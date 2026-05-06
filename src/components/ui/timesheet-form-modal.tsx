@@ -168,7 +168,7 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
     const actingAsOther = canActAsUser && form.user_id && form.user_id !== String(currentUser?.id)
     const customerEndpoint = actingAsOther
       ? `/customers/user-linked?pageSize=500&user_id=${form.user_id}`
-      : isAdmin
+      : (isAdmin || isCoordenador)
         ? '/customers?pageSize=500'
         : '/customers/user-linked?pageSize=500'
 
@@ -191,7 +191,7 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
     if (actingAsOther) {
       qs.set('consultant_only', 'true')
       qs.set('user_id', form.user_id)
-    } else if (!isAdmin) {
+    } else if (!isAdmin && !isCoordenador) {
       qs.set('consultant_only', 'true')
     }
     api.get<{ items: any[] }>(`/projects?${qs}`)
