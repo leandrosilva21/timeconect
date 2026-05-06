@@ -186,7 +186,7 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
   useEffect(() => {
     if (!form.customer_id) { setProjects([]); return }
     let cancelled = false
-    const qs = new URLSearchParams({ pageSize: '200', customer_id: form.customer_id, status: 'open' })
+    const qs = new URLSearchParams({ pageSize: '200', customer_id: form.customer_id, status: 'open', include_investimento_comercial: 'true' })
     const actingAsOther = canActAsUser && form.user_id && form.user_id !== String(currentUser?.id)
     if (actingAsOther) {
       qs.set('consultant_only', 'true')
