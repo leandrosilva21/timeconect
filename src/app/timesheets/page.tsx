@@ -1249,7 +1249,7 @@ function TimesheetsPageContent() {
                 <Th className="hidden xl:table-cell">Solicitante</Th>
                 <Th className="hidden xl:table-cell">Tipo de Serviço</Th>
                 <Th className="hidden xl:table-cell">Contrato</Th>
-                <Th className="hidden xl:table-cell">Inclusão</Th>
+                <Th className="hidden lg:table-cell">Inclusão</Th>
               </tr>
             </Thead>
             <Tbody>
@@ -1401,7 +1401,7 @@ function TimesheetsPageContent() {
                   <Td muted className="hidden xl:table-cell truncate max-w-[140px]">
                     {ts.project?.contract_type_display ?? '—'}
                   </Td>
-                  <Td muted className="hidden xl:table-cell whitespace-nowrap">{formatDateTime(ts.created_at)}</Td>
+                  <Td muted className="hidden lg:table-cell whitespace-nowrap">{formatDateTime(ts.created_at)}</Td>
                 </Tr>
               ))}
             </Tbody>

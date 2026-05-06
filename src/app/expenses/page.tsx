@@ -860,7 +860,7 @@ export default function ExpensesPage() {
                 <Th right>Valor</Th>
                 {!isCliente && <Th>Status</Th>}
                 {!isCliente && <Th>Pagamento</Th>}
-                <Th className="hidden xl:table-cell">Inclusão</Th>
+                <Th className="hidden lg:table-cell">Inclusão</Th>
               </tr>
             </Thead>
             <Tbody>
@@ -920,7 +920,7 @@ export default function ExpensesPage() {
                       }
                     </Td>
                   )}
-                  <Td muted className="hidden xl:table-cell whitespace-nowrap">{formatDateTime(exp.created_at)}</Td>
+                  <Td muted className="hidden lg:table-cell whitespace-nowrap">{formatDateTime(exp.created_at)}</Td>
                 </Tr>
               ))}
             </Tbody>
