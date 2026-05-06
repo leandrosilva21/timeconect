@@ -685,6 +685,10 @@ export default function ApprovalsPage() {
   }
   const hasFilters = !!(dateFrom || dateTo || userId || coordinatorId || executiveId || projectId || customerId)
 
+  // Totais de horas
+  const totalPageMinutes     = tsItems.reduce((s, ts) => s + ts.effort_minutes, 0)
+  const selectedMinutes      = tsItems.filter(ts => selected.includes(ts.id)).reduce((s, ts) => s + ts.effort_minutes, 0)
+
   // Timesheets: bulk allowed
   const currentItems   = tab === 'timesheets' ? tsItems   : expItems
   const currentLoading = tab === 'timesheets' ? tsLoading : expLoading
@@ -973,7 +977,10 @@ export default function ApprovalsPage() {
       {/* ── Bulk action bar (apontamentos only) ── */}
       {tab === 'timesheets' && selected.length > 0 && (
         <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600/10 border border-blue-500/20">
-          <span className="text-xs text-blue-300 flex-1">{selected.length} apontamento(s) selecionado(s)</span>
+          <span className="text-xs text-blue-300 flex-1">
+            {selected.length} apontamento(s) selecionado(s)
+            <span className="ml-2 font-semibold text-cyan-300">· {fmtMin(selectedMinutes)}</span>
+          </span>
           <button onClick={bulkApproveTs} disabled={approving}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-green-600 hover:bg-green-500 text-white disabled:opacity-50 transition-colors">
             <Check size={12} />{approving ? 'Aprovando...' : 'Aprovar todos'}
@@ -994,7 +1001,12 @@ export default function ApprovalsPage() {
 
       {/* ── Export bar ── */}
       {tab === 'timesheets' && tsItems.length > 0 && (
-        <div className="flex justify-end mb-2">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-xs text-zinc-400">
+            <Clock size={12} className="text-cyan-400" />
+            Total da página:
+            <span className="font-semibold text-cyan-300 ml-1">{fmtMin(totalPageMinutes)}</span>
+          </div>
           <button onClick={exportTs}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 transition-colors">
             <FileSpreadsheet size={13} /> Exportar Excel
@@ -1017,6 +1029,7 @@ export default function ApprovalsPage() {
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Data</th>
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Início</th>}
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Fim</th>}
+              {tab === 'timesheets' && <th className="text-right px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Tempo</th>}
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Ticket #</th>}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Gravação</th>
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Origem</th>}
@@ -1029,9 +1042,7 @@ export default function ApprovalsPage() {
               {tab === 'expenses'    && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Categoria</th>}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Tipo de Serviço</th>
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Contrato</th>}
-              <th className="text-right px-3 py-2.5 text-zinc-500 font-medium">
-                {tab === 'timesheets' ? 'Tempo' : 'Valor'}
-              </th>
+              {tab === 'expenses'   && <th className="text-right px-3 py-2.5 text-zinc-500 font-medium">Valor</th>}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Status</th>
               {tab === 'expenses' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Pagamento</th>}
             </tr>
@@ -1086,6 +1097,20 @@ export default function ApprovalsPage() {
                 <td className="px-3 py-2.5 text-zinc-300 whitespace-nowrap">{fmt(ts.date)}</td>
                 <td className="px-3 py-2.5 text-zinc-400 font-mono hidden md:table-cell">{ts.start_time ?? '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-400 font-mono hidden md:table-cell">{ts.end_time ?? '—'}</td>
+                <td className="px-3 py-2.5 text-right font-mono text-zinc-300 hidden md:table-cell">
+                  {ts.consultant_extra_pct ? (() => {
+                    const extraMin = Math.round(ts.effort_minutes * (Number(ts.consultant_extra_pct) / 100))
+                    const totalMin = ts.effort_minutes + extraMin
+                    return (
+                      <div className="flex flex-col items-end gap-0.5">
+                        <span>{fmtMin(ts.effort_minutes)}</span>
+                        <span className="text-[10px] font-normal" style={{ color: '#22C55E' }}>
+                          +{Number(ts.consultant_extra_pct)}% = {fmtMin(totalMin)}
+                        </span>
+                      </div>
+                    )
+                  })() : fmtMin(ts.effort_minutes)}
+                </td>
                 <td className="px-3 py-2.5 text-zinc-400 font-mono hidden lg:table-cell">
                   {ts.ticket
                     ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${ts.ticket}`} target="_blank" rel="noopener noreferrer"
@@ -1112,20 +1137,6 @@ export default function ApprovalsPage() {
                 <td className="px-3 py-2.5 text-zinc-500 hidden xl:table-cell truncate max-w-[120px]">{ts.ticket_solicitante?.name ?? '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-500 hidden xl:table-cell truncate max-w-[120px]">{(ts.project as any)?.service_type?.name ?? '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-500 hidden xl:table-cell truncate max-w-[120px]">{ts.project?.contract_type_display ?? '—'}</td>
-                <td className="px-3 py-2.5 text-right font-mono text-zinc-300">
-                  {ts.consultant_extra_pct ? (() => {
-                    const extraMin = Math.round(ts.effort_minutes * (Number(ts.consultant_extra_pct) / 100))
-                    const totalMin = ts.effort_minutes + extraMin
-                    return (
-                      <div className="flex flex-col items-end gap-0.5">
-                        <span>{fmtMin(ts.effort_minutes)}</span>
-                        <span className="text-[10px] font-normal" style={{ color: '#22C55E' }}>
-                          +{Number(ts.consultant_extra_pct)}% = {fmtMin(totalMin)}
-                        </span>
-                      </div>
-                    )
-                  })() : fmtMin(ts.effort_minutes)}
-                </td>
                 <td className="px-3 py-2.5">
                   <TsStatusBadge status={ts.status} display={ts.status_display} />
                 </td>
