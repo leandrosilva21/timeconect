@@ -164,8 +164,8 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
     setForm(f => ({ ...f, customer_id: '', project_id: '', is_billable_only: false }))
     setProjects([])
 
-    // When admin picks a different consultant → load only their allocated customers
-    const actingAsOther = isAdmin && form.user_id && form.user_id !== String(currentUser?.id)
+    // When admin/coordenador picks a different consultant → load only their allocated customers
+    const actingAsOther = canActAsUser && form.user_id && form.user_id !== String(currentUser?.id)
     const customerEndpoint = actingAsOther
       ? `/customers/user-linked?pageSize=500&user_id=${form.user_id}`
       : isAdmin
@@ -187,7 +187,7 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
     if (!form.customer_id) { setProjects([]); return }
     let cancelled = false
     const qs = new URLSearchParams({ pageSize: '200', customer_id: form.customer_id, status: 'open' })
-    const actingAsOther = isAdmin && form.user_id && form.user_id !== String(currentUser?.id)
+    const actingAsOther = canActAsUser && form.user_id && form.user_id !== String(currentUser?.id)
     if (actingAsOther) {
       qs.set('consultant_only', 'true')
       qs.set('user_id', form.user_id)
