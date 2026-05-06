@@ -51,6 +51,7 @@ export default function ClientesPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterExecutive, setFilterExecutive] = useState('')
+  const [filterStatus, setFilterStatus] = useState<'todos' | 'ativo' | 'inativo'>('todos')
   const [executives, setExecutives] = useState<Executive[]>([])
   const [modal, setModal] = useState<{ open: boolean; item?: CustomerFull }>({ open: false })
   const [form, setForm] = useState({ name: '', company_name: '', cgc: '', code_prefix: '', active: true, executive_id: '' })
@@ -68,25 +69,30 @@ export default function ClientesPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const p = new URLSearchParams({ pageSize: '500' })
-      if (search) p.set('search', search)
-      if (filterExecutive) p.set('executive_id', filterExecutive)
-      const r = await api.get<{ items?: CustomerFull[]; data?: CustomerFull[] }>(`/customers?${p}`)
+      const r = await api.get<{ items?: CustomerFull[]; data?: CustomerFull[] }>('/customers?pageSize=500')
       setItems(Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : [])
     } catch { toast.error('Erro ao carregar clientes') }
     finally { setLoading(false) }
-  }, [search, filterExecutive])
+  }, [])
 
   useEffect(() => { load() }, [load])
 
+  const filtered = items.filter(c => {
+    const q = search.toLowerCase()
+    const matchSearch = !q || c.name.toLowerCase().includes(q) || (c.company_name ?? '').toLowerCase().includes(q) || (c.cgc ?? '').includes(q)
+    const matchExec = !filterExecutive || String(c.executive_id) === filterExecutive
+    const matchStatus = filterStatus === 'todos' || (filterStatus === 'ativo' ? c.active : !c.active)
+    return matchSearch && matchExec && matchStatus
+  })
+
   const exportExcel = () => {
-    const rows = items.map(c => ({
-      Nome:         c.name,
+    const rows = filtered.map(c => ({
+      Nome:           c.name,
       'Razão Social': c.company_name ?? '',
-      'CPF/CNPJ':   c.cgc ?? '',
-      Prefixo:      c.code_prefix ?? '',
-      Executivo:    c.executive?.name ?? '',
-      Status:       c.active ? 'Ativo' : 'Inativo',
+      'CPF/CNPJ':     c.cgc ?? '',
+      Prefixo:        c.code_prefix ?? '',
+      Executivo:      c.executive?.name ?? '',
+      Status:         c.active ? 'Ativo' : 'Inativo',
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
@@ -154,7 +160,7 @@ export default function ClientesPage() {
             <Input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar cliente..."
+              placeholder="Buscar por nome, razão social ou CPF/CNPJ..."
               className="pl-8 bg-zinc-800 border-zinc-700 text-white h-8 text-xs"
             />
           </div>
@@ -166,7 +172,16 @@ export default function ClientesPage() {
             <option value="">Todos os executivos</option>
             {executives.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
           </select>
-          <Button onClick={exportExcel} disabled={items.length === 0} variant="outline" className="border-zinc-700 text-zinc-300 h-8 text-xs gap-1.5">
+          <select
+            value={filterStatus}
+            onChange={e => setFilterStatus(e.target.value as 'todos' | 'ativo' | 'inativo')}
+            className="px-3 py-1.5 rounded-lg text-xs outline-none appearance-none bg-zinc-800 border border-zinc-700 text-zinc-300"
+          >
+            <option value="todos">Todos</option>
+            <option value="ativo">Ativo</option>
+            <option value="inativo">Inativo</option>
+          </select>
+          <Button onClick={exportExcel} disabled={filtered.length === 0} variant="outline" className="border-zinc-700 text-zinc-300 h-8 text-xs gap-1.5">
             <Download size={13} /> Exportar
           </Button>
           <Button onClick={openCreate} className="bg-blue-600 hover:bg-blue-500 text-white h-8 text-xs gap-1.5">
@@ -188,9 +203,9 @@ export default function ClientesPage() {
               </tr>
             </thead>
             <tbody>
-              {loading ? <TableSkeleton /> : items.length === 0 ? (
+              {loading ? <TableSkeleton /> : filtered.length === 0 ? (
                 <tr><td colSpan={7} className="px-3 py-8 text-center text-zinc-500">Nenhum cliente encontrado</td></tr>
-              ) : items.map(item => (
+              ) : filtered.map(item => (
                 <tr key={item.id} className="border-b border-zinc-800 hover:bg-zinc-800/40 transition-colors">
                   <td className="px-2 py-2.5 w-10">
                     <RowMenu items={[
