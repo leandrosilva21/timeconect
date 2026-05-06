@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
-import { Users, Plus, Pencil, Trash2, X, Search } from 'lucide-react'
+import { Users, Plus, Pencil, Trash2, X, Search, Download } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { ConfirmDeleteModal } from '@/components/ui/confirm-delete-modal'
 import { RowMenu } from '@/components/ui/row-menu'
 import type { CustomerFull, Executive } from '@/types'
@@ -77,6 +78,21 @@ export default function ClientesPage() {
   }, [search, filterExecutive])
 
   useEffect(() => { load() }, [load])
+
+  const exportExcel = () => {
+    const rows = items.map(c => ({
+      Nome:         c.name,
+      'Razão Social': c.company_name ?? '',
+      'CPF/CNPJ':   c.cgc ?? '',
+      Prefixo:      c.code_prefix ?? '',
+      Executivo:    c.executive?.name ?? '',
+      Status:       c.active ? 'Ativo' : 'Inativo',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Clientes')
+    XLSX.writeFile(wb, 'clientes.xlsx')
+  }
 
   const openCreate = () => {
     setForm({ name: '', company_name: '', cgc: '', code_prefix: '', active: true, executive_id: '' })
@@ -150,6 +166,9 @@ export default function ClientesPage() {
             <option value="">Todos os executivos</option>
             {executives.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
           </select>
+          <Button onClick={exportExcel} disabled={items.length === 0} variant="outline" className="border-zinc-700 text-zinc-300 h-8 text-xs gap-1.5">
+            <Download size={13} /> Exportar
+          </Button>
           <Button onClick={openCreate} className="bg-blue-600 hover:bg-blue-500 text-white h-8 text-xs gap-1.5">
             <Plus size={13} /> Novo
           </Button>
