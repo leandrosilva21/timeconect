@@ -1,0 +1,276 @@
+'use client'
+
+import { AppLayout } from '@/components/layout/app-layout'
+import { useState, useEffect, useCallback } from 'react'
+import { api, ApiError } from '@/lib/api'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
+import { toast } from 'sonner'
+import { Users, Plus, Pencil, Trash2, X, Search } from 'lucide-react'
+import { ConfirmDeleteModal } from '@/components/ui/confirm-delete-modal'
+import { RowMenu } from '@/components/ui/row-menu'
+import type { CustomerFull, Executive } from '@/types'
+
+function ActiveBadge({ active }: { active: boolean }) {
+  return (
+    <Badge variant="outline" className={`text-[10px] border ${active
+      ? 'bg-green-500/20 text-green-400 border-green-500/30'
+      : 'bg-zinc-500/10 text-zinc-400 border-zinc-700'}`}>
+      {active ? 'Ativo' : 'Inativo'}
+    </Badge>
+  )
+}
+
+function TableSkeleton() {
+  return <>{Array.from({ length: 6 }).map((_, i) => (
+    <tr key={i} className="border-b border-zinc-800">
+      {Array.from({ length: 7 }).map((_, j) => (
+        <td key={j} className="px-3 py-2.5"><Skeleton className="h-3 w-full bg-zinc-800" /></td>
+      ))}
+    </tr>
+  ))}</>
+}
+
+function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75">
+      <div className="relative w-full max-w-lg rounded-xl shadow-2xl bg-zinc-900 border border-zinc-800 max-h-[90vh] overflow-y-auto">
+        <button onClick={onClose} className="absolute top-3 right-3 p-1 text-zinc-500 hover:text-zinc-300 transition-colors"><X size={14} /></button>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+export default function ClientesPage() {
+  const [items, setItems] = useState<CustomerFull[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [filterExecutive, setFilterExecutive] = useState('')
+  const [executives, setExecutives] = useState<Executive[]>([])
+  const [modal, setModal] = useState<{ open: boolean; item?: CustomerFull }>({ open: false })
+  const [form, setForm] = useState({ name: '', company_name: '', cgc: '', code_prefix: '', active: true, executive_id: '' })
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState<number | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id?: number }>({ open: false })
+
+  useEffect(() => {
+    api.get<any>('/executives?pageSize=100').then(r => {
+      const arr = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
+      setExecutives(arr)
+    }).catch(() => {})
+  }, [])
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const p = new URLSearchParams({ pageSize: '500' })
+      if (search) p.set('search', search)
+      if (filterExecutive) p.set('executive_id', filterExecutive)
+      const r = await api.get<{ items?: CustomerFull[]; data?: CustomerFull[] }>(`/customers?${p}`)
+      setItems(Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : [])
+    } catch { toast.error('Erro ao carregar clientes') }
+    finally { setLoading(false) }
+  }, [search, filterExecutive])
+
+  useEffect(() => { load() }, [load])
+
+  const openCreate = () => {
+    setForm({ name: '', company_name: '', cgc: '', code_prefix: '', active: true, executive_id: '' })
+    setModal({ open: true })
+  }
+
+  const openEdit = (item: CustomerFull) => {
+    setForm({
+      name: item.name,
+      company_name: item.company_name ?? '',
+      cgc: item.cgc ?? '',
+      code_prefix: item.code_prefix ?? '',
+      active: item.active,
+      executive_id: item.executive_id ? String(item.executive_id) : '',
+    })
+    setModal({ open: true, item })
+  }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const payload = {
+        ...form,
+        executive_id: form.executive_id ? Number(form.executive_id) : null,
+        code_prefix: form.code_prefix || null,
+      }
+      if (modal.item) await api.put(`/customers/${modal.item.id}`, payload)
+      else await api.post('/customers', payload)
+      toast.success(modal.item ? 'Cliente atualizado' : 'Cliente criado')
+      setModal({ open: false })
+      load()
+    } catch (e) { toast.error(e instanceof ApiError ? e.message : 'Erro ao salvar') }
+    finally { setSaving(false) }
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm.id) return
+    setDeleting(deleteConfirm.id)
+    setDeleteConfirm({ open: false })
+    try {
+      await api.delete(`/customers/${deleteConfirm.id}`)
+      toast.success('Cliente excluído')
+      load()
+    } catch (e) { toast.error(e instanceof ApiError ? e.message : 'Erro ao excluir') }
+    finally { setDeleting(null) }
+  }
+
+  return (
+    <AppLayout>
+      <div className="p-6 max-w-5xl mx-auto w-full">
+        <h2 className="text-sm font-semibold text-white mb-5 flex items-center gap-2">
+          <Users size={14} className="text-zinc-400" />
+          Clientes
+        </h2>
+
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <div className="relative flex-1 min-w-48">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <Input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar cliente..."
+              className="pl-8 bg-zinc-800 border-zinc-700 text-white h-8 text-xs"
+            />
+          </div>
+          <select
+            value={filterExecutive}
+            onChange={e => setFilterExecutive(e.target.value)}
+            className="px-3 py-1.5 rounded-lg text-xs outline-none appearance-none bg-zinc-800 border border-zinc-700 text-zinc-300 min-w-36"
+          >
+            <option value="">Todos os executivos</option>
+            {executives.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
+          </select>
+          <Button onClick={openCreate} className="bg-blue-600 hover:bg-blue-500 text-white h-8 text-xs gap-1.5">
+            <Plus size={13} /> Novo
+          </Button>
+        </div>
+
+        <div className="rounded-lg border border-zinc-800 overflow-clip">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 z-10 bg-zinc-900">
+              <tr className="border-b border-zinc-800 bg-zinc-900">
+                <th className="px-3 py-2.5 w-10"></th>
+                <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Nome</th>
+                <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Razão Social</th>
+                <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">CPF/CNPJ</th>
+                <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Prefixo</th>
+                <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Executivo</th>
+                <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? <TableSkeleton /> : items.length === 0 ? (
+                <tr><td colSpan={7} className="px-3 py-8 text-center text-zinc-500">Nenhum cliente encontrado</td></tr>
+              ) : items.map(item => (
+                <tr key={item.id} className="border-b border-zinc-800 hover:bg-zinc-800/40 transition-colors">
+                  <td className="px-2 py-2.5 w-10">
+                    <RowMenu items={[
+                      { label: 'Editar', icon: <Pencil size={12} />, onClick: () => openEdit(item) },
+                      { label: 'Excluir', icon: <Trash2 size={12} />, onClick: () => setDeleteConfirm({ open: true, id: item.id }), danger: true, disabled: deleting === item.id },
+                    ]} />
+                  </td>
+                  <td className="px-3 py-2.5 text-zinc-200">{item.name}</td>
+                  <td className="px-3 py-2.5 text-zinc-400 hidden md:table-cell">{item.company_name || '—'}</td>
+                  <td className="px-3 py-2.5 text-zinc-400 font-mono hidden sm:table-cell">{item.cgc || '—'}</td>
+                  <td className="px-3 py-2.5 text-zinc-400 font-mono hidden xl:table-cell">{item.code_prefix || '—'}</td>
+                  <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell">{item.executive?.name || '—'}</td>
+                  <td className="px-3 py-2.5"><ActiveBadge active={item.active} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {modal.open && (
+          <ModalOverlay onClose={() => setModal({ open: false })}>
+            <div className="p-5">
+              <h3 className="text-sm font-semibold text-white mb-4">{modal.item ? 'Editar Cliente' : 'Novo Cliente'}</h3>
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-zinc-400">Nome *</Label>
+                  <Input
+                    value={form.name}
+                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    className="mt-1 bg-zinc-800 border-zinc-700 text-white h-9 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-zinc-400">Razão Social</Label>
+                  <Input
+                    value={form.company_name}
+                    onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))}
+                    className="mt-1 bg-zinc-800 border-zinc-700 text-white h-9 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-zinc-400">CPF/CNPJ</Label>
+                  <Input
+                    value={form.cgc}
+                    onChange={e => setForm(f => ({ ...f, cgc: e.target.value }))}
+                    className="mt-1 bg-zinc-800 border-zinc-700 text-white h-9 text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-zinc-400">Prefixo de Código (3 letras)</Label>
+                  <Input
+                    value={form.code_prefix}
+                    onChange={e => setForm(f => ({ ...f, code_prefix: e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) }))}
+                    placeholder="ex: ABC"
+                    maxLength={3}
+                    className="mt-1 bg-zinc-800 border-zinc-700 text-white h-9 text-xs font-mono uppercase tracking-widest"
+                  />
+                  <p className="mt-1 text-[11px] text-zinc-500">Usado para gerar códigos automáticos dos projetos (ex: ABC001-26)</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-zinc-400">Executivo</Label>
+                  <select
+                    value={form.executive_id}
+                    onChange={e => setForm(f => ({ ...f, executive_id: e.target.value }))}
+                    className="mt-1 w-full px-3 py-2 rounded-lg text-xs outline-none appearance-none bg-zinc-800 border border-zinc-700 text-white"
+                  >
+                    <option value="">Sem executivo</option>
+                    {executives.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setForm(f => ({ ...f, active: !f.active }))}
+                    className={`w-8 h-4 rounded-full transition-colors relative ${form.active ? 'bg-blue-600' : 'bg-zinc-700'}`}
+                  >
+                    <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${form.active ? 'left-4' : 'left-0.5'}`} />
+                  </button>
+                  <Label className="text-xs text-zinc-400">Ativo</Label>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-5 justify-end">
+                <Button variant="outline" onClick={() => setModal({ open: false })} className="h-8 text-xs border-zinc-700 text-zinc-300">
+                  Cancelar
+                </Button>
+                <Button onClick={save} disabled={saving || !form.name} className="h-8 text-xs bg-blue-600 hover:bg-blue-500 text-white">
+                  {saving ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </div>
+            </div>
+          </ModalOverlay>
+        )}
+
+        <ConfirmDeleteModal
+          open={deleteConfirm.open}
+          message="Deseja excluir este cliente? Esta ação não pode ser desfeita."
+          onClose={() => setDeleteConfirm({ open: false })}
+          onConfirm={confirmDelete}
+        />
+      </div>
+    </AppLayout>
+  )
+}

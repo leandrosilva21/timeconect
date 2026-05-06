@@ -187,7 +187,7 @@ const NAV: NavEntry[] = [
     items: [
       { label: 'Tipos de Contrato',     href: '/cadastros?tab=contracts',         icon: FileType },
       { label: 'Tipos de Serviço',      href: '/cadastros?tab=services',          icon: Wrench },
-      { label: 'Clientes',              href: '/cadastros?tab=customers',          icon: Users },
+      { label: 'Clientes',              href: '/clientes',                         icon: Users },
       { label: 'Contatos de Clientes', href: '/cadastros?tab=customer_contacts',  icon: Contact },
       { label: 'Executivos',            href: '/cadastros?tab=executives',        icon: Star },
       { label: 'Grupos de Consultor',   href: '/cadastros?tab=groups',            icon: UserCheck },
@@ -293,7 +293,7 @@ function SidebarInner({ user }: { user: User }) {
       const cadastrosItems: { label: string; href: string; icon: typeof Users }[] = []
       if (has('contracts.manage'))          cadastrosItems.push({ label: 'Tipos de Contrato',     href: '/cadastros?tab=contracts',          icon: FileType })
       if (has('services.manage'))           cadastrosItems.push({ label: 'Tipos de Serviço',      href: '/cadastros?tab=services',           icon: Wrench })
-      if (has('customers.manage'))          cadastrosItems.push({ label: 'Clientes',              href: '/cadastros?tab=customers',          icon: Users })
+      if (has('customers.manage'))          cadastrosItems.push({ label: 'Clientes',              href: '/clientes',                         icon: Users })
       if (has('customers.manage'))          cadastrosItems.push({ label: 'Contatos de Clientes',  href: '/cadastros?tab=customer_contacts',   icon: Contact })
       if (has('executives.manage'))         cadastrosItems.push({ label: 'Executivos',            href: '/cadastros?tab=executives',         icon: Star })
       if (has('groups.manage'))             cadastrosItems.push({ label: 'Grupos de Consultor',   href: '/cadastros?tab=groups',             icon: UserCheck })
@@ -340,7 +340,7 @@ function SidebarInner({ user }: { user: User }) {
         {
           type: 'group', label: 'Cadastros', icon: Database,
           items: [
-            { label: 'Clientes',     href: '/customers',   icon: Building2 },
+            { label: 'Clientes',     href: '/clientes',    icon: Building2 },
           ],
         },
         { type: 'item', label: 'Usuários',     href: '/users',    icon: Users },
