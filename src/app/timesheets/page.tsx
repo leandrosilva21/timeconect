@@ -48,6 +48,16 @@ function formatMinutes(minutes: number) {
   return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}`
 }
 
+function formatDateTime(d: string | null | undefined) {
+  if (!d) return '—'
+  const dt = new Date(d)
+  const day = String(dt.getDate()).padStart(2, '0')
+  const mon = String(dt.getMonth() + 1).padStart(2, '0')
+  const h   = String(dt.getHours()).padStart(2, '0')
+  const min = String(dt.getMinutes()).padStart(2, '0')
+  return `${day}/${mon}/${dt.getFullYear()} ${h}:${min}`
+}
+
 // ─── Origin badge ─────────────────────────────────────────────────────────────
 
 function OriginBadge({ origin, isBillableOnly, isInternalAction, isReleased, canSeePct, clientExtraPct, consultantExtraPct }: {
@@ -1239,6 +1249,7 @@ function TimesheetsPageContent() {
                 <Th className="hidden xl:table-cell">Solicitante</Th>
                 <Th className="hidden xl:table-cell">Tipo de Serviço</Th>
                 <Th className="hidden xl:table-cell">Contrato</Th>
+                <Th className="hidden xl:table-cell">Inclusão</Th>
               </tr>
             </Thead>
             <Tbody>
@@ -1390,6 +1401,7 @@ function TimesheetsPageContent() {
                   <Td muted className="hidden xl:table-cell truncate max-w-[140px]">
                     {ts.project?.contract_type_display ?? '—'}
                   </Td>
+                  <Td muted className="hidden xl:table-cell whitespace-nowrap">{formatDateTime(ts.created_at)}</Td>
                 </Tr>
               ))}
             </Tbody>

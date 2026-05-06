@@ -185,6 +185,16 @@ const STATUS_LABEL: Record<string, string> = {
 interface Category { id: number; name: string; parent_id?: number | null }
 interface SelectOption { id: number; name: string }
 
+function formatDateTime(d: string | null | undefined) {
+  if (!d) return '—'
+  const dt = new Date(d)
+  const day = String(dt.getDate()).padStart(2, '0')
+  const mon = String(dt.getMonth() + 1).padStart(2, '0')
+  const h   = String(dt.getHours()).padStart(2, '0')
+  const min = String(dt.getMinutes()).padStart(2, '0')
+  return `${day}/${mon}/${dt.getFullYear()} ${h}:${min}`
+}
+
 function formatDate(d: string | null | undefined) {
   if (!d) return '—'
   const [y, m, day] = d.split('-')
@@ -850,6 +860,7 @@ export default function ExpensesPage() {
                 <Th right>Valor</Th>
                 {!isCliente && <Th>Status</Th>}
                 {!isCliente && <Th>Pagamento</Th>}
+                <Th className="hidden xl:table-cell">Inclusão</Th>
               </tr>
             </Thead>
             <Tbody>
@@ -909,6 +920,7 @@ export default function ExpensesPage() {
                       }
                     </Td>
                   )}
+                  <Td muted className="hidden xl:table-cell whitespace-nowrap">{formatDateTime(exp.created_at)}</Td>
                 </Tr>
               ))}
             </Tbody>
