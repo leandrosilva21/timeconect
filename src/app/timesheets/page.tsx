@@ -925,6 +925,11 @@ function TimesheetsPageContent() {
     } finally { setReverseRejecting(false) }
   }
 
+  const selectedMinutes = useMemo(
+    () => (data?.items ?? []).filter(ts => selectedIds.has(ts.id)).reduce((sum, ts) => sum + ts.effort_minutes, 0),
+    [data?.items, selectedIds]
+  )
+
   return (
     <AppLayout title="Apontamentos">
       <div className="max-w-7xl mx-auto">
@@ -1437,8 +1442,11 @@ function TimesheetsPageContent() {
       {(isAdmin || isCoordenador) && selectedIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl"
           style={{ background: '#18181B', border: '1px solid #3f3f46' }}>
-          <span className="text-xs text-zinc-300">
+          <span className="text-xs text-zinc-300 flex items-center gap-1.5">
             {selectedIds.size} apontamento{selectedIds.size > 1 ? 's' : ''} selecionado{selectedIds.size > 1 ? 's' : ''}
+            <span style={{ color: 'var(--brand-subtle)' }}>·</span>
+            <Clock size={11} style={{ color: 'var(--brand-primary)' }} />
+            <span style={{ color: 'var(--brand-primary)', fontWeight: 600 }}>{formatMinutes(selectedMinutes)}</span>
           </span>
           <button
             onClick={() => setExtraPctModalData({ ids: Array.from(selectedIds) })}
