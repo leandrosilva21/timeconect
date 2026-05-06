@@ -1484,7 +1484,7 @@ export default function MeuPainelPage() {
     try {
       const p = new URLSearchParams({
         page: String(tsPage),
-        per_page: '50',
+        pageSize: '100',
         start_date: tsDateFrom || startDate,
         end_date:   tsDateTo   || endDate,
       })

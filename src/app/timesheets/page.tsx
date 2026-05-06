@@ -832,7 +832,7 @@ function TimesheetsPageContent() {
   }, [isCliente, isAdmin, user?.customer_id])
 
   const params = useMemo(() => {
-    const p = new URLSearchParams({ page: String(page), per_page: '100' })
+    const p = new URLSearchParams({ page: String(page), pageSize: '100' })
     if (status) p.set('status', status)
     origins.forEach(v => p.append('origin[]', v))
     serviceTypeIds.forEach(v => p.append('service_type_id[]', v))
