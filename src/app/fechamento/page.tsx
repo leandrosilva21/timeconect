@@ -479,7 +479,7 @@ type TabId = typeof TABS[number]['id']
 
 export default function FechamentoPage() {
   const { user } = useAuth()
-  const isAdmin = (user as any)?.type === 'admin'
+  const isAdmin = (user as any)?.type === 'admin' || (user as any)?.type === 'administrativo'
 
   const now = new Date()
   const { filters: flt, set: setFilter } = usePersistedFilters(
