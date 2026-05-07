@@ -75,6 +75,29 @@ const isSustentacaoName = (name: string) => {
     || n.includes('banco de horas') || n.includes('on demand') || n.includes('saas')
 }
 
+// Regra de combinação Tipo de Serviço × Tipo de Contrato:
+// - Projeto    → não permite "On Demand" nem "SaaS"
+// - Sustentação → não permite "Fechado"
+// O contract_type atualmente selecionado é sempre mantido visível (caso de edição
+// de contrato pré-existente que viole a nova regra).
+const allowedForService = (
+  contractTypes: SelectOption[],
+  serviceTypeName: string | null | undefined,
+  selectedContractTypeId: string | number | null | undefined,
+): SelectOption[] => {
+  const sn = (serviceTypeName ?? '').toLowerCase()
+  const isProjeto = sn.includes('projeto')
+  const isSustenta = sn.includes('sustenta')
+  if (!isProjeto && !isSustenta) return contractTypes
+  return contractTypes.filter(ct => {
+    if (String(ct.id) === String(selectedContractTypeId ?? '')) return true
+    const n = String(ct.name ?? '').toLowerCase()
+    if (isProjeto && (n.includes('on demand') || n.includes('saas'))) return false
+    if (isSustenta && n.includes('fechado')) return false
+    return true
+  })
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ContractCreateModal({
@@ -593,7 +616,13 @@ export function ContractCreateModal({
                 Tipo de Contrato <span style={{ color: '#ef4444' }}>*</span>
               </label>
               <div className="space-y-2">
-                {(excludeSustentacao ? contractTypes.filter(ct => !isSustentacaoName(String(ct.name))) : contractTypes).map(ct => (
+                {(() => {
+                  const base = excludeSustentacao
+                    ? contractTypes.filter(ct => !isSustentacaoName(String(ct.name)))
+                    : contractTypes
+                  const serviceName = serviceTypes.find(s => String(s.id) === String(form.service_type_id))?.name
+                  return allowedForService(base, serviceName, form.contract_type_id)
+                })().map(ct => (
                   <label key={ct.id} className="flex items-center gap-2 cursor-pointer">
                     <input type="radio" name="contract_type_id" value={ct.id}
                       checked={String(form.contract_type_id) === String(ct.id)}

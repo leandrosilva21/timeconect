@@ -71,6 +71,29 @@ interface Contract {
 
 interface SelectOption { id: number; name: string; code_prefix?: string | null }
 
+// Regra de combinação Tipo de Serviço × Tipo de Contrato:
+// - Projeto    → não permite "On Demand" nem "SaaS"
+// - Sustentação → não permite "Fechado"
+// O contract_type atualmente selecionado é sempre mantido visível (caso de edição
+// de contrato pré-existente que viole a nova regra).
+const allowedForService = (
+  contractTypes: SelectOption[],
+  serviceTypeName: string | null | undefined,
+  selectedContractTypeId: string | number | null | undefined,
+): SelectOption[] => {
+  const sn = (serviceTypeName ?? '').toLowerCase()
+  const isProjeto = sn.includes('projeto')
+  const isSustenta = sn.includes('sustenta')
+  if (!isProjeto && !isSustenta) return contractTypes
+  return contractTypes.filter(ct => {
+    if (String(ct.id) === String(selectedContractTypeId ?? '')) return true
+    const n = String(ct.name ?? '').toLowerCase()
+    if (isProjeto && (n.includes('on demand') || n.includes('saas'))) return false
+    if (isSustenta && n.includes('fechado')) return false
+    return true
+  })
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const CURRENT_YEAR_2D = new Date().getFullYear().toString().slice(-2)
@@ -598,7 +621,11 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
             <div>
               <label className={labelCls}>Tipo de Contrato *</label>
               <div className="space-y-2">
-                {contractTypes.map(ct => (
+                {allowedForService(
+                  contractTypes,
+                  serviceTypes.find(s => String(s.id) === String(form.service_type_id))?.name,
+                  form.contract_type_id,
+                ).map(ct => (
                   <label key={ct.id} className="flex items-center gap-2 cursor-pointer">
                     <input type="radio" name="contract_type_id" value={ct.id}
                       checked={String(form.contract_type_id) === String(ct.id)}
