@@ -21,6 +21,7 @@ interface ConsultantGroup { id: number; name: string; users: Consultant[] }
 
 interface ICProject {
   id: number; name: string; code: string; status: string
+  categoria_interna: string | null
   customer: { id: number; name: string } | null
   consultants: Consultant[]
 }
@@ -114,12 +115,15 @@ export default function InvestimentoComercialPage() {
   const [saving,       setSaving]       = useState(false)
 
   // Modal de criação de projeto interno (ERPSERV)
-  const [newProjectOpen,   setNewProjectOpen]   = useState(false)
-  const [newProjectName,   setNewProjectName]   = useState('')
-  const [creatingProject,  setCreatingProject]  = useState(false)
+  const [newProjectOpen,      setNewProjectOpen]      = useState(false)
+  const [newProjectName,      setNewProjectName]      = useState('')
+  const [newProjectCategoria, setNewProjectCategoria] = useState<'Sustentação' | 'Projeto' | 'Suporte'>('Projeto')
+  const [creatingProject,     setCreatingProject]     = useState(false)
 
   // Árvore: clientes expandidos
   const [expandedCustomers, setExpandedCustomers] = useState<Set<number>>(new Set())
+  // Filtro de categoria
+  const [categoriaFilter, setCategoriaFilter] = useState<'todas' | 'Sustentação' | 'Projeto' | 'Suporte' | 'sem'>('todas')
   const toggleCustomerExpand = (customerId: number) => {
     setExpandedCustomers(prev => {
       const next = new Set(prev)
@@ -142,7 +146,7 @@ export default function InvestimentoComercialPage() {
     try {
       const projRes = await api.get<any>('/projects?only_investimento_comercial=true&pageSize=500&gestao=true&with_team=true')
       const rawProjects: any[] = projRes?.items ?? projRes?.data ?? []
-      setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
+      setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, categoria_interna: p.categoria_interna ?? null, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
     } catch {
       toast.error('Erro ao recarregar projetos')
     }
@@ -157,7 +161,7 @@ export default function InvestimentoComercialPage() {
     ]).then(([projRes, usersRes, groupsRes]) => {
       if (cancelled) return
       const rawProjects: any[] = projRes?.items ?? projRes?.data ?? []
-      setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
+      setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, categoria_interna: p.categoria_interna ?? null, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
       const rawUsers: any[] = usersRes?.items ?? usersRes?.data ?? []
       setAllUsers(rawUsers.map((u: any) => ({ id: u.id, name: u.name, email: u.email })))
       const rawGroups: any[] = groupsRes?.data ?? groupsRes?.items ?? []
@@ -176,10 +180,11 @@ export default function InvestimentoComercialPage() {
     if (name.length < 2) { toast.error('Informe um nome válido (mín. 2 caracteres)'); return }
     setCreatingProject(true)
     try {
-      await api.post('/investimento-interno/projects', { name })
+      await api.post('/investimento-interno/projects', { name, categoria: newProjectCategoria })
       toast.success('Projeto interno criado')
       setNewProjectOpen(false)
       setNewProjectName('')
+      setNewProjectCategoria('Projeto')
       await reloadProjects()
     } catch (err: any) {
       toast.error(err?.message ?? 'Erro ao criar projeto')
@@ -223,8 +228,13 @@ export default function InvestimentoComercialPage() {
 
   const filtered = useMemo(() => {
     const q = clientSearch.toLowerCase()
-    return projects.filter(p => !q || p.customer?.name.toLowerCase().includes(q) || p.consultants.some(c => c.name.toLowerCase().includes(q)))
-  }, [projects, clientSearch])
+    return projects.filter(p => {
+      if (q && !(p.customer?.name.toLowerCase().includes(q) || p.consultants.some(c => c.name.toLowerCase().includes(q)) || (p.name ?? '').toLowerCase().includes(q))) return false
+      if (categoriaFilter === 'todas') return true
+      if (categoriaFilter === 'sem')   return !p.categoria_interna
+      return p.categoria_interna === categoriaFilter
+    })
+  }, [projects, clientSearch, categoriaFilter])
 
   const filteredUsers = useMemo(() => {
     const q = userSearch.toLowerCase()
@@ -316,6 +326,12 @@ export default function InvestimentoComercialPage() {
                         <span className="flex items-center gap-2 pl-6">
                           <span className="text-zinc-600">└</span>
                           <span className="text-sm" style={{ color: 'var(--brand-text)' }}>{project.name || '—'}</span>
+                          {project.categoria_interna && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider"
+                              style={{ background: 'rgba(167,139,250,0.12)', color: '#a78bfa' }}>
+                              {project.categoria_interna}
+                            </span>
+                          )}
                         </span>
                       </Td>
                       <Td><span className="text-xs font-mono px-2 py-0.5 rounded" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{project.code}</span></Td>
@@ -581,6 +597,30 @@ export default function InvestimentoComercialPage() {
         })}
       </div>
 
+      {/* Filtro de categoria (apenas na aba projetos) */}
+      {activeTab === 'projetos' && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {([
+            { id: 'todas',       label: 'Todas as categorias' },
+            { id: 'Sustentação', label: 'Sustentação' },
+            { id: 'Projeto',     label: 'Projeto' },
+            { id: 'Suporte',     label: 'Suporte' },
+            { id: 'sem',         label: 'Sem categoria' },
+          ] as const).map(opt => {
+            const active = categoriaFilter === opt.id
+            return (
+              <button key={opt.id} onClick={() => setCategoriaFilter(opt.id)}
+                className="px-2.5 py-1 rounded-md text-[11px] transition-colors"
+                style={active
+                  ? { background: 'rgba(0,245,255,0.12)', color: '#00F5FF', border: '1px solid rgba(0,245,255,0.25)' }
+                  : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid var(--brand-border)' }}>
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* Conteúdo */}
       {activeTab === 'projetos'    && renderProjetos()}
       {activeTab === 'clientes'    && renderClientes()}
@@ -613,6 +653,18 @@ export default function InvestimentoComercialPage() {
                   onKeyDown={e => { if (e.key === 'Enter' && !creatingProject) handleCreateProject() }}
                   placeholder="Ex: Desenvolvimento Minutor"
                   className="w-full px-3 h-9 rounded-xl text-sm outline-none" style={inputStyle} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--brand-muted)' }}>
+                  Categoria <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <select value={newProjectCategoria}
+                  onChange={e => setNewProjectCategoria(e.target.value as 'Sustentação' | 'Projeto' | 'Suporte')}
+                  className="w-full px-3 h-9 rounded-xl text-sm outline-none" style={inputStyle}>
+                  <option value="Sustentação">Sustentação</option>
+                  <option value="Projeto">Projeto</option>
+                  <option value="Suporte">Suporte</option>
+                </select>
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
