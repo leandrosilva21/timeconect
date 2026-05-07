@@ -249,8 +249,8 @@ export default function NewTimesheetPage() {
               </div>
               <div>
                 <Label className="text-xs mb-1 block" style={{ color: 'var(--brand-muted)' }}>Total {timeDriver === 'total' ? '*' : ''}</Label>
-                <input type="text" value={form.total_hours} placeholder="ex: 2:30"
-                  onChange={e => { setTimeDriver('total'); set('total_hours', e.target.value) }}
+                <input type="text" inputMode="numeric" value={form.total_hours} placeholder="ex: 2:30"
+                  onChange={e => { const v = e.target.value.replace(/[^\d:]/g, ''); setTimeDriver('total'); set('total_hours', v) }}
                   className={inputCls} style={inputStyle} />
               </div>
             </div>
@@ -265,8 +265,8 @@ export default function NewTimesheetPage() {
               </div>
               <div>
                 <Label className="text-xs mb-1 block" style={{ color: 'var(--brand-muted)' }}>Total de Horas *</Label>
-                <input type="text" value={form.total_hours} placeholder="ex: 2:30"
-                  onChange={e => set('total_hours', e.target.value)}
+                <input type="text" inputMode="numeric" value={form.total_hours} placeholder="ex: 2:30"
+                  onChange={e => { const v = e.target.value.replace(/[^\d:]/g, ''); set('total_hours', v) }}
                   className={inputCls} style={inputStyle} />
               </div>
             </>

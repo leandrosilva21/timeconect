@@ -506,9 +506,9 @@ export default function MobileApontamento() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span style={lbl}>Total (ex: 2:30)</span>
-                <input type="text" inputMode="decimal" placeholder="0:00"
+                <input type="text" inputMode="numeric" placeholder="0:00"
                   value={form.total_hours}
-                  onChange={e => set('total_hours', e.target.value)}
+                  onChange={e => { const v = e.target.value.replace(/[^\d:]/g, ''); set('total_hours', v) }}
                   style={{ ...timeField, fontSize: 36, fontWeight: 800, color: '#00F5FF', letterSpacing: 2 }} />
               </div>
             )}

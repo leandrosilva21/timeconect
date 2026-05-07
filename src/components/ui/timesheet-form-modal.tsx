@@ -374,8 +374,8 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
                 </div>
                 <div>
                   <Label className="text-xs text-zinc-400">Total {timeDriver === 'total' ? '*' : ''}</Label>
-                  <input type="text" value={form.total_hours} placeholder="ex: 2:30"
-                    onChange={e => { setTimeDriver('total'); setForm(f => ({ ...f, total_hours: e.target.value })) }}
+                  <input type="text" inputMode="numeric" value={form.total_hours} placeholder="ex: 2:30"
+                    onChange={e => { const v = e.target.value.replace(/[^\d:]/g, ''); setTimeDriver('total'); setForm(f => ({ ...f, total_hours: v })) }}
                     className="mt-1 w-full px-3 py-2 rounded-xl text-sm outline-none bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600" />
                 </div>
               </div>
@@ -390,8 +390,8 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
                 </div>
                 <div>
                   <Label className="text-xs text-zinc-400">Total de Horas *</Label>
-                  <input type="text" value={form.total_hours} placeholder="ex: 2:30"
-                    onChange={e => setForm(f => ({ ...f, total_hours: e.target.value }))}
+                  <input type="text" inputMode="numeric" value={form.total_hours} placeholder="ex: 2:30"
+                    onChange={e => { const v = e.target.value.replace(/[^\d:]/g, ''); setForm(f => ({ ...f, total_hours: v })) }}
                     className="mt-1 w-full px-3 py-2 rounded-xl text-sm outline-none bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600" />
                 </div>
               </>
