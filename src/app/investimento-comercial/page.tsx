@@ -11,6 +11,8 @@ import {
 } from 'lucide-react'
 import { PageHeader, Table, Thead, Th, Tbody, Tr, Td, Button, SkeletonTable, EmptyState } from '@/components/ds'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
+import { MultiSelect } from '@/components/ui/multi-select'
+import { SearchSelect } from '@/components/ui/search-select'
 import { toast } from 'sonner'
 import type { LucideIcon } from 'lucide-react'
 
@@ -680,59 +682,87 @@ export default function InvestimentoComercialPage() {
       )}
 
       {/* Modal gerenciar equipe */}
-      {modal.open && modal.project && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
-          <div className="w-full max-w-md rounded-2xl p-6 flex flex-col gap-4" style={surfaceStyle}>
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-semibold" style={{ color: '#00F5FF' }}>Investimento Interno</p>
-                <h2 className="text-base font-bold mt-0.5" style={{ color: 'var(--brand-text)' }}>{modal.project!.customer?.name ?? '—'}</h2>
-                <p className="text-[11px] mt-0.5" style={{ color: 'var(--brand-subtle)' }}>{modal.project!.name} · <span className="font-mono">{modal.project!.code}</span></p>
+      {modal.open && modal.project && (() => {
+        const userOpts = allUsers.map(u => ({ id: u.id, name: u.email ? `${u.name} (${u.email})` : u.name }))
+        const groupOpts = groups.map(g => ({ id: g.id, name: `${g.name} (${g.users.length})` }))
+
+        const addGroup = (groupId: string) => {
+          if (!groupId) return
+          const g = groups.find(x => String(x.id) === String(groupId))
+          if (!g) return
+          const ids = g.users.map(u => u.id)
+          setSelected(prev => [...new Set([...prev, ...ids])])
+        }
+
+        const removeUser = (id: number) => setSelected(prev => prev.filter(x => x !== id))
+        const usersById = new Map(allUsers.map(u => [u.id, u]))
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+            <div className="w-full max-w-md rounded-2xl p-6 flex flex-col gap-4" style={surfaceStyle}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-semibold" style={{ color: '#00F5FF' }}>Investimento Interno</p>
+                  <h2 className="text-base font-bold mt-0.5" style={{ color: 'var(--brand-text)' }}>{modal.project!.customer?.name ?? '—'}</h2>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--brand-subtle)' }}>{modal.project!.name} · <span className="font-mono">{modal.project!.code}</span></p>
+                </div>
+                <button onClick={closeModal} className="p-1 rounded-lg hover:bg-white/5 transition-colors" style={{ color: 'var(--brand-subtle)' }}><X size={16} /></button>
               </div>
-              <button onClick={closeModal} className="p-1 rounded-lg hover:bg-white/5 transition-colors" style={{ color: 'var(--brand-subtle)' }}><X size={16} /></button>
-            </div>
 
-            <div className="relative">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--brand-subtle)' }} />
-              <input type="text" autoFocus placeholder="Buscar consultor pelo nome ou e-mail..." value={userSearch}
-                onChange={e => setUserSearch(e.target.value)}
-                className="w-full pl-9 pr-3 h-9 rounded-xl text-xs outline-none" style={inputStyle} />
-            </div>
+              <div>
+                <label className="block text-[11px] font-medium mb-1.5" style={{ color: 'var(--brand-muted)' }}>Consultores</label>
+                <MultiSelect
+                  fullWidth
+                  value={selected.map(String)}
+                  onChange={vals => setSelected(vals.map(Number))}
+                  options={userOpts}
+                  placeholder="Selecione um ou mais consultores..."
+                />
+              </div>
 
-            <div className="flex flex-col gap-0.5 max-h-80 overflow-y-auto pr-0.5">
-              {filteredUsers.length === 0 ? (
-                <p className="text-xs text-center py-4" style={{ color: 'var(--brand-subtle)' }}>Nenhum consultor encontrado</p>
-              ) : (
-                filteredUsers.map(u => {
-                  const checked = selected.includes(u.id)
-                  return (
-                    <button key={u.id} onClick={() => toggleUser(u.id)}
-                      className="flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors hover:bg-white/5 w-full">
-                      <div className="w-4 h-4 rounded flex items-center justify-center shrink-0 transition-colors"
-                        style={{ background: checked ? '#00F5FF' : 'transparent', border: checked ? 'none' : '1px solid var(--brand-border)' }}>
-                        {checked && <Check size={10} style={{ color: '#0a0a0a' }} />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium leading-tight truncate" style={{ color: 'var(--brand-text)' }}>{u.name}</p>
-                        <p className="text-[10px] truncate" style={{ color: 'var(--brand-subtle)' }}>{u.email}</p>
-                      </div>
-                    </button>
-                  )
-                })
+              {groups.length > 0 && (
+                <div>
+                  <label className="block text-[11px] font-medium mb-1.5" style={{ color: 'var(--brand-muted)' }}>Adicionar grupo (atalho)</label>
+                  <SearchSelect
+                    fullWidth
+                    value=""
+                    onChange={addGroup}
+                    options={groupOpts}
+                    placeholder="Selecione um grupo para adicionar todos os consultores..."
+                  />
+                  <p className="text-[10px] mt-1" style={{ color: 'var(--brand-subtle)' }}>Adiciona todos os consultores do grupo à seleção acima.</p>
+                </div>
               )}
-            </div>
 
-            <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>
-              {selected.length} consultor{selected.length !== 1 ? 'es' : ''} selecionado{selected.length !== 1 ? 's' : ''}
-              {filteredUsers.length > 0 && <span> · {filteredUsers.length} de {allUsers.length} {allUsers.length === 1 ? 'consultor' : 'consultores'}</span>}
-            </p>
-            <div className="flex gap-2 pt-1">
-              <Button variant="ghost" className="flex-1" onClick={closeModal}>Cancelar</Button>
-              <Button variant="primary" className="flex-1" onClick={saveTeam} disabled={saving}>{saving ? 'Salvando…' : 'Salvar Equipe'}</Button>
+              {selected.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-medium mb-1.5" style={{ color: 'var(--brand-muted)' }}>{selected.length} selecionado{selected.length !== 1 ? 's' : ''}</p>
+                  <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                    {selected.map(id => {
+                      const u = usersById.get(id)
+                      if (!u) return null
+                      return (
+                        <span key={id} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full"
+                          style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-text)', border: '1px solid rgba(0,245,255,0.2)' }}>
+                          {u.name}
+                          <button onClick={() => removeUser(id)} className="hover:opacity-70 transition-opacity" aria-label="Remover">
+                            <X size={11} style={{ color: '#00F5FF' }} />
+                          </button>
+                        </span>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <Button variant="ghost" className="flex-1" onClick={closeModal}>Cancelar</Button>
+                <Button variant="primary" className="flex-1" onClick={saveTeam} disabled={saving}>{saving ? 'Salvando…' : 'Salvar Equipe'}</Button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </AppLayout>
   )
 }
