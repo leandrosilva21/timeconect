@@ -354,7 +354,7 @@ export default function InvestimentoComercialPage() {
                           : <span className="text-sm font-semibold tabular-nums" style={{ color: hours > 0 ? '#00F5FF' : 'var(--brand-subtle)' }}>{fmtHours(hours)}</span>
                         }
                       </Td>
-                      <Td><Button size="sm" variant="ghost" onClick={() => openModal(project)}><Users size={13} className="mr-1" /> Gerenciar</Button></Td>
+                      <Td><Button size="sm" variant="ghost" onClick={() => openModal(project)}><Users size={13} className="mr-1" /> Alocação</Button></Td>
                     </Tr>
                   )
                 })}
