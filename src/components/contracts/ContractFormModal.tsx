@@ -335,6 +335,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
     if (form.is_subproject && !form.parent_project_id)                   { toast.error('Selecione o projeto pai para o subprojeto'); setActiveTab(0); return }
     if (!isOnDemand && !isMensalidade && !form.horas_contratadas)        { toast.error('Informe as horas contratadas'); setActiveTab(4); return }
     if (isMensalidade && !form.valor_projeto)                            { toast.error('Informe o Valor do Contrato (mensalidade)'); setActiveTab(4); return }
+    if (isOnDemand && !isMensalidade && !form.valor_projeto)             { toast.error('Informe o Valor do Projeto'); setActiveTab(4); return }
 
     setSaving(true)
     try {
@@ -726,24 +727,22 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-3">Valores e Horas</p>
                 <div className="grid grid-cols-3 gap-3">
-                  {!isOnDemand && (
-                    <div>
-                      <label className={labelCls}>
-                        {isMensalidade ? 'Valor do Contrato (R$) — mensalidade' : 'Valor do Projeto (R$)'}
-                        {isMensalidade && <span style={{ color: '#ef4444' }}> *</span>}
-                      </label>
-                      <input type="number" min="0" step="0.01" placeholder="0,00"
-                        value={form.valor_projeto}
-                        onChange={e => {
-                          const vp = e.target.value
-                          const h = Number(form.horas_contratadas)
-                          const vh = vp && h > 0 ? String((Number(vp) / h).toFixed(2)) : form.valor_hora
-                          setForm(f => ({ ...f, valor_projeto: vp, valor_hora: vh }))
-                        }}
-                        className={inputCls} style={inputStyle} />
-                    </div>
-                  )}
-                  {!isMensalidade && (
+                  <div>
+                    <label className={labelCls}>
+                      {isMensalidade ? 'Valor do Contrato (R$) — mensalidade' : 'Valor do Projeto (R$)'}
+                      {(isMensalidade || isOnDemand) && <span style={{ color: '#ef4444' }}> *</span>}
+                    </label>
+                    <input type="number" min="0" step="0.01" placeholder="0,00"
+                      value={form.valor_projeto}
+                      onChange={e => {
+                        const vp = e.target.value
+                        const h = Number(form.horas_contratadas)
+                        const vh = vp && h > 0 ? String((Number(vp) / h).toFixed(2)) : form.valor_hora
+                        setForm(f => ({ ...f, valor_projeto: vp, valor_hora: vh }))
+                      }}
+                      className={inputCls} style={inputStyle} />
+                  </div>
+                  {!isMensalidade && !isOnDemand && (
                     <div>
                       <label className={labelCls}>Valor da Hora (R$)</label>
                       <input type="number" min="0" step="0.01" placeholder="0,00"
@@ -752,7 +751,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                           const vh = e.target.value
                           const h = Number(form.horas_contratadas)
                           const vp = vh && h > 0 ? String((Number(vh) * h).toFixed(2)) : form.valor_projeto
-                          setForm(f => ({ ...f, valor_hora: vh, valor_projeto: isOnDemand ? f.valor_projeto : vp }))
+                          setForm(f => ({ ...f, valor_hora: vh, valor_projeto: vp }))
                         }}
                         className={inputCls} style={inputStyle} />
                     </div>

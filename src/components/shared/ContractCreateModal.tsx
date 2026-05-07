@@ -268,10 +268,11 @@ export function ContractCreateModal({
         return true
 
       case 4: // Operacional
-        if (!isOnDemand && !isMensalidade && !form.horas_contratadas) { toast.error('Informe as Horas Contratadas'); return false }
-        if (!form.expectativa_inicio)                                 { toast.error('Informe a Expectativa de Início'); return false }
-        if (isMensalidade && !form.valor_projeto)                     { toast.error('Informe o Valor do Contrato (mensalidade)'); return false }
-        if (!isMensalidade && !form.valor_hora)                       { toast.error('Informe o Valor da Hora'); return false }
+        if (!isOnDemand && !isMensalidade && !form.horas_contratadas)        { toast.error('Informe as Horas Contratadas'); return false }
+        if (!form.expectativa_inicio)                                        { toast.error('Informe a Expectativa de Início'); return false }
+        if (isMensalidade && !form.valor_projeto)                            { toast.error('Informe o Valor do Contrato (mensalidade)'); return false }
+        if (isOnDemand && !isMensalidade && !form.valor_projeto)             { toast.error('Informe o Valor do Projeto'); return false }
+        if (!isMensalidade && !isOnDemand && !form.valor_hora)               { toast.error('Informe o Valor da Hora'); return false }
         if (form.parent_project_id && parentBalance && !parentBalance.allow_negative) {
           const childHours = Number(form.horas_contratadas) || 0
           if (childHours > parentBalance.balance) {
@@ -351,7 +352,7 @@ export function ContractCreateModal({
       [2, () => !!form.contract_type_id],
       [4, () => {
         if (isMensalidade) return !!form.expectativa_inicio && !!form.valor_projeto
-        if (isOnDemand)    return !!form.expectativa_inicio && !!form.valor_hora
+        if (isOnDemand)    return !!form.expectativa_inicio && !!form.valor_projeto
         return !!form.horas_contratadas && !!form.expectativa_inicio && !!form.valor_hora
       }],
       [8, () => form.observacoes.trim().length >= 50],
@@ -763,22 +764,20 @@ export function ContractCreateModal({
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-3">Valores</p>
                 <div className="grid grid-cols-3 gap-3">
-                  {!isOnDemand && (
-                    <div>
-                      <label className={labelCls}>
-                        {isMensalidade ? 'Valor do Contrato (R$) — mensalidade' : 'Valor do Projeto (R$)'}
-                        {isMensalidade && <span style={{ color: '#ef4444' }}> *</span>}
-                      </label>
-                      <input {...numInput('valor_projeto', vp =>
-                        setForm(f => {
-                          const h = Number(f.horas_contratadas)
-                          const vh = vp && h > 0 ? String((Number(vp) / h).toFixed(2)) : f.valor_hora
-                          return { ...f, valor_projeto: vp, valor_hora: vh }
-                        })
-                      )} placeholder="0,00" />
-                    </div>
-                  )}
-                  {!isMensalidade && (
+                  <div>
+                    <label className={labelCls}>
+                      {isMensalidade ? 'Valor do Contrato (R$) — mensalidade' : 'Valor do Projeto (R$)'}
+                      {(isMensalidade || isOnDemand) && <span style={{ color: '#ef4444' }}> *</span>}
+                    </label>
+                    <input {...numInput('valor_projeto', vp =>
+                      setForm(f => {
+                        const h = Number(f.horas_contratadas)
+                        const vh = vp && h > 0 ? String((Number(vp) / h).toFixed(2)) : f.valor_hora
+                        return { ...f, valor_projeto: vp, valor_hora: vh }
+                      })
+                    )} placeholder="0,00" />
+                  </div>
+                  {!isMensalidade && !isOnDemand && (
                     <div>
                       <label className={labelCls}>
                         Valor da Hora (R$) <span style={{ color: '#ef4444' }}>*</span>
@@ -787,7 +786,7 @@ export function ContractCreateModal({
                         setForm(f => {
                           const h = Number(f.horas_contratadas)
                           const vp = vh && h > 0 ? String((Number(vh) * h).toFixed(2)) : f.valor_projeto
-                          return { ...f, valor_hora: vh, valor_projeto: isOnDemand ? f.valor_projeto : vp }
+                          return { ...f, valor_hora: vh, valor_projeto: vp }
                         })
                       )} placeholder="0,00" />
                     </div>
