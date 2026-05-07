@@ -277,8 +277,8 @@ function SidebarInner({ user }: { user: User }) {
           label: 'Sustentação',
           icon: Headphones,
           items: [
-            { label: 'Portal',   href: '/sustentacao',          icon: Headphones, exactMatch: true },
-            { label: 'Projetos', href: '/sustentacao/projetos', icon: Layers },
+            { label: 'Portal',             href: '/sustentacao',     icon: Headphones, exactMatch: true },
+            { label: 'Gestão de Projetos', href: '/gestao-projetos', icon: Layers },
           ],
         })
         nav.splice(1, 0, { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard })
