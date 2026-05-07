@@ -365,14 +365,26 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
 
   return (
     <>
+      {(project as any).has_open_period && (
+        <tr style={{ height: 0 }}>
+          <td colSpan={20} style={{ padding: 0, height: 0 }}>
+            <div style={{ background: 'rgba(251,191,36,0.12)', borderTop: '2px solid rgba(251,191,36,0.6)', display: 'flex', alignItems: 'center', gap: 6, padding: '3px 12px', fontSize: 11, color: '#FBBF24', fontWeight: 600 }}>
+              <span style={{ animation: 'pulse 1.5s infinite' }}>⚠</span> MÊS ABERTO — apontamentos permitidos em competência fechada
+            </div>
+          </td>
+        </tr>
+      )}
       <tr
         className={`border-b transition-all cursor-pointer ${statusRowClass} ${childRowClass}`.trim()}
         style={{
-          borderColor: 'var(--brand-border)',
-          // Se filho ativo na tree, hierarquia visual prevalece sobre status
-          background: isActive ? rowBg : !statusRowClass ? rowBg : undefined,
-          borderLeft: isActive ? rowBorderLeft : !statusRowClass ? rowBorderLeft : undefined,
-          boxShadow: rowBoxShadow,
+          borderColor: (project as any).has_open_period ? 'rgba(251,191,36,0.4)' : 'var(--brand-border)',
+          background: (project as any).has_open_period
+            ? 'rgba(251,191,36,0.06)'
+            : isActive ? rowBg : !statusRowClass ? rowBg : undefined,
+          borderLeft: (project as any).has_open_period
+            ? '4px solid rgba(251,191,36,0.7)'
+            : isActive ? rowBorderLeft : !statusRowClass ? rowBorderLeft : undefined,
+          boxShadow: (project as any).has_open_period ? '0 0 0 1px rgba(251,191,36,0.15) inset' : rowBoxShadow,
           opacity: !statusRowClass ? rowOpacity : undefined,
         }}
         onClick={treeRow ? (treeRow._hasChildren ? onTreeToggle : undefined) : onToggle}
@@ -454,11 +466,6 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
                 )}
                 {treeRow && isActive && (
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(0,245,255,0.12)', color: '#00F5FF' }}>ATIVO</span>
-                )}
-                {(project as any).has_open_period && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5" style={{ background: 'rgba(251,191,36,0.15)', color: '#FBBF24', border: '1px solid rgba(251,191,36,0.3)' }}>
-                    <CalendarPlus size={9} /> MÊS ABERTO
-                  </span>
                 )}
               </div>
               <p className="text-xs font-mono" style={{ color: 'var(--brand-subtle)' }}>
