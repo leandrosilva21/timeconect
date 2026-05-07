@@ -439,11 +439,16 @@ function ModalValidacao({ yearMonth, onClose, onFechar }: {
                   <span className="text-xs" style={{ color: '#f59e0b' }}>{a.mensagem}</span>
                 </div>
               ))}
-              {validacao.pode_fechar && (
+              {validacao.alertas.length === 0 && (
                 <div className="flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)' }}>
                   <CheckCircle size={14} className="shrink-0" style={{ color: '#22c55e' }} />
                   <span className="text-xs" style={{ color: '#22c55e' }}>Tudo ok — pronto para fechar</span>
                 </div>
+              )}
+              {validacao.alertas.length > 0 && (
+                <p className="text-[11px] leading-relaxed pt-1" style={{ color: 'var(--brand-subtle)' }}>
+                  O fechamento bloqueia apenas <span style={{ color: 'var(--brand-text)' }}>novos lançamentos</span> nesta competência. Os itens pendentes acima continuam podendo ser aprovados normalmente após o fechamento.
+                </p>
               )}
             </div>
           )}
