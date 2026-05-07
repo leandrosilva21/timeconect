@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
 import {
   Search, Users, X, Check, TrendingUp, Clock,
-  BarChart2, Building2, User, ChevronDown, ChevronRight,
+  BarChart2, Building2, User, ChevronDown, ChevronRight, Plus,
 } from 'lucide-react'
 import { PageHeader, Table, Thead, Th, Tbody, Tr, Td, Button, SkeletonTable, EmptyState } from '@/components/ds'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
@@ -113,6 +113,11 @@ export default function InvestimentoComercialPage() {
   const [userSearch,   setUserSearch]   = useState('')
   const [saving,       setSaving]       = useState(false)
 
+  // Modal de criação de projeto interno (ERPSERV)
+  const [newProjectOpen,   setNewProjectOpen]   = useState(false)
+  const [newProjectName,   setNewProjectName]   = useState('')
+  const [creatingProject,  setCreatingProject]  = useState(false)
+
   // analytics tabs
   const [analytics,        setAnalytics]        = useState<Analytics | null>(null)
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
@@ -121,6 +126,16 @@ export default function InvestimentoComercialPage() {
   useEffect(() => {
     if (user && user.type !== 'admin') router.replace('/dashboard')
   }, [user, router])
+
+  const reloadProjects = async () => {
+    try {
+      const projRes = await api.get<any>('/projects?only_investimento_comercial=true&pageSize=500&gestao=true&with_team=true')
+      const rawProjects: any[] = projRes?.items ?? projRes?.data ?? []
+      setProjects(rawProjects.map(p => ({ id: p.id, code: p.code, status: p.status, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
+    } catch {
+      toast.error('Erro ao recarregar projetos')
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -144,6 +159,23 @@ export default function InvestimentoComercialPage() {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
+
+  const handleCreateProject = async () => {
+    const name = newProjectName.trim()
+    if (name.length < 2) { toast.error('Informe um nome válido (mín. 2 caracteres)'); return }
+    setCreatingProject(true)
+    try {
+      await api.post('/investimento-interno/projects', { name })
+      toast.success('Projeto interno criado')
+      setNewProjectOpen(false)
+      setNewProjectName('')
+      await reloadProjects()
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Erro ao criar projeto')
+    } finally {
+      setCreatingProject(false)
+    }
+  }
 
   // horas por projeto (aba projetos)
   useEffect(() => {
@@ -455,12 +487,17 @@ export default function InvestimentoComercialPage() {
           onChange={(m, y) => { if (m === 0) { setFilterMonth(0); setFilterYear(0) } else { setFilterMonth(m); setFilterYear(y) } }} />
 
         {activeTab === 'projetos' && (
-          <span className="text-xs ml-auto" style={{ color: 'var(--brand-subtle)' }}>
-            {filtered.length} cliente{filtered.length !== 1 ? 's' : ''}
-            {filterMonth > 0 && !hoursLoading && (
-              <span> · <span style={{ color: '#00F5FF' }}>{fmtHours(totalHours)}</span> total</span>
-            )}
-          </span>
+          <>
+            <span className="text-xs ml-auto" style={{ color: 'var(--brand-subtle)' }}>
+              {filtered.length} cliente{filtered.length !== 1 ? 's' : ''}
+              {filterMonth > 0 && !hoursLoading && (
+                <span> · <span style={{ color: '#00F5FF' }}>{fmtHours(totalHours)}</span> total</span>
+              )}
+            </span>
+            <Button size="sm" variant="primary" onClick={() => setNewProjectOpen(true)}>
+              <Plus size={13} className="mr-1" /> Novo Projeto Interno (ERPSERV)
+            </Button>
+          </>
         )}
       </div>
 
@@ -488,6 +525,43 @@ export default function InvestimentoComercialPage() {
       {activeTab === 'consultores' && renderConsultores()}
       {activeTab === 'mensal'      && renderMensal()}
       {activeTab === 'detalhe'     && renderDetalhe()}
+
+      {/* Modal: Novo Projeto Interno (ERPSERV) */}
+      {newProjectOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}
+          onClick={() => !creatingProject && setNewProjectOpen(false)}>
+          <div className="flex flex-col rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+              <h2 className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>Novo Projeto Interno</h2>
+              <button onClick={() => !creatingProject && setNewProjectOpen(false)} className="p-1.5 rounded-lg hover:bg-white/5">
+                <X size={16} style={{ color: 'var(--brand-muted)' }} />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>
+                Cliente: <span className="font-semibold" style={{ color: 'var(--brand-text)' }}>ERPSERV</span> · sem horas e sem valor de contrato
+              </p>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--brand-muted)' }}>
+                  Nome do Projeto <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input type="text" autoFocus value={newProjectName}
+                  onChange={e => setNewProjectName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !creatingProject) handleCreateProject() }}
+                  placeholder="Ex: Desenvolvimento Minutor"
+                  className="w-full px-3 h-9 rounded-xl text-sm outline-none" style={inputStyle} />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+              <Button variant="ghost" onClick={() => setNewProjectOpen(false)} disabled={creatingProject}>Cancelar</Button>
+              <Button variant="primary" onClick={handleCreateProject} disabled={creatingProject || newProjectName.trim().length < 2}>
+                {creatingProject ? 'Criando...' : 'Criar Projeto'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal gerenciar equipe */}
       {modal.open && modal.project && (() => {
