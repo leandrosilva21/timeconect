@@ -683,7 +683,7 @@ export default function InvestimentoComercialPage() {
 
       {/* Modal gerenciar equipe */}
       {modal.open && modal.project && (() => {
-        const userOpts = allUsers.map(u => ({ id: u.id, name: u.email ? `${u.name} (${u.email})` : u.name }))
+        const userOpts = allUsers.map(u => ({ id: u.id, name: u.name }))
         const groupOpts = groups.map(g => ({ id: g.id, name: `${g.name} (${g.users.length})` }))
 
         const addGroup = (groupId: string) => {
