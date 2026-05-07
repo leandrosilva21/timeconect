@@ -72,8 +72,9 @@ interface Contract {
 interface SelectOption { id: number; name: string; code_prefix?: string | null }
 
 // Regra de combinação Tipo de Serviço × Tipo de Contrato:
-// - Projeto    → não permite "On Demand" nem "SaaS"
+// - Projeto     → não permite "On Demand" nem "SaaS"
 // - Sustentação → não permite "Fechado"
+// - Bizify      → não permite "Banco de Horas Mensal"
 // O contract_type atualmente selecionado é sempre mantido visível (caso de edição
 // de contrato pré-existente que viole a nova regra).
 const allowedForService = (
@@ -84,12 +85,14 @@ const allowedForService = (
   const sn = (serviceTypeName ?? '').toLowerCase()
   const isProjeto = sn.includes('projeto')
   const isSustenta = sn.includes('sustenta')
-  if (!isProjeto && !isSustenta) return contractTypes
+  const isBizify = sn.includes('bizify')
+  if (!isProjeto && !isSustenta && !isBizify) return contractTypes
   return contractTypes.filter(ct => {
     if (String(ct.id) === String(selectedContractTypeId ?? '')) return true
     const n = String(ct.name ?? '').toLowerCase()
     if (isProjeto && (n.includes('on demand') || n.includes('saas'))) return false
     if (isSustenta && n.includes('fechado')) return false
+    if (isBizify && n.includes('banco de horas mensal')) return false
     return true
   })
 }
