@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, Fragment } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
@@ -20,7 +20,7 @@ interface Consultant { id: number; name: string; email: string }
 interface ConsultantGroup { id: number; name: string; users: Consultant[] }
 
 interface ICProject {
-  id: number; code: string; status: string
+  id: number; name: string; code: string; status: string
   customer: { id: number; name: string } | null
   consultants: Consultant[]
 }
@@ -118,6 +118,17 @@ export default function InvestimentoComercialPage() {
   const [newProjectName,   setNewProjectName]   = useState('')
   const [creatingProject,  setCreatingProject]  = useState(false)
 
+  // Árvore: clientes expandidos
+  const [expandedCustomers, setExpandedCustomers] = useState<Set<number>>(new Set())
+  const toggleCustomerExpand = (customerId: number) => {
+    setExpandedCustomers(prev => {
+      const next = new Set(prev)
+      if (next.has(customerId)) next.delete(customerId)
+      else next.add(customerId)
+      return next
+    })
+  }
+
   // analytics tabs
   const [analytics,        setAnalytics]        = useState<Analytics | null>(null)
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
@@ -131,7 +142,7 @@ export default function InvestimentoComercialPage() {
     try {
       const projRes = await api.get<any>('/projects?only_investimento_comercial=true&pageSize=500&gestao=true&with_team=true')
       const rawProjects: any[] = projRes?.items ?? projRes?.data ?? []
-      setProjects(rawProjects.map(p => ({ id: p.id, code: p.code, status: p.status, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
+      setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
     } catch {
       toast.error('Erro ao recarregar projetos')
     }
@@ -146,7 +157,7 @@ export default function InvestimentoComercialPage() {
     ]).then(([projRes, usersRes, groupsRes]) => {
       if (cancelled) return
       const rawProjects: any[] = projRes?.items ?? projRes?.data ?? []
-      setProjects(rawProjects.map(p => ({ id: p.id, code: p.code, status: p.status, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
+      setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
       const rawUsers: any[] = usersRes?.items ?? usersRes?.data ?? []
       setAllUsers(rawUsers.map((u: any) => ({ id: u.id, name: u.name, email: u.email })))
       const rawGroups: any[] = groupsRes?.data ?? groupsRes?.items ?? []
@@ -242,43 +253,94 @@ export default function InvestimentoComercialPage() {
   // ── Conteúdo de cada aba ─────────────────────────────────────────────────────
 
   function renderProjetos() {
-    if (loading) return <SkeletonTable rows={8} cols={4} />
+    if (loading) return <SkeletonTable rows={8} cols={5} />
     if (filtered.length === 0) return <EmptyState icon={TrendingUp as LucideIcon} title="Nenhum projeto encontrado" description="Ajuste a busca." />
+
+    // Agrupa por cliente preservando a ordem em que apareceram em filtered.
+    const groups = new Map<number, { customer: { id: number; name: string }; projects: ICProject[] }>()
+    for (const p of filtered) {
+      if (!p.customer) continue
+      const key = p.customer.id
+      if (!groups.has(key)) groups.set(key, { customer: p.customer, projects: [] })
+      groups.get(key)!.projects.push(p)
+    }
+    const groupList = [...groups.values()].sort((a, b) => a.customer.name.localeCompare(b.customer.name))
+
     return (
       <Table>
         <Thead>
           <Tr>
-            <Th>Cliente</Th><Th>Código</Th><Th>Consultores Alocados</Th>
+            <Th>Cliente / Projeto</Th><Th>Código</Th><Th>Consultores Alocados</Th>
             <Th><span className="flex items-center gap-1"><Clock size={12} />{filterMonth > 0 ? 'Horas no Período' : 'Horas'}</span></Th>
             <Th></Th>
           </Tr>
         </Thead>
         <Tbody>
-          {filtered.map(project => {
-            const hours = hoursMap[project.id] ?? 0
+          {groupList.map(({ customer, projects }) => {
+            const expanded = expandedCustomers.has(customer.id)
+            const totalHoursCustomer = projects.reduce((s, p) => s + (hoursMap[p.id] ?? 0), 0)
+            const totalConsultorIds = new Set(projects.flatMap(p => p.consultants.map(c => c.id)))
             return (
-              <Tr key={project.id}>
-                <Td><span className="font-medium text-sm" style={{ color: 'var(--brand-text)' }}>{project.customer?.name ?? '—'}</span></Td>
-                <Td><span className="text-xs font-mono px-2 py-0.5 rounded" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{project.code}</span></Td>
-                <Td>
-                  {project.consultants.length === 0
-                    ? <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhum alocado</span>
-                    : <div className="flex flex-wrap gap-1">
-                        {project.consultants.slice(0, 4).map(c => (
-                          <span key={c.id} className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)' }}>{c.name.split(' ')[0]}</span>
-                        ))}
-                        {project.consultants.length > 4 && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>+{project.consultants.length - 4}</span>}
-                      </div>
-                  }
-                </Td>
-                <Td>
-                  {hoursLoading
-                    ? <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>…</span>
-                    : <span className="text-sm font-semibold tabular-nums" style={{ color: hours > 0 ? '#00F5FF' : 'var(--brand-subtle)' }}>{fmtHours(hours)}</span>
-                  }
-                </Td>
-                <Td><Button size="sm" variant="ghost" onClick={() => openModal(project)}><Users size={13} className="mr-1" /> Gerenciar</Button></Td>
-              </Tr>
+              <Fragment key={customer.id}>
+                {/* Linha do cliente (pai) */}
+                <Tr>
+                  <Td>
+                    <button onClick={() => toggleCustomerExpand(customer.id)}
+                      className="flex items-center gap-2 text-left w-full hover:opacity-80 transition-opacity">
+                      {expanded
+                        ? <ChevronDown size={14} style={{ color: 'var(--brand-muted)' }} />
+                        : <ChevronRight size={14} style={{ color: 'var(--brand-muted)' }} />}
+                      <span className="font-medium text-sm" style={{ color: 'var(--brand-text)' }}>{customer.name}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>{projects.length}</span>
+                    </button>
+                  </Td>
+                  <Td><span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>—</span></Td>
+                  <Td>
+                    {totalConsultorIds.size === 0
+                      ? <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhum alocado</span>
+                      : <span className="text-xs" style={{ color: 'var(--brand-muted)' }}>{totalConsultorIds.size} {totalConsultorIds.size === 1 ? 'consultor' : 'consultores'}</span>}
+                  </Td>
+                  <Td>
+                    {hoursLoading
+                      ? <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>…</span>
+                      : <span className="text-sm font-semibold tabular-nums" style={{ color: totalHoursCustomer > 0 ? '#00F5FF' : 'var(--brand-subtle)' }}>{fmtHours(totalHoursCustomer)}</span>}
+                  </Td>
+                  <Td></Td>
+                </Tr>
+                {/* Linhas dos projetos (filhos) */}
+                {expanded && projects.map(project => {
+                  const hours = hoursMap[project.id] ?? 0
+                  return (
+                    <Tr key={project.id}>
+                      <Td>
+                        <span className="flex items-center gap-2 pl-6">
+                          <span className="text-zinc-600">└</span>
+                          <span className="text-sm" style={{ color: 'var(--brand-text)' }}>{project.name || '—'}</span>
+                        </span>
+                      </Td>
+                      <Td><span className="text-xs font-mono px-2 py-0.5 rounded" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{project.code}</span></Td>
+                      <Td>
+                        {project.consultants.length === 0
+                          ? <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhum alocado</span>
+                          : <div className="flex flex-wrap gap-1">
+                              {project.consultants.slice(0, 4).map(c => (
+                                <span key={c.id} className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)' }}>{c.name.split(' ')[0]}</span>
+                              ))}
+                              {project.consultants.length > 4 && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>+{project.consultants.length - 4}</span>}
+                            </div>
+                        }
+                      </Td>
+                      <Td>
+                        {hoursLoading
+                          ? <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>…</span>
+                          : <span className="text-sm font-semibold tabular-nums" style={{ color: hours > 0 ? '#00F5FF' : 'var(--brand-subtle)' }}>{fmtHours(hours)}</span>
+                        }
+                      </Td>
+                      <Td><Button size="sm" variant="ghost" onClick={() => openModal(project)}><Users size={13} className="mr-1" /> Gerenciar</Button></Td>
+                    </Tr>
+                  )
+                })}
+              </Fragment>
             )
           })}
         </Tbody>
