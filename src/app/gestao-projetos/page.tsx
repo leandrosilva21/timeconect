@@ -10,7 +10,7 @@ import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { Project, PaginatedResponse, HourContribution } from '@/types'
 import { formatBRL } from '@/lib/format'
 import { toast } from 'sonner'
-import { Layers, Search, ChevronDown, ChevronRight, Users, TrendingUp, Clock, BarChart2, AlertTriangle, DollarSign, X, UserCheck, Pencil, Trash2, Plus, Edit2, MessageCircle, Eye, Check, UserPlus } from 'lucide-react'
+import { Layers, Search, ChevronDown, ChevronRight, Users, TrendingUp, Clock, BarChart2, AlertTriangle, DollarSign, X, UserCheck, Pencil, Trash2, Plus, Edit2, MessageCircle, Eye, Check, UserPlus, CalendarPlus, CalendarOff } from 'lucide-react'
 import { ProjectMessages } from '@/components/shared/ProjectMessages'
 import { ProjectDataModal } from '@/components/shared/ProjectDataModal'
 import { MultiSelect } from '@/components/ui/multi-select'
@@ -296,7 +296,7 @@ interface ProjectRowProps {
   project: ProjectWithTeam
   expanded: boolean
   onToggle: () => void
-  onMenuAction: (action: 'view' | 'costs' | 'timesheets' | 'expenses' | 'team' | 'aportes' | 'messages', project: ProjectWithTeam) => void
+  onMenuAction: (action: 'view' | 'costs' | 'timesheets' | 'expenses' | 'team' | 'aportes' | 'messages' | 'open-period', project: ProjectWithTeam) => void
   canEdit?: boolean
   canChangeStatus?: boolean
   onEdit?: (project: ProjectWithTeam) => void
@@ -400,6 +400,7 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
               { label: 'Apont. & Despesas', icon: <Clock       size={12} />, onClick: () => onMenuAction('timesheets', project) },
               ...(canEdit ? [{ label: 'Aportes', icon: <TrendingUp size={12} />, onClick: () => onMenuAction('aportes', project) }] : []),
               { label: 'Selecionar Equipe', icon: <Users       size={12} />, onClick: () => onMenuAction('team',       project) },
+              { label: 'Abrir Mês',        icon: <CalendarPlus size={12} />, onClick: () => onMenuAction('open-period', project) },
               ...(onDelete ? [{ label: 'Excluir', icon: <Trash2 size={12} className="text-red-400" />, onClick: () => onDelete(project), danger: true }] : []),
             ]} />
             <button
@@ -453,6 +454,11 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
                 )}
                 {treeRow && isActive && (
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(0,245,255,0.12)', color: '#00F5FF' }}>ATIVO</span>
+                )}
+                {(project as any).has_open_period && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5" style={{ background: 'rgba(251,191,36,0.15)', color: '#FBBF24', border: '1px solid rgba(251,191,36,0.3)' }}>
+                    <CalendarPlus size={9} /> MÊS ABERTO
+                  </span>
                 )}
               </div>
               <p className="text-xs font-mono" style={{ color: 'var(--brand-subtle)' }}>
@@ -1626,6 +1632,7 @@ export default function GestaoProjetosPage() {
   const [viewCostLoading, setViewCostLoading] = useState(false)
   const [messagesProject, setMessagesProject] = useState<ProjectWithTeam | null>(null)
   const [dataModal, setDataModal] = useState<{ project: ProjectWithTeam; tab: 'timesheets' | 'expenses' } | null>(null)
+  const [openPeriodProject, setOpenPeriodProject] = useState<ProjectWithTeam | null>(null)
 
   // Auto-open messages modal when ?messages=PROJECT_ID is in URL
   useEffect(() => {
@@ -1637,7 +1644,7 @@ export default function GestaoProjetosPage() {
     window.history.replaceState({}, '', window.location.pathname)
   }, [projects])
 
-  const handleMenuAction = async (action: 'view' | 'costs' | 'timesheets' | 'expenses' | 'team' | 'aportes' | 'messages', project: ProjectWithTeam) => {
+  const handleMenuAction = async (action: 'view' | 'costs' | 'timesheets' | 'expenses' | 'team' | 'aportes' | 'messages' | 'open-period', project: ProjectWithTeam) => {
     if (action === 'view') {
       setViewProject(project)
       setViewProjectFull(null)
@@ -1651,6 +1658,7 @@ export default function GestaoProjetosPage() {
       return
     }
     if (action === 'messages') { setMessagesProject(project); return }
+    if (action === 'open-period') { setOpenPeriodProject(project); return }
     if (action === 'timesheets') { setDataModal({ project, tab: 'timesheets' }); return }
     if (action === 'expenses')   { setDataModal({ project, tab: 'expenses'   }); return }
     if (action === 'costs') {
@@ -3293,6 +3301,139 @@ export default function GestaoProjetosPage() {
         />
       )}
 
+      {openPeriodProject && (
+        <OpenPeriodModal
+          project={openPeriodProject}
+          onClose={() => setOpenPeriodProject(null)}
+          onRefresh={() => setRefreshKey(k => k + 1)}
+        />
+      )}
+
     </AppLayout>
+  )
+}
+
+// ─── Modal Períodos Abertos ───────────────────────────────────────────────────
+
+function OpenPeriodModal({ project, onClose, onRefresh }: {
+  project: ProjectWithTeam
+  onClose: () => void
+  onRefresh: () => void
+}) {
+  const now = new Date()
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const defaultYearMonth = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}`
+
+  const [yearMonth, setYearMonth]     = useState(defaultYearMonth)
+  const [openPeriods, setOpenPeriods] = useState<{ id: number; year_month: string }[]>([])
+  const [saving, setSaving]           = useState(false)
+  const [closing, setClosing]         = useState(false)
+
+  useEffect(() => {
+    api.get<{ data: { id: number; year_month: string }[] }>(`/projects/${project.id}/open-periods`)
+      .then(r => setOpenPeriods(r.data ?? []))
+      .catch(() => {})
+  }, [project.id])
+
+  const fmtMonth = (ym: string) => {
+    const [y, m] = ym.split('-')
+    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  }
+
+  const handleOpen = async () => {
+    setSaving(true)
+    try {
+      await api.post(`/projects/${project.id}/open-period`, { year_month: yearMonth })
+      toast.success(`Mês ${fmtMonth(yearMonth)} aberto para este projeto.`)
+      const r = await api.get<{ data: { id: number; year_month: string }[] }>(`/projects/${project.id}/open-periods`)
+      setOpenPeriods(r.data ?? [])
+      onRefresh()
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao abrir período')
+    } finally { setSaving(false) }
+  }
+
+  const handleCloseAll = async () => {
+    setClosing(true)
+    try {
+      const r = await api.post<{ count: number }>(`/projects/${project.id}/close-periods`, {})
+      toast.success(`${r.count} período(s) fechado(s).`)
+      setOpenPeriods([])
+      onRefresh()
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao fechar períodos')
+    } finally { setClosing(false) }
+  }
+
+  const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
+  // Gera opções: últimos 12 meses antes do atual
+  const monthOptions: { value: string; label: string }[] = []
+  for (let i = 1; i <= 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    monthOptions.push({ value: val, label: fmtMonth(val) })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75">
+      <div className="relative w-full max-w-md rounded-xl shadow-2xl bg-zinc-900 border border-zinc-800">
+        <button onClick={onClose} className="absolute top-3 right-3 p-1 text-zinc-500 hover:text-zinc-300"><X size={14} /></button>
+        <div className="p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <CalendarPlus size={14} style={{ color: '#FBBF24' }} />
+            <h3 className="text-sm font-semibold text-white">Períodos Abertos</h3>
+          </div>
+          <p className="text-xs text-zinc-500 mb-4">{project.name} — permite apontamentos em meses com competência fechada</p>
+
+          {openPeriods.length > 0 && (
+            <div className="mb-4 space-y-1.5">
+              <p className="text-xs text-zinc-400 font-medium">Meses atualmente abertos:</p>
+              {openPeriods.map(p => (
+                <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', color: '#FBBF24' }}>
+                  <CalendarPlus size={11} />
+                  {fmtMonth(p.year_month)}
+                </div>
+              ))}
+              <button
+                onClick={handleCloseAll}
+                disabled={closing}
+                className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                style={{ background: 'rgba(239,68,68,0.1)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}
+              >
+                <CalendarOff size={11} />
+                {closing ? 'Fechando...' : 'Fechar todos os meses anteriores'}
+              </button>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Abrir mês:</label>
+              <select
+                value={yearMonth}
+                onChange={e => setYearMonth(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-xs bg-zinc-800 border border-zinc-700 text-white outline-none"
+              >
+                {monthOptions.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs border border-zinc-700 text-zinc-300">Cancelar</button>
+              <button
+                onClick={handleOpen}
+                disabled={saving}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
+                style={{ background: 'rgba(251,191,36,0.15)', color: '#FBBF24', border: '1px solid rgba(251,191,36,0.3)' }}
+              >
+                {saving ? 'Abrindo...' : 'Abrir Mês'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
