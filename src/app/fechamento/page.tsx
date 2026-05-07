@@ -493,6 +493,8 @@ export default function FechamentoPage() {
   const setTab   = (v: TabId)   => setFilter('tab', v)
 
   const yearMonth = toYearMonth(month, year)
+  const currentYearMonth = toYearMonth(now.getMonth() + 1, now.getFullYear())
+  const isPastMonth = yearMonth < currentYearMonth
 
   const [status,      setStatus]      = useState<FechamentoStatus | null>(null)
   const [producao,    setProducao]    = useState<ProducaoRow[]>([])
@@ -619,7 +621,9 @@ export default function FechamentoPage() {
                 isAdmin && (
                   <button
                     onClick={() => setShowValidacao(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+                    disabled={!isPastMonth}
+                    title={!isPastMonth ? 'Só é permitido fechar competências de meses anteriores' : undefined}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}>
                     <Lock size={13} />
                     Validar e Fechar
