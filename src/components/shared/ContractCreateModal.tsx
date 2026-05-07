@@ -76,9 +76,9 @@ const isSustentacaoName = (name: string) => {
 }
 
 // Regra de combinação Tipo de Serviço × Tipo de Contrato:
-// - Projeto     → não permite "On Demand" nem "SaaS"
-// - Sustentação → não permite "Fechado"
-// - Bizify      → não permite "Banco de Horas Mensal"
+// - Projeto     → permite: BH Fixo, BH Mensal, Fechado          (proíbe: On Demand, SaaS, Cloud)
+// - Sustentação → permite: BH Fixo, BH Mensal, On Demand, Cloud (proíbe: Fechado, SaaS)
+// - Bizify      → permite: BH Fixo, Fechado, On Demand, SaaS    (proíbe: BH Mensal, Cloud)
 // O contract_type atualmente selecionado é sempre mantido visível (caso de edição
 // de contrato pré-existente que viole a nova regra).
 const allowedForService = (
@@ -94,9 +94,9 @@ const allowedForService = (
   return contractTypes.filter(ct => {
     if (String(ct.id) === String(selectedContractTypeId ?? '')) return true
     const n = String(ct.name ?? '').toLowerCase()
-    if (isProjeto && (n.includes('on demand') || n.includes('saas'))) return false
-    if (isSustenta && n.includes('fechado')) return false
-    if (isBizify && n.includes('banco de horas mensal')) return false
+    if (isProjeto && (n.includes('on demand') || n.includes('saas') || n === 'cloud')) return false
+    if (isSustenta && (n.includes('fechado') || n.includes('saas'))) return false
+    if (isBizify && (n.includes('banco de horas mensal') || n === 'cloud')) return false
     return true
   })
 }
@@ -207,7 +207,10 @@ export function ContractCreateModal({
   )
   const isOnDemand = selectedContractType?.name.toLowerCase().trim() === 'on demand'
   const isBankHours = selectedContractType?.name.toLowerCase().includes('banco de horas') ?? false
-  const isFechado = !!selectedContractType && !isOnDemand && !isBankHours
+  const ctNameLower = selectedContractType?.name.toLowerCase().trim() ?? ''
+  // Mensalidade: Cloud e SaaS — só "Valor do Contrato" como mensalidade fixa.
+  const isMensalidade = ctNameLower === 'cloud' || ctNameLower === 'saas'
+  const isFechado = !!selectedContractType && !isOnDemand && !isBankHours && !isMensalidade
 
   const saveErpserv = useMemo(() => {
     if (!isFechado) return null
@@ -265,9 +268,10 @@ export function ContractCreateModal({
         return true
 
       case 4: // Operacional
-        if (!isOnDemand && !form.horas_contratadas) { toast.error('Informe as Horas Contratadas'); return false }
-        if (!form.expectativa_inicio)               { toast.error('Informe a Expectativa de Início'); return false }
-        if (!form.valor_hora)                       { toast.error('Informe o Valor da Hora'); return false }
+        if (!isOnDemand && !isMensalidade && !form.horas_contratadas) { toast.error('Informe as Horas Contratadas'); return false }
+        if (!form.expectativa_inicio)                                 { toast.error('Informe a Expectativa de Início'); return false }
+        if (isMensalidade && !form.valor_projeto)                     { toast.error('Informe o Valor do Contrato (mensalidade)'); return false }
+        if (!isMensalidade && !form.valor_hora)                       { toast.error('Informe o Valor da Hora'); return false }
         if (form.parent_project_id && parentBalance && !parentBalance.allow_negative) {
           const childHours = Number(form.horas_contratadas) || 0
           if (childHours > parentBalance.balance) {
@@ -345,7 +349,11 @@ export function ContractCreateModal({
       [0, () => !!form.customer_id && !!form.project_name.trim()],
       [1, () => !!form.service_type_id],
       [2, () => !!form.contract_type_id],
-      [4, () => !isOnDemand ? !!form.horas_contratadas && !!form.expectativa_inicio && !!form.valor_hora : !!form.expectativa_inicio && !!form.valor_hora],
+      [4, () => {
+        if (isMensalidade) return !!form.expectativa_inicio && !!form.valor_projeto
+        if (isOnDemand)    return !!form.expectativa_inicio && !!form.valor_hora
+        return !!form.horas_contratadas && !!form.expectativa_inicio && !!form.valor_hora
+      }],
       [8, () => form.observacoes.trim().length >= 50],
     ]
     for (const [tab, check] of checks) {
@@ -379,7 +387,7 @@ export function ContractCreateModal({
         limite_despesa:        form.limite_despesa ? Number(form.limite_despesa) : null,
         architect_id:          form.architect_id ? Number(form.architect_id) : null,
         tipo_alocacao:         form.tipo_alocacao,
-        horas_contratadas:     isOnDemand ? 0 : Math.round(Number(form.horas_contratadas) || 0),
+        horas_contratadas:     (isOnDemand || isMensalidade) ? 0 : Math.round(Number(form.horas_contratadas) || 0),
         valor_projeto:         form.valor_projeto ? Number(form.valor_projeto) : null,
         valor_hora:            form.valor_hora ? Number(form.valor_hora) : null,
         hora_adicional:        form.hora_adicional ? Number(form.hora_adicional) : null,
@@ -731,7 +739,7 @@ export function ContractCreateModal({
               )}
 
               <div className="grid grid-cols-2 gap-4">
-                {!isOnDemand && (
+                {!isOnDemand && !isMensalidade && (
                   <div>
                     <label className={labelCls}>Horas Contratadas *</label>
                     <input {...numInput('horas_contratadas', raw =>
@@ -757,7 +765,10 @@ export function ContractCreateModal({
                 <div className="grid grid-cols-3 gap-3">
                   {!isOnDemand && (
                     <div>
-                      <label className={labelCls}>Valor do Projeto (R$)</label>
+                      <label className={labelCls}>
+                        {isMensalidade ? 'Valor do Contrato (R$) — mensalidade' : 'Valor do Projeto (R$)'}
+                        {isMensalidade && <span style={{ color: '#ef4444' }}> *</span>}
+                      </label>
                       <input {...numInput('valor_projeto', vp =>
                         setForm(f => {
                           const h = Number(f.horas_contratadas)
@@ -767,25 +778,27 @@ export function ContractCreateModal({
                       )} placeholder="0,00" />
                     </div>
                   )}
-                  <div>
-                    <label className={labelCls}>
-                      Valor da Hora (R$) <span style={{ color: '#ef4444' }}>*</span>
-                    </label>
-                    <input {...numInput('valor_hora', vh =>
-                      setForm(f => {
-                        const h = Number(f.horas_contratadas)
-                        const vp = vh && h > 0 ? String((Number(vh) * h).toFixed(2)) : f.valor_projeto
-                        return { ...f, valor_hora: vh, valor_projeto: isOnDemand ? f.valor_projeto : vp }
-                      })
-                    )} placeholder="0,00" />
-                  </div>
-                  {!isOnDemand && (
+                  {!isMensalidade && (
+                    <div>
+                      <label className={labelCls}>
+                        Valor da Hora (R$) <span style={{ color: '#ef4444' }}>*</span>
+                      </label>
+                      <input {...numInput('valor_hora', vh =>
+                        setForm(f => {
+                          const h = Number(f.horas_contratadas)
+                          const vp = vh && h > 0 ? String((Number(vh) * h).toFixed(2)) : f.valor_projeto
+                          return { ...f, valor_hora: vh, valor_projeto: isOnDemand ? f.valor_projeto : vp }
+                        })
+                      )} placeholder="0,00" />
+                    </div>
+                  )}
+                  {!isOnDemand && !isMensalidade && (
                     <div>
                       <label className={labelCls}>Hora Adicional (R$)</label>
                       <input {...numInput('hora_adicional')} placeholder="0,00" />
                     </div>
                   )}
-                  {!isOnDemand && (
+                  {!isOnDemand && !isMensalidade && (
                     <div>
                       <label className={labelCls}>% Horas Coordenador</label>
                       <input {...numInput('pct_horas_coordenador')} placeholder="0,00" />

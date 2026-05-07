@@ -72,9 +72,9 @@ interface Contract {
 interface SelectOption { id: number; name: string; code_prefix?: string | null }
 
 // Regra de combinação Tipo de Serviço × Tipo de Contrato:
-// - Projeto     → não permite "On Demand" nem "SaaS"
-// - Sustentação → não permite "Fechado"
-// - Bizify      → não permite "Banco de Horas Mensal"
+// - Projeto     → permite: BH Fixo, BH Mensal, Fechado          (proíbe: On Demand, SaaS, Cloud)
+// - Sustentação → permite: BH Fixo, BH Mensal, On Demand, Cloud (proíbe: Fechado, SaaS)
+// - Bizify      → permite: BH Fixo, Fechado, On Demand, SaaS    (proíbe: BH Mensal, Cloud)
 // O contract_type atualmente selecionado é sempre mantido visível (caso de edição
 // de contrato pré-existente que viole a nova regra).
 const allowedForService = (
@@ -90,9 +90,9 @@ const allowedForService = (
   return contractTypes.filter(ct => {
     if (String(ct.id) === String(selectedContractTypeId ?? '')) return true
     const n = String(ct.name ?? '').toLowerCase()
-    if (isProjeto && (n.includes('on demand') || n.includes('saas'))) return false
-    if (isSustenta && n.includes('fechado')) return false
-    if (isBizify && n.includes('banco de horas mensal')) return false
+    if (isProjeto && (n.includes('on demand') || n.includes('saas') || n === 'cloud')) return false
+    if (isSustenta && (n.includes('fechado') || n.includes('saas'))) return false
+    if (isBizify && (n.includes('banco de horas mensal') || n === 'cloud')) return false
     return true
   })
 }
@@ -289,7 +289,10 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
   )
   const isOnDemand  = selectedContractType?.name.toLowerCase().trim() === 'on demand'
   const isBankHours = selectedContractType?.name.toLowerCase().includes('banco de horas') ?? false
-  const isFechado   = !!selectedContractType && !isOnDemand && !isBankHours
+  const ctNameLower = selectedContractType?.name.toLowerCase().trim() ?? ''
+  // Mensalidade: Cloud e SaaS — só "Valor do Contrato" como mensalidade fixa.
+  const isMensalidade = ctNameLower === 'cloud' || ctNameLower === 'saas'
+  const isFechado   = !!selectedContractType && !isOnDemand && !isBankHours && !isMensalidade
 
   // saveErpserv (read-only calc for Fechado)
   const saveErpserv = useMemo(() => {
@@ -330,7 +333,8 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
     if (!form.customer_id)                                               { toast.error('Selecione o cliente'); setActiveTab(0); return }
     if (!(form as any).project_name?.trim())                             { toast.error('Informe o nome do projeto'); setActiveTab(0); return }
     if (form.is_subproject && !form.parent_project_id)                   { toast.error('Selecione o projeto pai para o subprojeto'); setActiveTab(0); return }
-    if (!isOnDemand && !form.horas_contratadas)                          { toast.error('Informe as horas contratadas'); setActiveTab(4); return }
+    if (!isOnDemand && !isMensalidade && !form.horas_contratadas)        { toast.error('Informe as horas contratadas'); setActiveTab(4); return }
+    if (isMensalidade && !form.valor_projeto)                            { toast.error('Informe o Valor do Contrato (mensalidade)'); setActiveTab(4); return }
 
     setSaving(true)
     try {
@@ -346,7 +350,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
         limite_despesa:        form.limite_despesa ? Number(form.limite_despesa) : null,
         architect_id:          form.architect_id ? Number(form.architect_id) : null,
         tipo_alocacao:         form.tipo_alocacao,
-        horas_contratadas:     isOnDemand ? 0 : Number(form.horas_contratadas),
+        horas_contratadas:     (isOnDemand || isMensalidade) ? 0 : Number(form.horas_contratadas),
         valor_projeto:         form.valor_projeto ? Number(form.valor_projeto) : null,
         valor_hora:            form.valor_hora ? Number(form.valor_hora) : null,
         hora_adicional:        form.hora_adicional ? Number(form.hora_adicional) : null,
@@ -691,7 +695,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
 
               {/* Horas e datas */}
               <div className="grid grid-cols-2 gap-4">
-                {!isOnDemand && (
+                {!isOnDemand && !isMensalidade && (
                   <div>
                     <label className={labelCls}>Horas Contratadas *</label>
                     <input type="number" min="0" value={form.horas_contratadas}
@@ -724,7 +728,10 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                 <div className="grid grid-cols-3 gap-3">
                   {!isOnDemand && (
                     <div>
-                      <label className={labelCls}>Valor do Projeto (R$)</label>
+                      <label className={labelCls}>
+                        {isMensalidade ? 'Valor do Contrato (R$) — mensalidade' : 'Valor do Projeto (R$)'}
+                        {isMensalidade && <span style={{ color: '#ef4444' }}> *</span>}
+                      </label>
                       <input type="number" min="0" step="0.01" placeholder="0,00"
                         value={form.valor_projeto}
                         onChange={e => {
@@ -736,19 +743,21 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                         className={inputCls} style={inputStyle} />
                     </div>
                   )}
-                  <div>
-                    <label className={labelCls}>Valor da Hora (R$)</label>
-                    <input type="number" min="0" step="0.01" placeholder="0,00"
-                      value={form.valor_hora}
-                      onChange={e => {
-                        const vh = e.target.value
-                        const h = Number(form.horas_contratadas)
-                        const vp = vh && h > 0 ? String((Number(vh) * h).toFixed(2)) : form.valor_projeto
-                        setForm(f => ({ ...f, valor_hora: vh, valor_projeto: isOnDemand ? f.valor_projeto : vp }))
-                      }}
-                      className={inputCls} style={inputStyle} />
-                  </div>
-                  {!isOnDemand && (
+                  {!isMensalidade && (
+                    <div>
+                      <label className={labelCls}>Valor da Hora (R$)</label>
+                      <input type="number" min="0" step="0.01" placeholder="0,00"
+                        value={form.valor_hora}
+                        onChange={e => {
+                          const vh = e.target.value
+                          const h = Number(form.horas_contratadas)
+                          const vp = vh && h > 0 ? String((Number(vh) * h).toFixed(2)) : form.valor_projeto
+                          setForm(f => ({ ...f, valor_hora: vh, valor_projeto: isOnDemand ? f.valor_projeto : vp }))
+                        }}
+                        className={inputCls} style={inputStyle} />
+                    </div>
+                  )}
+                  {!isOnDemand && !isMensalidade && (
                     <div>
                       <label className={labelCls}>Hora Adicional (R$)</label>
                       <input type="number" min="0" step="0.01" placeholder="0,00"
@@ -757,7 +766,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                         className={inputCls} style={inputStyle} />
                     </div>
                   )}
-                  {!isOnDemand && (
+                  {!isOnDemand && !isMensalidade && (
                     <div>
                       <label className={labelCls}>% Horas Coordenador</label>
                       <input type="number" min="0" max="100" step="1" placeholder="0"
