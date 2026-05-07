@@ -117,13 +117,13 @@ export default function InvestimentoComercialPage() {
   // Modal de criação de projeto interno (ERPSERV)
   const [newProjectOpen,      setNewProjectOpen]      = useState(false)
   const [newProjectName,      setNewProjectName]      = useState('')
-  const [newProjectCategoria, setNewProjectCategoria] = useState<'Sustentação' | 'Projeto' | 'Suporte'>('Projeto')
+  const [newProjectCategoria, setNewProjectCategoria] = useState<'Sustentação' | 'Projeto' | 'Suporte' | 'Comercial'>('Projeto')
   const [creatingProject,     setCreatingProject]     = useState(false)
 
   // Árvore: clientes expandidos
   const [expandedCustomers, setExpandedCustomers] = useState<Set<number>>(new Set())
   // Filtro de categoria
-  const [categoriaFilter, setCategoriaFilter] = useState<'todas' | 'Sustentação' | 'Projeto' | 'Suporte' | 'sem'>('todas')
+  const [categoriaFilter, setCategoriaFilter] = useState<'todas' | 'Sustentação' | 'Projeto' | 'Suporte' | 'Comercial' | 'sem'>('todas')
   const toggleCustomerExpand = (customerId: number) => {
     setExpandedCustomers(prev => {
       const next = new Set(prev)
@@ -602,6 +602,7 @@ export default function InvestimentoComercialPage() {
         <div className="flex flex-wrap gap-1.5 mb-3">
           {([
             { id: 'todas',       label: 'Todas as categorias' },
+            { id: 'Comercial',   label: 'Comercial' },
             { id: 'Sustentação', label: 'Sustentação' },
             { id: 'Projeto',     label: 'Projeto' },
             { id: 'Suporte',     label: 'Suporte' },
@@ -659,11 +660,12 @@ export default function InvestimentoComercialPage() {
                   Categoria <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <select value={newProjectCategoria}
-                  onChange={e => setNewProjectCategoria(e.target.value as 'Sustentação' | 'Projeto' | 'Suporte')}
+                  onChange={e => setNewProjectCategoria(e.target.value as 'Sustentação' | 'Projeto' | 'Suporte' | 'Comercial')}
                   className="w-full px-3 h-9 rounded-xl text-sm outline-none" style={inputStyle}>
                   <option value="Sustentação">Sustentação</option>
                   <option value="Projeto">Projeto</option>
                   <option value="Suporte">Suporte</option>
+                  <option value="Comercial">Comercial</option>
                 </select>
               </div>
             </div>
