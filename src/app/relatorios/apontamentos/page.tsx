@@ -166,10 +166,9 @@ export default function RelatorioApontamentosPage() {
   )
 
   function vedaTitleValue(t: RawTimesheet): string {
-    const isValid = !!t.ticket && /^\d{5}$/.test(t.ticket)
-    const original = t.ticket_subject ?? ''
-    if (isValid) return original
-    return `sem ticket ${original}`.trim()
+    const original = (t.ticket_subject ?? '').trim()
+    // Padrão Vedamotors: NNNN-NNNNNN (ex: 0526-000007). Fora do padrão = sem ticket.
+    return /^\d{4}-\d{6}$/.test(original) ? original : 'Sem ticket'
   }
 
   const toggleStatus = (s: StatusKey) => {
