@@ -249,6 +249,7 @@ export default function RelatorioApontamentosPage() {
       start_time:     fmtTimeHM(t.start_time),
       end_time:       fmtTimeHM(t.end_time),
       effort_hours:   t.effort_hours ?? minutesToHHMM(t.effort_minutes ?? 0),
+      effort_decimal: Math.round(((t.effort_minutes ?? 0) / 60) * 100) / 100,
       date_service:   fmtDateBR(t.date),
     }))
   }
