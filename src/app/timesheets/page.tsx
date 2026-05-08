@@ -715,7 +715,6 @@ function TimesheetsPageContent() {
   }
   const setStatus         = (v: string)              => setFilter('status', v)
   const setOrigins        = (v: string[])            => setFilter('origins', v)
-  const setServiceTypeIds = (v: string[])            => setFilter('serviceTypeIds', v)
   const setContractTypeIds= (v: string[])            => setFilter('contractTypeIds', v)
   const setCategoriaServico = (v: '' | 'sustentacao' | 'projeto' | 'bizify' | 'investimento') => setFilter('categoriaServico', v)
   const setCustomerIds    = (v: string[])            => setFilter('customerIds', v)
