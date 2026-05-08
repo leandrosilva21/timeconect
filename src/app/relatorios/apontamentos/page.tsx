@@ -267,15 +267,24 @@ export default function RelatorioApontamentosPage() {
   }
 
   function handlePrint() {
-    if (typeof document !== 'undefined') {
-      document.body.dataset.print = 'relatorio'
+    if (typeof document === 'undefined') return
+    const el = document.getElementById('print-relatorio')
+    if (!el) return
+    // Move o bloco pra ser filho direto de body antes de imprimir.
+    // Isso permite paginação (position:fixed travava em 1 página).
+    const placeholder = document.createElement('div')
+    placeholder.style.display = 'none'
+    el.parentNode?.insertBefore(placeholder, el)
+    document.body.appendChild(el)
+    document.body.dataset.print = 'relatorio'
+    const restore = () => {
+      placeholder.parentNode?.insertBefore(el, placeholder)
+      placeholder.remove()
+      delete document.body.dataset.print
+      window.removeEventListener('afterprint', restore)
     }
-    setTimeout(() => {
-      window.print()
-      setTimeout(() => {
-        if (typeof document !== 'undefined') delete document.body.dataset.print
-      }, 300)
-    }, 50)
+    window.addEventListener('afterprint', restore)
+    setTimeout(() => window.print(), 100)
   }
 
   return (
@@ -283,13 +292,16 @@ export default function RelatorioApontamentosPage() {
       <style>{`
         @media print {
           @page { size: A4 landscape; margin: 8mm; }
-          body * { visibility: hidden !important; }
-          body[data-print="relatorio"] #print-relatorio,
-          body[data-print="relatorio"] #print-relatorio * { visibility: visible !important; }
-          body[data-print="relatorio"] #print-relatorio {
-            position: fixed; top: 0; left: 0; width: 100%; z-index: 9999;
+          /* Durante o print, #print-relatorio é movido pra ser filho direto
+             de body. Esconde todos os outros filhos diretos. */
+          body[data-print="relatorio"] > *:not(#print-relatorio) {
+            display: none !important;
           }
-          /* No print, o card preenche a largura total da página */
+          body[data-print="relatorio"] #print-relatorio {
+            display: block !important;
+            width: 100% !important;
+          }
+          /* Card preenche a largura total da página */
           body[data-print="relatorio"] #print-relatorio > div {
             max-width: none !important;
             width: 100% !important;
@@ -313,6 +325,10 @@ export default function RelatorioApontamentosPage() {
             white-space: normal !important;
             word-break: break-word !important;
             padding: 4px 6px !important;
+          }
+          /* Evita cortar linha entre páginas */
+          body[data-print="relatorio"] #print-relatorio table tr {
+            page-break-inside: avoid;
           }
           body[data-print="relatorio"] #print-relatorio .table-scroll {
             overflow: visible !important;
