@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { Fragment, useState, useEffect, useCallback } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
@@ -752,35 +752,43 @@ export default function FechamentoClientePage() {
                                     <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Solicitante</th>
                                     <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Ticket</th>
                                     <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Título</th>
-                                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Descrição</th>
                                     <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">Horas</th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {(p.apontamentos ?? []).map((ts, i) => (
-                                    <tr key={ts.id}
-                                      style={{ background: i % 2 === 0 ? '#fff' : '#faf9ff', borderBottom: '1px solid #e5e7eb', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                                      <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{fmtDate(ts.data)}</td>
-                                      <td className="px-3 py-2 text-xs text-gray-800">{ts.colaborador}</td>
-                                      <td className="px-3 py-2 text-xs text-gray-500">{ts.solicitante ?? '—'}</td>
-                                      <td className="px-3 py-2 text-xs text-gray-500">{ts.ticket ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${ts.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-500">#{ts.ticket}</a> : '—'}</td>
-                                      <td className="px-3 py-2 text-xs text-gray-500">{ts.titulo ?? '—'}</td>
-                                      <td className="px-3 py-2 text-xs text-gray-500">{ts.observacao ?? '—'}</td>
-                                      <td className="px-3 py-2 text-xs text-right font-medium text-gray-800 tabular-nums">
-                                        {ts.horas.toFixed(2)}h
-                                        {ts.client_extra_pct ? (
-                                          <span className="block text-[10px] font-semibold" style={{ color: '#d97706' }}>
-                                            +{ts.client_extra_pct}%{ts.valor_extra ? ` (+${formatBRL(ts.valor_extra)})` : ''}
-                                          </span>
-                                        ) : null}
-                                      </td>
-                                    </tr>
-                                  ))}
+                                  {(p.apontamentos ?? []).map((ts, i) => {
+                                    const bg = i % 2 === 0 ? '#fff' : '#faf9ff'
+                                    return (
+                                      <Fragment key={ts.id}>
+                                        <tr style={{ background: bg, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
+                                          <td className="px-3 pt-2 pb-1 text-xs text-gray-600 whitespace-nowrap">{fmtDate(ts.data)}</td>
+                                          <td className="px-3 pt-2 pb-1 text-xs text-gray-800">{ts.colaborador}</td>
+                                          <td className="px-3 pt-2 pb-1 text-xs text-gray-500">{ts.solicitante ?? '—'}</td>
+                                          <td className="px-3 pt-2 pb-1 text-xs text-gray-500">{ts.ticket ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${ts.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-500">#{ts.ticket}</a> : '—'}</td>
+                                          <td className="px-3 pt-2 pb-1 text-xs text-gray-500">{ts.titulo ?? '—'}</td>
+                                          <td className="px-3 pt-2 pb-1 text-xs text-right font-medium text-gray-800 tabular-nums">
+                                            {ts.horas.toFixed(2)}h
+                                            {ts.client_extra_pct ? (
+                                              <span className="block text-[10px] font-semibold" style={{ color: '#d97706' }}>
+                                                +{ts.client_extra_pct}%{ts.valor_extra ? ` (+${formatBRL(ts.valor_extra)})` : ''}
+                                              </span>
+                                            ) : null}
+                                          </td>
+                                        </tr>
+                                        <tr style={{ background: bg, borderBottom: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
+                                          <td colSpan={6} className="px-3 pt-1 pb-3 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
+                                            <span className="font-semibold text-gray-500 mr-1">Descrição:</span>
+                                            {ts.observacao ?? '—'}
+                                          </td>
+                                        </tr>
+                                      </Fragment>
+                                    )
+                                  })}
                                 </tbody>
                                 <tfoot>
                                   {p.extra_receita != null && p.extra_receita > 0 && (
                                     <tr style={{ background: '#fffbeb', borderTop: '1px solid #fde68a', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                                      <td colSpan={6} className="px-3 py-1.5 text-right text-xs font-semibold" style={{ color: '#92400e' }}>
+                                      <td colSpan={5} className="px-3 py-1.5 text-right text-xs font-semibold" style={{ color: '#92400e' }}>
                                         Acréscimo % ({p.apontamentos.filter(a => a.client_extra_pct).map(a => `+${Number(a.client_extra_pct)}%`).filter((v, i, s) => s.indexOf(v) === i).join(', ')}) =
                                       </td>
                                       <td className="px-3 py-1.5 text-right text-xs font-bold tabular-nums" style={{ color: '#d97706' }}>
@@ -789,7 +797,7 @@ export default function FechamentoClientePage() {
                                     </tr>
                                   )}
                                   <tr style={{ background: '#ede9fe', borderTop: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                                    <td colSpan={6} className="px-3 py-2 text-right text-sm font-semibold text-gray-700">
+                                    <td colSpan={5} className="px-3 py-2 text-right text-sm font-semibold text-gray-700">
                                       {p.horas.toFixed(2)}h × {formatBRL(p.valor_hora)}/h{p.extra_receita && p.extra_receita > 0 ? ' + acréscimo' : ''} =
                                     </td>
                                     <td className="px-3 py-2 text-right text-sm font-bold tabular-nums"
