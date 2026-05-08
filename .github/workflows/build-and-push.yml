@@ -40,5 +40,7 @@ jobs:
           tags: |
             ghcr.io/leonardo-almd/minutor-frontend:latest
             ghcr.io/leonardo-almd/minutor-frontend:${{ github.sha }}
-          cache-from: type=gha,scope=v2
-          cache-to: type=gha,mode=max,scope=v2
+          # Cache no GHCR (registry) — mais consistente que type=gha,
+          # que ocasionalmente reusava layers de builds anteriores.
+          cache-from: type=registry,ref=ghcr.io/leonardo-almd/minutor-frontend:buildcache
+          cache-to: type=registry,ref=ghcr.io/leonardo-almd/minutor-frontend:buildcache,mode=max
