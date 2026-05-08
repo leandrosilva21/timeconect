@@ -376,80 +376,9 @@ export default function RelatorioApontamentosPage() {
         </Card>
       )}
 
-      {/* Tabela operacional (com Status) */}
-      {loading && (
-        <Card>
-          <div className="space-y-2">
-            {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-8" />)}
-          </div>
-        </Card>
-      )}
-
-      {!loading && loaded && items.length === 0 && (
-        <EmptyState
-          icon={FileText}
-          title="Nenhum apontamento encontrado"
-          description="Ajuste os filtros e gere o relatório novamente."
-        />
-      )}
-
-      {!loading && loaded && items.length > 0 && (
-        <Card padding="none" className="overflow-x-auto">
-          <Table>
-            <Thead>
-              <tr>
-                <Th>Data Inclusão</Th>
-                <Th>Status</Th>
-                <Th>Solicitante</Th>
-                <Th>Consultor</Th>
-                <Th>Ticket</Th>
-                <Th>Título</Th>
-                <Th>Descrição</Th>
-                <Th className="text-center">Início</Th>
-                <Th className="text-center">Fim</Th>
-                <Th right>Esforço</Th>
-                <Th>Data do Serviço</Th>
-              </tr>
-            </Thead>
-            <Tbody>
-              {items.map((t, i) => (
-                <Tr key={i}>
-                  <Td className="whitespace-nowrap">{fmtDateTimeBR(t.created_at)}</Td>
-                  <Td>
-                    <Badge variant={t.status ?? 'default'}>{STATUS_LABEL[t.status ?? ''] ?? t.status}</Badge>
-                  </Td>
-                  <Td>{parseRequester(t.ticket_solicitante)}</Td>
-                  <Td>{t.user?.name ?? ''}</Td>
-                  <Td>{t.ticket ?? ''}</Td>
-                  <Td>{t.ticket_subject ?? ''}</Td>
-                  <Td className="whitespace-pre-wrap max-w-[26rem]">{t.observation ?? ''}</Td>
-                  <Td className="text-center">{fmtTimeHM(t.start_time)}</Td>
-                  <Td className="text-center">{fmtTimeHM(t.end_time)}</Td>
-                  <Td right className="font-semibold">{t.effort_hours ?? minutesToHHMM(t.effort_minutes ?? 0)}</Td>
-                  <Td className="whitespace-nowrap">{fmtDateBR(t.date)}</Td>
-                </Tr>
-              ))}
-              <tr style={{ background: 'var(--brand-bg)', borderTop: '2px solid var(--brand-border)' }}>
-                <td
-                  colSpan={9}
-                  className="px-5 py-3.5 text-right font-bold"
-                  style={{ color: 'var(--brand-text)' }}
-                >
-                  Total
-                </td>
-                <td className="px-5 py-3.5 text-right font-bold" style={{ color: 'var(--brand-primary)' }}>
-                  {totalHHMM}
-                </td>
-                <td />
-              </tr>
-            </Tbody>
-          </Table>
-        </Card>
-      )}
-
-      {/* Pré-visualização (estilo Relatório de Fechamento) */}
+      {/* Pré-visualização (estilo Relatório de Fechamento) — fica acima da tabela operacional */}
       {loaded && items.length > 0 && showPreview && (
-        <div className="mt-6">
+        <div className="mb-6">
           <div className="flex justify-end gap-2 mb-3 print:hidden">
             <Button variant="primary" icon={Printer} onClick={handlePrint}>Imprimir / Salvar PDF</Button>
             <Button variant="secondary" icon={X} onClick={() => setShowPreview(false)}>Fechar</Button>
@@ -544,6 +473,78 @@ export default function RelatorioApontamentosPage() {
           </div>
         </div>
       )}
+
+      {/* Tabela operacional (com Status) */}
+      {loading && (
+        <Card>
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-8" />)}
+          </div>
+        </Card>
+      )}
+
+      {!loading && loaded && items.length === 0 && (
+        <EmptyState
+          icon={FileText}
+          title="Nenhum apontamento encontrado"
+          description="Ajuste os filtros e gere o relatório novamente."
+        />
+      )}
+
+      {!loading && loaded && items.length > 0 && (
+        <Card padding="none" className="overflow-x-auto">
+          <Table>
+            <Thead>
+              <tr>
+                <Th>Data Inclusão</Th>
+                <Th>Status</Th>
+                <Th>Solicitante</Th>
+                <Th>Consultor</Th>
+                <Th>Ticket</Th>
+                <Th>Título</Th>
+                <Th>Descrição</Th>
+                <Th className="text-center">Início</Th>
+                <Th className="text-center">Fim</Th>
+                <Th right>Esforço</Th>
+                <Th>Data do Serviço</Th>
+              </tr>
+            </Thead>
+            <Tbody>
+              {items.map((t, i) => (
+                <Tr key={i}>
+                  <Td className="whitespace-nowrap">{fmtDateTimeBR(t.created_at)}</Td>
+                  <Td>
+                    <Badge variant={t.status ?? 'default'}>{STATUS_LABEL[t.status ?? ''] ?? t.status}</Badge>
+                  </Td>
+                  <Td>{parseRequester(t.ticket_solicitante)}</Td>
+                  <Td>{t.user?.name ?? ''}</Td>
+                  <Td>{t.ticket ?? ''}</Td>
+                  <Td>{t.ticket_subject ?? ''}</Td>
+                  <Td className="whitespace-pre-wrap max-w-[26rem]">{t.observation ?? ''}</Td>
+                  <Td className="text-center">{fmtTimeHM(t.start_time)}</Td>
+                  <Td className="text-center">{fmtTimeHM(t.end_time)}</Td>
+                  <Td right className="font-semibold">{t.effort_hours ?? minutesToHHMM(t.effort_minutes ?? 0)}</Td>
+                  <Td className="whitespace-nowrap">{fmtDateBR(t.date)}</Td>
+                </Tr>
+              ))}
+              <tr style={{ background: 'var(--brand-bg)', borderTop: '2px solid var(--brand-border)' }}>
+                <td
+                  colSpan={9}
+                  className="px-5 py-3.5 text-right font-bold"
+                  style={{ color: 'var(--brand-text)' }}
+                >
+                  Total
+                </td>
+                <td className="px-5 py-3.5 text-right font-bold" style={{ color: 'var(--brand-primary)' }}>
+                  {totalHHMM}
+                </td>
+                <td />
+              </tr>
+            </Tbody>
+          </Table>
+        </Card>
+      )}
+
     </AppLayout>
   )
 }
