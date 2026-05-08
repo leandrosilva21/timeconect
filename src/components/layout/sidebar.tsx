@@ -182,6 +182,14 @@ const NAV: NavEntry[] = [
   },
   {
     type: 'group',
+    label: 'Relatórios',
+    icon: FileText,
+    items: [
+      { label: 'Apontamentos', href: '/relatorios/apontamentos', icon: Clock },
+    ],
+  },
+  {
+    type: 'group',
     label: 'Cadastros',
     icon: Database,
     items: [
