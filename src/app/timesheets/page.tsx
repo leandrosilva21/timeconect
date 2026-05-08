@@ -680,6 +680,7 @@ function TimesheetsPageContent() {
     user?.id,
     {
       projectId:        spProjectId,
+      projectIds:       [] as string[],
       page:             1,
       status:           '',
       origins:          [] as string[],
@@ -704,12 +705,13 @@ function TimesheetsPageContent() {
   )
 
   const {
-    projectId, page, status, origins, serviceTypeIds, contractTypeIds, categoriaServico,
+    projectId, projectIds, page, status, origins, serviceTypeIds, contractTypeIds, categoriaServico,
     customerIds, coordinatorIds, executiveIds, userIds, startDate, endDate, refMonth, refYear,
     filterMode, ticket, requester, ticketService, sortField, sortDir,
   } = filters
 
   const setProjectId      = (v: string)              => setFilter('projectId', v)
+  const setProjectIds     = (v: string[])            => setFilter('projectIds', v)
   const setPage           = (v: number | ((p: number) => number)) => {
     setFilter('page', typeof v === 'function' ? v(filters.page) : v)
   }
@@ -731,6 +733,7 @@ function TimesheetsPageContent() {
   const setTicketService  = (v: string)              => setFilter('ticketService', v)
   const [exporting, setExporting]     = useState(false)
   const [customers, setCustomers]       = useState<SelectOption[]>([])
+  const [projectsList, setProjectsList] = useState<SelectOption[]>([])
   const [coordinators, setCoordinators] = useState<SelectOption[]>([])
   const [executives, setExecutives]     = useState<SelectOption[]>([])
   const [consultants, setConsultants]   = useState<SelectOption[]>([])
@@ -831,10 +834,12 @@ function TimesheetsPageContent() {
         api.get<any>('/users?pageSize=200&exclude_type=cliente'),
         api.get<any>('/users?pageSize=100&type=coordenador'),
         api.get<any>('/users?pageSize=100&type=admin'),
-      ]).then(([c, ex, us, coords, admins]) => {
+        api.get<any>('/projects?minimal=true&pageSize=2000'),
+      ]).then(([c, ex, us, coords, admins, projs]) => {
         setCustomers(items(c))
         setExecutives(items(ex))
         setConsultants(items(us))
+        setProjectsList(items(projs))
         const coordList = items(coords)
         const adminList = items(admins)
         setCoordinators([...coordList, ...adminList.filter((a: any) => !coordList.some((c: any) => c.id === a.id))])
@@ -860,16 +865,17 @@ function TimesheetsPageContent() {
     if (requester)     p.set('requester', requester)
     if (ticketService) p.set('ticket_service', ticketService)
     if (projectId)     p.set('project_id', projectId)
+    projectIds.forEach(v => p.append('project_id[]', v))
     if (sortField)     p.set('order', sortDir === 'desc' ? `-${sortField}` : sortField)
     return p.toString()
-  }, [page, status, origins, serviceTypeIds, contractTypeIds, categoriaServico, customerIds, coordinatorIds, executiveIds, userIds, projectId, startDate, endDate, ticket, requester, ticketService, sortField, sortDir, isCliente, user?.customer_id])
+  }, [page, status, origins, serviceTypeIds, contractTypeIds, categoriaServico, customerIds, coordinatorIds, executiveIds, userIds, projectId, projectIds, startDate, endDate, ticket, requester, ticketService, sortField, sortDir, isCliente, user?.customer_id])
 
   const { data, loading, error, refetch } = useApiQuery<PaginatedResponse<Timesheet>>(
     `/timesheets?${params}`, [params]
   )
 
   const resetPage = useCallback(() => setPage(1), [])
-  const hasFilters = !!(status || origins.length || serviceTypeIds.length || contractTypeIds.length || categoriaServico || customerIds.length || coordinatorIds.length || executiveIds.length || userIds.length || projectId || startDate || endDate || ticket || requester || ticketService)
+  const hasFilters = !!(status || origins.length || serviceTypeIds.length || contractTypeIds.length || categoriaServico || customerIds.length || coordinatorIds.length || executiveIds.length || userIds.length || projectId || projectIds.length || startDate || endDate || ticket || requester || ticketService)
 
   const clearFilters = useCallback(() => {
     clearPersistedFilters()
@@ -886,6 +892,7 @@ function TimesheetsPageContent() {
       else customerIds.forEach(v => p.append('customer_id[]', v))
       userIds.forEach(v => p.append('user_id[]', v))
       if (projectId)     p.set('project_id', projectId)
+      projectIds.forEach(v => p.append('project_id[]', v))
       if (startDate)     p.set('start_date', startDate)
       if (endDate)       p.set('end_date', endDate)
       if (ticket)        p.set('ticket', ticket)
@@ -1008,6 +1015,12 @@ function TimesheetsPageContent() {
                   onChange={v => { setCustomerIds(v); resetPage() }}
                   options={customers}
                   placeholder="Todos os clientes"
+                />
+                <MultiSelect
+                  value={projectIds}
+                  onChange={v => { setProjectIds(v); resetPage() }}
+                  options={projectsList}
+                  placeholder="Todos os projetos"
                 />
                 {coordinators.length > 0 && (
                   <MultiSelect
