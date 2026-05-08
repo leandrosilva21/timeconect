@@ -983,30 +983,6 @@ function TimesheetsPageContent() {
           style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
         >
           {/* Chips de categoria de serviço */}
-          {!isCliente && (
-            <div className="flex flex-wrap gap-1.5">
-              {([
-                { id: '',             label: 'Todas',      color: 'var(--brand-muted)',  bg: 'transparent', border: 'var(--brand-border)' },
-                { id: 'sustentacao',  label: 'Sustentação', color: '#f59e0b',            bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)' },
-                { id: 'projeto',      label: 'Projeto',     color: '#00F5FF',            bg: 'rgba(0,245,255,0.12)',   border: 'rgba(0,245,255,0.35)' },
-                { id: 'bizify',       label: 'Bizify',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
-                { id: 'investimento', label: 'Investimento', color: '#ef4444',           bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.35)' },
-              ] as const).map(opt => {
-                const active = (categoriaServico || '') === opt.id
-                return (
-                  <button key={opt.id || 'all'}
-                    onClick={() => { setCategoriaServico(opt.id as any); resetPage() }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                    style={active
-                      ? { background: opt.bg, color: opt.color, border: `1px solid ${opt.border}` }
-                      : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid var(--brand-border)' }}>
-                    {opt.label}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
           {/* Linha 1: selects */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
             {isCliente ? (
@@ -1050,12 +1026,6 @@ function TimesheetsPageContent() {
                     placeholder="Todos os executivos"
                   />
                 )}
-                <MultiSelect
-                  value={serviceTypeIds}
-                  onChange={v => { setServiceTypeIds(v); resetPage() }}
-                  options={serviceTypeList}
-                  placeholder="Tipo de serviço"
-                />
                 <MultiSelect
                   value={contractTypeIds}
                   onChange={v => { setContractTypeIds(v); resetPage() }}
@@ -1110,6 +1080,25 @@ function TimesheetsPageContent() {
                 onChange={(f, t) => { setStartDate(f); setEndDate(t); setRefMonth(null); setRefYear(null); resetPage() }}
               />
             )}
+            {!isCliente && ([
+              { id: '',             label: 'Todas',       color: 'var(--brand-muted)', bg: 'transparent',            border: 'var(--brand-border)' },
+              { id: 'sustentacao',  label: 'Sustentação', color: '#f59e0b',            bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)' },
+              { id: 'projeto',      label: 'Projeto',     color: '#00F5FF',            bg: 'rgba(0,245,255,0.12)',   border: 'rgba(0,245,255,0.35)' },
+              { id: 'bizify',       label: 'Bizify',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
+              { id: 'investimento', label: 'Investimento', color: '#ef4444',           bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.35)' },
+            ] as const).map(opt => {
+              const active = (categoriaServico || '') === opt.id
+              return (
+                <button key={opt.id || 'all'}
+                  onClick={() => { setCategoriaServico(opt.id as any); resetPage() }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                  style={active
+                    ? { background: opt.bg, color: opt.color, border: `1px solid ${opt.border}` }
+                    : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid var(--brand-border)' }}>
+                  {opt.label}
+                </button>
+              )
+            })}
             {projectId && (
               <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium"
                 style={{ background: 'rgba(0,245,255,0.08)', border: '1px solid rgba(0,245,255,0.2)', color: 'var(--brand-primary)' }}>

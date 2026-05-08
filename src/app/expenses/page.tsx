@@ -720,29 +720,6 @@ export default function ExpensesPage() {
         {/* Filter card */}
         <div className="p-4 rounded-2xl mb-4 space-y-3"
           style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-          {!isCliente && (
-            <div className="flex flex-wrap gap-1.5">
-              {([
-                { id: '',             label: 'Todas',       color: 'var(--brand-muted)', bg: 'transparent',            border: 'var(--brand-border)' },
-                { id: 'sustentacao',  label: 'Sustentação', color: '#f59e0b',            bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)' },
-                { id: 'projeto',      label: 'Projeto',     color: '#00F5FF',            bg: 'rgba(0,245,255,0.12)',   border: 'rgba(0,245,255,0.35)' },
-                { id: 'bizify',       label: 'Bizify',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
-                { id: 'investimento', label: 'Investimento', color: '#ef4444',           bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.35)' },
-              ] as const).map(opt => {
-                const active = (categoriaServico || '') === opt.id
-                return (
-                  <button key={opt.id || 'all'}
-                    onClick={() => { setCategoriaServico(opt.id as any); setPage(1) }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                    style={active
-                      ? { background: opt.bg, color: opt.color, border: `1px solid ${opt.border}` }
-                      : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid var(--brand-border)' }}>
-                    {opt.label}
-                  </button>
-                )
-              })}
-            </div>
-          )}
           {isCliente ? (
             <div className="grid grid-cols-1 gap-2">
               <SearchSelect value={projectId} onChange={v => { setProjectId(v); setPage(1) }} options={clienteProjects} placeholder="Todos os projetos" />
@@ -787,6 +764,25 @@ export default function ExpensesPage() {
                 onChange={(f, t) => { setDateFrom(f); setDateTo(t); setRefMonth(null); setRefYear(null); setPage(1) }}
               />
             )}
+            {!isCliente && ([
+              { id: '',             label: 'Todas',       color: 'var(--brand-muted)', bg: 'transparent',            border: 'var(--brand-border)' },
+              { id: 'sustentacao',  label: 'Sustentação', color: '#f59e0b',            bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)' },
+              { id: 'projeto',      label: 'Projeto',     color: '#00F5FF',            bg: 'rgba(0,245,255,0.12)',   border: 'rgba(0,245,255,0.35)' },
+              { id: 'bizify',       label: 'Bizify',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
+              { id: 'investimento', label: 'Investimento', color: '#ef4444',           bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.35)' },
+            ] as const).map(opt => {
+              const active = (categoriaServico || '') === opt.id
+              return (
+                <button key={opt.id || 'all'}
+                  onClick={() => { setCategoriaServico(opt.id as any); setPage(1) }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                  style={active
+                    ? { background: opt.bg, color: opt.color, border: `1px solid ${opt.border}` }
+                    : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid var(--brand-border)' }}>
+                  {opt.label}
+                </button>
+              )
+            })}
             {(customerIds.length > 0 || projectId || userIds.length > 0 || coordinatorIds.length > 0 || executiveIds.length > 0 || contractTypeId || dateFrom || dateTo) && (
               <button onClick={() => clearPersistedFilters()}
                 className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs transition-all hover:bg-white/5"
