@@ -29,6 +29,7 @@ interface Project  { id: number; name: string }
 interface TicketSummaryRow {
   ticket: string
   title: string | null
+  requester: string | null
   period_minutes: number
   period_count: number
   lifetime_minutes: number
@@ -599,6 +600,7 @@ export default function RelatorioApontamentosPage() {
                       <tr style={{ background: '#f5f3ff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
                         <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Ticket</th>
                         <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Título</th>
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Solicitante</th>
                         <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Total no período</th>
                         <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Total histórico</th>
                       </tr>
@@ -615,6 +617,7 @@ export default function RelatorioApontamentosPage() {
                             </a>
                           </td>
                           <td className="px-3 py-2 text-xs text-gray-700">{tk.title ?? '—'}</td>
+                          <td className="px-3 py-2 text-xs text-gray-700">{tk.requester ?? '—'}</td>
                           <td className="px-3 py-2 text-xs text-right font-semibold text-gray-800 tabular-nums whitespace-nowrap">
                             {minutesToHHMM(tk.period_minutes)}
                           </td>
@@ -626,7 +629,7 @@ export default function RelatorioApontamentosPage() {
                     </tbody>
                     <tfoot>
                       <tr style={{ background: '#ede9fe', borderTop: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                        <td colSpan={2} className="px-3 py-2 text-right text-sm font-semibold text-gray-700">
+                        <td colSpan={3} className="px-3 py-2 text-right text-sm font-semibold text-gray-700">
                           Totais ({ticketSummary.length} ticket{ticketSummary.length === 1 ? '' : 's'})
                         </td>
                         <td className="px-3 py-2 text-right text-sm font-bold tabular-nums text-gray-800 whitespace-nowrap">
