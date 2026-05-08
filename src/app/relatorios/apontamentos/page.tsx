@@ -157,6 +157,21 @@ export default function RelatorioApontamentosPage() {
     [customers, customerId],
   )
 
+  // Regra especial VEDAMOTORS: coluna "Título" do relatório vira "TICKET ERPSERV".
+  // Quando o ticket bate o padrão (5 dígitos), mantém o título original.
+  // Quando NÃO bate, prefixa com "sem ticket".
+  const isVedamotors = useMemo(
+    () => customerName.toUpperCase().includes('VEDAMOTORS'),
+    [customerName],
+  )
+
+  function vedaTitleValue(t: RawTimesheet): string {
+    const isValid = !!t.ticket && /^\d{5}$/.test(t.ticket)
+    const original = t.ticket_subject ?? ''
+    if (isValid) return original
+    return `sem ticket ${original}`.trim()
+  }
+
   const toggleStatus = (s: StatusKey) => {
     setStatuses(prev => {
       const has = prev.includes(s)
@@ -225,7 +240,7 @@ export default function RelatorioApontamentosPage() {
       requester:      parseRequester(t.ticket_solicitante),
       consultant:     t.user?.name ?? '',
       ticket:         t.ticket ?? '',
-      title:          t.ticket_subject ?? '',
+      title:          isVedamotors ? vedaTitleValue(t) : (t.ticket_subject ?? ''),
       description:    t.observation ?? '',
       start_time:     fmtTimeHM(t.start_time),
       end_time:       fmtTimeHM(t.end_time),
@@ -241,6 +256,7 @@ export default function RelatorioApontamentosPage() {
       emittedAt,
       totalHours:   totalHHMM,
       totalRecords: items.length,
+      titleHeader:  isVedamotors ? 'TICKET ERPSERV' : 'Título',
     }
   }
 
@@ -471,7 +487,7 @@ export default function RelatorioApontamentosPage() {
                       <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Solicitante</th>
                       <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Consultor</th>
                       <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Ticket</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Título</th>
+                      <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">{isVedamotors ? 'TICKET ERPSERV' : 'Título'}</th>
                       <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Início</th>
                       <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Fim</th>
                       <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">Esforço</th>
@@ -492,7 +508,9 @@ export default function RelatorioApontamentosPage() {
                                 ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${t.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-500">#{t.ticket}</a>
                                 : '—'}
                             </td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700">{t.ticket_subject ?? '—'}</td>
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 whitespace-nowrap">
+                              {isVedamotors ? (vedaTitleValue(t) || '—') : (t.ticket_subject ?? '—')}
+                            </td>
                             <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtTimeHM(t.start_time) || '—'}</td>
                             <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtTimeHM(t.end_time) || '—'}</td>
                             <td className="px-3 pt-2 pb-1 text-xs text-right font-semibold text-gray-800 tabular-nums whitespace-nowrap">
