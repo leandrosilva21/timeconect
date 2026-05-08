@@ -1488,7 +1488,7 @@ export default function MeuPainelPage() {
         start_date: tsDateFrom || startDate,
         end_date:   tsDateTo   || endDate,
       })
-      if (isCoordenador && user?.id) p.set('user_id', String(user.id))
+      if (user?.id) p.set('user_id', String(user.id))
       if (tsSearch)   p.set('search',      tsSearch)
       if (tsProject)  p.set('project_id',  tsProject)
       if (tsCustomer) p.set('customer_id', tsCustomer)
@@ -1510,7 +1510,7 @@ export default function MeuPainelPage() {
         start_date: expDateFrom || startDate,
         end_date:   expDateTo   || endDate,
       })
-      if (isCoordenador && user?.id) p.set('user_id', String(user.id))
+      if (user?.id) p.set('user_id', String(user.id))
       if (expSearch)   p.set('search',      expSearch)
       if (expCustomer)  p.set('customer_id',  expCustomer)
       if (expProject)   p.set('project_id',   expProject)
@@ -1590,9 +1590,10 @@ export default function MeuPainelPage() {
         const start = new Date(now.getFullYear(), now.getMonth() - 11, 1)
         const start12 = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-01`
 
+        const uid = user?.id ? `&user_id=${user.id}` : ''
         const [tsRes, expRes] = await Promise.all([
-          api.get<any>(`/timesheets?start_date=${start12}&end_date=${end12}&per_page=2000&status=approved`),
-          api.get<any>(`/expenses?start_date=${start12}&end_date=${end12}&per_page=2000&status=approved`),
+          api.get<any>(`/timesheets?start_date=${start12}&end_date=${end12}&per_page=2000&status=approved${uid}`),
+          api.get<any>(`/expenses?start_date=${start12}&end_date=${end12}&per_page=2000&status=approved${uid}`),
         ])
 
         const tsList: TimesheetItem[] = Array.isArray(tsRes?.items) ? tsRes.items : []
@@ -1941,14 +1942,14 @@ export default function MeuPainelPage() {
   // daysWorked: busca todos os apontamentos do mês (sem paginação) para calcular dias únicos
   const [daysWorked, setDaysWorked] = useState(0)
   useEffect(() => {
-    if (!startDate || !endDate) return
-    api.get<any>(`/timesheets?start_date=${startDate}&end_date=${endDate}&per_page=1000`)
+    if (!startDate || !endDate || !user?.id) return
+    api.get<any>(`/timesheets?start_date=${startDate}&end_date=${endDate}&per_page=1000&user_id=${user.id}`)
       .then(r => {
         const all: TimesheetItem[] = Array.isArray(r?.items) ? r.items : []
         setDaysWorked(new Set(all.map((t: TimesheetItem) => t.date)).size)
       })
       .catch(() => {})
-  }, [startDate, endDate])
+  }, [startDate, endDate, user?.id])
 
   const occupancyPct = workingDaysInMonth > 0
     ? Math.min(100, Math.round((daysWorked / workingDaysInMonth) * 100))
