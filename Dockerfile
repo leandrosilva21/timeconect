@@ -8,8 +8,10 @@ COPY package.json package-lock.json* ./
 RUN --mount=type=cache,id=minutor-npm,target=/root/.npm \
     npm ci --cache /root/.npm
 COPY . .
-RUN --mount=type=cache,id=minutor-next,target=/app/.next/cache \
-    npm run build
+# Sem cache mount em .next/cache: Next.js às vezes reusa chunks
+# compilados antigos mesmo após mudança de source. Build limpo
+# garante que o source pushed é o que vai pra produção.
+RUN npm run build
 
 FROM node:20-alpine
 WORKDIR /app
