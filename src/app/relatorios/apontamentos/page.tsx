@@ -296,7 +296,27 @@ export default function RelatorioApontamentosPage() {
             box-shadow: none !important;
             border-radius: 0 !important;
           }
-          body[data-print="relatorio"] #print-relatorio table { font-size: 10px !important; }
+          /* Reduz padding lateral pra ganhar espaço */
+          body[data-print="relatorio"] #print-relatorio .px-10 {
+            padding-left: 12px !important;
+            padding-right: 12px !important;
+          }
+          /* Tabela: força caber na largura da página A4 landscape com quebra
+             interna. table-layout: fixed distribui colunas igualmente. */
+          body[data-print="relatorio"] #print-relatorio table {
+            table-layout: fixed !important;
+            width: 100% !important;
+            font-size: 9px !important;
+          }
+          body[data-print="relatorio"] #print-relatorio table td,
+          body[data-print="relatorio"] #print-relatorio table th {
+            white-space: normal !important;
+            word-break: break-word !important;
+            padding: 4px 6px !important;
+          }
+          body[data-print="relatorio"] #print-relatorio .table-scroll {
+            overflow: visible !important;
+          }
         }
         #print-relatorio {
           -webkit-print-color-adjust: exact !important;
@@ -305,7 +325,6 @@ export default function RelatorioApontamentosPage() {
         /* Na tela, scroll horizontal só nos containers de tabela
            (cabeçalho do relatório fica intacto). */
         #print-relatorio .table-scroll { overflow-x: auto; }
-        @media print { #print-relatorio .table-scroll { overflow-x: visible; } }
       `}</style>
 
       <PageHeader
