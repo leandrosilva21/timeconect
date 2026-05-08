@@ -270,20 +270,18 @@ export default function RelatorioApontamentosPage() {
     if (typeof document === 'undefined') return
     const el = document.getElementById('print-relatorio')
     if (!el) return
-    // Move o bloco pra ser filho direto de body antes de imprimir.
-    // Isso permite paginação (position:fixed travava em 1 página).
-    const placeholder = document.createElement('div')
-    placeholder.style.display = 'none'
-    el.parentNode?.insertBefore(placeholder, el)
-    document.body.appendChild(el)
+    // Clona pra evitar interferência do React reconciliando.
+    const clone = el.cloneNode(true) as HTMLElement
+    clone.id = 'print-relatorio-clone'
+    clone.classList.add('print-clone')
+    document.body.appendChild(clone)
     document.body.dataset.print = 'relatorio'
-    const restore = () => {
-      placeholder.parentNode?.insertBefore(el, placeholder)
-      placeholder.remove()
+    const cleanup = () => {
+      clone.remove()
       delete document.body.dataset.print
-      window.removeEventListener('afterprint', restore)
+      window.removeEventListener('afterprint', cleanup)
     }
-    window.addEventListener('afterprint', restore)
+    window.addEventListener('afterprint', cleanup)
     setTimeout(() => window.print(), 100)
   }
 
@@ -292,54 +290,50 @@ export default function RelatorioApontamentosPage() {
       <style>{`
         @media print {
           @page { size: A4 landscape; margin: 8mm; }
-          /* Durante o print, #print-relatorio é movido pra ser filho direto
-             de body. Esconde todos os outros filhos diretos. */
-          body[data-print="relatorio"] > *:not(#print-relatorio) {
+          /* Esconde tudo que NÃO é o clone do print. O clone é anexado ao
+             body (via JS no handlePrint) e classe .print-clone garante o pega. */
+          body[data-print="relatorio"] > *:not(.print-clone) {
             display: none !important;
           }
-          body[data-print="relatorio"] #print-relatorio {
+          body[data-print="relatorio"] .print-clone {
             display: block !important;
             width: 100% !important;
           }
-          /* Card preenche a largura total da página */
-          body[data-print="relatorio"] #print-relatorio > div {
+          .print-clone > div {
             max-width: none !important;
             width: 100% !important;
             box-shadow: none !important;
             border-radius: 0 !important;
           }
-          /* Reduz padding lateral pra ganhar espaço */
-          body[data-print="relatorio"] #print-relatorio .px-10 {
+          .print-clone .px-10 {
             padding-left: 12px !important;
             padding-right: 12px !important;
           }
-          /* Tabela: força caber na largura da página A4 landscape com quebra
-             interna. table-layout: fixed distribui colunas igualmente. */
-          body[data-print="relatorio"] #print-relatorio table {
+          .print-clone table {
             table-layout: fixed !important;
             width: 100% !important;
             font-size: 9px !important;
           }
-          body[data-print="relatorio"] #print-relatorio table td,
-          body[data-print="relatorio"] #print-relatorio table th {
+          .print-clone table td,
+          .print-clone table th {
             white-space: normal !important;
             word-break: break-word !important;
             padding: 4px 6px !important;
           }
-          /* Evita cortar linha entre páginas */
-          body[data-print="relatorio"] #print-relatorio table tr {
+          .print-clone table tr {
             page-break-inside: avoid;
           }
-          body[data-print="relatorio"] #print-relatorio .table-scroll {
+          .print-clone .table-scroll {
             overflow: visible !important;
           }
+          .print-clone {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
         }
-        #print-relatorio {
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-        /* Na tela, scroll horizontal só nos containers de tabela
-           (cabeçalho do relatório fica intacto). */
+        /* Na tela, esconde o clone (caso ainda exista por algum motivo) */
+        .print-clone { display: none; }
+        /* Scroll horizontal só no container da tabela */
         #print-relatorio .table-scroll { overflow-x: auto; }
       `}</style>
 
