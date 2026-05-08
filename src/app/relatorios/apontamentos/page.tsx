@@ -289,12 +289,21 @@ export default function RelatorioApontamentosPage() {
           body[data-print="relatorio"] #print-relatorio {
             position: fixed; top: 0; left: 0; width: 100%; z-index: 9999;
           }
+          /* No print, o card preenche a largura total da página */
+          body[data-print="relatorio"] #print-relatorio > div {
+            max-width: none !important;
+            width: 100% !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+          }
           body[data-print="relatorio"] #print-relatorio table { font-size: 10px !important; }
         }
         #print-relatorio {
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
+        /* Na tela, permite scroll horizontal interno se a tabela exceder o card */
+        #print-relatorio > div { overflow-x: auto; }
       `}</style>
 
       <PageHeader
@@ -452,7 +461,7 @@ export default function RelatorioApontamentosPage() {
           <div id="print-relatorio">
             <div
               className="bg-white text-gray-900 rounded-2xl shadow-lg mx-auto"
-              style={{ maxWidth: 980, fontFamily: 'Arial, sans-serif' }}
+              style={{ maxWidth: 1280, fontFamily: 'Arial, sans-serif' }}
             >
               {/* Cabeçalho */}
               <div
