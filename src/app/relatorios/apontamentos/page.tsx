@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import { AppLayout } from '@/components/layout/app-layout'
 import {
@@ -472,7 +472,6 @@ export default function RelatorioApontamentosPage() {
                       <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Consultor</th>
                       <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Ticket</th>
                       <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Título</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Descrição</th>
                       <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Início</th>
                       <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Fim</th>
                       <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">Esforço</th>
@@ -480,35 +479,40 @@ export default function RelatorioApontamentosPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((t, i) => (
-                      <tr
-                        key={i}
-                        style={{ background: i % 2 === 0 ? '#fff' : '#faf9ff', borderBottom: '1px solid #e5e7eb', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}
-                      >
-                        <td className="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">{fmtDateBR(t.created_at)}</td>
-                        <td className="px-3 py-2 text-xs text-gray-700">{parseRequester(t.ticket_solicitante) || '—'}</td>
-                        <td className="px-3 py-2 text-xs text-gray-700">{t.user?.name ?? '—'}</td>
-                        <td className="px-3 py-2 text-xs text-gray-500">
-                          {t.ticket
-                            ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${t.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-500">#{t.ticket}</a>
-                            : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-gray-700">{t.ticket_subject ?? '—'}</td>
-                        <td className="px-3 py-2 text-xs text-gray-700 whitespace-pre-wrap" style={{ maxWidth: 360 }}>
-                          {t.observation ?? '—'}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-gray-700 text-center whitespace-nowrap">{fmtTimeHM(t.start_time) || '—'}</td>
-                        <td className="px-3 py-2 text-xs text-gray-700 text-center whitespace-nowrap">{fmtTimeHM(t.end_time) || '—'}</td>
-                        <td className="px-3 py-2 text-xs text-right font-semibold text-gray-800 tabular-nums whitespace-nowrap">
-                          {t.effort_hours ?? minutesToHHMM(t.effort_minutes ?? 0)}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">{fmtDateBR(t.date)}</td>
-                      </tr>
-                    ))}
+                    {items.map((t, i) => {
+                      const bg = i % 2 === 0 ? '#fff' : '#faf9ff'
+                      return (
+                        <Fragment key={i}>
+                          <tr style={{ background: bg, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 whitespace-nowrap">{fmtDateBR(t.created_at)}</td>
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700">{parseRequester(t.ticket_solicitante) || '—'}</td>
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700">{t.user?.name ?? '—'}</td>
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-500">
+                              {t.ticket
+                                ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${t.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-500">#{t.ticket}</a>
+                                : '—'}
+                            </td>
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700">{t.ticket_subject ?? '—'}</td>
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtTimeHM(t.start_time) || '—'}</td>
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtTimeHM(t.end_time) || '—'}</td>
+                            <td className="px-3 pt-2 pb-1 text-xs text-right font-semibold text-gray-800 tabular-nums whitespace-nowrap">
+                              {t.effort_hours ?? minutesToHHMM(t.effort_minutes ?? 0)}
+                            </td>
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 whitespace-nowrap">{fmtDateBR(t.date)}</td>
+                          </tr>
+                          <tr style={{ background: bg, borderBottom: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
+                            <td colSpan={9} className="px-3 pt-1 pb-3 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
+                              <span className="font-semibold text-gray-500 mr-1">Descrição:</span>
+                              {t.observation ?? '—'}
+                            </td>
+                          </tr>
+                        </Fragment>
+                      )
+                    })}
                   </tbody>
                   <tfoot>
                     <tr style={{ background: '#ede9fe', borderTop: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                      <td colSpan={8} className="px-3 py-2 text-right text-sm font-semibold text-gray-700">
+                      <td colSpan={7} className="px-3 py-2 text-right text-sm font-semibold text-gray-700">
                         Total ({items.length} registro{items.length === 1 ? '' : 's'})
                       </td>
                       <td className="px-3 py-2 text-right text-sm font-bold tabular-nums" style={{ color: '#5b21b6' }}>
