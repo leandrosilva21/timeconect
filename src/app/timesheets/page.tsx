@@ -1080,7 +1080,6 @@ function TimesheetsPageContent() {
               />
             )}
             {!isCliente && ([
-              { id: '',             label: 'Todas',       color: 'var(--brand-muted)', bg: 'transparent',            border: 'var(--brand-border)' },
               { id: 'sustentacao',  label: 'Sustentação', color: '#f59e0b',            bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)' },
               { id: 'projeto',      label: 'Projeto',     color: '#00F5FF',            bg: 'rgba(0,245,255,0.12)',   border: 'rgba(0,245,255,0.35)' },
               { id: 'bizify',       label: 'Bizify',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
@@ -1089,7 +1088,7 @@ function TimesheetsPageContent() {
               const active = (categoriaServico || '') === opt.id
               return (
                 <button key={opt.id || 'all'}
-                  onClick={() => { setCategoriaServico(opt.id as any); resetPage() }}
+                  onClick={() => { setCategoriaServico(active ? '' : (opt.id as any)); resetPage() }}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
                   style={active
                     ? { background: opt.bg, color: opt.color, border: `1px solid ${opt.border}` }
@@ -1250,8 +1249,8 @@ function TimesheetsPageContent() {
                 <Th sortable active={sortField === 'date'}          dir={sortDir} onClick={() => handleSort('date')}>Data</Th>
                 <Th className="hidden md:table-cell">Início</Th>
                 <Th className="hidden md:table-cell">Fim</Th>
-                <Th className="hidden lg:table-cell">Ticket #</Th>
                 <Th right sortable active={sortField === 'effort_hours'} dir={sortDir} onClick={() => handleSort('effort_hours')}>Tempo</Th>
+                <Th className="hidden lg:table-cell">Ticket #</Th>
                 <Th className="hidden sm:table-cell">Origem</Th>
                 {!(isAdmin || isCoordenador) && (
                   <Th sortable active={sortField === 'user.name'} dir={sortDir} onClick={() => handleSort('user.name')}>Colaborador</Th>
@@ -1338,18 +1337,6 @@ function TimesheetsPageContent() {
                   <Td className="whitespace-nowrap font-medium">{formatDate(ts.date)}</Td>
                   <Td muted className="hidden md:table-cell font-mono tabular-nums">{ts.start_time ?? '—'}</Td>
                   <Td muted className="hidden md:table-cell font-mono tabular-nums">{ts.end_time ?? '—'}</Td>
-                  <Td muted className="hidden lg:table-cell font-mono">
-                    {ts.ticket
-                      ? <a
-                          href={`https://erpserv.movidesk.com/Ticket/Edit/${ts.ticket}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={e => e.stopPropagation()}
-                          className="hover:underline cursor-pointer"
-                          style={{ color: 'var(--brand-primary)', pointerEvents: 'auto' }}
-                        >#{ts.ticket}</a>
-                      : '—'}
-                  </Td>
                   <Td right mono className="font-semibold" style={{ color: 'var(--brand-primary)' }}>
                     {!isCliente && ts.consultant_extra_pct ? (() => {
                       const extraMin = Math.round(ts.effort_minutes * (Number(ts.consultant_extra_pct) / 100))
@@ -1363,6 +1350,18 @@ function TimesheetsPageContent() {
                         </div>
                       )
                     })() : formatMinutes(ts.effort_minutes)}
+                  </Td>
+                  <Td muted className="hidden lg:table-cell font-mono">
+                    {ts.ticket
+                      ? <a
+                          href={`https://erpserv.movidesk.com/Ticket/Edit/${ts.ticket}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="hover:underline cursor-pointer"
+                          style={{ color: 'var(--brand-primary)', pointerEvents: 'auto' }}
+                        >#{ts.ticket}</a>
+                      : '—'}
                   </Td>
                   <Td className="hidden sm:table-cell">
                     <OriginBadge

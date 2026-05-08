@@ -765,7 +765,6 @@ export default function ExpensesPage() {
               />
             )}
             {!isCliente && ([
-              { id: '',             label: 'Todas',       color: 'var(--brand-muted)', bg: 'transparent',            border: 'var(--brand-border)' },
               { id: 'sustentacao',  label: 'Sustentação', color: '#f59e0b',            bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)' },
               { id: 'projeto',      label: 'Projeto',     color: '#00F5FF',            bg: 'rgba(0,245,255,0.12)',   border: 'rgba(0,245,255,0.35)' },
               { id: 'bizify',       label: 'Bizify',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
@@ -774,7 +773,7 @@ export default function ExpensesPage() {
               const active = (categoriaServico || '') === opt.id
               return (
                 <button key={opt.id || 'all'}
-                  onClick={() => { setCategoriaServico(opt.id as any); setPage(1) }}
+                  onClick={() => { setCategoriaServico(active ? '' : (opt.id as any)); setPage(1) }}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
                   style={active
                     ? { background: opt.bg, color: opt.color, border: `1px solid ${opt.border}` }
