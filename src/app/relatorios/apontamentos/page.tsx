@@ -9,6 +9,7 @@ import {
   EmptyState, Skeleton,
 } from '@/components/ds'
 import { SearchSelect } from '@/components/ui/search-select'
+import { MultiSelect } from '@/components/ui/multi-select'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { api } from '@/lib/api'
@@ -23,6 +24,7 @@ type FilterMode = 'month' | 'period'
 type StatusKey  = 'pending' | 'approved'
 
 interface Customer { id: number; name: string }
+interface Project  { id: number; name: string }
 
 interface TicketSummaryRow {
   ticket: string
@@ -90,6 +92,8 @@ export default function RelatorioApontamentosPage() {
 
   const [customers,  setCustomers]  = useState<Customer[]>([])
   const [customerId, setCustomerId] = useState<string | number>('')
+  const [projects,   setProjects]   = useState<Project[]>([])
+  const [projectIds, setProjectIds] = useState<string[]>([])
 
   const [filterMode, setFilterMode] = useState<FilterMode>('month')
   const [refMonth,   setRefMonth]   = useState<number | null>(today.getMonth() + 1)
@@ -126,6 +130,18 @@ export default function RelatorioApontamentosPage() {
       .catch(() => toast.error('Erro ao carregar clientes'))
   }, [])
 
+  // ── Load projects do cliente selecionado
+  useEffect(() => {
+    if (!customerId) { setProjects([]); setProjectIds([]); return }
+    api.get<any>(`/projects?customer_id=${customerId}&pageSize=500`)
+      .then(r => {
+        const list: any[] = Array.isArray(r) ? r : r?.items ?? r?.data ?? []
+        setProjects(list.map(p => ({ id: p.id, name: p.name })).sort((a, b) => a.name.localeCompare(b.name)))
+      })
+      .catch(() => setProjects([]))
+    setProjectIds([])
+  }, [customerId])
+
   const periodInfo = useMemo(() => {
     if (filterMode === 'month' && refMonth && refYear) {
       return { label: `${MONTHS_PT[refMonth - 1]} ${refYear}` }
@@ -160,12 +176,14 @@ export default function RelatorioApontamentosPage() {
       p.set('end_date',    endDate)
       p.set('pageSize',    '2000')
       statuses.forEach(s => p.append('status[]', s))
+      projectIds.forEach(id => p.append('project_id[]', id))
 
       const summaryParams = new URLSearchParams()
       summaryParams.set('customer_id', String(customerId))
       summaryParams.set('start_date',  startDate)
       summaryParams.set('end_date',    endDate)
       statuses.forEach(s => summaryParams.append('status[]', s))
+      projectIds.forEach(id => summaryParams.append('project_id[]', id))
 
       const [r, sumR] = await Promise.all([
         api.get<any>(`/timesheets?${p}`),
@@ -270,7 +288,7 @@ export default function RelatorioApontamentosPage() {
 
       {/* Filtros */}
       <Card className="mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-xs mb-1.5" style={{ color: 'var(--brand-muted)' }}>
               Cliente <span style={{ color: 'var(--brand-danger)' }}>*</span>
@@ -281,6 +299,20 @@ export default function RelatorioApontamentosPage() {
               options={customers}
               placeholder="Selecione um cliente"
               fullWidth
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs mb-1.5" style={{ color: 'var(--brand-muted)' }}>
+              Projetos
+            </label>
+            <MultiSelect
+              value={projectIds}
+              onChange={setProjectIds}
+              options={projects}
+              placeholder={projects.length === 0 ? 'Selecione um cliente' : 'Todos os projetos'}
+              fullWidth
+              disabled={!customerId || projects.length === 0}
             />
           </div>
 
@@ -416,6 +448,12 @@ export default function RelatorioApontamentosPage() {
                   <div className="text-sm text-gray-500 mb-2">Documento de cobrança e transparência</div>
                   <div className="text-sm text-gray-700">
                     <span className="font-semibold">Cliente:</span> {customerName}
+                  </div>
+                  <div className="text-sm text-gray-700" style={{ maxWidth: 420 }}>
+                    <span className="font-semibold">Projeto:</span>{' '}
+                    {projectIds.length === 0
+                      ? 'Todos'
+                      : projects.filter(p => projectIds.includes(String(p.id))).map(p => p.name).join(', ')}
                   </div>
                   <div className="text-sm text-gray-700">
                     <span className="font-semibold">Competência:</span> {periodInfo.label}
