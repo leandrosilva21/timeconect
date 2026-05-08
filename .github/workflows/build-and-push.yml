@@ -40,5 +40,5 @@ jobs:
           tags: |
             ghcr.io/leonardo-almd/minutor-frontend:latest
             ghcr.io/leonardo-almd/minutor-frontend:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=v2
+          cache-to: type=gha,mode=max,scope=v2
