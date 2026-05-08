@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { Fragment, useState, useEffect, useCallback } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
@@ -285,6 +285,9 @@ export default function FechamentoParceiroPage() {
     table { width: 100%; border-collapse: collapse; }
     thead th { background: #f3f4f6; padding: 7px 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; color: #6b7280; text-align: left; border-bottom: 1px solid #e5e7eb; }
     tbody td { padding: 7px 10px; font-size: 11px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+    tbody tr.main-row td { padding-bottom: 2px; border-bottom: none; }
+    tbody tr.desc-row td { padding-top: 2px; padding-bottom: 8px; border-bottom: 2px solid #5b21b6; font-size: 11px; color: #374151; white-space: pre-wrap; }
+    tbody tr.desc-row td .label { font-weight: 600; color: #6b7280; margin-right: 4px; }
     .right { text-align: right; }
     .section-footer { background: #f5f3ff; padding: 8px 12px; text-align: right; font-size: 12px; color: #7c3aed; font-weight: 600; border-radius: 0 0 6px 6px; margin-top: -1px; }
     .divider { border: none; border-top: 1px dashed #d1d5db; margin: 20px 0; }
@@ -327,15 +330,17 @@ export default function FechamentoParceiroPage() {
 
       const consultoresHtml = Array.from(consMap.values()).map(({ consultor, taxa, horas, total, rows }) => {
         const rowsHtml = rows.map(r => `
-          <tr>
+          <tr class="main-row">
             <td>${new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
             <td>${r.cliente ?? '—'}</td>
             <td>${r.projeto}</td>
             <td>${r.solicitante ?? '—'}</td>
             <td>${r.ticket ?? '0'}</td>
             <td>${r.titulo ?? '—'}</td>
-            <td>${r.observacao ?? '—'}</td>
             <td class="right">${r.horas.toFixed(2)}h</td>
+          </tr>
+          <tr class="desc-row">
+            <td colspan="7"><span class="label">Descrição:</span>${r.observacao ?? '—'}</td>
           </tr>`).join('')
         return `
           <div style="margin-bottom:16px">
@@ -344,7 +349,7 @@ export default function FechamentoParceiroPage() {
               <div class="section-rate">Valor/hora: <b>${formatBRL(taxa)}/h</b></div>
             </div>
             <table>
-              <thead><tr><th>Data</th><th>Cliente</th><th>Projeto</th><th>Solicitante</th><th>Ticket</th><th>Título</th><th>Descrição</th><th class="right">Horas</th></tr></thead>
+              <thead><tr><th>Data</th><th>Cliente</th><th>Projeto</th><th>Solicitante</th><th>Ticket</th><th>Título</th><th class="right">Horas</th></tr></thead>
               <tbody>${rowsHtml}</tbody>
             </table>
             <div class="section-footer">${horas.toFixed(2)}h × ${formatBRL(taxa)}/h = <b>${formatBRL(Math.round(total * 100) / 100)}</b></div>
@@ -995,20 +1000,27 @@ export default function FechamentoParceiroPage() {
                                   <Thead>
                                     <tr>
                                       <Th>Data</Th><Th>Projeto</Th><Th>Solicitante</Th>
-                                      <Th>Ticket</Th><Th>Título</Th><Th>Descrição</Th><Th right>Horas</Th>
+                                      <Th>Ticket</Th><Th>Título</Th><Th right>Horas</Th>
                                     </tr>
                                   </Thead>
                                   <Tbody>
                                     {rows.map(r => (
-                                      <Tr key={r.id}>
-                                        <Td className="text-xs tabular-nums whitespace-nowrap">{new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR')}</Td>
-                                        <Td className="text-xs">{r.projeto}</Td>
-                                        <Td className="text-xs">{r.solicitante ?? '—'}</Td>
-                                        <Td className="text-xs tabular-nums">{r.ticket ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300">#{r.ticket}</a> : '—'}</Td>
-                                        <Td className="text-xs">{r.titulo ?? '—'}</Td>
-                                        <Td className="text-xs">{r.observacao ?? '—'}</Td>
-                                        <Td right className="tabular-nums text-xs">{r.horas.toFixed(2)}h</Td>
-                                      </Tr>
+                                      <Fragment key={r.id}>
+                                        <tr style={{ borderBottom: 'none' }}>
+                                          <Td className="text-xs tabular-nums whitespace-nowrap">{new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR')}</Td>
+                                          <Td className="text-xs">{r.projeto}</Td>
+                                          <Td className="text-xs">{r.solicitante ?? '—'}</Td>
+                                          <Td className="text-xs tabular-nums">{r.ticket ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300">#{r.ticket}</a> : '—'}</Td>
+                                          <Td className="text-xs">{r.titulo ?? '—'}</Td>
+                                          <Td right className="tabular-nums text-xs">{r.horas.toFixed(2)}h</Td>
+                                        </tr>
+                                        <tr style={{ borderBottom: '2px solid #7c3aed' }}>
+                                          <td colSpan={6} className="px-5 pt-1 pb-3 text-xs whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--brand-muted)' }}>
+                                            <span className="font-semibold mr-1" style={{ color: 'var(--brand-subtle)' }}>Descrição:</span>
+                                            {r.observacao ?? '—'}
+                                          </td>
+                                        </tr>
+                                      </Fragment>
                                     ))}
                                   </Tbody>
                                 </Table>

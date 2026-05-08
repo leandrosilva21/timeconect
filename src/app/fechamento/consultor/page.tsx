@@ -149,6 +149,9 @@ const printStyles = `
   table { width: 100%; border-collapse: collapse; }
   th { background: #f3f4f6; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; padding: 5px 8px; text-align: left; color: #555; border-bottom: 1px solid #ddd; }
   td { font-size: 11px; padding: 4px 8px; border-bottom: 1px solid #f0f0f0; }
+  tbody tr.main-row td { padding-bottom: 2px; border-bottom: none; }
+  tbody tr.desc-row td { padding-top: 2px; padding-bottom: 7px; border-bottom: 2px solid #5b21b6; font-size: 11px; color: #374151; white-space: pre-wrap; }
+  tbody tr.desc-row td .label { font-weight: 600; color: #6b7280; margin-right: 4px; }
   .right { text-align: right; }
   .center { text-align: center; }
   .total-box { background: #7c3aed; color: #fff; padding: 12px 18px; margin-top: 24px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
@@ -213,15 +216,18 @@ function buildReport(
       for (const [cliente, clienteRows] of byCliente.entries()) {
         const clienteHoras = clienteRows.reduce((s, r) => s + r.horas, 0)
         const rowsHtml = clienteRows.map(r => `
-          <tr>
+          <tr class="main-row">
             <td>${fmtDate(r.data)}</td>
             <td>${r.cliente || '—'}</td>
             <td><span style="color:#888;margin-right:4px">${r.projeto_codigo}</span>${r.projeto}</td>
             <td>${r.ticket ?? '—'}</td>
-            <td>${r.titulo ? r.titulo.slice(0, 70) : (r.observacao ? r.observacao.slice(0, 70) : '—')}</td>
+            <td>${r.titulo ?? '—'}</td>
             <td class="center">${r.start_time ? (r.start_time.includes('T') ? r.start_time.slice(11, 16) : r.start_time.slice(0, 5)) : '—'}</td>
             <td class="center">${r.end_time   ? (r.end_time.includes('T')   ? r.end_time.slice(11, 16)   : r.end_time.slice(0, 5))   : '—'}</td>
             <td class="right">${fmtH(r.horas)}${r.consultant_extra_pct ? (r.valor_extra != null ? `<span style="color:#16a34a;font-size:10px;margin-left:4px">+${r.consultant_extra_pct}% (${formatBRL(r.valor_extra)})</span>` : `<span style="color:#16a34a;font-size:10px;margin-left:4px">+${r.consultant_extra_pct}% base ${fmtH(r.horas_base ?? r.horas)}</span>`) : ''}</td>
+          </tr>
+          <tr class="desc-row">
+            <td colspan="8"><span class="label">Descrição:</span>${r.observacao ?? '—'}</td>
           </tr>
         `).join('')
         clienteBlocksHtml += `
@@ -230,7 +236,7 @@ function buildReport(
             <span class="client-total">${fmtH(clienteHoras)}</span>
           </div>
           <table>
-            <thead><tr><th>Data</th><th>Cliente</th><th>Projeto</th><th>Ticket</th><th>Descrição</th><th class="center">Início</th><th class="center">Fim</th><th class="right">Horas / Extra</th></tr></thead>
+            <thead><tr><th>Data</th><th>Cliente</th><th>Projeto</th><th>Ticket</th><th>Título</th><th class="center">Início</th><th class="center">Fim</th><th class="right">Horas / Extra</th></tr></thead>
             <tbody>${rowsHtml}</tbody>
           </table>
         `
