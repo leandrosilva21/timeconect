@@ -165,10 +165,14 @@ export default function RelatorioApontamentosPage() {
     [customerName],
   )
 
+  // Padrão Vedamotors: NNNN-NNNNNN (ex: 0526-000007).
+  // Fora do padrão = "Sem ticket". (rev2)
+  const VEDAMOTORS_PATTERN = /^\d{4}-\d{6}$/
+
   function vedaTitleValue(t: RawTimesheet): string {
     const original = (t.ticket_subject ?? '').trim()
-    // Padrão Vedamotors: NNNN-NNNNNN (ex: 0526-000007). Fora do padrão = sem ticket.
-    return /^\d{4}-\d{6}$/.test(original) ? original : 'Sem ticket'
+    if (VEDAMOTORS_PATTERN.test(original)) return original
+    return 'Sem ticket'
   }
 
   const toggleStatus = (s: StatusKey) => {
