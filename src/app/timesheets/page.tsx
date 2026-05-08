@@ -685,6 +685,7 @@ function TimesheetsPageContent() {
       origins:          [] as string[],
       serviceTypeIds:   [] as string[],
       contractTypeIds:  [] as string[],
+      categoriaServico: '' as '' | 'sustentacao' | 'projeto' | 'bizify' | 'investimento',
       customerIds:      spCustomerId ? [spCustomerId] : [] as string[],
       coordinatorIds:   [] as string[],
       executiveIds:     [] as string[],
@@ -703,7 +704,7 @@ function TimesheetsPageContent() {
   )
 
   const {
-    projectId, page, status, origins, serviceTypeIds, contractTypeIds,
+    projectId, page, status, origins, serviceTypeIds, contractTypeIds, categoriaServico,
     customerIds, coordinatorIds, executiveIds, userIds, startDate, endDate, refMonth, refYear,
     filterMode, ticket, requester, ticketService, sortField, sortDir,
   } = filters
@@ -716,6 +717,7 @@ function TimesheetsPageContent() {
   const setOrigins        = (v: string[])            => setFilter('origins', v)
   const setServiceTypeIds = (v: string[])            => setFilter('serviceTypeIds', v)
   const setContractTypeIds= (v: string[])            => setFilter('contractTypeIds', v)
+  const setCategoriaServico = (v: '' | 'sustentacao' | 'projeto' | 'bizify' | 'investimento') => setFilter('categoriaServico', v)
   const setCustomerIds    = (v: string[])            => setFilter('customerIds', v)
   const setCoordinatorIds = (v: string[])            => setFilter('coordinatorIds', v)
   const setExecutiveIds   = (v: string[])            => setFilter('executiveIds', v)
@@ -847,6 +849,7 @@ function TimesheetsPageContent() {
     origins.forEach(v => p.append('origin[]', v))
     serviceTypeIds.forEach(v => p.append('service_type_id[]', v))
     contractTypeIds.forEach(v => p.append('contract_type_id[]', v))
+    if (categoriaServico) p.set('categoria_servico', categoriaServico)
     if (isCliente && user?.customer_id) p.set('customer_id', String(user.customer_id))
     else customerIds.forEach(v => p.append('customer_id[]', v))
     coordinatorIds.forEach(v => p.append('coordinator_id[]', v))
@@ -860,14 +863,14 @@ function TimesheetsPageContent() {
     if (projectId)     p.set('project_id', projectId)
     if (sortField)     p.set('order', sortDir === 'desc' ? `-${sortField}` : sortField)
     return p.toString()
-  }, [page, status, origins, serviceTypeIds, contractTypeIds, customerIds, coordinatorIds, executiveIds, userIds, projectId, startDate, endDate, ticket, requester, ticketService, sortField, sortDir, isCliente, user?.customer_id])
+  }, [page, status, origins, serviceTypeIds, contractTypeIds, categoriaServico, customerIds, coordinatorIds, executiveIds, userIds, projectId, startDate, endDate, ticket, requester, ticketService, sortField, sortDir, isCliente, user?.customer_id])
 
   const { data, loading, error, refetch } = useApiQuery<PaginatedResponse<Timesheet>>(
     `/timesheets?${params}`, [params]
   )
 
   const resetPage = useCallback(() => setPage(1), [])
-  const hasFilters = !!(status || origins.length || serviceTypeIds.length || contractTypeIds.length || customerIds.length || coordinatorIds.length || executiveIds.length || userIds.length || projectId || startDate || endDate || ticket || requester || ticketService)
+  const hasFilters = !!(status || origins.length || serviceTypeIds.length || contractTypeIds.length || categoriaServico || customerIds.length || coordinatorIds.length || executiveIds.length || userIds.length || projectId || startDate || endDate || ticket || requester || ticketService)
 
   const clearFilters = useCallback(() => {
     clearPersistedFilters()
@@ -979,6 +982,31 @@ function TimesheetsPageContent() {
           className="p-4 rounded-2xl mb-4 space-y-3"
           style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
         >
+          {/* Chips de categoria de serviço */}
+          {!isCliente && (
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                { id: '',             label: 'Todas',      color: 'var(--brand-muted)',  bg: 'transparent', border: 'var(--brand-border)' },
+                { id: 'sustentacao',  label: 'Sustentação', color: '#f59e0b',            bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)' },
+                { id: 'projeto',      label: 'Projeto',     color: '#00F5FF',            bg: 'rgba(0,245,255,0.12)',   border: 'rgba(0,245,255,0.35)' },
+                { id: 'bizify',       label: 'Bizify',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
+                { id: 'investimento', label: 'Investimento', color: '#ef4444',           bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.35)' },
+              ] as const).map(opt => {
+                const active = (categoriaServico || '') === opt.id
+                return (
+                  <button key={opt.id || 'all'}
+                    onClick={() => { setCategoriaServico(opt.id as any); resetPage() }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                    style={active
+                      ? { background: opt.bg, color: opt.color, border: `1px solid ${opt.border}` }
+                      : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid var(--brand-border)' }}>
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
           {/* Linha 1: selects */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
             {isCliente ? (

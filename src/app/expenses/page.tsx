@@ -450,9 +450,10 @@ export default function ExpensesPage() {
       coordinatorIds:  [] as string[],
       executiveIds:    [] as string[],
       contractTypeId:  '',
+      categoriaServico: '' as '' | 'sustentacao' | 'projeto' | 'bizify' | 'investimento',
     },
   )
-  const { page, status, isPaidFilter, dateFrom, dateTo, refMonth, refYear, filterMode, customerIds, projectId, userIds, coordinatorIds, executiveIds, contractTypeId } = flt
+  const { page, status, isPaidFilter, dateFrom, dateTo, refMonth, refYear, filterMode, customerIds, projectId, userIds, coordinatorIds, executiveIds, contractTypeId, categoriaServico } = flt
   const setPage           = (v: number)                     => setFilter('page', v)
   const setStatus         = (v: string)                     => setFilter('status', v)
   const setIsPaidFilter   = (v: '' | 'false' | 'true')      => setFilter('isPaidFilter', v)
@@ -467,6 +468,7 @@ export default function ExpensesPage() {
   const setCoordinatorIds = (v: string[])                   => setFilter('coordinatorIds', v)
   const setExecutiveIds   = (v: string[])                   => setFilter('executiveIds', v)
   const setContractTypeId = (v: string)                     => setFilter('contractTypeId', v)
+  const setCategoriaServico = (v: '' | 'sustentacao' | 'projeto' | 'bizify' | 'investimento') => setFilter('categoriaServico', v)
 
   const [data, setData] = useState<PaginatedResponse<Expense> | null>(null)
   const [loading, setLoading] = useState(true)
@@ -516,6 +518,7 @@ export default function ExpensesPage() {
     if (dateFrom)     p.set('start_date', dateFrom)
     if (dateTo)       p.set('end_date',  dateTo)
     if (contractTypeId) p.set('contract_type_id', contractTypeId)
+    if (categoriaServico) p.set('categoria_servico', categoriaServico)
     if (isCliente && user?.customer_id) p.set('customer_id', String(user.customer_id))
     else customerIds.forEach(v => p.append('customer_id[]', v))
     if (projectId) p.set('project_id', projectId)
@@ -523,7 +526,7 @@ export default function ExpensesPage() {
     coordinatorIds.forEach(v => p.append('coordinator_id[]', v))
     executiveIds.forEach(v => p.append('executive_id[]', v))
     return p.toString()
-  }, [page, status, isPaidFilter, dateFrom, dateTo, customerIds, projectId, userIds, coordinatorIds, executiveIds, contractTypeId, isCliente, user?.customer_id])
+  }, [page, status, isPaidFilter, dateFrom, dateTo, customerIds, projectId, userIds, coordinatorIds, executiveIds, contractTypeId, categoriaServico, isCliente, user?.customer_id])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -717,6 +720,29 @@ export default function ExpensesPage() {
         {/* Filter card */}
         <div className="p-4 rounded-2xl mb-4 space-y-3"
           style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+          {!isCliente && (
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                { id: '',             label: 'Todas',       color: 'var(--brand-muted)', bg: 'transparent',            border: 'var(--brand-border)' },
+                { id: 'sustentacao',  label: 'Sustentação', color: '#f59e0b',            bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)' },
+                { id: 'projeto',      label: 'Projeto',     color: '#00F5FF',            bg: 'rgba(0,245,255,0.12)',   border: 'rgba(0,245,255,0.35)' },
+                { id: 'bizify',       label: 'Bizify',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
+                { id: 'investimento', label: 'Investimento', color: '#ef4444',           bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.35)' },
+              ] as const).map(opt => {
+                const active = (categoriaServico || '') === opt.id
+                return (
+                  <button key={opt.id || 'all'}
+                    onClick={() => { setCategoriaServico(opt.id as any); setPage(1) }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                    style={active
+                      ? { background: opt.bg, color: opt.color, border: `1px solid ${opt.border}` }
+                      : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid var(--brand-border)' }}>
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
           {isCliente ? (
             <div className="grid grid-cols-1 gap-2">
               <SearchSelect value={projectId} onChange={v => { setProjectId(v); setPage(1) }} options={clienteProjects} placeholder="Todos os projetos" />
