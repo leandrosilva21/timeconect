@@ -652,7 +652,14 @@ export default function RelatorioApontamentosPage() {
                   <Td>{t.user?.name ?? ''}</Td>
                   <Td>{t.ticket ?? ''}</Td>
                   <Td>{t.ticket_subject ?? ''}</Td>
-                  <Td className="whitespace-pre-wrap max-w-[26rem]">{t.observation ?? ''}</Td>
+                  <Td className="max-w-[24rem]">
+                    <span
+                      title={t.observation ?? ''}
+                      className="block overflow-hidden text-ellipsis whitespace-nowrap cursor-help"
+                    >
+                      {t.observation ?? ''}
+                    </span>
+                  </Td>
                   <Td className="text-center">{fmtTimeHM(t.start_time)}</Td>
                   <Td className="text-center">{fmtTimeHM(t.end_time)}</Td>
                   <Td right className="font-semibold">{t.effort_hours ?? minutesToHHMM(t.effort_minutes ?? 0)}</Td>
