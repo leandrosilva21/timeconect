@@ -902,58 +902,61 @@ export default function ApprovalsPage() {
         </button>
 
         {showFilters && (
-          <div className="border-t border-zinc-800 px-4 py-3">
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-              <div className="flex items-end gap-2 col-span-2">
-                <div className="flex rounded-lg border border-zinc-700 overflow-hidden text-xs self-end mb-0.5">
-                  {(['month', 'period'] as const).map((mode) => (
-                    <button key={mode} onClick={() => setFilterMode(mode)}
-                      className="px-3 py-1.5 font-medium transition-colors"
-                      style={{ background: filterMode === mode ? 'rgba(0,245,255,0.12)' : 'transparent', color: filterMode === mode ? '#00F5FF' : '#71717a' }}>
-                      {mode === 'month' ? 'Mês/Ano' : 'Período'}
-                    </button>
-                  ))}
-                </div>
-                {filterMode === 'month' ? (
-                  <MonthYearPicker
-                    month={refMonth}
-                    year={refYear}
-                    onChange={(m, y) => {
-                      if (m === 0) { setRefMonth(null); setRefYear(null); setDateFrom(''); setDateTo('') }
-                      else {
-                        const mm = String(m).padStart(2, '0')
-                        const last = new Date(y, m, 0).getDate()
-                        setRefMonth(m); setRefYear(y)
-                        setDateFrom(`${y}-${mm}-01`); setDateTo(`${y}-${mm}-${String(last).padStart(2, '0')}`)
-                      }
-                    }}
-                  />
-                ) : (
-                  <DateRangePicker
-                    from={dateFrom}
-                    to={dateTo}
-                    onChange={(f, t) => { setDateFrom(f); setDateTo(t); setRefMonth(null); setRefYear(null) }}
-                  />
-                )}
-                {([
-                  { id: 'sustentacao',  label: 'Sustentação', color: '#f59e0b',            bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)' },
-                  { id: 'projeto',      label: 'Projeto',     color: '#00F5FF',            bg: 'rgba(0,245,255,0.12)',   border: 'rgba(0,245,255,0.35)' },
-                  { id: 'bizify',       label: 'Bizify',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
-                  { id: 'investimento', label: 'Investimento', color: '#ef4444',           bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.35)' },
-                ] as const).map(opt => {
-                  const active = (categoriaServico || '') === opt.id
-                  return (
-                    <button key={opt.id || 'all'}
-                      onClick={() => setCategoriaServico(active ? '' : (opt.id as any))}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors self-end mb-0.5"
-                      style={active
-                        ? { background: opt.bg, color: opt.color, border: `1px solid ${opt.border}` }
-                        : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid var(--brand-border)' }}>
-                      {opt.label}
-                    </button>
-                  )
-                })}
+          <div className="border-t border-zinc-800 px-4 py-3 space-y-3">
+            {/* Linha 1: período + chips de categoria */}
+            <div className="flex items-end gap-2 flex-wrap">
+              <div className="flex rounded-lg border border-zinc-700 overflow-hidden text-xs self-end mb-0.5">
+                {(['month', 'period'] as const).map((mode) => (
+                  <button key={mode} onClick={() => setFilterMode(mode)}
+                    className="px-3 py-1.5 font-medium transition-colors"
+                    style={{ background: filterMode === mode ? 'rgba(0,245,255,0.12)' : 'transparent', color: filterMode === mode ? '#00F5FF' : '#71717a' }}>
+                    {mode === 'month' ? 'Mês/Ano' : 'Período'}
+                  </button>
+                ))}
               </div>
+              {filterMode === 'month' ? (
+                <MonthYearPicker
+                  month={refMonth}
+                  year={refYear}
+                  onChange={(m, y) => {
+                    if (m === 0) { setRefMonth(null); setRefYear(null); setDateFrom(''); setDateTo('') }
+                    else {
+                      const mm = String(m).padStart(2, '0')
+                      const last = new Date(y, m, 0).getDate()
+                      setRefMonth(m); setRefYear(y)
+                      setDateFrom(`${y}-${mm}-01`); setDateTo(`${y}-${mm}-${String(last).padStart(2, '0')}`)
+                    }
+                  }}
+                />
+              ) : (
+                <DateRangePicker
+                  from={dateFrom}
+                  to={dateTo}
+                  onChange={(f, t) => { setDateFrom(f); setDateTo(t); setRefMonth(null); setRefYear(null) }}
+                />
+              )}
+              {([
+                { id: 'sustentacao',  label: 'Sustentação', color: '#f59e0b',            bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)' },
+                { id: 'projeto',      label: 'Projeto',     color: '#00F5FF',            bg: 'rgba(0,245,255,0.12)',   border: 'rgba(0,245,255,0.35)' },
+                { id: 'bizify',       label: 'Bizify',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
+                { id: 'investimento', label: 'Investimento', color: '#ef4444',           bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.35)' },
+              ] as const).map(opt => {
+                const active = (categoriaServico || '') === opt.id
+                return (
+                  <button key={opt.id || 'all'}
+                    onClick={() => setCategoriaServico(active ? '' : (opt.id as any))}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors self-end mb-0.5"
+                    style={active
+                      ? { background: opt.bg, color: opt.color, border: `1px solid ${opt.border}` }
+                      : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid var(--brand-border)' }}>
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Linha 2: dropdowns de pessoas/cliente/projeto */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               <SearchableSelect
                 label="Colaborador"
                 value={userId}
