@@ -484,15 +484,15 @@ export default function RelatorioApontamentosPage() {
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr style={{ background: '#f5f3ff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Data de Inclusão</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Solicitante</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Consultor</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">{isVedamotors ? 'Ticket ERPSERV' : 'Ticket'}</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">{isVedamotors ? 'Ticket Vedamotors' : 'Título'}</th>
+                      <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Data de Inclusão</th>
+                      <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Solicitante</th>
+                      <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Consultor</th>
+                      <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">{isVedamotors ? 'Ticket ERPSERV' : 'Ticket'}</th>
+                      <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">{isVedamotors ? 'Ticket Vedamotors' : 'Título'}</th>
                       <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Início</th>
                       <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Fim</th>
-                      <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">Esforço</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Data do Serviço</th>
+                      <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Esforço</th>
+                      <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Data do Serviço</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -501,23 +501,23 @@ export default function RelatorioApontamentosPage() {
                       return (
                         <Fragment key={i}>
                           <tr style={{ background: bg, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 whitespace-nowrap">{fmtDateBR(t.created_at)}</td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700">{parseRequester(t.ticket_solicitante) || '—'}</td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700">{t.user?.name ?? '—'}</td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-500">
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtDateBR(t.created_at)}</td>
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center">{parseRequester(t.ticket_solicitante) || '—'}</td>
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center">{t.user?.name ?? '—'}</td>
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-500 text-center">
                               {t.ticket
                                 ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${t.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-500">#{t.ticket}</a>
                                 : '—'}
                             </td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 whitespace-nowrap">
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">
                               {isVedamotors ? (vedaTitleValue(t) || '—') : (t.ticket_subject ?? '—')}
                             </td>
                             <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtTimeHM(t.start_time) || '—'}</td>
                             <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtTimeHM(t.end_time) || '—'}</td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-right font-semibold text-gray-800 tabular-nums whitespace-nowrap">
+                            <td className="px-3 pt-2 pb-1 text-xs text-center font-semibold text-gray-800 tabular-nums whitespace-nowrap">
                               {t.effort_hours ?? minutesToHHMM(t.effort_minutes ?? 0)}
                             </td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 whitespace-nowrap">{fmtDateBR(t.date)}</td>
+                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtDateBR(t.date)}</td>
                           </tr>
                           <tr style={{ background: bg, borderBottom: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
                             <td colSpan={9} className="px-3 pt-1 pb-3 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
