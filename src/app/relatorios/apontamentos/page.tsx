@@ -256,7 +256,8 @@ export default function RelatorioApontamentosPage() {
       emittedAt,
       totalHours:   totalHHMM,
       totalRecords: items.length,
-      titleHeader:  isVedamotors ? 'TICKET ERPSERV' : 'Título',
+      ticketHeader: isVedamotors ? 'Ticket ERPSERV' : 'Ticket',
+      titleHeader:  isVedamotors ? 'Ticket Vedamotors' : 'Título',
     }
   }
 
@@ -486,8 +487,8 @@ export default function RelatorioApontamentosPage() {
                       <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Data de Inclusão</th>
                       <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Solicitante</th>
                       <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Consultor</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Ticket</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">{isVedamotors ? 'TICKET ERPSERV' : 'Título'}</th>
+                      <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">{isVedamotors ? 'Ticket ERPSERV' : 'Ticket'}</th>
+                      <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">{isVedamotors ? 'Ticket Vedamotors' : 'Título'}</th>
                       <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Início</th>
                       <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Fim</th>
                       <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">Esforço</th>

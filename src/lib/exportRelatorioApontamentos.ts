@@ -19,13 +19,15 @@ export interface RelatorioMeta {
   emittedAt: string
   totalHours: string
   totalRecords: number
-  titleHeader?: string  // ex: 'Título' (default) ou 'TICKET ERPSERV' (VEDAMOTORS)
+  ticketHeader?: string  // 'Ticket' (default) ou 'Ticket ERPSERV' (VEDAMOTORS)
+  titleHeader?:  string  // 'Título' (default) ou 'Ticket Vedamotors' (VEDAMOTORS)
 }
 
 function buildCols(meta: RelatorioMeta): string[] {
   return [
-    'Data de Inclusão', 'Solicitante', 'Consultor', 'Ticket',
-    meta.titleHeader ?? 'Título',
+    'Data de Inclusão', 'Solicitante', 'Consultor',
+    meta.ticketHeader ?? 'Ticket',
+    meta.titleHeader  ?? 'Título',
     'Descrição', 'Início', 'Fim', 'Esforço (h)', 'Data do Serviço',
   ]
 }
