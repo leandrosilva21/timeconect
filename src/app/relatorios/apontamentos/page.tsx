@@ -302,8 +302,10 @@ export default function RelatorioApontamentosPage() {
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
-        /* Na tela, permite scroll horizontal interno se a tabela exceder o card */
-        #print-relatorio > div { overflow-x: auto; }
+        /* Na tela, scroll horizontal só nos containers de tabela
+           (cabeçalho do relatório fica intacto). */
+        #print-relatorio .table-scroll { overflow-x: auto; }
+        @media print { #print-relatorio .table-scroll { overflow-x: visible; } }
       `}</style>
 
       <PageHeader
@@ -489,7 +491,7 @@ export default function RelatorioApontamentosPage() {
               </div>
 
               {/* Tabela */}
-              <div className="px-10 py-6">
+              <div className="px-10 py-6 table-scroll">
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr style={{ background: '#f5f3ff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
@@ -554,7 +556,7 @@ export default function RelatorioApontamentosPage() {
 
               {/* 2ª tabela: Apuração por Ticket — total no período + histórico */}
               {ticketSummary.length > 0 && (
-                <div className="px-10 pb-6">
+                <div className="px-10 pb-6 table-scroll">
                   <h2 className="text-sm font-bold text-gray-800 mb-3 mt-2">Apuração por Ticket</h2>
                   <p className="text-xs text-gray-500 mb-3">
                     Tickets com apontamento dentro do período, mostrando o total no período selecionado e o
