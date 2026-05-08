@@ -1480,6 +1480,7 @@ export default function MeuPainelPage() {
 
   // ── Load timesheets ────────────────────────────────────────────────────────
   const loadTimesheets = useCallback(async () => {
+    if (!user?.id) return  // aguarda auth carregar — Meu Painel é sempre do usuário logado
     setTsLoading(true)
     try {
       const p = new URLSearchParams({
@@ -1488,7 +1489,7 @@ export default function MeuPainelPage() {
         start_date: tsDateFrom || startDate,
         end_date:   tsDateTo   || endDate,
       })
-      if (user?.id) p.set('user_id', String(user.id))
+      p.set('user_id', String(user.id))
       if (tsSearch)   p.set('search',      tsSearch)
       if (tsProject)  p.set('project_id',  tsProject)
       if (tsCustomer) p.set('customer_id', tsCustomer)
@@ -1503,6 +1504,7 @@ export default function MeuPainelPage() {
 
   // ── Load expenses ──────────────────────────────────────────────────────────
   const loadExpenses = useCallback(async () => {
+    if (!user?.id) return  // aguarda auth carregar
     setExpLoading(true)
     try {
       const p = new URLSearchParams({
@@ -1510,7 +1512,7 @@ export default function MeuPainelPage() {
         start_date: expDateFrom || startDate,
         end_date:   expDateTo   || endDate,
       })
-      if (user?.id) p.set('user_id', String(user.id))
+      p.set('user_id', String(user.id))
       if (expSearch)   p.set('search',      expSearch)
       if (expCustomer)  p.set('customer_id',  expCustomer)
       if (expProject)   p.set('project_id',   expProject)
