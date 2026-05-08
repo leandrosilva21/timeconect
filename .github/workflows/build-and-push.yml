@@ -34,6 +34,7 @@ jobs:
         with:
           context: .
           push: true
+          no-cache: true
           build-args: |
             NEXT_PUBLIC_API_URL=https://api.minutor.com.br
             BACKEND_URL=http://backend:8080
