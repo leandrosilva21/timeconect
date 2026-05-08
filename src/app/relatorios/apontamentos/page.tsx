@@ -24,6 +24,15 @@ type StatusKey  = 'pending' | 'approved'
 
 interface Customer { id: number; name: string }
 
+interface TicketSummaryRow {
+  ticket: string
+  title: string | null
+  period_minutes: number
+  period_count: number
+  lifetime_minutes: number
+  lifetime_count: number
+}
+
 interface RawTimesheet {
   date: string
   created_at?: string | null
@@ -55,18 +64,6 @@ function fmtDateBR(iso: string | null | undefined): string {
   const [y, m, d] = date.split('-')
   if (!y || !m || !d) return ''
   return `${d}/${m}/${y}`
-}
-
-function fmtDateTimeBR(iso: string | null | undefined): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return fmtDateBR(iso)
-  const dd = String(d.getDate()).padStart(2, '0')
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const yyyy = d.getFullYear()
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mi = String(d.getMinutes()).padStart(2, '0')
-  return `${dd}/${mm}/${yyyy} ${hh}:${mi}`
 }
 
 function fmtTimeHM(t: string | null | undefined): string {
@@ -103,6 +100,7 @@ export default function RelatorioApontamentosPage() {
   const [statuses, setStatuses] = useState<StatusKey[]>(['pending', 'approved'])
 
   const [items,    setItems]    = useState<RawTimesheet[]>([])
+  const [ticketSummary, setTicketSummary] = useState<TicketSummaryRow[]>([])
   const [loaded,   setLoaded]   = useState(false)
   const [loading,  setLoading]  = useState(false)
   const [showPreview, setShowPreview] = useState(false)
@@ -162,7 +160,18 @@ export default function RelatorioApontamentosPage() {
       p.set('end_date',    endDate)
       p.set('pageSize',    '2000')
       statuses.forEach(s => p.append('status[]', s))
-      const r = await api.get<any>(`/timesheets?${p}`)
+
+      const summaryParams = new URLSearchParams()
+      summaryParams.set('customer_id', String(customerId))
+      summaryParams.set('start_date',  startDate)
+      summaryParams.set('end_date',    endDate)
+      statuses.forEach(s => summaryParams.append('status[]', s))
+
+      const [r, sumR] = await Promise.all([
+        api.get<any>(`/timesheets?${p}`),
+        api.get<any>(`/timesheets/summary-by-ticket?${summaryParams}`).catch(() => ({ tickets: [] })),
+      ])
+
       const list: RawTimesheet[] = Array.isArray(r?.items) ? r.items : []
       list.sort((a, b) => {
         const ai = a.created_at ?? a.date
@@ -171,6 +180,11 @@ export default function RelatorioApontamentosPage() {
         return (a.start_time ?? '').localeCompare(b.start_time ?? '')
       })
       setItems(list)
+
+      const tickets: TicketSummaryRow[] = Array.isArray(sumR?.tickets) ? sumR.tickets : []
+      tickets.sort((a, b) => a.ticket.localeCompare(b.ticket, 'pt-BR', { numeric: true }))
+      setTicketSummary(tickets)
+
       setLoaded(true)
       setShowPreview(false)
     } catch {
@@ -189,7 +203,7 @@ export default function RelatorioApontamentosPage() {
 
   function buildRows(): RelatorioRow[] {
     return items.map(t => ({
-      date_inclusion: fmtDateTimeBR(t.created_at),
+      date_inclusion: fmtDateBR(t.created_at),
       requester:      parseRequester(t.ticket_solicitante),
       consultant:     t.user?.name ?? '',
       ticket:         t.ticket ?? '',
@@ -233,12 +247,14 @@ export default function RelatorioApontamentosPage() {
     <AppLayout>
       <style>{`
         @media print {
+          @page { size: A4 landscape; margin: 8mm; }
           body * { visibility: hidden !important; }
           body[data-print="relatorio"] #print-relatorio,
           body[data-print="relatorio"] #print-relatorio * { visibility: visible !important; }
           body[data-print="relatorio"] #print-relatorio {
             position: fixed; top: 0; left: 0; width: 100%; z-index: 9999;
           }
+          body[data-print="relatorio"] #print-relatorio table { font-size: 10px !important; }
         }
         #print-relatorio {
           -webkit-print-color-adjust: exact !important;
@@ -431,7 +447,7 @@ export default function RelatorioApontamentosPage() {
                         key={i}
                         style={{ background: i % 2 === 0 ? '#fff' : '#faf9ff', borderBottom: '1px solid #e5e7eb', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}
                       >
-                        <td className="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">{fmtDateTimeBR(t.created_at)}</td>
+                        <td className="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">{fmtDateBR(t.created_at)}</td>
                         <td className="px-3 py-2 text-xs text-gray-700">{parseRequester(t.ticket_solicitante) || '—'}</td>
                         <td className="px-3 py-2 text-xs text-gray-700">{t.user?.name ?? '—'}</td>
                         <td className="px-3 py-2 text-xs text-gray-500">
@@ -465,6 +481,61 @@ export default function RelatorioApontamentosPage() {
                   </tfoot>
                 </table>
               </div>
+
+              {/* 2ª tabela: Apuração por Ticket — total no período + histórico */}
+              {ticketSummary.length > 0 && (
+                <div className="px-10 pb-6">
+                  <h2 className="text-sm font-bold text-gray-800 mb-3 mt-2">Apuração por Ticket</h2>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Tickets com apontamento dentro do período, mostrando o total no período selecionado e o
+                    total acumulado desde o primeiro apontamento no sistema (mesmo cliente).
+                  </p>
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr style={{ background: '#f5f3ff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Ticket</th>
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Título</th>
+                        <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Total no período</th>
+                        <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Total histórico</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ticketSummary.map((tk, i) => (
+                        <tr
+                          key={tk.ticket}
+                          style={{ background: i % 2 === 0 ? '#fff' : '#faf9ff', borderBottom: '1px solid #e5e7eb', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}
+                        >
+                          <td className="px-3 py-2 text-xs whitespace-nowrap">
+                            <a href={`https://erpserv.movidesk.com/Ticket/Edit/${tk.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-500">
+                              #{tk.ticket}
+                            </a>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-700">{tk.title ?? '—'}</td>
+                          <td className="px-3 py-2 text-xs text-right font-semibold text-gray-800 tabular-nums whitespace-nowrap">
+                            {minutesToHHMM(tk.period_minutes)}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-right font-semibold tabular-nums whitespace-nowrap" style={{ color: '#5b21b6' }}>
+                            {minutesToHHMM(tk.lifetime_minutes)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ background: '#ede9fe', borderTop: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
+                        <td colSpan={2} className="px-3 py-2 text-right text-sm font-semibold text-gray-700">
+                          Totais ({ticketSummary.length} ticket{ticketSummary.length === 1 ? '' : 's'})
+                        </td>
+                        <td className="px-3 py-2 text-right text-sm font-bold tabular-nums text-gray-800 whitespace-nowrap">
+                          {minutesToHHMM(ticketSummary.reduce((acc, t) => acc + t.period_minutes, 0))}
+                        </td>
+                        <td className="px-3 py-2 text-right text-sm font-bold tabular-nums whitespace-nowrap" style={{ color: '#5b21b6' }}>
+                          {minutesToHHMM(ticketSummary.reduce((acc, t) => acc + t.lifetime_minutes, 0))}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
 
               <div className="px-10 pb-6 text-center text-xs text-gray-400">
                 ERPSERV Consultoria — Documento gerado pelo sistema Minutor
@@ -512,7 +583,7 @@ export default function RelatorioApontamentosPage() {
             <Tbody>
               {items.map((t, i) => (
                 <Tr key={i}>
-                  <Td className="whitespace-nowrap">{fmtDateTimeBR(t.created_at)}</Td>
+                  <Td className="whitespace-nowrap">{fmtDateBR(t.created_at)}</Td>
                   <Td>
                     <Badge variant={t.status ?? 'default'}>{STATUS_LABEL[t.status ?? ''] ?? t.status}</Badge>
                   </Td>
