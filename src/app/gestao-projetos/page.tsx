@@ -415,7 +415,7 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
               ...(canEdit ? [{ label: 'Aportes', icon: <TrendingUp size={12} />, onClick: () => onMenuAction('aportes', project) }] : []),
               { label: 'Selecionar Equipe', icon: <Users       size={12} />, onClick: () => onMenuAction('team',       project) },
               { label: 'Abrir Mês',        icon: <CalendarPlus size={12} />, onClick: () => onMenuAction('open-period', project) },
-              ...(canDetach && project.parent_project ? [{ label: 'Desvincular do pai', icon: <Layers size={12} />, onClick: () => onMenuAction('detach-parent', project) }] : []),
+              ...(canDetach && project.parent_project_id ? [{ label: 'Desvincular do pai', icon: <Layers size={12} />, onClick: () => onMenuAction('detach-parent', project) }] : []),
               ...(onDelete ? [{ label: 'Excluir', icon: <Trash2 size={12} className="text-red-400" />, onClick: () => onDelete(project), danger: true }] : []),
             ]} />
             <button
