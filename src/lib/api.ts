@@ -47,13 +47,9 @@ async function request<T>(
     const body = await res.json().catch(() => ({}))
     const message = body.message ?? 'Não autenticado'
 
-    // Só redireciona se: (1) não estamos no endpoint de login, (2) ainda não estamos
-    // na tela /login (evita loop infinito quando AuthProvider checa /user numa rota pública).
+    // No endpoint de login o 401 é credencial errada — não redireciona
     const isLoginEndpoint = path === '/auth/login'
-    const inBrowser = typeof window !== 'undefined'
-    const alreadyOnLoginPage = inBrowser && window.location.pathname.startsWith('/login')
-
-    if (!isLoginEndpoint && inBrowser && !alreadyOnLoginPage) {
+    if (!isLoginEndpoint && typeof window !== 'undefined') {
       // Limpa cookie via rota interna e manda pra tela de login
       try {
         await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
