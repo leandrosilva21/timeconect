@@ -297,7 +297,7 @@ interface ProjectRowProps {
   project: ProjectWithTeam
   expanded: boolean
   onToggle: () => void
-  onMenuAction: (action: 'view' | 'costs' | 'timesheets' | 'expenses' | 'team' | 'aportes' | 'messages' | 'open-period' | 'detach-parent', project: ProjectWithTeam) => void
+  onMenuAction: (action: 'view' | 'costs' | 'timesheets' | 'expenses' | 'team' | 'aportes' | 'messages' | 'open-period' | 'detach-parent' | 'attach-parent', project: ProjectWithTeam) => void
   canEdit?: boolean
   canChangeStatus?: boolean
   canDetach?: boolean
@@ -416,6 +416,7 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
               { label: 'Selecionar Equipe', icon: <Users       size={12} />, onClick: () => onMenuAction('team',       project) },
               { label: 'Abrir Mês',        icon: <CalendarPlus size={12} />, onClick: () => onMenuAction('open-period', project) },
               ...(canDetach && project.parent_project_id ? [{ label: 'Desvincular do pai', icon: <Layers size={12} />, onClick: () => onMenuAction('detach-parent', project) }] : []),
+              ...(canDetach && !project.parent_project_id ? [{ label: 'Vincular como filho', icon: <Layers size={12} />, onClick: () => onMenuAction('attach-parent', project) }] : []),
               ...(onDelete ? [{ label: 'Excluir', icon: <Trash2 size={12} className="text-red-400" />, onClick: () => onDelete(project), danger: true }] : []),
             ]} />
             <button
@@ -1645,6 +1646,8 @@ export default function GestaoProjetosPage() {
   const [openPeriodProject, setOpenPeriodProject] = useState<ProjectWithTeam | null>(null)
   const [detachModal, setDetachModal] = useState<{ project: ProjectWithTeam; newCode: string; suggestedCode: string; codeError: string } | null>(null)
   const [detaching, setDetaching] = useState(false)
+  const [attachModal, setAttachModal] = useState<{ project: ProjectWithTeam; parentId: string; parents: { id: number; name: string; code: string }[]; loading: boolean } | null>(null)
+  const [attaching, setAttaching] = useState(false)
 
   // Auto-open messages modal when ?messages=PROJECT_ID is in URL
   useEffect(() => {
@@ -1656,7 +1659,19 @@ export default function GestaoProjetosPage() {
     window.history.replaceState({}, '', window.location.pathname)
   }, [projects])
 
-  const handleMenuAction = async (action: 'view' | 'costs' | 'timesheets' | 'expenses' | 'team' | 'aportes' | 'messages' | 'open-period' | 'detach-parent', project: ProjectWithTeam) => {
+  const handleMenuAction = async (action: 'view' | 'costs' | 'timesheets' | 'expenses' | 'team' | 'aportes' | 'messages' | 'open-period' | 'detach-parent' | 'attach-parent', project: ProjectWithTeam) => {
+    if (action === 'attach-parent') {
+      setAttachModal({ project, parentId: '', parents: [], loading: true })
+      try {
+        const r = await api.get<any>(`/projects?customer_id=${project.customer_id}&parent_projects_only=true&pageSize=200&exclude_id=${project.id}`)
+        const items: any[] = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
+        setAttachModal(p => p ? { ...p, parents: items.map((x: any) => ({ id: x.id, name: x.name, code: x.code })), loading: false } : p)
+      } catch {
+        setAttachModal(p => p ? { ...p, loading: false } : p)
+        toast.error('Erro ao carregar pais disponíveis')
+      }
+      return
+    }
     if (action === 'detach-parent') {
       setDetachModal({ project, newCode: '', suggestedCode: '', codeError: '' })
       // Sugere próximo código baseado no cliente
@@ -3142,6 +3157,76 @@ export default function GestaoProjetosPage() {
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                 style={{ background: 'var(--brand-primary)', color: '#000' }}>
                 <Layers size={14} /> {detaching ? 'Desvinculando...' : 'Desvincular'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Vincular Projeto Independente como Filho ── */}
+      {attachModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70">
+          <div className="rounded-2xl w-full max-w-md overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <div className="px-6 py-5 flex items-center gap-3">
+              <Layers size={20} style={{ color: 'var(--brand-primary)' }} className="shrink-0" />
+              <div>
+                <p className="font-semibold text-white">Vincular como filho</p>
+                <p className="text-xs text-zinc-400 mt-0.5">{attachModal.project.name} · {attachModal.project.code}</p>
+              </div>
+            </div>
+            <div className="px-6 pb-4 space-y-3">
+              <ul className="text-xs text-zinc-400 list-disc list-inside space-y-1">
+                <li><b>Fechado</b>: o pai entrega o sold_hours total do filho.</li>
+                <li><b>Banco de horas / outros</b>: o pai entrega só as horas consumidas.</li>
+                <li>O filho mantém seu próprio orçamento como sub-projeto do pai.</li>
+              </ul>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                  Projeto pai <span className="text-red-400">*</span>
+                </label>
+                {attachModal.loading ? (
+                  <div className="text-xs text-zinc-500">Carregando projetos disponíveis...</div>
+                ) : attachModal.parents.length === 0 ? (
+                  <div className="text-xs text-zinc-500">Nenhum projeto pai disponível pra este cliente.</div>
+                ) : (
+                  <select
+                    value={attachModal.parentId}
+                    onChange={e => setAttachModal(p => p ? { ...p, parentId: e.target.value } : p)}
+                    className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                    style={{
+                      background: 'var(--brand-bg)',
+                      border: '1px solid var(--brand-border)',
+                      color: 'var(--brand-text)',
+                    }}
+                  >
+                    <option value="">Selecione um projeto pai</option>
+                    {attachModal.parents.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} · {p.code}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+              <button onClick={() => setAttachModal(null)} disabled={attaching}
+                className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-white transition-colors">
+                Cancelar
+              </button>
+              <button disabled={attaching || !attachModal.parentId} onClick={async () => {
+                if (!attachModal || !attachModal.parentId) return
+                setAttaching(true)
+                try {
+                  await api.post(`/projects/${attachModal.project.id}/attach-to-parent`, { parent_id: Number(attachModal.parentId) })
+                  toast.success('Projeto vinculado com sucesso')
+                  setAttachModal(null)
+                  setRefreshKey(k => k + 1)
+                } catch (e: any) {
+                  toast.error(e?.message ?? 'Erro ao vincular projeto')
+                } finally { setAttaching(false) }
+              }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                style={{ background: 'var(--brand-primary)', color: '#000' }}>
+                <Layers size={14} /> {attaching ? 'Vinculando...' : 'Vincular'}
               </button>
             </div>
           </div>
