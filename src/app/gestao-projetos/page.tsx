@@ -1643,7 +1643,7 @@ export default function GestaoProjetosPage() {
   const [messagesProject, setMessagesProject] = useState<ProjectWithTeam | null>(null)
   const [dataModal, setDataModal] = useState<{ project: ProjectWithTeam; tab: 'timesheets' | 'expenses' } | null>(null)
   const [openPeriodProject, setOpenPeriodProject] = useState<ProjectWithTeam | null>(null)
-  const [detachModal, setDetachModal] = useState<{ project: ProjectWithTeam } | null>(null)
+  const [detachModal, setDetachModal] = useState<{ project: ProjectWithTeam; newCode: string; suggestedCode: string; codeError: string } | null>(null)
   const [detaching, setDetaching] = useState(false)
 
   // Auto-open messages modal when ?messages=PROJECT_ID is in URL
@@ -1657,7 +1657,16 @@ export default function GestaoProjetosPage() {
   }, [projects])
 
   const handleMenuAction = async (action: 'view' | 'costs' | 'timesheets' | 'expenses' | 'team' | 'aportes' | 'messages' | 'open-period' | 'detach-parent', project: ProjectWithTeam) => {
-    if (action === 'detach-parent') { setDetachModal({ project }); return }
+    if (action === 'detach-parent') {
+      setDetachModal({ project, newCode: '', suggestedCode: '', codeError: '' })
+      // Sugere próximo código baseado no cliente
+      try {
+        const r = await api.get<{ code: string }>(`/projects/next-code?customer_id=${project.customer_id}`)
+        const sug = r?.code ?? ''
+        setDetachModal(prev => prev ? { ...prev, suggestedCode: sug, newCode: sug } : prev)
+      } catch { /* sem sugestão, user digita manual */ }
+      return
+    }
     if (action === 'view') {
       setViewProject(project)
       setViewProjectFull(null)
@@ -3071,35 +3080,63 @@ export default function GestaoProjetosPage() {
                 <p className="text-xs text-zinc-400 mt-0.5">{detachModal.project.name} · {detachModal.project.code}</p>
               </div>
             </div>
-            <div className="px-6 pb-4 space-y-2">
-              <p className="text-sm text-zinc-300">
-                Pai atual: <span className="font-semibold text-white">{detachModal.project.parent_project?.name ?? '—'}</span>
-              </p>
-              <p className="text-sm text-zinc-400">
-                Ao desvincular:
-              </p>
+            <div className="px-6 pb-4 space-y-3">
               <ul className="text-xs text-zinc-400 list-disc list-inside space-y-1">
                 <li>O pai recupera as horas vendidas atuais do filho ({Number(detachModal.project.sold_hours ?? 0).toFixed(2)}h).</li>
                 <li>O filho fica independente, com horas vendidas igual ao consumido (apontamentos).</li>
-                <li>Um novo código será gerado para o filho.</li>
                 <li>Ação irreversível.</li>
               </ul>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                  Novo código <span className="text-red-400">*</span>
+                  {detachModal.suggestedCode && (
+                    <span className="ml-2 text-zinc-500">
+                      (sugestão: <button type="button" onClick={() => setDetachModal(p => p ? { ...p, newCode: p.suggestedCode, codeError: '' } : p)} className="text-cyan-400 hover:text-cyan-300 font-mono">{detachModal.suggestedCode}</button>)
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  value={detachModal.newCode}
+                  onChange={e => setDetachModal(p => p ? { ...p, newCode: e.target.value.toUpperCase().trim(), codeError: '' } : p)}
+                  placeholder="Ex: AAM004-25"
+                  className="w-full px-3 py-2 rounded-lg text-sm font-mono outline-none"
+                  style={{
+                    background: 'var(--brand-bg)',
+                    border: `1px solid ${detachModal.codeError ? '#EF4444' : 'var(--brand-border)'}`,
+                    color: 'var(--brand-text)',
+                  }}
+                />
+                {detachModal.codeError && (
+                  <p className="text-xs text-red-400 mt-1">{detachModal.codeError}</p>
+                )}
+              </div>
             </div>
             <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
               <button onClick={() => setDetachModal(null)} disabled={detaching}
                 className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-white transition-colors">
                 Cancelar
               </button>
-              <button disabled={detaching} onClick={async () => {
+              <button disabled={detaching || !detachModal.newCode} onClick={async () => {
                 if (!detachModal) return
+                const code = detachModal.newCode.trim()
+                if (!code) {
+                  setDetachModal(p => p ? { ...p, codeError: 'Informe o novo código' } : p)
+                  return
+                }
                 setDetaching(true)
                 try {
-                  const r = await api.post<any>(`/projects/${detachModal.project.id}/detach-from-parent`, {})
-                  toast.success(`Desvinculado. Novo código: ${r?.child?.code ?? ''}`)
+                  const r = await api.post<any>(`/projects/${detachModal.project.id}/detach-from-parent`, { code })
+                  toast.success(`Desvinculado. Novo código: ${r?.child?.code ?? code}`)
                   setDetachModal(null)
                   setRefreshKey(k => k + 1)
                 } catch (e: any) {
-                  toast.error(e?.message ?? 'Erro ao desvincular projeto')
+                  const msg = e?.message ?? 'Erro ao desvincular projeto'
+                  if (/já está em uso|in use/i.test(msg)) {
+                    setDetachModal(p => p ? { ...p, codeError: msg } : p)
+                  } else {
+                    toast.error(msg)
+                  }
                 } finally { setDetaching(false) }
               }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
