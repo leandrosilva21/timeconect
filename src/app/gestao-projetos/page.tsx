@@ -26,6 +26,7 @@ interface ProjectWithTeam extends Project {
   service_type?: { id: number; name: string } | null
   contract_type?: { id: number; name: string } | null
   contract_type_display?: string
+  parent_project?: { id: number; name: string; code: string } | null
 }
 
 interface ProjectFull extends ProjectWithTeam {
@@ -296,9 +297,10 @@ interface ProjectRowProps {
   project: ProjectWithTeam
   expanded: boolean
   onToggle: () => void
-  onMenuAction: (action: 'view' | 'costs' | 'timesheets' | 'expenses' | 'team' | 'aportes' | 'messages' | 'open-period', project: ProjectWithTeam) => void
+  onMenuAction: (action: 'view' | 'costs' | 'timesheets' | 'expenses' | 'team' | 'aportes' | 'messages' | 'open-period' | 'detach-parent', project: ProjectWithTeam) => void
   canEdit?: boolean
   canChangeStatus?: boolean
+  canDetach?: boolean
   onEdit?: (project: ProjectWithTeam) => void
   onChangeStatus?: (project: ProjectWithTeam) => void
   onDelete?: (project: ProjectWithTeam) => void
@@ -310,7 +312,7 @@ interface ProjectRowProps {
   onConsultantManualToggle?: (userId: number, allow: boolean) => void
 }
 
-function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canChangeStatus, onEdit, onChangeStatus, onDelete, treeRow, onTreeToggle, hasUnread, isSelected, onSelect, onConsultantManualToggle }: ProjectRowProps) {
+function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canChangeStatus, canDetach, onEdit, onChangeStatus, onDelete, treeRow, onTreeToggle, hasUnread, isSelected, onSelect, onConsultantManualToggle }: ProjectRowProps) {
   const ctName = (project.contract_type_display ?? project.contract_type?.name ?? '').toLowerCase()
   const isOnDemand = ctName.includes('on demand') || (project as any).tipo_faturamento === 'on_demand'
   const isBhMensal = ctName.includes('mensal')
@@ -413,6 +415,7 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
               ...(canEdit ? [{ label: 'Aportes', icon: <TrendingUp size={12} />, onClick: () => onMenuAction('aportes', project) }] : []),
               { label: 'Selecionar Equipe', icon: <Users       size={12} />, onClick: () => onMenuAction('team',       project) },
               { label: 'Abrir Mês',        icon: <CalendarPlus size={12} />, onClick: () => onMenuAction('open-period', project) },
+              ...(canDetach && project.parent_project ? [{ label: 'Desvincular do pai', icon: <Layers size={12} />, onClick: () => onMenuAction('detach-parent', project) }] : []),
               ...(onDelete ? [{ label: 'Excluir', icon: <Trash2 size={12} className="text-red-400" />, onClick: () => onDelete(project), danger: true }] : []),
             ]} />
             <button
@@ -1640,6 +1643,8 @@ export default function GestaoProjetosPage() {
   const [messagesProject, setMessagesProject] = useState<ProjectWithTeam | null>(null)
   const [dataModal, setDataModal] = useState<{ project: ProjectWithTeam; tab: 'timesheets' | 'expenses' } | null>(null)
   const [openPeriodProject, setOpenPeriodProject] = useState<ProjectWithTeam | null>(null)
+  const [detachModal, setDetachModal] = useState<{ project: ProjectWithTeam } | null>(null)
+  const [detaching, setDetaching] = useState(false)
 
   // Auto-open messages modal when ?messages=PROJECT_ID is in URL
   useEffect(() => {
@@ -1651,7 +1656,8 @@ export default function GestaoProjetosPage() {
     window.history.replaceState({}, '', window.location.pathname)
   }, [projects])
 
-  const handleMenuAction = async (action: 'view' | 'costs' | 'timesheets' | 'expenses' | 'team' | 'aportes' | 'messages' | 'open-period', project: ProjectWithTeam) => {
+  const handleMenuAction = async (action: 'view' | 'costs' | 'timesheets' | 'expenses' | 'team' | 'aportes' | 'messages' | 'open-period' | 'detach-parent', project: ProjectWithTeam) => {
+    if (action === 'detach-parent') { setDetachModal({ project }); return }
     if (action === 'view') {
       setViewProject(project)
       setViewProjectFull(null)
@@ -2080,6 +2086,7 @@ export default function GestaoProjetosPage() {
                       onMenuAction={handleMenuAction}
                       canEdit={canEdit}
                       canChangeStatus={canChangeStatus}
+                      canDetach={isAdmin}
                       onEdit={p => setEditProjectId(p.id)}
                       onChangeStatus={p => setStatusModal({ open: true, project: p, newStatus: p.status ?? '' })}
                       onDelete={canDelete ? p => setDeleteProject(p) : undefined}
@@ -3047,6 +3054,57 @@ export default function GestaoProjetosPage() {
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                 style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
                 <Trash2 size={14} /> {deleting ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Desvincular Projeto Filho do Pai ── */}
+      {detachModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70">
+          <div className="rounded-2xl w-full max-w-md overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <div className="px-6 py-5 flex items-center gap-3">
+              <Layers size={20} style={{ color: 'var(--brand-primary)' }} className="shrink-0" />
+              <div>
+                <p className="font-semibold text-white">Desvincular projeto do pai</p>
+                <p className="text-xs text-zinc-400 mt-0.5">{detachModal.project.name} · {detachModal.project.code}</p>
+              </div>
+            </div>
+            <div className="px-6 pb-4 space-y-2">
+              <p className="text-sm text-zinc-300">
+                Pai atual: <span className="font-semibold text-white">{detachModal.project.parent_project?.name ?? '—'}</span>
+              </p>
+              <p className="text-sm text-zinc-400">
+                Ao desvincular:
+              </p>
+              <ul className="text-xs text-zinc-400 list-disc list-inside space-y-1">
+                <li>O pai recupera as horas vendidas atuais do filho ({Number(detachModal.project.sold_hours ?? 0).toFixed(2)}h).</li>
+                <li>O filho fica independente, com horas vendidas igual ao consumido (apontamentos).</li>
+                <li>Um novo código será gerado para o filho.</li>
+                <li>Ação irreversível.</li>
+              </ul>
+            </div>
+            <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+              <button onClick={() => setDetachModal(null)} disabled={detaching}
+                className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-white transition-colors">
+                Cancelar
+              </button>
+              <button disabled={detaching} onClick={async () => {
+                if (!detachModal) return
+                setDetaching(true)
+                try {
+                  const r = await api.post<any>(`/projects/${detachModal.project.id}/detach-from-parent`, {})
+                  toast.success(`Desvinculado. Novo código: ${r?.child?.code ?? ''}`)
+                  setDetachModal(null)
+                  setRefreshKey(k => k + 1)
+                } catch (e: any) {
+                  toast.error(e?.message ?? 'Erro ao desvincular projeto')
+                } finally { setDetaching(false) }
+              }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                style={{ background: 'var(--brand-primary)', color: '#000' }}>
+                <Layers size={14} /> {detaching ? 'Desvinculando...' : 'Desvincular'}
               </button>
             </div>
           </div>
