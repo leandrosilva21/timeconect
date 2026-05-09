@@ -141,9 +141,7 @@ const NAV: NavEntry[] = [
     label: 'Sustentação',
     icon: Headphones,
     items: [
-      { label: 'Portal',          href: '/sustentacao',          icon: Headphones, exactMatch: true },
-      { label: 'Projetos',        href: '/sustentacao/projetos', icon: Layers },
-      { label: 'Visão Executiva', href: '/portal-cliente',       icon: Building2 },
+      { label: 'Portal', href: '/sustentacao', icon: Headphones, exactMatch: true },
     ],
   },
   {
@@ -285,8 +283,7 @@ function SidebarInner({ user }: { user: User }) {
           label: 'Sustentação',
           icon: Headphones,
           items: [
-            { label: 'Portal',             href: '/sustentacao',     icon: Headphones, exactMatch: true },
-            { label: 'Gestão de Projetos', href: '/gestao-projetos', icon: Layers },
+            { label: 'Portal', href: '/sustentacao', icon: Headphones, exactMatch: true },
           ],
         })
         nav.splice(1, 0, { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard })
