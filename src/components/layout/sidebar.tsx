@@ -257,6 +257,9 @@ function SidebarInner({ user }: { user: User }) {
             { label: 'Demandas e Projetos', href: '/contratos/pipeline', icon: LayoutGrid },
           ],
         })
+      } else if (ep.includes('gestao_projetos.view') || ep.includes('gestao_projetos.update')) {
+        // Permissão via grupo libera o item independente do coordinator_type
+        nav.splice(1, 0, { type: 'item', label: 'Gestão de Projetos', href: '/gestao-projetos', icon: Layers })
       }
 
       // Meu Painel — primeiro item para TODOS os coordenadores
@@ -311,7 +314,7 @@ function SidebarInner({ user }: { user: User }) {
       return nav
     }
     if (isAdministrativo) {
-      return [
+      const nav: NavEntry[] = [
         { type: 'item', label: 'Início', href: '/dashboard', icon: Home },
         {
           type: 'group',
@@ -341,7 +344,12 @@ function SidebarInner({ user }: { user: User }) {
           ],
         },
         { type: 'item', label: 'Usuários',     href: '/users',    icon: Users },
-      ] as NavEntry[]
+      ]
+      // Gestão de Projetos — libera via permissão de grupo (mesmo padrão de outros perfis)
+      if (ep.includes('gestao_projetos.view') || ep.includes('gestao_projetos.update')) {
+        nav.splice(3, 0, { type: 'item', label: 'Gestão de Projetos', href: '/gestao-projetos', icon: Layers })
+      }
+      return nav
     }
     if (isCliente) {
       // Filtra dashboards pelos tipos de contrato que o cliente realmente possui
