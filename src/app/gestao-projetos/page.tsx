@@ -3103,9 +3103,9 @@ export default function GestaoProjetosPage() {
             </div>
             <div className="px-6 pb-4 space-y-3">
               <ul className="text-xs text-zinc-400 list-disc list-inside space-y-1">
-                <li>O pai recupera as horas vendidas atuais do filho ({Number(detachModal.project.sold_hours ?? 0).toFixed(2)}h).</li>
-                <li>O filho fica independente, com horas vendidas igual ao consumido (apontamentos).</li>
-                <li>Ação irreversível.</li>
+                <li>O <b>sold_hours</b> do pai e do filho <b>não muda</b> — vínculo é apenas estrutural.</li>
+                <li>O consumo do filho <b>deixa de ser contabilizado</b> no consumed_hours do pai (saldo do pai aumenta).</li>
+                <li>O filho continua independente com o mesmo sold_hours que tinha.</li>
               </ul>
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1.5">
@@ -3182,9 +3182,10 @@ export default function GestaoProjetosPage() {
             </div>
             <div className="px-6 pb-4 space-y-3">
               <ul className="text-xs text-zinc-400 list-disc list-inside space-y-1">
-                <li><b>Fechado</b>: o pai entrega o sold_hours total do filho.</li>
-                <li><b>Banco de horas / outros</b>: o pai entrega só as horas consumidas.</li>
-                <li>O filho mantém seu próprio orçamento como sub-projeto do pai.</li>
+                <li>O <b>sold_hours</b> do pai e do filho <b>não muda</b> — vínculo é apenas estrutural.</li>
+                <li><b>Fechado</b>: pai consome (no saldo) o <b>sold_hours + aportes</b> do filho no ato.</li>
+                <li><b>BH Fixo</b>: pai consome (no saldo) o efetivamente apontado pelo filho.</li>
+                <li>BH Mensal e On Demand <b>não podem</b> ser filhos.</li>
               </ul>
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1.5">
