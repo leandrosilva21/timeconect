@@ -59,7 +59,10 @@ export default function IndicadoresAusterPage() {
   const [topLoading, setTopLoading] = useState(true)
 
   useEffect(() => {
-    if (!authLoading && user && !user.type?.includes('admin') && user.type !== 'admin') {
+    if (authLoading || !user) return
+    const isAdmin = user.type === 'admin'
+    const isAusterClient = user.type === 'cliente' && (user as any).customer_id === 220
+    if (!isAdmin && !isAusterClient) {
       router.replace('/dashboard')
     }
   }, [user, authLoading, router])

@@ -386,6 +386,10 @@ function SidebarInner({ user }: { user: User }) {
       if (dashItems.length > 0) {
         nav.push({ type: 'group', label: 'Dashboards', icon: BarChart2, items: dashItems })
       }
+      // Indicadores da própria empresa (atualmente só Auster)
+      if (user?.customer_id === 220) {
+        nav.push({ type: 'item', label: 'Indicadores', href: '/indicadores/auster', icon: BarChart2 })
+      }
       return nav
     }
     if (isConsultor) {
