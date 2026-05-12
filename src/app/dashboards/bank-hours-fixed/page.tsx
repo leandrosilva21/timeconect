@@ -378,15 +378,27 @@ export default function BankHoursFixedPage() {
     if (inlineRows.length === 0) return
     const isExpenses = activeTab === 'expenses'
     const isLeafTotal = isLeafProject && activeTab === 'total'
-    const useMaintenanceLayout = activeTab === 'maintenance' || isLeafTotal
-    const sheetName = isExpenses ? 'Despesas' : (activeTab === 'architecture' ? 'Arquitetura' : 'Sustentação')
+    const sheetName = isExpenses
+      ? 'Despesas'
+      : isLeafTotal
+        ? 'Apontamentos'
+        : (activeTab === 'architecture' ? 'Arquitetura' : 'Sustentação')
     const data = isExpenses
       ? inlineRows.map(r => ({
           Data: r.date ? r.date.split('-').reverse().join('/') : '',
           Colaborador: r.user?.name ?? '',
           Valor: Number(r.amount) || 0,
         }))
-      : useMaintenanceLayout
+      : isLeafTotal
+        ? inlineRows.map(r => ({
+            Data: r.date ? r.date.split('-').reverse().join('/') : '',
+            Consultor: r.user?.name ?? '',
+            Descrição: r.description ?? '',
+            Início: r.start_time ?? '',
+            Fim: r.end_time ?? '',
+            'Esforço (h)': Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
+          }))
+      : activeTab === 'maintenance'
         ? inlineRows.map(r => ({
             Data: r.date ? r.date.split('-').reverse().join('/') : '',
             Solicitante: r.requester ?? '',
@@ -766,7 +778,7 @@ export default function BankHoursFixedPage() {
                     {isLeafProject && (
                       <>
                         <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
-                        <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="maintenance" onRowClick={setInlineDetail} />
+                        <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="leaf" onRowClick={setInlineDetail} />
                       </>
                     )}
 
@@ -1168,8 +1180,9 @@ function IndicatorCard({
   )
 }
 
-function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowClick }: { rows: any[]; loading: boolean; variant?: 'maintenance' | 'architecture'; onRowClick?: (r: any) => void }) {
+function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowClick }: { rows: any[]; loading: boolean; variant?: 'maintenance' | 'architecture' | 'leaf'; onRowClick?: (r: any) => void }) {
   const isArch = variant === 'architecture'
+  const isLeaf = variant === 'leaf'
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
       <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -1200,6 +1213,34 @@ function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowCl
                   <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
                   <td className="px-4 py-2 max-w-2xl truncate" style={{ color: 'var(--text-muted)' }} title={r.description ?? '—'}>{r.description ?? '—'}</td>
                   <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
+                  {onRowClick && <td className="px-2 py-2"><Eye size={14} style={{ color: 'var(--text-muted)' }} /></td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : isLeaf ? (
+          // Leaf — sem Solicitante / Ticket / Título do Ticket
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Data</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Consultor</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Descrição</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Início</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Fim</th>
+                <th className="text-right px-3 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Esforço (h)</th>
+                <th className="px-2 py-2 w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id} className={onRowClick ? 'cursor-pointer' : ''} onClick={onRowClick ? () => onRowClick(r) : undefined} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td className="px-3 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                  <td className="px-3 py-2">{r.user?.name ?? '—'}</td>
+                  <td className="px-3 py-2 max-w-xl truncate" style={{ color: 'var(--text-muted)' }} title={r.description ?? '—'}>{r.description ?? '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{r.start_time ?? '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{r.end_time ?? '—'}</td>
+                  <td className="px-3 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}</td>
                   {onRowClick && <td className="px-2 py-2"><Eye size={14} style={{ color: 'var(--text-muted)' }} /></td>}
                 </tr>
               ))}
