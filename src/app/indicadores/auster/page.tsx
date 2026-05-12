@@ -137,6 +137,77 @@ export default function IndicadoresAusterPage() {
           />
         </div>
 
+        {/* ─ Top horas consumidas (gráfico) ─ */}
+        <section className="ds-card">
+          <div className="px-5 py-4 border-b flex items-center justify-between gap-3 flex-wrap" style={{ borderColor: 'var(--border)' }}>
+            <h2 className="text-base font-semibold" style={{ color: 'var(--text)' }}>Top Horas Consumidas</h2>
+            <div className="flex gap-1">
+              {(['5', '10', '20', 'all'] as TopLimit[]).map(l => (
+                <button
+                  key={l}
+                  onClick={() => setTopLimit(l)}
+                  className="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+                  style={{
+                    background: topLimit === l ? 'var(--primary)' : 'var(--surface-hover)',
+                    color:      topLimit === l ? 'var(--primary-fg)' : 'var(--text)',
+                  }}
+                >
+                  {l === 'all' ? 'Todos' : `Top ${l}`}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="p-5">
+            {topLoading && (
+              <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
+            )}
+            {!topLoading && topRows.length === 0 && (
+              <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem dados.</div>
+            )}
+            {!topLoading && topRows.length > 0 && (() => {
+              const maxConsumed = Math.max(...topRows.map(p => p.consumed_hours), 1)
+              return (
+                <div className="space-y-2.5">
+                  {topRows.map((p, idx) => {
+                    const pct = (p.consumed_hours / maxConsumed) * 100
+                    return (
+                      <div key={p.id} className="flex items-center gap-3">
+                        <div className="w-6 text-right text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                          {idx + 1}
+                        </div>
+                        <div className="w-56 shrink-0 text-sm truncate" title={`${p.code} — ${p.name}`}>
+                          <span className="font-mono text-xs" style={{ color: 'var(--text-light)' }}>{p.code}</span>
+                          <span className="mx-1.5" style={{ color: 'var(--text-light)' }}>·</span>
+                          <span style={{ color: 'var(--text)' }}>{p.name}</span>
+                        </div>
+                        <div className="flex-1 relative h-7 rounded overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
+                          <div
+                            className="absolute inset-y-0 left-0 rounded transition-all"
+                            style={{
+                              width: `${pct}%`,
+                              background: 'linear-gradient(90deg, var(--primary) 0%, var(--primary-hover, var(--primary)) 100%)',
+                            }}
+                          />
+                          <div className="absolute inset-0 flex items-center px-2.5 text-xs font-semibold" style={{
+                            color: pct > 35 ? 'var(--primary-fg)' : 'var(--text)',
+                            mixBlendMode: 'normal',
+                          }}>
+                            {fmtHours(p.consumed_hours)}h
+                          </div>
+                        </div>
+                        <div className="w-24 text-right text-xs" style={{ color: 'var(--text-muted)' }}>
+                          <span className="font-mono">{fmtHours(p.sold_hours)}h</span>
+                          <span className="ml-1">vend</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+          </div>
+        </section>
+
         {/* ─ Relação de Projetos ─ */}
         <section className="ds-card">
           <div className="px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
@@ -187,57 +258,6 @@ export default function IndicadoresAusterPage() {
                   </tr>
                 </tfoot>
               )}
-            </table>
-          </div>
-        </section>
-
-        {/* ─ Top horas consumidas ─ */}
-        <section className="ds-card">
-          <div className="px-5 py-4 border-b flex items-center justify-between gap-3" style={{ borderColor: 'var(--border)' }}>
-            <h2 className="text-base font-semibold" style={{ color: 'var(--text)' }}>Top Horas Consumidas</h2>
-            <div className="flex gap-1">
-              {(['5', '10', '20', 'all'] as TopLimit[]).map(l => (
-                <button
-                  key={l}
-                  onClick={() => setTopLimit(l)}
-                  className="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
-                  style={{
-                    background: topLimit === l ? 'var(--primary)' : 'var(--surface-hover)',
-                    color:      topLimit === l ? 'var(--primary-fg)' : 'var(--text)',
-                  }}
-                >
-                  {l === 'all' ? 'Todos' : `Top ${l}`}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                  <Th align="right" width={48}>#</Th>
-                  <Th>Código</Th><Th>Projeto</Th><Th>Tipo</Th>
-                  <Th align="right">Horas Consumidas</Th>
-                  <Th align="right">Horas Vendidas</Th>
-                  <Th>Status</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {topLoading && (
-                  <tr><td colSpan={7} className="px-5 py-6 text-center" style={{ color: 'var(--text-muted)' }}>Carregando…</td></tr>
-                )}
-                {!topLoading && topRows.map((p, idx) => (
-                  <tr key={p.id} className="ds-row-hover">
-                    <Td align="right" muted>{idx + 1}</Td>
-                    <Td><span className="font-mono">{p.code}</span></Td>
-                    <Td>{p.name}</Td>
-                    <Td>{p.contract_type ?? '—'}</Td>
-                    <Td align="right" bold>{fmtHours(p.consumed_hours)}</Td>
-                    <Td align="right">{fmtHours(p.sold_hours)}</Td>
-                    <Td>{statusBadge(p.status, p.status_display)}</Td>
-                  </tr>
-                ))}
-              </tbody>
             </table>
           </div>
         </section>
