@@ -188,9 +188,8 @@ export default function IndicadoresAusterPage() {
                               background: 'linear-gradient(90deg, var(--primary) 0%, var(--primary-hover, var(--primary)) 100%)',
                             }}
                           />
-                          <div className="absolute inset-0 flex items-center px-2.5 text-xs font-semibold" style={{
-                            color: pct > 35 ? 'var(--primary-fg)' : 'var(--text)',
-                            mixBlendMode: 'normal',
+                          <div className="absolute inset-y-0 left-0 flex items-center px-2.5 text-xs font-semibold whitespace-nowrap" style={{
+                            color: 'var(--primary-fg)',
                           }}>
                             {fmtHours(p.consumed_hours)}h
                           </div>
