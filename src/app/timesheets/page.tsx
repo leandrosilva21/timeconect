@@ -1269,6 +1269,9 @@ function TimesheetsPageContent() {
                 <Th className="hidden md:table-cell">Fim</Th>
                 <Th right sortable active={sortField === 'effort_hours'} dir={sortDir} onClick={() => handleSort('effort_hours')}>Tempo</Th>
                 <Th className="hidden lg:table-cell">Ticket #</Th>
+                {!isCliente && (
+                  <Th right className="hidden lg:table-cell whitespace-nowrap">Consumo do Ticket</Th>
+                )}
                 <Th className="hidden sm:table-cell">Origem</Th>
                 {!(isAdmin || isCoordenador) && (
                   <Th sortable active={sortField === 'user.name'} dir={sortDir} onClick={() => handleSort('user.name')}>Colaborador</Th>
@@ -1288,7 +1291,7 @@ function TimesheetsPageContent() {
             <Tbody>
               {data?.items.length === 0 ? (
                 <tr>
-                  <td colSpan={14}>
+                  <td colSpan={isCliente ? 14 : 15}>
                     <EmptyState icon={Clock} title="Nenhum apontamento encontrado" description="Tente ajustar os filtros ou criar um novo apontamento." />
                   </td>
                 </tr>
@@ -1383,6 +1386,13 @@ function TimesheetsPageContent() {
                         >#{ts.ticket}</a>
                       : '—'}
                   </Td>
+                  {!isCliente && (
+                    <Td right className="hidden lg:table-cell font-mono">
+                      {ts.ticket_total_minutes != null
+                        ? formatMinutes(ts.ticket_total_minutes)
+                        : <span style={{ color: 'var(--brand-subtle)' }}>—</span>}
+                    </Td>
+                  )}
                   <Td className="hidden sm:table-cell">
                     <OriginBadge
                       origin={ts.origin}

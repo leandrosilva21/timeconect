@@ -278,6 +278,7 @@ export default function BankHoursFixedPage() {
   const [indicHoursRequester, setIndicHoursRequester] = useState<any[]>([])
   const [indicHoursService,   setIndicHoursService]   = useState<any[]>([])
   const [indicTicketsStatus,  setIndicTicketsStatus]  = useState<any[]>([])
+  const [indicTicketsUrgency, setIndicTicketsUrgency] = useState<any[]>([])
   const [indicLoading,        setIndicLoading]        = useState(false)
   useEffect(() => {
     if (activeTab !== 'indicators') return
@@ -295,11 +296,13 @@ export default function BankHoursFixedPage() {
       api.get<any>(`${base}/hours-by-requester?${qs}`).catch(() => null),
       api.get<any>(`${base}/hours-by-service?${qs}`).catch(() => null),
       api.get<any>(`${base}/tickets-by-status?${qs}`).catch(() => null),
-    ]).then(([r, s, st]) => {
+      api.get<any>(`${base}/tickets-by-urgency?${qs}`).catch(() => null),
+    ]).then(([r, s, st, u]) => {
       const extract = (x: any) => Array.isArray(x?.data) ? x.data : (Array.isArray(x?.data?.data) ? x.data.data : [])
       setIndicHoursRequester(extract(r))
       setIndicHoursService(extract(s))
       setIndicTicketsStatus(extract(st))
+      setIndicTicketsUrgency(extract(u))
     }).finally(() => setIndicLoading(false))
   }, [activeTab, selectedCustomer, selectedProject, refMonth, refYear, dateTo, user?.customer_id])
 
@@ -850,15 +853,21 @@ export default function BankHoursFixedPage() {
                       badgeKey={(r) => Number(r.ticket_count ?? 0)}
                       badgeFmt={(n) => `${n} ${n === 1 ? 'ticket' : 'tickets'}`}
                     />
-                    <div className="lg:col-span-2">
-                      <IndicatorCard
-                        title="Tickets por Status"
-                        rows={indicTicketsStatus}
-                        labelKey={(r) => r.status_display ?? r.status ?? r.name ?? '—'}
-                        valueKey={(r) => Number(r.ticket_count ?? r.total_tickets ?? r.tickets ?? r.count ?? r.value ?? 0)}
-                        valueFmt={(v) => String(Math.round(v))}
-                      />
-                    </div>
+                    <IndicatorCard
+                      title="Tickets por Status"
+                      rows={indicTicketsStatus}
+                      labelKey={(r) => r.status_display ?? r.status ?? r.name ?? '—'}
+                      valueKey={(r) => Number(r.ticket_count ?? r.total_tickets ?? r.tickets ?? r.count ?? r.value ?? 0)}
+                      valueFmt={(v) => String(Math.round(v))}
+                    />
+                    <IndicatorCard
+                      title="Tickets por Urgência"
+                      rows={indicTicketsUrgency}
+                      labelKey={(r) => r.urgency ?? r.name ?? '—'}
+                      valueKey={(r) => Number(r.ticket_count ?? 0)}
+                      valueFmt={(v) => `${Math.round(v)} ${v === 1 ? 'ticket' : 'tickets'}`}
+                      colorKey={(r) => URGENCY_COLORS[r.urgency as keyof typeof URGENCY_COLORS] ?? 'var(--primary)'}
+                    />
                   </div>
                 )}
               </div>
@@ -1098,8 +1107,15 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
 
 // ─── Inline tables (visual no mesmo padrão de /timesheets) ──────────────────
 
+const URGENCY_COLORS = {
+  'Urgente': '#DC2626',  // vermelho forte
+  'Alta':    '#F97316',  // laranja
+  'Média':   '#F59E0B',  // âmbar / amarelo
+  'Baixa':   '#10B981',  // verde
+}
+
 function IndicatorCard({
-  title, rows, labelKey, valueKey, valueFmt, emptyMessage = 'Sem dados no período.', badgeKey, badgeFmt,
+  title, rows, labelKey, valueKey, valueFmt, emptyMessage = 'Sem dados no período.', badgeKey, badgeFmt, colorKey,
 }: {
   title: string
   rows: any[]
@@ -1109,6 +1125,7 @@ function IndicatorCard({
   emptyMessage?: string
   badgeKey?: (r: any) => number
   badgeFmt?: (n: number) => string
+  colorKey?: (r: any) => string
 }) {
   const max = Math.max(1, ...rows.map(valueKey))
   return (
@@ -1130,8 +1147,8 @@ function IndicatorCard({
                   <div className="w-6 text-right text-xs font-mono shrink-0" style={{ color: 'var(--text-muted)' }}>{idx + 1}</div>
                   <div className="w-48 shrink-0 text-sm truncate" style={{ color: 'var(--text)' }} title={labelKey(r)}>{labelKey(r)}</div>
                   <div className="flex-1 relative h-6 rounded overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
-                    <div className="absolute inset-y-0 left-0 rounded" style={{ width: `${pct}%`, background: 'var(--primary)' }} />
-                    <div className="absolute inset-y-0 left-0 flex items-center px-2 text-xs font-semibold whitespace-nowrap" style={{ color: 'var(--primary-fg)' }}>
+                    <div className="absolute inset-y-0 left-0 rounded" style={{ width: `${pct}%`, background: colorKey ? colorKey(r) : 'var(--primary)' }} />
+                    <div className="absolute inset-y-0 left-0 flex items-center px-2 text-xs font-semibold whitespace-nowrap" style={{ color: '#0A0A0B' }}>
                       {valueFmt(v)}
                     </div>
                   </div>
