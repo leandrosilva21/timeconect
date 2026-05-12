@@ -1274,7 +1274,7 @@ function TimesheetsPageContent() {
                     className="hidden lg:table-cell whitespace-nowrap text-center px-5 py-3.5 text-xs font-semibold uppercase tracking-wider"
                     style={{ color: 'var(--brand-primary)', background: 'rgba(0,245,255,0.06)', borderLeft: '2px solid var(--brand-primary)', borderRight: '2px solid var(--brand-primary)' }}
                   >
-                    Consumo do Ticket
+                    Hist. de Hs Tikets
                   </th>
                 )}
                 <Th>Status</Th>

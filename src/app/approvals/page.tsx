@@ -1068,7 +1068,7 @@ export default function ApprovalsPage() {
                 <th
                   className="text-center px-3 py-2.5 font-medium hidden lg:table-cell whitespace-nowrap"
                   style={{ color: 'var(--brand-primary)', background: 'rgba(0,245,255,0.06)', borderLeft: '2px solid var(--brand-primary)', borderRight: '2px solid var(--brand-primary)' }}
-                >Consumo do Ticket</th>
+                >Hist. de Hs Tikets</th>
               )}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Data</th>
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Início</th>}
