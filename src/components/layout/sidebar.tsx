@@ -79,22 +79,6 @@ const NAV_COORDINATOR: NavEntry[] = [
   },
 ]
 
-const NAV_CLIENTE: NavEntry[] = [
-  { type: 'item', label: 'Visão Executiva', href: '/portal-cliente', icon: Building2 },
-  { type: 'item', label: 'Apontamentos',  href: '/timesheets',     icon: Clock },
-  { type: 'item', label: 'Despesas',      href: '/expenses',       icon: Receipt },
-  {
-    type: 'group',
-    label: 'Dashboards',
-    icon: BarChart2,
-    items: [
-      { label: 'Banco de Horas Fixo',    href: '/dashboards/bank-hours-fixed',   icon: BarChart2 },
-      { label: 'Banco de Horas Mensais', href: '/dashboards/bank-hours-monthly', icon: CalendarClock },
-      { label: 'On Demand',              href: '/dashboards/on-demand',           icon: Zap },
-      { label: 'Fechado',                href: '/dashboards/fechado',             icon: CheckSquare },
-    ],
-  },
-]
 
 const NAV: NavEntry[] = [
   { type: 'item', label: 'Meu Painel',            href: '/meu-painel',      icon: LayoutDashboard },
@@ -363,7 +347,6 @@ function SidebarInner({ user }: { user: User }) {
         .filter(([code]) => clienteContractCodes.has(code))
         .map(([, item]) => item)
       const nav: NavEntry[] = [
-        { type: 'item', label: 'Visão Executiva',     href: '/portal-cliente',      icon: Building2 },
         { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline',  icon: LayoutGrid },
         {
           type: 'group',
