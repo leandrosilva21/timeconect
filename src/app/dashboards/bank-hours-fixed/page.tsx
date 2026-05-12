@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
-import { BarChart2, Clock, TrendingUp, TrendingDown, AlertCircle, DollarSign, ChevronDown } from 'lucide-react'
+import { BarChart2, Clock, TrendingUp, TrendingDown, AlertCircle, DollarSign, ChevronDown, ArrowUp, MousePointerClick } from 'lucide-react'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { SearchSelect } from '@/components/ui/search-select'
@@ -274,8 +274,9 @@ export default function BankHoursFixedPage() {
     api.get<any>(`/projects?${params}`).then(r => setProjects(Array.isArray(r?.items) ? r.items : [])).catch(() => {})
   }, [user, selectedCustomer, isCliente])
 
-  // Admins precisam selecionar projeto ou cliente; não-admins veem sempre
-  const hasFilters = !isAdmin || !!selectedProject || !!selectedCustomer
+  // Cliente sempre precisa selecionar projeto (mostrar agregado sem projeto não faz sentido pro cliente).
+  // Admin pode ver agregado por cliente OU por projeto.
+  const hasFilters = isAdmin ? (!!selectedProject || !!selectedCustomer) : !!selectedProject
 
   // Build base params
   const baseParams = useCallback(() => {
@@ -477,16 +478,38 @@ export default function BankHoursFixedPage() {
           </div>
         </div>
 
-        {/* Empty */}
+        {/* Empty — chama atenção pra selecionar o projeto */}
         {!hasFilters && (
-          <div className="rounded-2xl p-16 text-center" style={{ border: '1px dashed var(--brand-border)' }}>
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(0,245,255,0.06)' }}>
-              <BarChart2 size={22} color="#00F5FF" />
+          <div
+            className="rounded-2xl p-12 text-center relative overflow-hidden"
+            style={{
+              background: 'linear-gradient(135deg, rgba(0,245,255,0.06) 0%, rgba(0,245,255,0.02) 100%)',
+              border: '2px dashed var(--primary)',
+            }}
+          >
+            <div
+              className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 animate-pulse"
+              style={{
+                background: 'var(--primary)',
+                color: 'var(--primary-fg)',
+                boxShadow: '0 0 0 8px rgba(0,245,255,0.10), 0 0 0 16px rgba(0,245,255,0.05)',
+              }}
+            >
+              <MousePointerClick size={36} />
             </div>
-            <p className="font-semibold text-sm mb-1" style={{ color: 'var(--brand-text)' }}>Nenhum projeto selecionado</p>
-            <p className="text-sm" style={{ color: 'var(--brand-muted)' }}>
-              {isAdmin ? 'Selecione um cliente e um projeto para visualizar os dados.' : 'Selecione um projeto para visualizar os dados.'}
+            <p className="font-bold text-2xl mb-2" style={{ color: 'var(--text)' }}>
+              Selecione um projeto
             </p>
+            <p className="text-base mb-6" style={{ color: 'var(--text-muted)' }}>
+              {isAdmin
+                ? 'Escolha um cliente e um projeto acima para visualizar os dados do banco de horas.'
+                : 'Use o seletor acima para escolher o projeto que deseja visualizar.'}
+            </p>
+            <div className="flex items-center justify-center gap-2 text-sm font-medium" style={{ color: 'var(--primary)' }}>
+              <ArrowUp size={18} className="animate-bounce" />
+              <span>Use o filtro de Projeto no topo da página</span>
+              <ArrowUp size={18} className="animate-bounce" />
+            </div>
           </div>
         )}
 
