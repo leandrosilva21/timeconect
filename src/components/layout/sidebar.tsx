@@ -350,7 +350,7 @@ function SidebarInner({ user }: { user: User }) {
         { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline',  icon: LayoutGrid },
       ]
       if (dashItems.length > 0) {
-        nav.push({ type: 'group', label: 'Contratos', icon: BarChart2, items: dashItems })
+        nav.push({ type: 'group', label: 'Contratos', icon: FileText, items: dashItems })
       }
       // Indicadores da própria empresa (atualmente só Auster)
       if (user?.customer_id === 220) {
