@@ -278,8 +278,6 @@ export default function BankHoursFixedPage() {
   const [indicHoursRequester, setIndicHoursRequester] = useState<any[]>([])
   const [indicHoursService,   setIndicHoursService]   = useState<any[]>([])
   const [indicTicketsStatus,  setIndicTicketsStatus]  = useState<any[]>([])
-  const [indicTicketsLevel,   setIndicTicketsLevel]   = useState<any[]>([])
-  const [indicTicketsAbove8,  setIndicTicketsAbove8]  = useState<any[]>([])
   const [indicLoading,        setIndicLoading]        = useState(false)
   useEffect(() => {
     if (activeTab !== 'indicators') return
@@ -297,15 +295,11 @@ export default function BankHoursFixedPage() {
       api.get<any>(`${base}/hours-by-requester?${qs}`).catch(() => null),
       api.get<any>(`${base}/hours-by-service?${qs}`).catch(() => null),
       api.get<any>(`${base}/tickets-by-status?${qs}`).catch(() => null),
-      api.get<any>(`${base}/tickets-by-level?${qs}`).catch(() => null),
-      api.get<any>(`${base}/tickets-above-8-hours?${qs}`).catch(() => null),
-    ]).then(([r, s, st, lv, a8]) => {
+    ]).then(([r, s, st]) => {
       const extract = (x: any) => Array.isArray(x?.data) ? x.data : (Array.isArray(x?.data?.data) ? x.data.data : [])
       setIndicHoursRequester(extract(r))
       setIndicHoursService(extract(s))
       setIndicTicketsStatus(extract(st))
-      setIndicTicketsLevel(extract(lv))
-      setIndicTicketsAbove8(extract(a8))
     }).finally(() => setIndicLoading(false))
   }, [activeTab, selectedCustomer, selectedProject, refMonth, refYear, dateTo, user?.customer_id])
 
@@ -852,28 +846,13 @@ export default function BankHoursFixedPage() {
                       valueKey={(r) => Number(r.total_hours ?? r.hours ?? r.value ?? 0)}
                       valueFmt={(v) => `${v.toFixed(2)}h`}
                     />
-                    <IndicatorCard
-                      title="Tickets por Status"
-                      rows={indicTicketsStatus}
-                      labelKey={(r) => r.status_display ?? r.status ?? r.name ?? '—'}
-                      valueKey={(r) => Number(r.total_tickets ?? r.tickets ?? r.count ?? r.value ?? 0)}
-                      valueFmt={(v) => String(Math.round(v))}
-                    />
-                    <IndicatorCard
-                      title="Tickets por Nível"
-                      rows={indicTicketsLevel}
-                      labelKey={(r) => r.level ?? r.name ?? '—'}
-                      valueKey={(r) => Number(r.total_tickets ?? r.tickets ?? r.count ?? r.value ?? 0)}
-                      valueFmt={(v) => String(Math.round(v))}
-                    />
                     <div className="lg:col-span-2">
                       <IndicatorCard
-                        title="Tickets acima de 8 horas"
-                        rows={indicTicketsAbove8}
-                        labelKey={(r) => `#${r.ticket ?? r.ticket_id ?? '—'} · ${r.ticket_subject ?? r.subject ?? r.title ?? ''}`}
-                        valueKey={(r) => Number(r.total_hours ?? r.hours ?? r.value ?? 0)}
-                        valueFmt={(v) => `${v.toFixed(2)}h`}
-                        emptyMessage="Nenhum ticket acima de 8 horas no período."
+                        title="Tickets por Status"
+                        rows={indicTicketsStatus}
+                        labelKey={(r) => r.status_display ?? r.status ?? r.name ?? '—'}
+                        valueKey={(r) => Number(r.ticket_count ?? r.total_tickets ?? r.tickets ?? r.count ?? r.value ?? 0)}
+                        valueFmt={(v) => String(Math.round(v))}
                       />
                     </div>
                   </div>
