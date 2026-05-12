@@ -3026,7 +3026,7 @@ function ProjectTeamModal({ projectId, projectName, onClose, onSaved }: { projec
   useEffect(() => {
     Promise.all([
       api.get<any>(`/projects/${projectId}`),
-      api.get<any>('/users?type=consultor&pageSize=200'),
+      api.get<any>('/users?type=consultor,parceiro_admin&pageSize=200'),
       api.get<any>('/consultant-groups?pageSize=100&active=1'),
     ]).then(([proj, usrs, grps]) => {
       setAllConsultants(usrs?.items ?? usrs?.data ?? [])

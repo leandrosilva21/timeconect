@@ -746,7 +746,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       api.get<any>('/contract-types?pageSize=100'),
       api.get<any>('/users?type=coordenador&coordinator_type=projetos&pageSize=200'),
       api.get<any>('/users?type=admin&pageSize=200'),
-      api.get<any>('/users?type=consultor&pageSize=200'),
+      api.get<any>('/users?type=consultor,parceiro_admin&pageSize=200'),
       api.get<any>('/consultant-groups?pageSize=100&active=1'),
       api.get<any>('/customers?pageSize=500'),
     ]).then(([st, ct, coords, admins, consults, grps, custs]) => {

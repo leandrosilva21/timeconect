@@ -918,7 +918,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       api.get<any>('/contract-types?pageSize=100'),
       api.get<any>('/users?type=coordenador&coordinator_type=projetos&pageSize=200'),
       api.get<any>('/users?type=admin&pageSize=200'),
-      api.get<any>('/users?type=consultor&pageSize=200'),
+      api.get<any>('/users?type=consultor,parceiro_admin&pageSize=200'),
       api.get<any>('/consultant-groups?pageSize=100&active=1'),
     ]).then(([st, ct, coords, admins, consults, grps]) => {
       if (st.status === 'fulfilled')       setOptServiceTypes(items(st.value))
@@ -1225,7 +1225,7 @@ function ProjectTeamModal({ projectId, projectName, onClose, onSaved }: { projec
   useEffect(() => {
     Promise.all([
       api.get<any>(`/projects/${projectId}`),
-      api.get<any>('/users?type=consultor&pageSize=200'),
+      api.get<any>('/users?type=consultor,parceiro_admin&pageSize=200'),
       api.get<any>('/consultant-groups?pageSize=100&active=1'),
     ]).then(([proj, usrs, grps]) => {
       setAllConsultants(usrs?.items ?? usrs?.data ?? [])
