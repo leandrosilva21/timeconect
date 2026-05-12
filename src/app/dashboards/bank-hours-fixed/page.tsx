@@ -170,36 +170,38 @@ function MetricCard({
 function ConsumedBreakdownCard({ total, projetos, sustentacao, arquitetura }: { total: number; projetos?: number; sustentacao?: number; arquitetura?: number }) {
   const showArq = arquitetura !== undefined && arquitetura > 0
   return (
-    <div className="rounded-2xl p-5 flex flex-col gap-3" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-      <div className="flex items-center gap-2">
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(0,245,255,0.08)' }}>
+    <div className="rounded-2xl p-5 flex flex-col gap-3 min-w-0 overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(0,245,255,0.08)' }}>
           <Clock size={13} color="#00F5FF" />
         </div>
-        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Consumo Acumulado</span>
+        <span className="text-xs font-semibold uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Consumo Acumulado</span>
       </div>
       <div className="flex items-end gap-1.5">
         <span className="text-4xl font-extrabold tracking-tight" style={{ color: '#00F5FF', lineHeight: 1 }}>{fmtH(total)}</span>
         <span className="text-base font-medium mb-0.5" style={{ color: 'var(--brand-muted)' }}>h</span>
       </div>
       {(projetos !== undefined || sustentacao !== undefined || showArq) && (
-        <div className="flex gap-3 pt-1 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-          <div>
-            <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Projetos</p>
-            <p className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{fmtH(projetos ?? 0)}h</p>
+        <div
+          className="grid gap-2 pt-2 border-t"
+          style={{
+            borderColor: 'var(--brand-border)',
+            gridTemplateColumns: `repeat(${showArq ? 3 : 2}, minmax(0, 1fr))`,
+          }}
+        >
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-wider mb-0.5 truncate" style={{ color: 'var(--brand-subtle)' }}>Projetos</p>
+            <p className="text-sm font-bold truncate" style={{ color: 'var(--brand-text)' }}>{fmtH(projetos ?? 0)}h</p>
           </div>
           {showArq && (
-            <>
-              <div className="w-px" style={{ background: 'var(--brand-border)' }} />
-              <div>
-                <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Arquitetura</p>
-                <p className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{fmtH(arquitetura ?? 0)}h</p>
-              </div>
-            </>
+            <div className="min-w-0 border-l pl-2" style={{ borderColor: 'var(--brand-border)' }}>
+              <p className="text-[10px] uppercase tracking-wider mb-0.5 truncate" style={{ color: 'var(--brand-subtle)' }}>Arquitetura</p>
+              <p className="text-sm font-bold truncate" style={{ color: 'var(--brand-text)' }}>{fmtH(arquitetura ?? 0)}h</p>
+            </div>
           )}
-          <div className="w-px" style={{ background: 'var(--brand-border)' }} />
-          <div>
-            <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Sustentação</p>
-            <p className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{fmtH(sustentacao ?? 0)}h</p>
+          <div className="min-w-0 border-l pl-2" style={{ borderColor: 'var(--brand-border)' }}>
+            <p className="text-[10px] uppercase tracking-wider mb-0.5 truncate" style={{ color: 'var(--brand-subtle)' }}>Sustentação</p>
+            <p className="text-sm font-bold truncate" style={{ color: 'var(--brand-text)' }}>{fmtH(sustentacao ?? 0)}h</p>
           </div>
         </div>
       )}
