@@ -308,8 +308,16 @@ export default function BankHoursFixedPage() {
     if (selectedCustomer) qs.set('customer_id', String(selectedCustomer))
     else if (user?.customer_id) qs.set('customer_id', String(user.customer_id))
     if (selectedProject) qs.set('project_id', String(selectedProject))
-    if (dateFrom) qs.set('date_from', dateFrom)
-    if (dateTo)   qs.set('date_to',   dateTo)
+    let effFrom = dateFrom
+    let effTo   = dateTo
+    if ((!effFrom || !effTo) && refMonth && refYear) {
+      const mm = String(refMonth).padStart(2, '0')
+      const lastDay = new Date(refYear, refMonth, 0).getDate()
+      effFrom = `${refYear}-${mm}-01`
+      effTo   = `${refYear}-${mm}-${String(lastDay).padStart(2, '0')}`
+    }
+    if (effFrom) qs.set('date_from', effFrom)
+    if (effTo)   qs.set('date_to',   effTo)
     const path = isTimesheets
       ? `/dashboards/bank-hours-fixed/category-timesheets?${qs}&category=${activeTab === 'architecture' ? 'architecture' : 'maintenance'}`
       : `/dashboards/bank-hours-fixed/expenses?${qs}`
@@ -328,7 +336,7 @@ export default function BankHoursFixedPage() {
     } else {
       setTicketSummary([])
     }
-  }, [activeTab, selectedCustomer, selectedProject, dateFrom, dateTo, user?.customer_id])
+  }, [activeTab, selectedCustomer, selectedProject, dateFrom, dateTo, refMonth, refYear, user?.customer_id])
 
   // Modais da aba Projetos: Ver Apontamentos + Detalhe
   const [projectTSModal, setProjectTSModal] = useState<{ projectId: number; projectName: string; isClosed?: boolean } | null>(null)
@@ -344,13 +352,21 @@ export default function BankHoursFixedPage() {
     qs.set('project_id', String(projectTSModal.projectId))
     if (selectedCustomer) qs.set('customer_id', String(selectedCustomer))
     else if (user?.customer_id) qs.set('customer_id', String(user.customer_id))
-    if (dateFrom) qs.set('date_from', dateFrom)
-    if (dateTo)   qs.set('date_to',   dateTo)
+    let effFrom = dateFrom
+    let effTo   = dateTo
+    if ((!effFrom || !effTo) && refMonth && refYear) {
+      const mm = String(refMonth).padStart(2, '0')
+      const lastDay = new Date(refYear, refMonth, 0).getDate()
+      effFrom = `${refYear}-${mm}-01`
+      effTo   = `${refYear}-${mm}-${String(lastDay).padStart(2, '0')}`
+    }
+    if (effFrom) qs.set('date_from', effFrom)
+    if (effTo)   qs.set('date_to',   effTo)
     api.get<{ data: any[] }>(`/dashboards/bank-hours-fixed/project-timesheets?${qs}`)
       .then(r => setProjectTSRows(r.data ?? []))
       .catch(() => setProjectTSRows([]))
       .finally(() => setProjectTSLoading(false))
-  }, [projectTSModal, selectedCustomer, dateFrom, dateTo, user?.customer_id])
+  }, [projectTSModal, selectedCustomer, dateFrom, dateTo, refMonth, refYear, user?.customer_id])
 
   function exportInlineToXLSX() {
     if (inlineRows.length === 0) return
