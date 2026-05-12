@@ -36,6 +36,7 @@ interface TSItem {
   effort_minutes: number
   observation?: string
   ticket?: string
+  ticket_total_minutes?: number | null
   ticket_subject?: string
   ticket_solicitante?: { id?: number; name?: string } | null
   origin?: string
@@ -1059,6 +1060,7 @@ export default function ApprovalsPage() {
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Fim</th>}
               {tab === 'timesheets' && <th className="text-right px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Tempo</th>}
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Ticket #</th>}
+              {tab === 'timesheets' && <th className="text-right px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell whitespace-nowrap">Consumo do Ticket</th>}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Inclusão</th>
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Origem</th>}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Colaborador</th>
@@ -1106,7 +1108,7 @@ export default function ApprovalsPage() {
 
             {/* Timesheets rows */}
             {!currentLoading && tab === 'timesheets' && tsItems.map(ts => (
-              <tr key={ts.id} onClick={() => toggleOne(ts.id)}
+              <tr key={ts.id} onClick={() => openTsView(ts)}
                 className={`border-b border-zinc-800/60 cursor-pointer transition-colors ${
                   selected.includes(ts.id) ? 'bg-blue-950/30' : 'hover:bg-zinc-800/40'
                 }`}>
@@ -1147,6 +1149,11 @@ export default function ApprovalsPage() {
                       </a>
                     : '—'}
                 </td>
+                <td className="px-3 py-2.5 text-zinc-300 font-mono text-right hidden lg:table-cell">
+                  {ts.ticket_total_minutes != null
+                    ? fmtMin(ts.ticket_total_minutes)
+                    : <span style={{ color: 'var(--brand-subtle)' }}>—</span>}
+                </td>
                 <td className="px-3 py-2.5 text-zinc-400 whitespace-nowrap hidden sm:table-cell">{fmtDateTime(ts.created_at)}</td>
                 <td className="px-3 py-2.5 hidden sm:table-cell">
                   <OriginLabel origin={ts.origin} isInternalAction={ts.is_internal_action} isBillableOnly={ts.is_billable_only} />
@@ -1174,8 +1181,9 @@ export default function ApprovalsPage() {
             {/* Expenses rows */}
             {!currentLoading && tab === 'expenses' && expItems.map(exp => (
               <tr key={exp.id}
-                className="border-b border-zinc-800/60 hover:bg-zinc-800/40 transition-colors">
-                <td className="px-2 py-2.5 w-10">
+                onClick={() => openExpApprove(exp)}
+                className="border-b border-zinc-800/60 hover:bg-zinc-800/40 transition-colors cursor-pointer">
+                <td className="px-2 py-2.5 w-10" onClick={e => e.stopPropagation()}>
                   <RowMenu items={[
                     { label: 'Visualizar', icon: <Eye size={12} />, onClick: () => openExpApprove(exp) },
                     { label: 'Aprovar', icon: <Check size={12} />, onClick: () => openExpApprove(exp) },

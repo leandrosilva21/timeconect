@@ -1148,9 +1148,9 @@ function IndicatorCard({
                   <div className="w-48 shrink-0 text-sm truncate" style={{ color: 'var(--text)' }} title={labelKey(r)}>{labelKey(r)}</div>
                   <div className="flex-1 relative h-6 rounded overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
                     <div className="absolute inset-y-0 left-0 rounded" style={{ width: `${pct}%`, background: colorKey ? colorKey(r) : 'var(--primary)' }} />
-                    <div className="absolute inset-y-0 left-0 flex items-center px-2 text-xs font-semibold whitespace-nowrap" style={{ color: '#0A0A0B' }}>
-                      {valueFmt(v)}
-                    </div>
+                  </div>
+                  <div className="w-24 text-right text-sm font-semibold shrink-0 whitespace-nowrap tabular-nums" style={{ color: 'var(--text)' }}>
+                    {valueFmt(v)}
                   </div>
                   {badgeVal !== null && badgeFmt && (
                     <div

@@ -890,9 +890,10 @@ export default function ExpensesPage() {
                   </td>
                 </tr>
               ) : data?.items.map(exp => (
-                <Tr key={exp.id}>
+                <Tr key={exp.id} onClick={() => setViewItem(exp)}>
                   {!isCliente && (
                     <Td className="w-10">
+                      <div onClick={e => e.stopPropagation()}>
                       <RowMenu items={[
                         { label: 'Visualizar', icon: <Eye size={12} />, onClick: () => setViewItem(exp) },
                         ...(canEdit(exp) ? [
@@ -909,6 +910,7 @@ export default function ExpensesPage() {
                           { label: 'Estornar Aprovação', icon: <Undo2 size={12} />, onClick: () => setRevertTarget(exp), danger: true },
                         ] : []),
                       ]} />
+                      </div>
                     </Td>
                   )}
                   <Td className="whitespace-nowrap font-medium">{formatDate(exp.expense_date)}</Td>

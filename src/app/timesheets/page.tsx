@@ -1296,8 +1296,13 @@ function TimesheetsPageContent() {
                   </td>
                 </tr>
               ) : data?.items.map(ts => (
-                <Tr key={ts.id} baseBackground={ts.is_internal_action ? 'rgba(100,116,139,0.07)' : ts.is_billable_only ? 'rgba(245,158,11,0.06)' : undefined}>
+                <Tr
+                  key={ts.id}
+                  baseBackground={ts.is_internal_action ? 'rgba(100,116,139,0.07)' : ts.is_billable_only ? 'rgba(245,158,11,0.06)' : undefined}
+                  onClick={() => openView(ts)}
+                >
                   <Td className="w-10">
+                    <div onClick={e => e.stopPropagation()}>
                     <RowActions
                       id={ts.id}
                       onView={() => openView(ts)}
@@ -1310,6 +1315,7 @@ function TimesheetsPageContent() {
                       onReverseRelease={(isAdmin || isCoordenador) && ts.is_internal_action && ts.status === 'released' ? () => handleReverseRelease(ts.id) : undefined}
                       onReverseRejection={(isAdmin || isCoordenador) && (ts.status === 'rejected' || ts.status === 'adjustment_requested') ? () => { setReverseRejectionModal({ open: true, tsId: ts.id }); setReverseRejectionReason('') } : undefined}
                     />
+                    </div>
                   </Td>
                   {(isAdmin || isCoordenador) && (
                     <Td className="w-8">
@@ -1317,6 +1323,7 @@ function TimesheetsPageContent() {
                         type="checkbox"
                         className="w-3.5 h-3.5 accent-cyan-400 cursor-pointer"
                         checked={selectedIds.has(ts.id)}
+                        onClick={e => e.stopPropagation()}
                         onChange={e => {
                           setSelectedIds(prev => {
                             const next = new Set(prev)
