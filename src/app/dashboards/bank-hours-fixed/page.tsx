@@ -269,7 +269,32 @@ export default function BankHoursFixedPage() {
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [loadingMaint,    setLoadingMaint]    = useState(false)
 
-  const [activeTab, setActiveTab] = useState<'total' | 'projects' | 'architecture' | 'maintenance'>('total')
+  const [activeTab, setActiveTab] = useState<'total' | 'projects' | 'architecture' | 'maintenance' | 'expenses'>('total')
+
+  type RecordsModalKind =
+    | { type: 'timesheets'; category: 'architecture' | 'maintenance'; title: string }
+    | { type: 'expenses'; title: string }
+    | null
+  const [recordsModal, setRecordsModal] = useState<RecordsModalKind>(null)
+  const [recordsRows, setRecordsRows] = useState<any[]>([])
+  const [recordsLoading, setRecordsLoading] = useState(false)
+  useEffect(() => {
+    if (!recordsModal) return
+    setRecordsLoading(true)
+    const qs = new URLSearchParams()
+    if (selectedCustomer) qs.set('customer_id', String(selectedCustomer))
+    else if (user?.customer_id) qs.set('customer_id', String(user.customer_id))
+    if (selectedProject) qs.set('project_id', String(selectedProject))
+    if (dateFrom) qs.set('date_from', dateFrom)
+    if (dateTo)   qs.set('date_to',   dateTo)
+    const path = recordsModal.type === 'timesheets'
+      ? `/dashboards/bank-hours-fixed/category-timesheets?${qs}&category=${recordsModal.category}`
+      : `/dashboards/bank-hours-fixed/expenses?${qs}`
+    api.get<{ data: any[] }>(path)
+      .then(r => setRecordsRows(r.data ?? []))
+      .catch(() => setRecordsRows([]))
+      .finally(() => setRecordsLoading(false))
+  }, [recordsModal, selectedCustomer, selectedProject, dateFrom, dateTo, user?.customer_id])
 
   // Customers
   useEffect(() => {
@@ -538,6 +563,7 @@ export default function BankHoursFixedPage() {
               {(summary?.has_support ?? true) && (
                 <Tab label="Sustentação" active={activeTab === 'maintenance'} onClick={() => setActiveTab('maintenance')} />
               )}
+              <Tab label="Despesas" active={activeTab === 'expenses'} onClick={() => setActiveTab('expenses')} />
             </div>
 
             {/* ── TOTAL GERAL ── */}
@@ -667,6 +693,13 @@ export default function BankHoursFixedPage() {
                     icon={Clock}
                   />
                 </div>
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setRecordsModal({ type: 'timesheets', category: 'architecture', title: 'Apontamentos — Arquitetura' })}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold"
+                    style={{ background: 'var(--primary)', color: 'var(--primary-fg)' }}
+                  >Ver Apontamentos</button>
+                </div>
               </div>
             )}
 
@@ -686,12 +719,115 @@ export default function BankHoursFixedPage() {
                     icon={Clock}
                   />
                 </div>
-                <ProjectsTable items={maintList} loading={loadingMaint} />
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setRecordsModal({ type: 'timesheets', category: 'maintenance', title: 'Apontamentos — Sustentação' })}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold"
+                    style={{ background: 'var(--primary)', color: 'var(--primary-fg)' }}
+                  >Ver Apontamentos</button>
+                </div>
+              </div>
+            )}
+
+            {/* ── DESPESAS ── */}
+            {activeTab === 'expenses' && (
+              <div className="space-y-4">
+                <div className="rounded-2xl p-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Despesas registradas no recorte selecionado (projeto, cliente e período).</p>
+                    </div>
+                    <button
+                      onClick={() => setRecordsModal({ type: 'expenses', title: 'Despesas' })}
+                      className="px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap"
+                      style={{ background: 'var(--primary)', color: 'var(--primary-fg)' }}
+                    >Ver Despesas</button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
         )}
       </div>
+
+      {/* ── Modal in-page: Apontamentos / Despesas ─────────────────── */}
+      {recordsModal && (
+        <div
+          className="fixed inset-0 z-[80] flex items-start justify-center p-4 overflow-y-auto"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+          onClick={() => setRecordsModal(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="w-full max-w-5xl mt-8 rounded-2xl overflow-hidden"
+            style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
+          >
+            <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h3 className="text-base font-semibold" style={{ color: 'var(--text)' }}>{recordsModal.title}</h3>
+              <button onClick={() => setRecordsModal(null)} className="p-1.5 rounded-md hover:opacity-70" style={{ color: 'var(--text-muted)' }}>✕</button>
+            </div>
+            <div className="overflow-x-auto max-h-[70vh]">
+              {recordsLoading ? (
+                <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
+              ) : recordsRows.length === 0 ? (
+                <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem registros no período.</div>
+              ) : recordsModal.type === 'timesheets' ? (
+                <table className="w-full text-sm">
+                  <thead style={{ background: 'var(--brand-surface)', borderBottom: '1px solid var(--border)' }}>
+                    <tr style={{ color: 'var(--text-muted)' }}>
+                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Data</th>
+                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Consultor</th>
+                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Projeto</th>
+                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Descrição</th>
+                      <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Horas</th>
+                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recordsRows.map(r => (
+                      <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td className="px-4 py-2">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                        <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
+                        <td className="px-4 py-2"><span className="font-mono text-xs" style={{ color: 'var(--text-light)' }}>{r.project?.code}</span> · {r.project?.name}</td>
+                        <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{r.description ?? '—'}</td>
+                        <td className="px-4 py-2 text-right font-mono">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
+                        <td className="px-4 py-2 text-xs">{r.status_display ?? r.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead style={{ background: 'var(--brand-surface)', borderBottom: '1px solid var(--border)' }}>
+                    <tr style={{ color: 'var(--text-muted)' }}>
+                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Data</th>
+                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Consultor</th>
+                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Projeto</th>
+                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Categoria</th>
+                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Descrição</th>
+                      <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Valor</th>
+                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recordsRows.map(r => (
+                      <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td className="px-4 py-2">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                        <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
+                        <td className="px-4 py-2"><span className="font-mono text-xs" style={{ color: 'var(--text-light)' }}>{r.project?.code}</span> · {r.project?.name}</td>
+                        <td className="px-4 py-2">{r.category?.name ?? '—'}</td>
+                        <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{r.description ?? '—'}</td>
+                        <td className="px-4 py-2 text-right font-mono">{(r.amount ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                        <td className="px-4 py-2 text-xs">{r.status_display ?? r.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   )
 }
