@@ -730,6 +730,19 @@ export default function SustentacaoPage() {
   const [routineTotal, setRoutineTotal] = useState(0)
   const [routineLoading, setRoutineLoading] = useState(false)
   const [routineDetail, setRoutineDetail] = useState<any | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [filterMode, setFilterMode] = useState<'month' | 'period'>('month')
+
+  const now = new Date()
+  const [refMonth, setRefMonth] = useState<number | null>(now.getMonth() + 1)
+  const [refYear,  setRefYear]  = useState<number | null>(now.getFullYear())
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30)
+    return d.toISOString().split('T')[0]
+  })
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0])
+
+  // Fetch das rotinas embarcadas (depois das declarações de dateFrom/dateTo)
   useEffect(() => {
     if (!['timesheets', 'expenses', 'approvals'].includes(tab)) return
     setRoutineLoading(true)
@@ -742,17 +755,6 @@ export default function SustentacaoPage() {
       .catch(() => { setRoutineRows([]); setRoutineTotal(0) })
       .finally(() => setRoutineLoading(false))
   }, [tab, dateFrom, dateTo])
-  const [loading, setLoading] = useState(false)
-  const [filterMode, setFilterMode] = useState<'month' | 'period'>('month')
-
-  const now = new Date()
-  const [refMonth, setRefMonth] = useState<number | null>(now.getMonth() + 1)
-  const [refYear,  setRefYear]  = useState<number | null>(now.getFullYear())
-  const [dateFrom, setDateFrom] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 30)
-    return d.toISOString().split('T')[0]
-  })
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0])
 
   // Computa from/to a partir do modo ativo
   const from = filterMode === 'month' && refMonth && refYear
