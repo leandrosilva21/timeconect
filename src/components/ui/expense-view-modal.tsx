@@ -122,11 +122,11 @@ export function ExpenseViewModal({
         {/* Header */}
         <div className="px-5 pt-5 pb-4 flex items-start gap-3">
           <div className="p-2.5 rounded-xl shrink-0"
-            style={{ background: 'rgba(249,115,22,0.1)', color: '#F97316' }}>
+            style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>
             <Receipt size={16} />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-white">Detalhes da Despesa</h3>
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Detalhes da Despesa</h3>
             <p className="text-[11px] mt-0.5" style={{ color: 'var(--brand-subtle)' }}>
               #{expense.id} · {formatDate(expense.expense_date)}
             </p>
@@ -150,9 +150,9 @@ export function ExpenseViewModal({
 
           {/* Valor hero */}
           <div className="rounded-xl px-4 py-4"
-            style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
+            style={{ background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.15)' }}>
             <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'var(--brand-subtle)' }}>Valor Total</p>
-            <p className="text-2xl font-bold" style={{ color: '#F97316' }}>{formatCurrency(expense.amount)}</p>
+            <p className="text-2xl font-bold" style={{ color: 'var(--brand-primary)' }}>{formatCurrency(expense.amount)}</p>
           </div>
 
           {/* Info card */}
