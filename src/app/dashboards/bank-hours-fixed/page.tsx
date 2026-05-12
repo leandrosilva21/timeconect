@@ -771,7 +771,7 @@ export default function BankHoursFixedPage() {
                   <MetricCard label="Consumo do Mês"    value={fmtH(summary?.architecture_month_consumed_hours ?? 0)} icon={Clock} />
                 </div>
                 <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
-                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} />
+                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="architecture" />
               </div>
             )}
 
@@ -783,7 +783,7 @@ export default function BankHoursFixedPage() {
                   <MetricCard label="Consumo do Mês"    value={fmtH(summary?.maintenance_month_consumed_hours ?? summary?.month_consumed_hours ?? 0)} icon={Clock} />
                 </div>
                 <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
-                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} />
+                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="maintenance" />
                 <InlineTicketSummaryTable rows={ticketSummary} loading={ticketSummaryLoading} />
               </div>
             )}
@@ -1017,7 +1017,8 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
 
 // ─── Inline tables (visual no mesmo padrão de /timesheets) ──────────────────
 
-function InlineTimesheetsTable({ rows, loading }: { rows: any[]; loading: boolean }) {
+function InlineTimesheetsTable({ rows, loading, variant = 'maintenance' }: { rows: any[]; loading: boolean; variant?: 'maintenance' | 'architecture' }) {
+  const isArch = variant === 'architecture'
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
       <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -1035,33 +1036,44 @@ function InlineTimesheetsTable({ rows, loading }: { rows: any[]; loading: boolea
               <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Data</th>
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Consultor</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Projeto</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Ticket</th>
+                {!isArch && <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Projeto</th>}
+                {!isArch && <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Ticket</th>}
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Descrição</th>
                 <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Horas</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Status</th>
+                {!isArch && <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Status</th>}
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td className="px-4 py-2">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
-                  <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
-                  <td className="px-4 py-2">
-                    <span className="font-mono text-xs" style={{ color: 'var(--text-light)' }}>{r.project?.code}</span>
-                    <span className="mx-1.5" style={{ color: 'var(--text-light)' }}>·</span>
-                    <span style={{ color: 'var(--text)' }}>{r.project?.name}</span>
-                  </td>
-                  <td className="px-4 py-2">
-                    {r.ticket
-                      ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }}>#{r.ticket}</a>
-                      : <span style={{ color: 'var(--text-light)' }}>—</span>}
-                  </td>
-                  <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{r.description ?? '—'}</td>
-                  <td className="px-4 py-2 text-right font-mono">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
-                  <td className="px-4 py-2 text-xs">{r.status_display ?? r.status}</td>
-                </tr>
-              ))}
+              {rows.map(r => {
+                const desc = r.description ?? ''
+                return (
+                  <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td className="px-4 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                    <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
+                    {!isArch && (
+                      <td className="px-4 py-2">
+                        <span className="font-mono text-xs" style={{ color: 'var(--text-light)' }}>{r.project?.code}</span>
+                        <span className="mx-1.5" style={{ color: 'var(--text-light)' }}>·</span>
+                        <span style={{ color: 'var(--text)' }}>{r.project?.name}</span>
+                      </td>
+                    )}
+                    {!isArch && (
+                      <td className="px-4 py-2">
+                        {r.ticket
+                          ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }}>#{r.ticket}</a>
+                          : <span style={{ color: 'var(--text-light)' }}>—</span>}
+                      </td>
+                    )}
+                    <td
+                      className={`px-4 py-2 ${isArch ? 'max-w-2xl' : 'max-w-md'} truncate`}
+                      style={{ color: 'var(--text-muted)' }}
+                      title={desc || '—'}
+                    >{desc || '—'}</td>
+                    <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
+                    {!isArch && <td className="px-4 py-2 text-xs">{r.status_display ?? r.status}</td>}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}
