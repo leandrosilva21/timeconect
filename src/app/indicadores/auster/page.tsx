@@ -108,7 +108,7 @@ export default function IndicadoresAusterPage() {
           <div>
             <h1 className="text-2xl font-semibold" style={{ color: 'var(--text)' }}>Indicadores — Auster</h1>
             <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-              Inclui projetos históricos (anteriores a 01/05/2025) e ativos.
+              Subprojetos históricos com início anterior a 01/05/2025.
             </p>
           </div>
         </header>
