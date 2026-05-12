@@ -11,7 +11,11 @@ import * as XLSX from 'xlsx'
 import DashboardIndicators from '@/components/dashboard/DashboardIndicators'
 import {
   useMaintenanceInline, exportMaintenanceToXLSX,
-  ExportButton, InlineTimesheetsTable, InlineTicketSummaryTable, InlineExpensesTable, TimesheetDetailModal,
+  ExportButton as MxExportButton,
+  InlineTimesheetsTable as MxTimesheets,
+  InlineTicketSummaryTable as MxTicketSummary,
+  InlineExpensesTable as MxExpenses,
+  TimesheetDetailModal,
 } from '@/components/dashboard/MaintenanceInline'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
@@ -379,9 +383,9 @@ export default function OnDemandPage() {
             {/* ── SUSTENTAÇÃO ── */}
             {activeTab === 'maintenance' && (
               <div className="space-y-4">
-                <ExportButton onClick={() => exportMaintenanceToXLSX('maintenance', mxRows)} disabled={mxRows.length === 0} />
-                <InlineTimesheetsTable rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} />
-                <InlineTicketSummaryTable rows={mxTicketSummary} loading={mxTicketLoading} />
+                <MxExportButton onClick={() => exportMaintenanceToXLSX('maintenance', mxRows)} disabled={mxRows.length === 0} />
+                <MxTimesheets rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} />
+                <MxTicketSummary rows={mxTicketSummary} loading={mxTicketLoading} />
               </div>
             )}
 
@@ -399,8 +403,8 @@ export default function OnDemandPage() {
                     <MetricCard label="Valor Total"   value={fmtBRL(totalAmount)} icon={DollarSign} />
                     <MetricCard label="Valor a Pagar" value={fmtBRL(toPay)} icon={DollarSign} accent="primary" />
                   </div>
-                  <ExportButton onClick={() => exportMaintenanceToXLSX('expenses', mxRows)} disabled={mxRows.length === 0} />
-                  <InlineExpensesTable rows={mxRows} loading={mxLoading} />
+                  <MxExportButton onClick={() => exportMaintenanceToXLSX('expenses', mxRows)} disabled={mxRows.length === 0} />
+                  <MxExpenses rows={mxRows} loading={mxLoading} />
                 </div>
               )
             })()}
