@@ -1064,12 +1064,17 @@ export default function ApprovalsPage() {
                     className="rounded border-zinc-600 bg-zinc-800 accent-blue-500" />
                 </th>
               )}
+              {tab === 'timesheets' && (
+                <th
+                  className="text-center px-3 py-2.5 font-medium hidden lg:table-cell whitespace-nowrap"
+                  style={{ color: 'var(--brand-primary)', background: 'rgba(0,245,255,0.06)', borderLeft: '2px solid var(--brand-primary)', borderRight: '2px solid var(--brand-primary)' }}
+                >Consumo do Ticket</th>
+              )}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Data</th>
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Início</th>}
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Fim</th>}
               {tab === 'timesheets' && <th className="text-right px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Tempo</th>}
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Ticket #</th>}
-              {tab === 'timesheets' && <th className="text-center px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell whitespace-nowrap">Consumo do Ticket</th>}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Inclusão</th>
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Origem</th>}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Colaborador</th>
@@ -1133,6 +1138,14 @@ export default function ApprovalsPage() {
                   <input type="checkbox" checked={selected.includes(ts.id)} onChange={() => toggleOne(ts.id)}
                     className="rounded border-zinc-600 bg-zinc-800 accent-blue-500" />
                 </td>
+                <td
+                  className="px-3 py-2.5 font-mono text-center hidden lg:table-cell"
+                  style={{ background: 'rgba(0,245,255,0.06)', borderLeft: '2px solid var(--brand-primary)', borderRight: '2px solid var(--brand-primary)' }}
+                >
+                  {ts.ticket_total_minutes != null
+                    ? <span style={{ color: ticketTotalColor(ts.ticket_total_minutes), fontWeight: 700, fontSize: '0.875rem' }}>{fmtMin(ts.ticket_total_minutes)}</span>
+                    : <span style={{ color: 'var(--brand-subtle)' }}>—</span>}
+                </td>
                 <td className="px-3 py-2.5 text-zinc-300 whitespace-nowrap">{fmt(ts.date)}</td>
                 <td className="px-3 py-2.5 text-zinc-400 font-mono hidden md:table-cell">{ts.start_time ?? '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-400 font-mono hidden md:table-cell">{ts.end_time ?? '—'}</td>
@@ -1157,11 +1170,6 @@ export default function ApprovalsPage() {
                         #{ts.ticket}
                       </a>
                     : '—'}
-                </td>
-                <td className="px-3 py-2.5 font-mono text-center hidden lg:table-cell">
-                  {ts.ticket_total_minutes != null
-                    ? <span style={{ color: ticketTotalColor(ts.ticket_total_minutes), fontWeight: 600 }}>{fmtMin(ts.ticket_total_minutes)}</span>
-                    : <span style={{ color: 'var(--brand-subtle)' }}>—</span>}
                 </td>
                 <td className="px-3 py-2.5 text-zinc-400 whitespace-nowrap hidden sm:table-cell">{fmtDateTime(ts.created_at)}</td>
                 <td className="px-3 py-2.5 hidden sm:table-cell">

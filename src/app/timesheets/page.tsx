@@ -1269,6 +1269,14 @@ function TimesheetsPageContent() {
                     />
                   </Th>
                 )}
+                {!isCliente && (
+                  <th
+                    className="hidden lg:table-cell whitespace-nowrap text-center px-5 py-3.5 text-xs font-semibold uppercase tracking-wider"
+                    style={{ color: 'var(--brand-primary)', background: 'rgba(0,245,255,0.06)', borderLeft: '2px solid var(--brand-primary)', borderRight: '2px solid var(--brand-primary)' }}
+                  >
+                    Consumo do Ticket
+                  </th>
+                )}
                 <Th>Status</Th>
                 {(isAdmin || isCoordenador) && (
                   <Th sortable active={sortField === 'user.name'} dir={sortDir} onClick={() => handleSort('user.name')}>Colaborador</Th>
@@ -1278,9 +1286,6 @@ function TimesheetsPageContent() {
                 <Th className="hidden md:table-cell">Fim</Th>
                 <Th right sortable active={sortField === 'effort_hours'} dir={sortDir} onClick={() => handleSort('effort_hours')}>Tempo</Th>
                 <Th className="hidden lg:table-cell">Ticket #</Th>
-                {!isCliente && (
-                  <Th className="hidden lg:table-cell whitespace-nowrap text-center">Consumo do Ticket</Th>
-                )}
                 <Th className="hidden sm:table-cell">Origem</Th>
                 {!(isAdmin || isCoordenador) && (
                   <Th sortable active={sortField === 'user.name'} dir={sortDir} onClick={() => handleSort('user.name')}>Colaborador</Th>
@@ -1344,6 +1349,16 @@ function TimesheetsPageContent() {
                       />
                     </Td>
                   )}
+                  {!isCliente && (
+                    <td
+                      className="hidden lg:table-cell font-mono text-center px-5 py-3.5"
+                      style={{ background: 'rgba(0,245,255,0.06)', borderLeft: '2px solid var(--brand-primary)', borderRight: '2px solid var(--brand-primary)' }}
+                    >
+                      {ts.ticket_total_minutes != null
+                        ? <span style={{ color: ticketTotalColor(ts.ticket_total_minutes), fontWeight: 700, fontSize: '0.875rem' }}>{formatMinutes(ts.ticket_total_minutes)}</span>
+                        : <span style={{ color: 'var(--brand-subtle)' }}>—</span>}
+                    </td>
+                  )}
                   <Td>
                     <span className="inline-flex items-center gap-1 flex-wrap">
                       {ts.is_internal_action
@@ -1402,13 +1417,6 @@ function TimesheetsPageContent() {
                         >#{ts.ticket}</a>
                       : '—'}
                   </Td>
-                  {!isCliente && (
-                    <Td className="hidden lg:table-cell font-mono text-center">
-                      {ts.ticket_total_minutes != null
-                        ? <span style={{ color: ticketTotalColor(ts.ticket_total_minutes), fontWeight: 600 }}>{formatMinutes(ts.ticket_total_minutes)}</span>
-                        : <span style={{ color: 'var(--brand-subtle)' }}>—</span>}
-                    </Td>
-                  )}
                   <Td className="hidden sm:table-cell">
                     <OriginBadge
                       origin={ts.origin}
