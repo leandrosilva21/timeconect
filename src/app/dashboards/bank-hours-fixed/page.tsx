@@ -2,11 +2,11 @@
 
 import { formatBRL } from '@/lib/format'
 import { AppLayout } from '@/components/layout/app-layout'
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
-import { BarChart2, Clock, TrendingUp, TrendingDown, AlertCircle, DollarSign, ChevronDown, ArrowUp, MousePointerClick, Download } from 'lucide-react'
+import { BarChart2, Clock, TrendingUp, TrendingDown, AlertCircle, DollarSign, ChevronDown, ArrowUp, MousePointerClick, Download, MoreVertical, Calendar, User as UserIcon, Building2, Folder, Paperclip, FileText, X as CloseIcon, Eye } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
@@ -309,6 +309,26 @@ export default function BankHoursFixedPage() {
     }
   }, [activeTab, selectedCustomer, selectedProject, dateFrom, dateTo, user?.customer_id])
 
+  // Modais da aba Projetos: Ver Apontamentos + Detalhe
+  const [projectTSModal, setProjectTSModal] = useState<{ projectId: number; projectName: string } | null>(null)
+  const [projectTSRows, setProjectTSRows] = useState<any[]>([])
+  const [projectTSLoading, setProjectTSLoading] = useState(false)
+  const [projectTSDetail, setProjectTSDetail] = useState<any | null>(null)
+  useEffect(() => {
+    if (!projectTSModal) { setProjectTSRows([]); return }
+    setProjectTSLoading(true)
+    const qs = new URLSearchParams()
+    qs.set('project_id', String(projectTSModal.projectId))
+    if (selectedCustomer) qs.set('customer_id', String(selectedCustomer))
+    else if (user?.customer_id) qs.set('customer_id', String(user.customer_id))
+    if (dateFrom) qs.set('date_from', dateFrom)
+    if (dateTo)   qs.set('date_to',   dateTo)
+    api.get<{ data: any[] }>(`/dashboards/bank-hours-fixed/project-timesheets?${qs}`)
+      .then(r => setProjectTSRows(r.data ?? []))
+      .catch(() => setProjectTSRows([]))
+      .finally(() => setProjectTSLoading(false))
+  }, [projectTSModal, selectedCustomer, dateFrom, dateTo, user?.customer_id])
+
   function exportInlineToXLSX() {
     if (inlineRows.length === 0) return
     const isExpenses = activeTab === 'expenses'
@@ -437,14 +457,14 @@ export default function BankHoursFixedPage() {
           <table className="w-full text-sm" style={{ background: 'var(--brand-surface)' }}>
             <thead className="sticky top-0 z-10" style={{ borderBottom: '1px solid var(--brand-border)', background: 'rgba(255,255,255,0.02)' }}>
               <tr>
-                {['Código','Projeto','Status','Tipo','Horas Vendidas','Consumo','Saldo','Início'].map(col => (
+                {['Código','Projeto','Status','Tipo','Horas Vendidas','Consumo','Saldo','Início',''].map(col => (
                   <th key={col} className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wider ${['Saldo','Horas Vendidas','Consumo'].includes(col) ? 'text-right' : 'text-left'}`} style={{ color: 'var(--brand-subtle)' }}>{col}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {items.length === 0 ? (
-                <tr><td colSpan={8} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
+                <tr><td colSpan={9} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
               ) : items.map((p, idx) => {
                 const balance = p.hours_balance ?? 0
                 const consumed = p.consumed_hours ?? 0
@@ -475,6 +495,9 @@ export default function BankHoursFixedPage() {
                       {fmtH(balance)}h
                     </td>
                     <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--brand-muted)' }}>{p.start_date ? fmtDate(p.start_date) : '—'}</td>
+                    <td className="px-3 py-3.5 text-right">
+                      <ProjectActionsMenu onViewTimesheets={() => setProjectTSModal({ projectId: p.id, projectName: p.name })} />
+                    </td>
                   </tr>
                 )
               })}
@@ -770,7 +793,196 @@ export default function BankHoursFixedPage() {
           </div>
         )}
       </div>
+
+      {/* ─ Modal A: Lista de Apontamentos do Projeto ─ */}
+      {projectTSModal && (
+        <div
+          className="fixed inset-0 z-[80] flex items-start justify-center p-4 overflow-y-auto"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+          onClick={() => setProjectTSModal(null)}
+        >
+          <div onClick={e => e.stopPropagation()} className="w-full max-w-6xl mt-8 rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <h3 className="text-base font-semibold" style={{ color: 'var(--text)' }}>Apontamentos — {projectTSModal.projectName}</h3>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{projectTSRows.length} registros</p>
+              </div>
+              <button onClick={() => setProjectTSModal(null)} className="p-1.5 rounded-md hover:opacity-70" style={{ color: 'var(--text-muted)' }}><CloseIcon size={18} /></button>
+            </div>
+            <div className="overflow-x-auto max-h-[70vh]">
+              {projectTSLoading ? (
+                <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
+              ) : projectTSRows.length === 0 ? (
+                <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem apontamentos no período.</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Data</th>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Solicitante</th>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Consultor</th>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Ticket</th>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Título do ticket</th>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Descrição</th>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Início</th>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Fim</th>
+                      <th className="text-right px-3 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Esforço (h)</th>
+                      <th className="px-3 py-2 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projectTSRows.map(r => (
+                      <tr key={r.id} className="cursor-pointer" style={{ borderBottom: '1px solid var(--border)' }} onClick={() => setProjectTSDetail(r)}>
+                        <td className="px-3 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                        <td className="px-3 py-2">{r.requester ?? '—'}</td>
+                        <td className="px-3 py-2">{r.user?.name ?? '—'}</td>
+                        <td className="px-3 py-2">{r.ticket ? <span className="font-mono text-xs">{r.ticket}</span> : '—'}</td>
+                        <td className="px-3 py-2" style={{ color: 'var(--text-muted)' }}>{r.ticket_subject ?? '—'}</td>
+                        <td className="px-3 py-2 max-w-xs truncate" style={{ color: 'var(--text-muted)' }} title={r.description ?? ''}>{r.description ?? '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{r.start_time ?? '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{r.end_time ?? '—'}</td>
+                        <td className="px-3 py-2 text-right font-mono">{((r.effort_minutes ?? 0) / 60).toFixed(2)}</td>
+                        <td className="px-3 py-2"><Eye size={14} style={{ color: 'var(--text-muted)' }} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─ Modal B: Detalhe do Apontamento ─ */}
+      {projectTSDetail && (
+        <TimesheetDetailModal ts={projectTSDetail} onClose={() => setProjectTSDetail(null)} />
+      )}
     </AppLayout>
+  )
+}
+
+// ─── ProjectActionsMenu (3 pontinhos) ───────────────────────────────────────
+
+function ProjectActionsMenu({ onViewTimesheets }: { onViewTimesheets: () => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        className="p-1.5 rounded-md hover:bg-white/5"
+        style={{ color: 'var(--text-muted)' }}
+        title="Ações"
+      >
+        <MoreVertical size={16} />
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 mt-1 z-50 rounded-lg overflow-hidden min-w-[180px]"
+          style={{ background: 'var(--brand-surface)', border: '1px solid var(--border)', boxShadow: 'var(--brand-card-shadow-md)' }}
+        >
+          <button
+            onClick={() => { setOpen(false); onViewTimesheets() }}
+            className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/5"
+            style={{ color: 'var(--text)' }}
+          >
+            <Eye size={14} /> Ver Apontamentos
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── TimesheetDetailModal ───────────────────────────────────────────────────
+
+function TimesheetDetailModal({ ts, onClose }: { ts: any; onClose: () => void }) {
+  const fmtDateBR = (iso: string | null) => iso ? iso.split('-').reverse().join('/') : '—'
+  const period = (ts.start_time && ts.end_time)
+    ? `${ts.start_time} – ${ts.end_time}`
+    : null
+  const hours = ((ts.effort_minutes ?? 0) / 60)
+  const hoursDisplay = `${Math.floor(hours)}:${String(Math.round((hours - Math.floor(hours)) * 60)).padStart(2, '0')}`
+  return (
+    <div className="fixed inset-0 z-[90] flex items-start justify-center p-4 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.75)' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="w-full max-w-2xl mt-8 rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+        <div className="px-6 py-5 flex items-start justify-between gap-4" style={{ borderBottom: '1px solid var(--border)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(0,245,255,0.10)' }}>
+              <Clock size={20} style={{ color: 'var(--primary)' }} />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>Detalhe do Apontamento</h3>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>#{ts.id} · {fmtDateBR(ts.date)}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-md hover:opacity-70" style={{ color: 'var(--text-muted)' }}><CloseIcon size={18} /></button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {period && (
+            <div className="rounded-xl p-4" style={{ background: 'rgba(0,245,255,0.05)', border: '1px solid rgba(0,245,255,0.2)' }}>
+              <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Período</p>
+              <p className="text-2xl font-bold" style={{ color: 'var(--primary)' }}>
+                {period} <span className="text-base font-normal" style={{ color: 'var(--text-muted)' }}>({hoursDisplay})</span>
+              </p>
+            </div>
+          )}
+
+          <div className="rounded-xl divide-y" style={{ background: 'var(--brand-surface)', border: '1px solid var(--border)' }}>
+            <DetailRow icon={<Calendar size={14} />} label="Data" value={fmtDateBR(ts.date)} />
+            <DetailRow icon={<UserIcon size={14} />} label="Colaborador" value={ts.user?.name ?? '—'} />
+            <DetailRow icon={<Building2 size={14} />} label="Cliente" value={ts.customer ?? '—'} />
+            <DetailRow icon={<Folder size={14} />} label="Projeto" value={
+              <div className="flex items-center gap-2 flex-wrap">
+                <span>{ts.project?.name ?? '—'}</span>
+                {ts.project?.contract_type && (
+                  <span className="text-xs px-2 py-0.5 rounded-md" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>{ts.project.contract_type}</span>
+                )}
+              </div>
+            } />
+            <DetailRow icon={<Paperclip size={14} />} label="Anexo" value={ts.attachment_path ? <a href={ts.attachment_path} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)' }}>Ver anexo</a> : 'Sem anexo'} />
+            {ts.ticket && (
+              <DetailRow icon={<FileText size={14} />} label="Ticket" value={
+                <a href={`https://erpserv.movidesk.com/Ticket/Edit/${ts.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs" style={{ color: 'var(--primary)' }}>#{ts.ticket}{ts.ticket_subject ? ` · ${ts.ticket_subject}` : ''}</a>
+              } />
+            )}
+          </div>
+
+          {ts.description && (
+            <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)', border: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <FileText size={14} style={{ color: 'var(--primary)' }} />
+                <span className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--text-muted)' }}>Observação</span>
+              </div>
+              <p className="text-sm" style={{ color: 'var(--text)' }}>{ts.description}</p>
+            </div>
+          )}
+
+          <div className="flex justify-end pt-2">
+            <button onClick={onClose} className="px-5 py-2 rounded-lg text-sm font-medium" style={{ background: 'var(--surface-hover)', color: 'var(--text)', border: '1px solid var(--border)' }}>Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3">
+      <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>{icon}</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{label}</p>
+        <div className="text-sm font-medium" style={{ color: 'var(--text)' }}>{value}</div>
+      </div>
+    </div>
   )
 }
 
