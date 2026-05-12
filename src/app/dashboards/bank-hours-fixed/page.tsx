@@ -315,6 +315,7 @@ export default function BankHoursFixedPage() {
   const [projectTSRows, setProjectTSRows] = useState<any[]>([])
   const [projectTSLoading, setProjectTSLoading] = useState(false)
   const [projectTSDetail, setProjectTSDetail] = useState<any | null>(null)
+  const [inlineDetail, setInlineDetail] = useState<any | null>(null)
   useEffect(() => {
     if (!projectTSModal) { setProjectTSRows([]); return }
     if (projectTSModal.isClosed) { setProjectTSRows([]); setProjectTSLoading(false); return }
@@ -346,17 +347,25 @@ export default function BankHoursFixedPage() {
           Valor: Number(r.amount) || 0,
           Status: r.status_display ?? r.status ?? '',
         }))
-      : inlineRows.map(r => ({
-          Data: r.date ? r.date.split('-').reverse().join('/') : '',
-          Consultor: r.user?.name ?? '',
-          Código: r.project?.code ?? '',
-          Projeto: r.project?.name ?? '',
-          Ticket: r.ticket ?? '',
-          'Assunto Ticket': r.ticket_subject ?? '',
-          Descrição: r.description ?? '',
-          Horas: Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
-          Status: r.status_display ?? r.status ?? '',
-        }))
+      : activeTab === 'maintenance'
+        ? inlineRows.map(r => ({
+            Data: r.date ? r.date.split('-').reverse().join('/') : '',
+            Solicitante: r.requester ?? '',
+            Consultor: r.user?.name ?? '',
+            Ticket: r.ticket ?? '',
+            'Titulo do ticket': r.ticket_subject ?? '',
+            Descrição: r.description ?? '',
+            Início: r.start_time ?? '',
+            Fim: r.end_time ?? '',
+            'Esforço (h)': Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
+            'Data do Serviço': r.date ? r.date.split('-').reverse().join('/') : '',
+          }))
+        : inlineRows.map(r => ({
+            Data: r.date ? r.date.split('-').reverse().join('/') : '',
+            Consultor: r.user?.name ?? '',
+            Descrição: r.description ?? '',
+            'Esforço (h)': Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
+          }))
     const ws = XLSX.utils.json_to_sheet(data)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, sheetName)
@@ -771,7 +780,7 @@ export default function BankHoursFixedPage() {
                   <MetricCard label="Consumo do Mês"    value={fmtH(summary?.architecture_month_consumed_hours ?? 0)} icon={Clock} />
                 </div>
                 <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
-                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="architecture" />
+                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="architecture" onRowClick={setInlineDetail} />
               </div>
             )}
 
@@ -783,7 +792,7 @@ export default function BankHoursFixedPage() {
                   <MetricCard label="Consumo do Mês"    value={fmtH(summary?.maintenance_month_consumed_hours ?? summary?.month_consumed_hours ?? 0)} icon={Clock} />
                 </div>
                 <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
-                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="maintenance" />
+                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="maintenance" onRowClick={setInlineDetail} />
                 <InlineTicketSummaryTable rows={ticketSummary} loading={ticketSummaryLoading} />
               </div>
             )}
@@ -882,9 +891,14 @@ export default function BankHoursFixedPage() {
         </div>
       )}
 
-      {/* ─ Modal B: Detalhe do Apontamento ─ */}
+      {/* ─ Modal B: Detalhe do Apontamento (aba Projetos) ─ */}
       {projectTSDetail && (
         <TimesheetDetailModal ts={projectTSDetail} onClose={() => setProjectTSDetail(null)} />
+      )}
+
+      {/* ─ Modal: Detalhe do Apontamento (abas Sustentação/Arquitetura) ─ */}
+      {inlineDetail && (
+        <TimesheetDetailModal ts={inlineDetail} onClose={() => setInlineDetail(null)} />
       )}
     </AppLayout>
   )
@@ -1017,7 +1031,7 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
 
 // ─── Inline tables (visual no mesmo padrão de /timesheets) ──────────────────
 
-function InlineTimesheetsTable({ rows, loading, variant = 'maintenance' }: { rows: any[]; loading: boolean; variant?: 'maintenance' | 'architecture' }) {
+function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowClick }: { rows: any[]; loading: boolean; variant?: 'maintenance' | 'architecture'; onRowClick?: (r: any) => void }) {
   const isArch = variant === 'architecture'
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
@@ -1030,47 +1044,66 @@ function InlineTimesheetsTable({ rows, loading, variant = 'maintenance' }: { row
           <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
         ) : rows.length === 0 ? (
           <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem apontamentos no período selecionado.</div>
-        ) : (
+        ) : isArch ? (
+          // Arquitetura — tabela enxuta (Data, Consultor, Descrição, Horas)
           <table className="w-full text-sm">
             <thead>
               <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Data</th>
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Consultor</th>
-                {!isArch && <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Projeto</th>}
-                {!isArch && <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Ticket</th>}
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Descrição</th>
                 <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Horas</th>
-                {!isArch && <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Status</th>}
+                <th className="px-2 py-2 w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id} className={onRowClick ? 'cursor-pointer' : ''} onClick={onRowClick ? () => onRowClick(r) : undefined} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td className="px-4 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                  <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
+                  <td className="px-4 py-2 max-w-2xl truncate" style={{ color: 'var(--text-muted)' }} title={r.description ?? '—'}>{r.description ?? '—'}</td>
+                  <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
+                  {onRowClick && <td className="px-2 py-2"><Eye size={14} style={{ color: 'var(--text-muted)' }} /></td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          // Sustentação — colunas no padrão do Excel
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Data</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Solicitante</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Consultor</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Ticket</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Título do ticket</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Descrição</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Início</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Fim</th>
+                <th className="text-right px-3 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Esforço (h)</th>
+                <th className="px-2 py-2 w-8"></th>
               </tr>
             </thead>
             <tbody>
               {rows.map(r => {
-                const desc = r.description ?? ''
+                const desc = r.description ?? '—'
                 return (
-                  <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td className="px-4 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
-                    <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
-                    {!isArch && (
-                      <td className="px-4 py-2">
-                        <span className="font-mono text-xs" style={{ color: 'var(--text-light)' }}>{r.project?.code}</span>
-                        <span className="mx-1.5" style={{ color: 'var(--text-light)' }}>·</span>
-                        <span style={{ color: 'var(--text)' }}>{r.project?.name}</span>
-                      </td>
-                    )}
-                    {!isArch && (
-                      <td className="px-4 py-2">
-                        {r.ticket
-                          ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }}>#{r.ticket}</a>
-                          : <span style={{ color: 'var(--text-light)' }}>—</span>}
-                      </td>
-                    )}
-                    <td
-                      className={`px-4 py-2 ${isArch ? 'max-w-2xl' : 'max-w-md'} truncate`}
-                      style={{ color: 'var(--text-muted)' }}
-                      title={desc || '—'}
-                    >{desc || '—'}</td>
-                    <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
-                    {!isArch && <td className="px-4 py-2 text-xs">{r.status_display ?? r.status}</td>}
+                  <tr key={r.id} className={onRowClick ? 'cursor-pointer' : ''} onClick={onRowClick ? () => onRowClick(r) : undefined} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td className="px-3 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                    <td className="px-3 py-2">{r.requester ?? '—'}</td>
+                    <td className="px-3 py-2">{r.user?.name ?? '—'}</td>
+                    <td className="px-3 py-2">
+                      {r.ticket
+                        ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }} onClick={e => e.stopPropagation()}>#{r.ticket}</a>
+                        : <span style={{ color: 'var(--text-light)' }}>—</span>}
+                    </td>
+                    <td className="px-3 py-2 max-w-xs truncate" style={{ color: 'var(--text-muted)' }} title={r.ticket_subject ?? '—'}>{r.ticket_subject ?? '—'}</td>
+                    <td className="px-3 py-2 max-w-sm truncate" style={{ color: 'var(--text-muted)' }} title={desc}>{desc}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{r.start_time ?? '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{r.end_time ?? '—'}</td>
+                    <td className="px-3 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}</td>
+                    {onRowClick && <td className="px-2 py-2"><Eye size={14} style={{ color: 'var(--text-muted)' }} /></td>}
                   </tr>
                 )
               })}
