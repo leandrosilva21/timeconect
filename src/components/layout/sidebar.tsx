@@ -203,7 +203,16 @@ function SidebarInner({ user }: { user: User }) {
   // Para clientes: carrega os códigos de tipo de contrato dos seus projetos
   // PRINCIPAIS (sem parent_project_id). Filhos herdam o item do menu via parent
   // — não deveriam expor entrada extra no menu.
-  const [clienteContractCodes, setClienteContractCodes] = useState<Set<string>>(new Set())
+  // Cacheado em sessionStorage pra evitar flicker do grupo "Contratos" ao trocar de rota.
+  const cacheKey = isCliente && user?.customer_id ? `minutor:contract_codes:${user.customer_id}` : null
+  const [clienteContractCodes, setClienteContractCodes] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined' || !cacheKey) return new Set()
+    try {
+      const raw = window.sessionStorage.getItem(cacheKey)
+      if (raw) return new Set(JSON.parse(raw) as string[])
+    } catch { /* ignore */ }
+    return new Set()
+  })
   useEffect(() => {
     if (!isCliente || !user?.customer_id) return
     api.get<any>(`/projects?customer_id=${user.customer_id}&pageSize=200`)
@@ -216,6 +225,9 @@ function SidebarInner({ user }: { user: User }) {
             .filter(Boolean) as string[]
         )
         setClienteContractCodes(codes)
+        if (cacheKey) {
+          try { window.sessionStorage.setItem(cacheKey, JSON.stringify(Array.from(codes))) } catch { /* ignore */ }
+        }
       })
       .catch(() => {})
   }, [isCliente, user?.customer_id])
