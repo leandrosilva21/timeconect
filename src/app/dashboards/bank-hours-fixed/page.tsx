@@ -838,6 +838,8 @@ export default function BankHoursFixedPage() {
                       labelKey={(r) => r.requester_name ?? r.name ?? r.requester ?? '—'}
                       valueKey={(r) => Number(r.total_hours ?? r.hours ?? r.value ?? 0)}
                       valueFmt={(v) => `${v.toFixed(2)}h`}
+                      badgeKey={(r) => Number(r.ticket_count ?? 0)}
+                      badgeFmt={(n) => `${n} ${n === 1 ? 'ticket' : 'tickets'}`}
                     />
                     <IndicatorCard
                       title="Horas por Módulo/Serviço"
@@ -845,6 +847,8 @@ export default function BankHoursFixedPage() {
                       labelKey={(r) => r.service ?? r.module ?? r.name ?? '—'}
                       valueKey={(r) => Number(r.total_hours ?? r.hours ?? r.value ?? 0)}
                       valueFmt={(v) => `${v.toFixed(2)}h`}
+                      badgeKey={(r) => Number(r.ticket_count ?? 0)}
+                      badgeFmt={(n) => `${n} ${n === 1 ? 'ticket' : 'tickets'}`}
                     />
                     <div className="lg:col-span-2">
                       <IndicatorCard
@@ -1095,7 +1099,7 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
 // ─── Inline tables (visual no mesmo padrão de /timesheets) ──────────────────
 
 function IndicatorCard({
-  title, rows, labelKey, valueKey, valueFmt, emptyMessage = 'Sem dados no período.',
+  title, rows, labelKey, valueKey, valueFmt, emptyMessage = 'Sem dados no período.', badgeKey, badgeFmt,
 }: {
   title: string
   rows: any[]
@@ -1103,6 +1107,8 @@ function IndicatorCard({
   valueKey: (r: any) => number
   valueFmt: (v: number) => string
   emptyMessage?: string
+  badgeKey?: (r: any) => number
+  badgeFmt?: (n: number) => string
 }) {
   const max = Math.max(1, ...rows.map(valueKey))
   return (
@@ -1118,6 +1124,7 @@ function IndicatorCard({
             {rows.slice(0, 15).map((r, idx) => {
               const v = valueKey(r)
               const pct = (v / max) * 100
+              const badgeVal = badgeKey ? badgeKey(r) : null
               return (
                 <div key={idx} className="flex items-center gap-3">
                   <div className="w-6 text-right text-xs font-mono shrink-0" style={{ color: 'var(--text-muted)' }}>{idx + 1}</div>
@@ -1128,6 +1135,14 @@ function IndicatorCard({
                       {valueFmt(v)}
                     </div>
                   </div>
+                  {badgeVal !== null && badgeFmt && (
+                    <div
+                      className="text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap"
+                      style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+                    >
+                      {badgeFmt(badgeVal)}
+                    </div>
+                  )}
                 </div>
               )
             })}
