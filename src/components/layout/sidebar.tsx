@@ -116,7 +116,7 @@ const NAV: NavEntry[] = [
   },
   {
     type: 'group',
-    label: 'Dashboards',
+    label: 'Visão do Cliente',
     icon: BarChart2,
     items: [
       { label: 'Banco de Horas Fixo',    href: '/dashboards/bank-hours-fixed',   icon: BarChart2 },
