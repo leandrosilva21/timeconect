@@ -682,25 +682,7 @@ export default function DashboardIndicators({ basePath, params, disabled = false
           )}
         </ChartCard>
 
-        {/* 6 — Tickets acima de 8h */}
-        <ChartCard title="Tickets acima de 08 horas" onOpen={() => openModal(baseParams)}>
-          {data.above8.length === 0 ? <Empty /> : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={data.above8} style={CHART_STYLE}
-                margin={{ top: 0, right: 16, left: 0, bottom: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
-                <XAxis dataKey="ticket_id" tick={AXIS_TICK} angle={-30} textAnchor="end" interval={0} />
-                <YAxis tick={AXIS_TICK} tickFormatter={v => `${v}h`} />
-                <Tooltip content={<CustomTooltip valueLabel="Horas" />} cursor={CURSOR} />
-                <Bar dataKey="total_hours" name="Horas" radius={[6, 6, 0, 0]}
-                  fill="#EF4444" fillOpacity={0.8} style={{ cursor: 'pointer' }}
-                  onClick={(d: any) => openModal(buildTimesheetsParams(params, { ticket: d.ticket_id }))} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </ChartCard>
-
-        {/* 7+8 — Evolução Mensal */}
+        {/* 6 — Evolução Mensal (Tickets acima de 8h removido) */}
         {(() => {
           const allMonths = Array.from(new Set([
             ...data.monthlyTix.map(d => d.month),
