@@ -6,7 +6,8 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
-import { Zap, Clock, DollarSign } from 'lucide-react'
+import { Zap, Clock, DollarSign, Download } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import DashboardIndicators from '@/components/dashboard/DashboardIndicators'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
@@ -110,6 +111,10 @@ export default function OnDemandPage() {
   const [loadingSummary, setLoadingSummary] = useState(false)
   const [activeTab, setActiveTab] = useState<'overview' | 'indicators'>('overview')
   const [indicatorParams, setIndicatorParams] = useState<URLSearchParams>(new URLSearchParams())
+  const [inlineRows, setInlineRows] = useState<any[]>([])
+  const [inlineLoading, setInlineLoading] = useState(false)
+  const [ticketSummary, setTicketSummary] = useState<Array<{ticket: string; title: string|null; requester: string|null; period_minutes: number; lifetime_minutes: number}>>([])
+  const [ticketSummaryLoading, setTicketSummaryLoading] = useState(false)
 
   // Load customers & executives (admin only)
   useEffect(() => {
@@ -166,6 +171,47 @@ export default function OnDemandPage() {
   }, [buildParams])
 
   const hasFilters = !isAdmin || !!selectedProject
+
+  // Lista inline de apontamentos do projeto + ticket summary (mesmo padrão do BH Fixo/Sustentação)
+  useEffect(() => {
+    if (!hasFilters || !selectedProject || activeTab !== 'overview') { setInlineRows([]); setTicketSummary([]); return }
+    setInlineLoading(true)
+    setTicketSummaryLoading(true)
+    const qs = new URLSearchParams()
+    qs.set('project_id', String(selectedProject))
+    if (selectedCustomer) qs.set('customer_id', String(selectedCustomer))
+    else if (user?.customer_id) qs.set('customer_id', String(user.customer_id))
+    if (dateFrom) qs.set('date_from', dateFrom)
+    if (dateTo)   qs.set('date_to',   dateTo)
+    api.get<{ data: any[] }>(`/dashboards/bank-hours-fixed/project-timesheets?${qs}`)
+      .then(r => setInlineRows(r.data ?? []))
+      .catch(() => setInlineRows([]))
+      .finally(() => setInlineLoading(false))
+    api.get<{ tickets: any[] }>(`/dashboards/bank-hours-fixed/project-ticket-summary?${qs}`)
+      .then(r => setTicketSummary(r.tickets ?? []))
+      .catch(() => setTicketSummary([]))
+      .finally(() => setTicketSummaryLoading(false))
+  }, [hasFilters, selectedProject, selectedCustomer, dateFrom, dateTo, user?.customer_id, activeTab])
+
+  function exportInlineToXLSX() {
+    if (inlineRows.length === 0) return
+    const data = inlineRows.map(r => ({
+      Data: r.date ? r.date.split('-').reverse().join('/') : '',
+      Consultor: r.user?.name ?? '',
+      Código: r.project?.code ?? '',
+      Projeto: r.project?.name ?? '',
+      Ticket: r.ticket ?? '',
+      'Assunto Ticket': r.ticket_subject ?? '',
+      Descrição: r.description ?? '',
+      Horas: Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
+      Status: r.status_display ?? r.status ?? '',
+    }))
+    const ws = XLSX.utils.json_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'On Demand')
+    const stamp = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `on-demand_${stamp}.xlsx`)
+  }
 
 
 
@@ -304,6 +350,11 @@ export default function OnDemandPage() {
                     <p className="text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum dado disponível para o período selecionado.</p>
                   </div>
                 )}
+
+                {/* Exportar + Lista de apontamentos + Apuração por Ticket */}
+                <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
+                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} />
+                <InlineTicketSummaryTable rows={ticketSummary} loading={ticketSummaryLoading} />
               </div>
             )}
 
@@ -319,5 +370,130 @@ export default function OnDemandPage() {
         )}
       </div>
     </AppLayout>
+  )
+}
+
+// ─── Inline tables (mesmo padrão de /dashboards/bank-hours-fixed) ────────────
+
+function InlineTimesheetsTable({ rows, loading }: { rows: any[]; loading: boolean }) {
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Apontamentos do período</h3>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{rows.length} registros</span>
+      </div>
+      <div className="overflow-x-auto">
+        {loading ? (
+          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
+        ) : rows.length === 0 ? (
+          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem apontamentos no período selecionado.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Data</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Consultor</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Projeto</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Ticket</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Descrição</th>
+                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Horas</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td className="px-4 py-2">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                  <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
+                  <td className="px-4 py-2">
+                    <span className="font-mono text-xs" style={{ color: 'var(--text-light)' }}>{r.project?.code}</span>
+                    <span className="mx-1.5" style={{ color: 'var(--text-light)' }}>·</span>
+                    <span style={{ color: 'var(--text)' }}>{r.project?.name}</span>
+                  </td>
+                  <td className="px-4 py-2">
+                    {r.ticket
+                      ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }}>#{r.ticket}</a>
+                      : <span style={{ color: 'var(--text-light)' }}>—</span>}
+                  </td>
+                  <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{r.description ?? '—'}</td>
+                  <td className="px-4 py-2 text-right font-mono">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
+                  <td className="px-4 py-2 text-xs">{r.status_display ?? r.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loading: boolean }) {
+  const fmtHHMM = (mins: number) => {
+    const h = Math.floor(mins / 60)
+    const m = Math.abs(mins % 60)
+    return `${h}:${String(m).padStart(2, '0')}`
+  }
+  if (!loading && rows.length === 0) return null
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Apuração por Ticket</h3>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{rows.length} tickets</span>
+      </div>
+      <div className="overflow-x-auto">
+        {loading ? (
+          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Ticket</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Título</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Solicitante</th>
+                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Total no período</th>
+                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Total histórico</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(tk => (
+                <tr key={tk.ticket} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td className="px-4 py-2">
+                    <a href={`https://erpserv.movidesk.com/Ticket/Edit/${tk.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }}>#{tk.ticket}</a>
+                  </td>
+                  <td className="px-4 py-2" style={{ color: 'var(--text)' }}>{tk.title ?? '—'}</td>
+                  <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{tk.requester ?? '—'}</td>
+                  <td className="px-4 py-2 text-right font-mono">{fmtHHMM(tk.period_minutes)}</td>
+                  <td className="px-4 py-2 text-right font-mono" style={{ color: 'var(--text-muted)' }}>{fmtHHMM(tk.lifetime_minutes)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ borderTop: '1px solid var(--border)', fontWeight: 600 }}>
+                <td colSpan={3} className="px-4 py-2 text-right">Totais ({rows.length} {rows.length === 1 ? 'ticket' : 'tickets'})</td>
+                <td className="px-4 py-2 text-right font-mono">{fmtHHMM(rows.reduce((s, r) => s + (r.period_minutes || 0), 0))}</td>
+                <td className="px-4 py-2 text-right font-mono">{fmtHHMM(rows.reduce((s, r) => s + (r.lifetime_minutes || 0), 0))}</td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ExportButton({ onClick, disabled }: { onClick: () => void; disabled: boolean }) {
+  return (
+    <div className="flex justify-end">
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40"
+        style={{ background: 'var(--surface-hover)', color: 'var(--text)', border: '1px solid var(--border)' }}
+      >
+        <Download size={14} />
+        Exportar Excel
+      </button>
+    </div>
   )
 }
