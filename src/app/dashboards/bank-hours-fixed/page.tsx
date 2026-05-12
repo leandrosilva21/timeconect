@@ -6,7 +6,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
-import { BarChart2, Clock, TrendingUp, TrendingDown, AlertCircle, DollarSign, ChevronDown, ArrowUp, MousePointerClick } from 'lucide-react'
+import { BarChart2, Clock, TrendingUp, TrendingDown, AlertCircle, DollarSign, ChevronDown, ArrowUp, MousePointerClick, Download } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { SearchSelect } from '@/components/ui/search-select'
@@ -273,11 +274,13 @@ export default function BankHoursFixedPage() {
 
   const [inlineRows, setInlineRows] = useState<any[]>([])
   const [inlineLoading, setInlineLoading] = useState(false)
+  const [ticketSummary, setTicketSummary] = useState<Array<{ticket: string; title: string|null; requester: string|null; period_minutes: number; lifetime_minutes: number}>>([])
+  const [ticketSummaryLoading, setTicketSummaryLoading] = useState(false)
   useEffect(() => {
     // carrega lista inline conforme aba selecionada (sustentação/arquitetura = timesheets; despesas = expenses)
     const isTimesheets = activeTab === 'maintenance' || activeTab === 'architecture'
     const isExpenses   = activeTab === 'expenses'
-    if (!isTimesheets && !isExpenses) { setInlineRows([]); return }
+    if (!isTimesheets && !isExpenses) { setInlineRows([]); setTicketSummary([]); return }
 
     setInlineLoading(true)
     const qs = new URLSearchParams()
@@ -293,7 +296,51 @@ export default function BankHoursFixedPage() {
       .then(r => setInlineRows(r.data ?? []))
       .catch(() => setInlineRows([]))
       .finally(() => setInlineLoading(false))
+
+    // Agrupamento por ticket — apenas em Sustentação
+    if (activeTab === 'maintenance') {
+      setTicketSummaryLoading(true)
+      api.get<{ tickets: any[] }>(`/dashboards/bank-hours-fixed/category-ticket-summary?${qs}&category=maintenance`)
+        .then(r => setTicketSummary(r.tickets ?? []))
+        .catch(() => setTicketSummary([]))
+        .finally(() => setTicketSummaryLoading(false))
+    } else {
+      setTicketSummary([])
+    }
   }, [activeTab, selectedCustomer, selectedProject, dateFrom, dateTo, user?.customer_id])
+
+  function exportInlineToXLSX() {
+    if (inlineRows.length === 0) return
+    const isExpenses = activeTab === 'expenses'
+    const sheetName = isExpenses ? 'Despesas' : (activeTab === 'architecture' ? 'Arquitetura' : 'Sustentação')
+    const data = isExpenses
+      ? inlineRows.map(r => ({
+          Data: r.date ? r.date.split('-').reverse().join('/') : '',
+          Consultor: r.user?.name ?? '',
+          Código: r.project?.code ?? '',
+          Projeto: r.project?.name ?? '',
+          Categoria: r.category?.name ?? '',
+          Descrição: r.description ?? '',
+          Valor: Number(r.amount) || 0,
+          Status: r.status_display ?? r.status ?? '',
+        }))
+      : inlineRows.map(r => ({
+          Data: r.date ? r.date.split('-').reverse().join('/') : '',
+          Consultor: r.user?.name ?? '',
+          Código: r.project?.code ?? '',
+          Projeto: r.project?.name ?? '',
+          Ticket: r.ticket ?? '',
+          'Assunto Ticket': r.ticket_subject ?? '',
+          Descrição: r.description ?? '',
+          Horas: Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
+          Status: r.status_display ?? r.status ?? '',
+        }))
+    const ws = XLSX.utils.json_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, sheetName)
+    const stamp = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `${sheetName.toLowerCase()}_${stamp}.xlsx`)
+  }
 
   // Customers
   useEffect(() => {
@@ -683,6 +730,7 @@ export default function BankHoursFixedPage() {
                   <MetricCard label="Consumo Acumulado" value={fmtH(summary?.architecture_consumed_hours ?? 0)} icon={Clock} accent="primary" />
                   <MetricCard label="Consumo do Mês"    value={fmtH(summary?.architecture_month_consumed_hours ?? 0)} icon={Clock} />
                 </div>
+                <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
                 <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} />
               </div>
             )}
@@ -694,7 +742,9 @@ export default function BankHoursFixedPage() {
                   <MetricCard label="Consumo Acumulado" value={fmtH(summary?.maintenance_consumed_hours ?? 0)} icon={Clock} accent="primary" />
                   <MetricCard label="Consumo do Mês"    value={fmtH(summary?.maintenance_month_consumed_hours ?? summary?.month_consumed_hours ?? 0)} icon={Clock} />
                 </div>
+                <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
                 <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} />
+                <InlineTicketSummaryTable rows={ticketSummary} loading={ticketSummaryLoading} />
               </div>
             )}
 
@@ -712,6 +762,7 @@ export default function BankHoursFixedPage() {
                     <MetricCard label="Valor Total"   value={fmtBRL(totalAmount)} icon={DollarSign} />
                     <MetricCard label="Valor a Pagar" value={fmtBRL(toPay)} icon={DollarSign} accent="primary" />
                   </div>
+                  <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
                   <InlineExpensesTable rows={inlineRows} loading={inlineLoading} />
                 </div>
               )
@@ -744,6 +795,7 @@ function InlineTimesheetsTable({ rows, loading }: { rows: any[]; loading: boolea
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Data</th>
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Consultor</th>
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Projeto</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Ticket</th>
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Descrição</th>
                 <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Horas</th>
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Status</th>
@@ -759,6 +811,11 @@ function InlineTimesheetsTable({ rows, loading }: { rows: any[]; loading: boolea
                     <span className="mx-1.5" style={{ color: 'var(--text-light)' }}>·</span>
                     <span style={{ color: 'var(--text)' }}>{r.project?.name}</span>
                   </td>
+                  <td className="px-4 py-2">
+                    {r.ticket
+                      ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }}>#{r.ticket}</a>
+                      : <span style={{ color: 'var(--text-light)' }}>—</span>}
+                  </td>
                   <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{r.description ?? '—'}</td>
                   <td className="px-4 py-2 text-right font-mono">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
                   <td className="px-4 py-2 text-xs">{r.status_display ?? r.status}</td>
@@ -768,6 +825,76 @@ function InlineTimesheetsTable({ rows, loading }: { rows: any[]; loading: boolea
           </table>
         )}
       </div>
+    </div>
+  )
+}
+
+function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loading: boolean }) {
+  const fmtH = (mins: number) => {
+    const h = Math.floor(mins / 60)
+    const m = Math.abs(mins % 60)
+    return `${h}:${String(m).padStart(2, '0')}`
+  }
+  if (!loading && rows.length === 0) return null
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Apuração por Ticket</h3>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{rows.length} tickets</span>
+      </div>
+      <div className="overflow-x-auto">
+        {loading ? (
+          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Ticket</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Título</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Solicitante</th>
+                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Total no período</th>
+                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Total histórico</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(tk => (
+                <tr key={tk.ticket} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td className="px-4 py-2">
+                    <a href={`https://erpserv.movidesk.com/Ticket/Edit/${tk.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }}>#{tk.ticket}</a>
+                  </td>
+                  <td className="px-4 py-2" style={{ color: 'var(--text)' }}>{tk.title ?? '—'}</td>
+                  <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{tk.requester ?? '—'}</td>
+                  <td className="px-4 py-2 text-right font-mono">{fmtH(tk.period_minutes)}</td>
+                  <td className="px-4 py-2 text-right font-mono" style={{ color: 'var(--text-muted)' }}>{fmtH(tk.lifetime_minutes)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ borderTop: '1px solid var(--border)', fontWeight: 600 }}>
+                <td colSpan={3} className="px-4 py-2 text-right">Totais ({rows.length} {rows.length === 1 ? 'ticket' : 'tickets'})</td>
+                <td className="px-4 py-2 text-right font-mono">{fmtH(rows.reduce((s, r) => s + (r.period_minutes || 0), 0))}</td>
+                <td className="px-4 py-2 text-right font-mono">{fmtH(rows.reduce((s, r) => s + (r.lifetime_minutes || 0), 0))}</td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ExportButton({ onClick, disabled }: { onClick: () => void; disabled: boolean }) {
+  return (
+    <div className="flex justify-end">
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40"
+        style={{ background: 'var(--surface-hover)', color: 'var(--text)', border: '1px solid var(--border)' }}
+      >
+        <Download size={14} />
+        Exportar Excel
+      </button>
     </div>
   )
 }
