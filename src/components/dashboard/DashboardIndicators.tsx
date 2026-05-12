@@ -606,19 +606,19 @@ export default function DashboardIndicators({ basePath, params, disabled = false
           )}
         </ChartCard>
 
-        {/* 2 — Horas por Módulo */}
-        <ChartCard title="Horas por Módulo" onOpen={() => openModal(baseParams)}>
-          {data.service.length === 0 ? <Empty /> : (
+        {/* 2 — Motivo de Abertura (trocado de posição com Módulos) */}
+        <ChartCard title="Motivo de Abertura" onOpen={() => openModal(baseParams)}>
+          {data.category.length === 0 ? <Empty /> : (
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={data.service} style={CHART_STYLE}
+              <BarChart data={data.category} style={CHART_STYLE}
                 margin={{ top: 0, right: 16, left: 0, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
-                <XAxis dataKey="service" tick={AXIS_TICK} angle={-30} textAnchor="end" interval={0} />
-                <YAxis tick={AXIS_TICK} tickFormatter={v => `${v}h`} />
-                <Tooltip content={<CustomTooltip valueLabel="Horas" />} cursor={CURSOR} />
-                <Bar dataKey="total_hours" name="Horas" radius={[6, 6, 0, 0]} style={{ cursor: 'pointer' }}
-                  onClick={(d: any) => openModal(buildTimesheetsParams(params, { ticket_service: d.service }))}>
-                  {data.service.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} fillOpacity={0.85} />)}
+                <XAxis dataKey="category" tick={AXIS_TICK} angle={-30} textAnchor="end" interval={0} />
+                <YAxis tick={AXIS_TICK} allowDecimals={false} />
+                <Tooltip content={<CustomTooltip valueLabel="Tickets" />} cursor={CURSOR} />
+                <Bar dataKey="ticket_count" name="Tickets" radius={[6, 6, 0, 0]} style={{ cursor: 'pointer' }}
+                  onClick={(d: any) => openModal(buildTimesheetsParams(params, { category: d.category }))}>
+                  {data.category.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} fillOpacity={0.85} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -663,19 +663,19 @@ export default function DashboardIndicators({ basePath, params, disabled = false
           )}
         </ChartCard>
 
-        {/* 5 — Motivo de Abertura */}
-        <ChartCard title="Motivo de Abertura" onOpen={() => openModal(baseParams)}>
-          {data.category.length === 0 ? <Empty /> : (
+        {/* 5 — Horas por Módulo (trocado de posição c/ Motivo de Abertura, full-width) */}
+        <ChartCard title="Horas por Módulo" fullWidth onOpen={() => openModal(baseParams)}>
+          {data.service.length === 0 ? <Empty /> : (
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={data.category} style={CHART_STYLE}
+              <BarChart data={data.service} style={CHART_STYLE}
                 margin={{ top: 0, right: 16, left: 0, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
-                <XAxis dataKey="category" tick={AXIS_TICK} angle={-30} textAnchor="end" interval={0} />
-                <YAxis tick={AXIS_TICK} allowDecimals={false} />
-                <Tooltip content={<CustomTooltip valueLabel="Tickets" />} cursor={CURSOR} />
-                <Bar dataKey="ticket_count" name="Tickets" radius={[6, 6, 0, 0]} style={{ cursor: 'pointer' }}
-                  onClick={(d: any) => openModal(buildTimesheetsParams(params, { category: d.category }))}>
-                  {data.category.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} fillOpacity={0.85} />)}
+                <XAxis dataKey="service" tick={AXIS_TICK} angle={-30} textAnchor="end" interval={0} />
+                <YAxis tick={AXIS_TICK} tickFormatter={v => `${v}h`} />
+                <Tooltip content={<CustomTooltip valueLabel="Horas" />} cursor={CURSOR} />
+                <Bar dataKey="total_hours" name="Horas" radius={[6, 6, 0, 0]} style={{ cursor: 'pointer' }}
+                  onClick={(d: any) => openModal(buildTimesheetsParams(params, { ticket_service: d.service }))}>
+                  {data.service.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} fillOpacity={0.85} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
