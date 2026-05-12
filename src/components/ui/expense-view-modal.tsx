@@ -107,8 +107,6 @@ export function ExpenseViewModal({
   onClose: () => void
   onEdit?: () => void
 }) {
-  const sc = EXP_STATUS_CONF[expense.status] ?? { bg: 'rgba(113,113,122,0.12)', color: '#71717A', label: expense.status }
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="relative w-full max-w-md rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto"
@@ -134,20 +132,6 @@ export function ExpenseViewModal({
         </div>
 
         <div className="px-5 pb-5 space-y-4">
-          {/* Status + Categoria */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
-              style={{ background: sc.bg, color: sc.color }}>
-              {sc.label}
-            </span>
-            {expense.category?.name && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
-                style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <Tag size={9} /> {expense.category.name}
-              </span>
-            )}
-          </div>
-
           {/* Valor hero */}
           <div className="rounded-xl px-4 py-4"
             style={{ background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.15)' }}>

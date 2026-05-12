@@ -106,24 +106,24 @@ export function TimesheetViewModal({
         </div>
 
         <div className="px-5 pb-5 space-y-4">
-          {/* Status + origem */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={ts.status}>{ts.status_display ?? ts.status}</Badge>
-            <OriginChip origin={ts.origin} />
-            {ts.is_billable_only && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
-                style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }}>
-                <DollarSign size={11} /> Somente Faturável
-              </span>
-            )}
-            {ts.rejection_reason && ['rejected', 'adjustment_requested'].includes(ts.status) && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
-                style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.25)' }}>
-                <AlertCircle size={11} />
-                {ts.status === 'adjustment_requested' ? 'Ajuste:' : 'Motivo:'} {ts.rejection_reason}
-              </span>
-            )}
-          </div>
+          {/* Badges relevantes (Pendente/status + Web manual ficam fora deste modal) */}
+          {(ts.is_billable_only || (ts.rejection_reason && ['rejected', 'adjustment_requested'].includes(ts.status))) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {ts.is_billable_only && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                  style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }}>
+                  <DollarSign size={11} /> Somente Faturável
+                </span>
+              )}
+              {ts.rejection_reason && ['rejected', 'adjustment_requested'].includes(ts.status) && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                  style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.25)' }}>
+                  <AlertCircle size={11} />
+                  {ts.status === 'adjustment_requested' ? 'Ajuste:' : 'Motivo:'} {ts.rejection_reason}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Horas hero */}
           <div className="rounded-xl px-4 py-4"
