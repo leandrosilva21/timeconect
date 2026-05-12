@@ -483,7 +483,8 @@ export default function UsersPage() {
       }
       if (form.profiles.includes('coordenador')) {
         payload.coordinator_type  = form.coordinator_type || null
-        payload.extra_permissions = form.extra_permissions
+        // extra_permissions agora é gerenciado via Grupos de Permissões — sempre limpa aqui
+        payload.extra_permissions = []
       }
       if (form.profiles.includes('consultor') || form.profiles.includes('parceiro_adm')) {
         payload.can_timesheet_sustentacao = form.can_timesheet_sustentacao
@@ -1123,44 +1124,8 @@ export default function UsersPage() {
                   </div>
                 )}
 
-                {/* ── Coordenador: permissões adicionais ── */}
-                {isCoordenador && (
-                  <div>
-                    <Label className="text-xs text-zinc-400 mb-1 block">Permissões Adicionais</Label>
-                    <div className="space-y-1.5 rounded-lg border border-zinc-700 bg-zinc-800/50 p-3">
-                      {COORDINATOR_PERMISSIONS.map(perm => {
-                        const active = form.extra_permissions.includes(perm.key)
-                        return (
-                          <button
-                            key={perm.key}
-                            type="button"
-                            onClick={() => setForm(f => ({
-                              ...f,
-                              extra_permissions: active
-                                ? f.extra_permissions.filter(p => p !== perm.key)
-                                : [...f.extra_permissions, perm.key],
-                            }))}
-                            className={`w-full flex items-start gap-2.5 px-2.5 py-2 rounded-md text-xs text-left transition-colors ${
-                              active
-                                ? 'bg-blue-600/15 border border-blue-500/30'
-                                : 'hover:bg-zinc-700/50 border border-transparent'
-                            }`}
-                          >
-                            <span className={`mt-0.5 w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center ${
-                              active ? 'border-blue-400 bg-blue-500 text-white' : 'border-zinc-600'
-                            }`}>
-                              {active && <Check size={9} />}
-                            </span>
-                            <div>
-                              <p className={`font-medium leading-tight ${active ? 'text-blue-300' : 'text-zinc-300'}`}>{perm.label}</p>
-                              <p className="text-[10px] text-zinc-500 mt-0.5">{perm.desc}</p>
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
+                {/* Permissões adicionais agora vivem em Grupos de Permissões (Settings → Grupos).
+                    Removida a seção inline pra evitar conflito com permissões herdadas de grupo. */}
 
                 {/* ── Parceiro: seleciona empresa + define se é ADM ── */}
                 {isParceiroAdm && (
