@@ -182,26 +182,20 @@ function ConsumedBreakdownCard({ total, projetos, sustentacao, arquitetura }: { 
         <span className="text-base font-medium mb-0.5" style={{ color: 'var(--brand-muted)' }}>h</span>
       </div>
       {(projetos !== undefined || sustentacao !== undefined || showArq) && (
-        <div
-          className="grid gap-2 pt-2 border-t"
-          style={{
-            borderColor: 'var(--brand-border)',
-            gridTemplateColumns: `repeat(${showArq ? 3 : 2}, minmax(0, 1fr))`,
-          }}
-        >
-          <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wider mb-0.5 truncate" style={{ color: 'var(--brand-subtle)' }}>Projetos</p>
-            <p className="text-sm font-bold truncate" style={{ color: 'var(--brand-text)' }}>{fmtH(projetos ?? 0)}h</p>
+        <div className="flex flex-col gap-1.5 pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+          <div className="flex items-baseline justify-between gap-2 min-w-0">
+            <span className="text-[10px] uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Projetos</span>
+            <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{fmtH(projetos ?? 0)}h</span>
           </div>
           {showArq && (
-            <div className="min-w-0 border-l pl-2" style={{ borderColor: 'var(--brand-border)' }}>
-              <p className="text-[10px] uppercase tracking-wider mb-0.5 truncate" style={{ color: 'var(--brand-subtle)' }}>Arquitetura</p>
-              <p className="text-sm font-bold truncate" style={{ color: 'var(--brand-text)' }}>{fmtH(arquitetura ?? 0)}h</p>
+            <div className="flex items-baseline justify-between gap-2 min-w-0">
+              <span className="text-[10px] uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Arquitetura</span>
+              <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{fmtH(arquitetura ?? 0)}h</span>
             </div>
           )}
-          <div className="min-w-0 border-l pl-2" style={{ borderColor: 'var(--brand-border)' }}>
-            <p className="text-[10px] uppercase tracking-wider mb-0.5 truncate" style={{ color: 'var(--brand-subtle)' }}>Sustentação</p>
-            <p className="text-sm font-bold truncate" style={{ color: 'var(--brand-text)' }}>{fmtH(sustentacao ?? 0)}h</p>
+          <div className="flex items-baseline justify-between gap-2 min-w-0">
+            <span className="text-[10px] uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Sustentação</span>
+            <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{fmtH(sustentacao ?? 0)}h</span>
           </div>
         </div>
       )}
