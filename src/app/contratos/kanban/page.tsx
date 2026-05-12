@@ -57,6 +57,7 @@ interface ProjectCard {
   sustentacao_column?: string | null
   coordinator_ids?: number[]
   coordinators?: string[]
+  kanban_coordinator_override_id?: number | null
   executivo_conta_name?: string
   contract_type?: string
   service_type?: string
@@ -1964,15 +1965,20 @@ function KanbanContent() {
       .sort((a, b) => (a.kanban_order ?? 0) - (b.kanban_order ?? 0))
   }
 
-  // Active project cards per coordinator column
+  // Active project cards per coordinator column.
+  // Override (kanban_coordinator_override_id) tem precedência: se setado, o card
+  // vai SÓ pra coluna do override, ignorando coordinator_ids da relação M2M.
   const activeProjectsInCoordCol = (coordId: number): ProjectCard[] =>
-    projectCards.filter(p =>
-      isActiveProject(p) &&
-      (p.coordinator_ids ?? []).includes(coordId) &&
-      matchFilter(p.customer_name, p.project_name) &&
-      matchExecutivoKanban(p.executivo_conta_name) &&
-      matchProjectKanban(p.project_name)
-    )
+    projectCards.filter(p => {
+      if (!isActiveProject(p)) return false
+      const effective = p.kanban_coordinator_override_id != null
+        ? [p.kanban_coordinator_override_id]
+        : (p.coordinator_ids ?? [])
+      if (!effective.includes(coordId)) return false
+      return matchFilter(p.customer_name, p.project_name)
+        && matchExecutivoKanban(p.executivo_conta_name)
+        && matchProjectKanban(p.project_name)
+    })
 
   // Project cards in status columns
   const projectsInStatusCol = (colId: string): ProjectCard[] => {
