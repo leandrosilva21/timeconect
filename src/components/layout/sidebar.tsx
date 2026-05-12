@@ -185,16 +185,7 @@ function SidebarInner({ user }: { user: User }) {
   const pathname     = usePathname()
   const searchParams = useSearchParams()
   const [collapsed,   setCollapsed]   = useState(false)
-  const [openGroups,  setOpenGroups]  = useState<string[]>(() => {
-    // Abre automaticamente apenas o grupo que contém a rota atual
-    const active: string[] = []
-    for (const entry of NAV) {
-      if (entry.type === 'group' && entry.items.some(i => pathname === i.href.split('?')[0] || pathname.startsWith(i.href.split('?')[0] + '/'))) {
-        active.push(entry.label)
-      }
-    }
-    return active
-  })
+  const [openGroups,  setOpenGroups]  = useState<string[]>([])
 
   const isConsultor        = user?.type === 'consultor'
   const isCoordenador      = user?.type === 'coordenador'
@@ -203,7 +194,11 @@ function SidebarInner({ user }: { user: User }) {
   const isParceiroGestor   = isParceiroAdmin && !!user?.is_executive
   const isAdministrativo   = user?.type === 'administrativo'
   // permissions = lista resolvida pelo backend (base + extra + grupos); fallback para extra_permissions
-  const ep: string[] = (user as any)?.permissions ?? user?.extra_permissions ?? []
+  // Estabilizada com useMemo pra não causar re-render do visibleNav em cada ciclo
+  const ep: string[] = useMemo(
+    () => (user as any)?.permissions ?? user?.extra_permissions ?? [],
+    [(user as any)?.permissions, user?.extra_permissions]
+  )
 
   // Para clientes: carrega os códigos de tipo de contrato dos seus projetos
   // PRINCIPAIS (sem parent_project_id). Filhos herdam o item do menu via parent
@@ -402,6 +397,25 @@ function SidebarInner({ user }: { user: User }) {
     }
     return NAV
   }, [isCoordenador, isConsultor, isCliente, isParceiroAdmin, isParceiroGestor, isAdministrativo, clienteContractCodes, ep])
+
+  // Auto-abre o grupo que contém a rota atual, sem fechar os já abertos manualmente.
+  // Roda quando muda pathname OU visibleNav (cliente/coord etc com sidebar dinâmico).
+  useEffect(() => {
+    const auto: string[] = []
+    for (const entry of visibleNav) {
+      if (entry.type === 'group' && entry.items.some(i => {
+        const base = i.href.split('?')[0]
+        return pathname === base || pathname.startsWith(base + '/')
+      })) {
+        auto.push(entry.label)
+      }
+    }
+    if (auto.length === 0) return
+    setOpenGroups(prev => {
+      const merged = new Set([...prev, ...auto])
+      return merged.size === prev.length ? prev : Array.from(merged)
+    })
+  }, [pathname, visibleNav])
 
   // First two letters of name for avatar
   const initials = user?.name
