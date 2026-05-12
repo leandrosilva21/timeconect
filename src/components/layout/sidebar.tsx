@@ -348,15 +348,6 @@ function SidebarInner({ user }: { user: User }) {
         .map(([, item]) => item)
       const nav: NavEntry[] = [
         { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline',  icon: LayoutGrid },
-        {
-          type: 'group',
-          label: 'Apontamentos & Despesas',
-          icon: Clock,
-          items: [
-            { label: 'Apontamentos', href: '/timesheets', icon: Clock },
-            { label: 'Despesas',     href: '/expenses',   icon: Receipt },
-          ],
-        },
       ]
       if (dashItems.length > 0) {
         nav.push({ type: 'group', label: 'Dashboards', icon: BarChart2, items: dashItems })

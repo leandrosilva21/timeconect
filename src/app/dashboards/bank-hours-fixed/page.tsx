@@ -271,30 +271,29 @@ export default function BankHoursFixedPage() {
 
   const [activeTab, setActiveTab] = useState<'total' | 'projects' | 'architecture' | 'maintenance' | 'expenses'>('total')
 
-  type RecordsModalKind =
-    | { type: 'timesheets'; category: 'architecture' | 'maintenance'; title: string }
-    | { type: 'expenses'; title: string }
-    | null
-  const [recordsModal, setRecordsModal] = useState<RecordsModalKind>(null)
-  const [recordsRows, setRecordsRows] = useState<any[]>([])
-  const [recordsLoading, setRecordsLoading] = useState(false)
+  const [inlineRows, setInlineRows] = useState<any[]>([])
+  const [inlineLoading, setInlineLoading] = useState(false)
   useEffect(() => {
-    if (!recordsModal) return
-    setRecordsLoading(true)
+    // carrega lista inline conforme aba selecionada (sustentação/arquitetura = timesheets; despesas = expenses)
+    const isTimesheets = activeTab === 'maintenance' || activeTab === 'architecture'
+    const isExpenses   = activeTab === 'expenses'
+    if (!isTimesheets && !isExpenses) { setInlineRows([]); return }
+
+    setInlineLoading(true)
     const qs = new URLSearchParams()
     if (selectedCustomer) qs.set('customer_id', String(selectedCustomer))
     else if (user?.customer_id) qs.set('customer_id', String(user.customer_id))
     if (selectedProject) qs.set('project_id', String(selectedProject))
     if (dateFrom) qs.set('date_from', dateFrom)
     if (dateTo)   qs.set('date_to',   dateTo)
-    const path = recordsModal.type === 'timesheets'
-      ? `/dashboards/bank-hours-fixed/category-timesheets?${qs}&category=${recordsModal.category}`
+    const path = isTimesheets
+      ? `/dashboards/bank-hours-fixed/category-timesheets?${qs}&category=${activeTab === 'architecture' ? 'architecture' : 'maintenance'}`
       : `/dashboards/bank-hours-fixed/expenses?${qs}`
     api.get<{ data: any[] }>(path)
-      .then(r => setRecordsRows(r.data ?? []))
-      .catch(() => setRecordsRows([]))
-      .finally(() => setRecordsLoading(false))
-  }, [recordsModal, selectedCustomer, selectedProject, dateFrom, dateTo, user?.customer_id])
+      .then(r => setInlineRows(r.data ?? []))
+      .catch(() => setInlineRows([]))
+      .finally(() => setInlineLoading(false))
+  }, [activeTab, selectedCustomer, selectedProject, dateFrom, dateTo, user?.customer_id])
 
   // Customers
   useEffect(() => {
@@ -681,25 +680,10 @@ export default function BankHoursFixedPage() {
             {activeTab === 'architecture' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <MetricCard
-                    label="Consumo Acumulado"
-                    value={fmtH(summary?.architecture_consumed_hours ?? 0)}
-                    icon={Clock}
-                    accent="primary"
-                  />
-                  <MetricCard
-                    label="Consumo do Mês"
-                    value={fmtH(summary?.architecture_month_consumed_hours ?? 0)}
-                    icon={Clock}
-                  />
+                  <MetricCard label="Consumo Acumulado" value={fmtH(summary?.architecture_consumed_hours ?? 0)} icon={Clock} accent="primary" />
+                  <MetricCard label="Consumo do Mês"    value={fmtH(summary?.architecture_month_consumed_hours ?? 0)} icon={Clock} />
                 </div>
-                <div className="flex justify-end">
-                  <button
-                    onClick={() => setRecordsModal({ type: 'timesheets', category: 'architecture', title: 'Apontamentos — Arquitetura' })}
-                    className="px-4 py-2 rounded-lg text-sm font-semibold"
-                    style={{ background: 'var(--primary)', color: 'var(--primary-fg)' }}
-                  >Ver Apontamentos</button>
-                </div>
+                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} />
               </div>
             )}
 
@@ -707,127 +691,133 @@ export default function BankHoursFixedPage() {
             {activeTab === 'maintenance' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <MetricCard
-                    label="Consumo Acumulado"
-                    value={fmtH(summary?.maintenance_consumed_hours ?? 0)}
-                    icon={Clock}
-                    accent="primary"
-                  />
-                  <MetricCard
-                    label="Consumo do Mês"
-                    value={fmtH(summary?.maintenance_month_consumed_hours ?? summary?.month_consumed_hours ?? 0)}
-                    icon={Clock}
-                  />
+                  <MetricCard label="Consumo Acumulado" value={fmtH(summary?.maintenance_consumed_hours ?? 0)} icon={Clock} accent="primary" />
+                  <MetricCard label="Consumo do Mês"    value={fmtH(summary?.maintenance_month_consumed_hours ?? summary?.month_consumed_hours ?? 0)} icon={Clock} />
                 </div>
-                <div className="flex justify-end">
-                  <button
-                    onClick={() => setRecordsModal({ type: 'timesheets', category: 'maintenance', title: 'Apontamentos — Sustentação' })}
-                    className="px-4 py-2 rounded-lg text-sm font-semibold"
-                    style={{ background: 'var(--primary)', color: 'var(--primary-fg)' }}
-                  >Ver Apontamentos</button>
-                </div>
+                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} />
               </div>
             )}
 
             {/* ── DESPESAS ── */}
-            {activeTab === 'expenses' && (
-              <div className="space-y-4">
-                <div className="rounded-2xl p-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Despesas registradas no recorte selecionado (projeto, cliente e período).</p>
-                    </div>
-                    <button
-                      onClick={() => setRecordsModal({ type: 'expenses', title: 'Despesas' })}
-                      className="px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap"
-                      style={{ background: 'var(--primary)', color: 'var(--primary-fg)' }}
-                    >Ver Despesas</button>
+            {activeTab === 'expenses' && (() => {
+              const totalAmount = inlineRows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+              const toPay = inlineRows
+                .filter(r => !['rejected','rejeitado','pago','paid'].includes(String(r.status ?? '').toLowerCase()))
+                .reduce((s, r) => s + (Number(r.amount) || 0), 0)
+              const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+              return (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <MetricCard label="Quantidade"    value={String(inlineRows.length)} icon={DollarSign} />
+                    <MetricCard label="Valor Total"   value={fmtBRL(totalAmount)} icon={DollarSign} />
+                    <MetricCard label="Valor a Pagar" value={fmtBRL(toPay)} icon={DollarSign} accent="primary" />
                   </div>
+                  <InlineExpensesTable rows={inlineRows} loading={inlineLoading} />
                 </div>
-              </div>
-            )}
+              )
+            })()}
           </div>
         )}
       </div>
-
-      {/* ── Modal in-page: Apontamentos / Despesas ─────────────────── */}
-      {recordsModal && (
-        <div
-          className="fixed inset-0 z-[80] flex items-start justify-center p-4 overflow-y-auto"
-          style={{ background: 'rgba(0,0,0,0.6)' }}
-          onClick={() => setRecordsModal(null)}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            className="w-full max-w-5xl mt-8 rounded-2xl overflow-hidden"
-            style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
-          >
-            <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
-              <h3 className="text-base font-semibold" style={{ color: 'var(--text)' }}>{recordsModal.title}</h3>
-              <button onClick={() => setRecordsModal(null)} className="p-1.5 rounded-md hover:opacity-70" style={{ color: 'var(--text-muted)' }}>✕</button>
-            </div>
-            <div className="overflow-x-auto max-h-[70vh]">
-              {recordsLoading ? (
-                <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
-              ) : recordsRows.length === 0 ? (
-                <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem registros no período.</div>
-              ) : recordsModal.type === 'timesheets' ? (
-                <table className="w-full text-sm">
-                  <thead style={{ background: 'var(--brand-surface)', borderBottom: '1px solid var(--border)' }}>
-                    <tr style={{ color: 'var(--text-muted)' }}>
-                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Data</th>
-                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Consultor</th>
-                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Projeto</th>
-                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Descrição</th>
-                      <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Horas</th>
-                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recordsRows.map(r => (
-                      <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td className="px-4 py-2">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
-                        <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
-                        <td className="px-4 py-2"><span className="font-mono text-xs" style={{ color: 'var(--text-light)' }}>{r.project?.code}</span> · {r.project?.name}</td>
-                        <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{r.description ?? '—'}</td>
-                        <td className="px-4 py-2 text-right font-mono">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
-                        <td className="px-4 py-2 text-xs">{r.status_display ?? r.status}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead style={{ background: 'var(--brand-surface)', borderBottom: '1px solid var(--border)' }}>
-                    <tr style={{ color: 'var(--text-muted)' }}>
-                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Data</th>
-                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Consultor</th>
-                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Projeto</th>
-                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Categoria</th>
-                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Descrição</th>
-                      <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Valor</th>
-                      <th className="text-left px-4 py-2 text-xs uppercase tracking-wide">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recordsRows.map(r => (
-                      <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td className="px-4 py-2">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
-                        <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
-                        <td className="px-4 py-2"><span className="font-mono text-xs" style={{ color: 'var(--text-light)' }}>{r.project?.code}</span> · {r.project?.name}</td>
-                        <td className="px-4 py-2">{r.category?.name ?? '—'}</td>
-                        <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{r.description ?? '—'}</td>
-                        <td className="px-4 py-2 text-right font-mono">{(r.amount ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                        <td className="px-4 py-2 text-xs">{r.status_display ?? r.status}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </AppLayout>
+  )
+}
+
+// ─── Inline tables (visual no mesmo padrão de /timesheets) ──────────────────
+
+function InlineTimesheetsTable({ rows, loading }: { rows: any[]; loading: boolean }) {
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Apontamentos do período</h3>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{rows.length} registros</span>
+      </div>
+      <div className="overflow-x-auto">
+        {loading ? (
+          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
+        ) : rows.length === 0 ? (
+          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem apontamentos no período selecionado.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Data</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Consultor</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Projeto</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Descrição</th>
+                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Horas</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td className="px-4 py-2">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                  <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
+                  <td className="px-4 py-2">
+                    <span className="font-mono text-xs" style={{ color: 'var(--text-light)' }}>{r.project?.code}</span>
+                    <span className="mx-1.5" style={{ color: 'var(--text-light)' }}>·</span>
+                    <span style={{ color: 'var(--text)' }}>{r.project?.name}</span>
+                  </td>
+                  <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{r.description ?? '—'}</td>
+                  <td className="px-4 py-2 text-right font-mono">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
+                  <td className="px-4 py-2 text-xs">{r.status_display ?? r.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function InlineExpensesTable({ rows, loading }: { rows: any[]; loading: boolean }) {
+  const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Despesas do período</h3>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{rows.length} registros</span>
+      </div>
+      <div className="overflow-x-auto">
+        {loading ? (
+          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
+        ) : rows.length === 0 ? (
+          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem despesas no período selecionado.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Data</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Consultor</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Projeto</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Categoria</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Descrição</th>
+                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Valor</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td className="px-4 py-2">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                  <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
+                  <td className="px-4 py-2">
+                    <span className="font-mono text-xs" style={{ color: 'var(--text-light)' }}>{r.project?.code}</span>
+                    <span className="mx-1.5" style={{ color: 'var(--text-light)' }}>·</span>
+                    <span style={{ color: 'var(--text)' }}>{r.project?.name}</span>
+                  </td>
+                  <td className="px-4 py-2">{r.category?.name ?? '—'}</td>
+                  <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{r.description ?? '—'}</td>
+                  <td className="px-4 py-2 text-right font-mono">{fmtBRL(Number(r.amount) || 0)}</td>
+                  <td className="px-4 py-2 text-xs">{r.status_display ?? r.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
   )
 }
