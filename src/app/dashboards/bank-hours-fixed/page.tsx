@@ -339,13 +339,8 @@ export default function BankHoursFixedPage() {
     const data = isExpenses
       ? inlineRows.map(r => ({
           Data: r.date ? r.date.split('-').reverse().join('/') : '',
-          Consultor: r.user?.name ?? '',
-          Código: r.project?.code ?? '',
-          Projeto: r.project?.name ?? '',
-          Categoria: r.category?.name ?? '',
-          Descrição: r.description ?? '',
+          Colaborador: r.user?.name ?? '',
           Valor: Number(r.amount) || 0,
-          Status: r.status_display ?? r.status ?? '',
         }))
       : activeTab === 'maintenance'
         ? inlineRows.map(r => ({
@@ -1203,28 +1198,16 @@ function InlineExpensesTable({ rows, loading }: { rows: any[]; loading: boolean 
             <thead>
               <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Data</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Consultor</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Projeto</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Categoria</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Descrição</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Colaborador</th>
                 <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Valor</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Status</th>
               </tr>
             </thead>
             <tbody>
               {rows.map(r => (
                 <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td className="px-4 py-2">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
                   <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
-                  <td className="px-4 py-2">
-                    <span className="font-mono text-xs" style={{ color: 'var(--text-light)' }}>{r.project?.code}</span>
-                    <span className="mx-1.5" style={{ color: 'var(--text-light)' }}>·</span>
-                    <span style={{ color: 'var(--text)' }}>{r.project?.name}</span>
-                  </td>
-                  <td className="px-4 py-2">{r.category?.name ?? '—'}</td>
-                  <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{r.description ?? '—'}</td>
-                  <td className="px-4 py-2 text-right font-mono">{fmtBRL(Number(r.amount) || 0)}</td>
-                  <td className="px-4 py-2 text-xs">{r.status_display ?? r.status}</td>
+                  <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{fmtBRL(Number(r.amount) || 0)}</td>
                 </tr>
               ))}
             </tbody>
