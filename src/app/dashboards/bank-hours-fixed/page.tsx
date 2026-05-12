@@ -310,12 +310,13 @@ export default function BankHoursFixedPage() {
   }, [activeTab, selectedCustomer, selectedProject, dateFrom, dateTo, user?.customer_id])
 
   // Modais da aba Projetos: Ver Apontamentos + Detalhe
-  const [projectTSModal, setProjectTSModal] = useState<{ projectId: number; projectName: string } | null>(null)
+  const [projectTSModal, setProjectTSModal] = useState<{ projectId: number; projectName: string; isClosed?: boolean } | null>(null)
   const [projectTSRows, setProjectTSRows] = useState<any[]>([])
   const [projectTSLoading, setProjectTSLoading] = useState(false)
   const [projectTSDetail, setProjectTSDetail] = useState<any | null>(null)
   useEffect(() => {
     if (!projectTSModal) { setProjectTSRows([]); return }
+    if (projectTSModal.isClosed) { setProjectTSRows([]); setProjectTSLoading(false); return }
     setProjectTSLoading(true)
     const qs = new URLSearchParams()
     qs.set('project_id', String(projectTSModal.projectId))
@@ -496,7 +497,11 @@ export default function BankHoursFixedPage() {
                     </td>
                     <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--brand-muted)' }}>{p.start_date ? fmtDate(p.start_date) : '—'}</td>
                     <td className="px-3 py-3.5 text-right">
-                      <ProjectActionsMenu onViewTimesheets={() => setProjectTSModal({ projectId: p.id, projectName: p.name })} />
+                      <ProjectActionsMenu onViewTimesheets={() => setProjectTSModal({
+                        projectId: p.id,
+                        projectName: p.name,
+                        isClosed: String(p.contract_type_display ?? '').toLowerCase() === 'fechado',
+                      })} />
                     </td>
                   </tr>
                 )
@@ -805,12 +810,24 @@ export default function BankHoursFixedPage() {
             <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
               <div>
                 <h3 className="text-base font-semibold" style={{ color: 'var(--text)' }}>Apontamentos — {projectTSModal.projectName}</h3>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{projectTSRows.length} registros</p>
+                {!projectTSModal.isClosed && (
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{projectTSRows.length} registros</p>
+                )}
               </div>
               <button onClick={() => setProjectTSModal(null)} className="p-1.5 rounded-md hover:opacity-70" style={{ color: 'var(--text-muted)' }}><CloseIcon size={18} /></button>
             </div>
             <div className="overflow-x-auto max-h-[70vh]">
-              {projectTSLoading ? (
+              {projectTSModal.isClosed ? (
+                <div className="py-16 px-8 text-center">
+                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-full mb-4" style={{ background: 'rgba(245,158,11,0.10)', color: '#F59E0B' }}>
+                    <AlertCircle size={24} />
+                  </div>
+                  <p className="text-base font-semibold mb-2" style={{ color: 'var(--text)' }}>Projeto Fechado</p>
+                  <p className="text-sm max-w-md mx-auto" style={{ color: 'var(--text-muted)' }}>
+                    Projetos do tipo <strong>Fechado</strong> não controlam apontamentos — o valor vendido é comprometido no ato da criação.
+                  </p>
+                </div>
+              ) : projectTSLoading ? (
                 <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
               ) : projectTSRows.length === 0 ? (
                 <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem apontamentos no período.</div>
