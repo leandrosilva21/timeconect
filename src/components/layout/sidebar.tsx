@@ -164,14 +164,6 @@ const NAV: NavEntry[] = [
   },
   {
     type: 'group',
-    label: 'Indicadores',
-    icon: BarChart2,
-    items: [
-      { label: 'Auster', href: '/indicadores/auster', icon: Building2 },
-    ],
-  },
-  {
-    type: 'group',
     label: 'Cadastros',
     icon: Database,
     items: [
