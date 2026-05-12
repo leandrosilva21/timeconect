@@ -280,6 +280,36 @@ export default function BankHoursFixedPage() {
   const [indicTicketsStatus,  setIndicTicketsStatus]  = useState<any[]>([])
   const [indicTicketsUrgency, setIndicTicketsUrgency] = useState<any[]>([])
   const [indicLoading,        setIndicLoading]        = useState(false)
+
+  // Drilldown: modal de timesheets ao clicar numa linha dos gráficos
+  type IndicatorKind = 'requester' | 'service' | 'status' | 'urgency'
+  const [indicDrillModal, setIndicDrillModal] = useState<{ kind: IndicatorKind; value: string; title: string } | null>(null)
+  const [indicDrillRows, setIndicDrillRows] = useState<any[]>([])
+  const [indicDrillLoading, setIndicDrillLoading] = useState(false)
+  useEffect(() => {
+    if (!indicDrillModal) { setIndicDrillRows([]); return }
+    setIndicDrillLoading(true)
+    const qs = new URLSearchParams()
+    if (selectedCustomer) qs.set('customer_id', String(selectedCustomer))
+    else if (user?.customer_id) qs.set('customer_id', String(user.customer_id))
+    if (selectedProject) qs.set('project_id', String(selectedProject))
+    const now3 = new Date()
+    const _m = refMonth ?? (dateTo ? Number(dateTo.split('-')[1]) : now3.getMonth() + 1)
+    const _y = refYear  ?? (dateTo ? Number(dateTo.split('-')[0]) : now3.getFullYear())
+    qs.set('month', String(_m)); qs.set('year', String(_y))
+    const endpointMap: Record<IndicatorKind, { path: string; param: string }> = {
+      requester: { path: 'requester-timesheets', param: 'requester' },
+      service:   { path: 'service-timesheets',   param: 'service'   },
+      status:    { path: 'status-timesheets',    param: 'status'    },
+      urgency:   { path: 'urgency-timesheets',   param: 'urgency'   },
+    }
+    const ep = endpointMap[indicDrillModal.kind]
+    qs.set(ep.param, indicDrillModal.value)
+    api.get<{ data: any[] }>(`/dashboards/bank-hours-fixed/indicators/${ep.path}?${qs}`)
+      .then(r => setIndicDrillRows(r.data ?? []))
+      .catch(() => setIndicDrillRows([]))
+      .finally(() => setIndicDrillLoading(false))
+  }, [indicDrillModal, selectedCustomer, selectedProject, refMonth, refYear, dateTo, user?.customer_id])
   useEffect(() => {
     if (activeTab !== 'indicators') return
     setIndicLoading(true)
@@ -843,6 +873,7 @@ export default function BankHoursFixedPage() {
                       valueFmt={(v) => `${v.toFixed(2)}h`}
                       badgeKey={(r) => Number(r.ticket_count ?? 0)}
                       badgeFmt={(n) => `${n} ${n === 1 ? 'ticket' : 'tickets'}`}
+                      onRowClick={(r) => setIndicDrillModal({ kind: 'requester', value: r.requester_name ?? r.name ?? r.requester, title: `Apontamentos — ${r.requester_name ?? r.name ?? r.requester}` })}
                     />
                     <IndicatorCard
                       title="Horas por Módulo/Serviço"
@@ -852,6 +883,7 @@ export default function BankHoursFixedPage() {
                       valueFmt={(v) => `${v.toFixed(2)}h`}
                       badgeKey={(r) => Number(r.ticket_count ?? 0)}
                       badgeFmt={(n) => `${n} ${n === 1 ? 'ticket' : 'tickets'}`}
+                      onRowClick={(r) => setIndicDrillModal({ kind: 'service', value: r.service ?? r.module ?? r.name, title: `Apontamentos — ${r.service ?? r.module ?? r.name}` })}
                     />
                     <IndicatorCard
                       title="Tickets por Status"
@@ -859,6 +891,7 @@ export default function BankHoursFixedPage() {
                       labelKey={(r) => r.status_display ?? r.status ?? r.name ?? '—'}
                       valueKey={(r) => Number(r.ticket_count ?? r.total_tickets ?? r.tickets ?? r.count ?? r.value ?? 0)}
                       valueFmt={(v) => String(Math.round(v))}
+                      onRowClick={(r) => setIndicDrillModal({ kind: 'status', value: r.status ?? r.status_display ?? r.name, title: `Apontamentos — ${r.status_display ?? r.status ?? r.name}` })}
                     />
                     <IndicatorCard
                       title="Tickets por Urgência"
@@ -867,6 +900,7 @@ export default function BankHoursFixedPage() {
                       valueKey={(r) => Number(r.ticket_count ?? 0)}
                       valueFmt={(v) => `${Math.round(v)} ${v === 1 ? 'ticket' : 'tickets'}`}
                       colorKey={(r) => URGENCY_COLORS[r.urgency as keyof typeof URGENCY_COLORS] ?? 'var(--primary)'}
+                      onRowClick={(r) => setIndicDrillModal({ kind: 'urgency', value: r.urgency ?? r.name, title: `Apontamentos — Urgência ${r.urgency ?? r.name}` })}
                     />
                   </div>
                 )}
@@ -975,6 +1009,28 @@ export default function BankHoursFixedPage() {
       {/* ─ Modal: Detalhe do Apontamento (abas Sustentação/Arquitetura) ─ */}
       {inlineDetail && (
         <TimesheetDetailModal ts={inlineDetail} onClose={() => setInlineDetail(null)} />
+      )}
+
+      {/* ─ Modal: Drilldown dos gráficos da aba Indicadores ─ */}
+      {indicDrillModal && (
+        <div
+          className="fixed inset-0 z-[80] flex items-start justify-center p-4 overflow-y-auto"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+          onClick={() => setIndicDrillModal(null)}
+        >
+          <div onClick={e => e.stopPropagation()} className="w-full max-w-6xl mt-8 rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <h3 className="text-base font-semibold" style={{ color: 'var(--text)' }}>{indicDrillModal.title}</h3>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{indicDrillRows.length} registros</p>
+              </div>
+              <button onClick={() => setIndicDrillModal(null)} className="p-1.5 rounded-md hover:opacity-70" style={{ color: 'var(--text-muted)' }}><CloseIcon size={18} /></button>
+            </div>
+            <div className="max-h-[75vh] overflow-y-auto">
+              <InlineTimesheetsTable rows={indicDrillRows} loading={indicDrillLoading} variant="maintenance" onRowClick={setInlineDetail} />
+            </div>
+          </div>
+        </div>
       )}
     </AppLayout>
   )
@@ -1115,7 +1171,7 @@ const URGENCY_COLORS = {
 }
 
 function IndicatorCard({
-  title, rows, labelKey, valueKey, valueFmt, emptyMessage = 'Sem dados no período.', badgeKey, badgeFmt, colorKey,
+  title, rows, labelKey, valueKey, valueFmt, emptyMessage = 'Sem dados no período.', badgeKey, badgeFmt, colorKey, onRowClick,
 }: {
   title: string
   rows: any[]
@@ -1126,6 +1182,7 @@ function IndicatorCard({
   badgeKey?: (r: any) => number
   badgeFmt?: (n: number) => string
   colorKey?: (r: any) => string
+  onRowClick?: (r: any) => void
 }) {
   const max = Math.max(1, ...rows.map(valueKey))
   return (
@@ -1142,8 +1199,13 @@ function IndicatorCard({
               const v = valueKey(r)
               const pct = (v / max) * 100
               const badgeVal = badgeKey ? badgeKey(r) : null
+              const clickable = !!onRowClick
               return (
-                <div key={idx} className="flex items-center gap-3">
+                <div
+                  key={idx}
+                  className={`flex items-center gap-3 rounded-md px-1 py-0.5 transition-colors ${clickable ? 'cursor-pointer hover:bg-white/[0.03]' : ''}`}
+                  onClick={clickable ? () => onRowClick!(r) : undefined}
+                >
                   <div className="w-6 text-right text-xs font-mono shrink-0" style={{ color: 'var(--text-muted)' }}>{idx + 1}</div>
                   <div className="w-48 shrink-0 text-sm truncate" style={{ color: 'var(--text)' }} title={labelKey(r)}>{labelKey(r)}</div>
                   <div className="flex-1 relative h-6 rounded overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
