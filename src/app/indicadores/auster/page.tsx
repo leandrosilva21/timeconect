@@ -108,7 +108,7 @@ export default function IndicadoresAusterPage() {
           <div>
             <h1 className="text-2xl font-semibold" style={{ color: 'var(--text)' }}>Indicadores — Auster</h1>
             <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-              Subprojetos históricos com início anterior a 01/05/2025.
+              Projetos fechados históricos com início anterior a 01/05/2025.
             </p>
           </div>
         </header>
@@ -121,7 +121,7 @@ export default function IndicadoresAusterPage() {
             icon={<Briefcase size={18} />}
           />
           <SummaryCard
-            label="Horas Vendidas"
+            label="Horas Contratadas"
             value={summary ? fmtHours(summary.total_sold_hours) : '—'}
             icon={<Clock size={18} />}
           />
@@ -194,9 +194,9 @@ export default function IndicadoresAusterPage() {
                             {fmtHours(p.consumed_hours)}h
                           </div>
                         </div>
-                        <div className="w-24 text-right text-xs" style={{ color: 'var(--text-muted)' }}>
+                        <div className="w-28 text-right text-xs" style={{ color: 'var(--text-muted)' }}>
                           <span className="font-mono">{fmtHours(p.sold_hours)}h</span>
-                          <span className="ml-1">vend</span>
+                          <span className="ml-1">contr</span>
                         </div>
                       </div>
                     )
@@ -216,19 +216,16 @@ export default function IndicadoresAusterPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                  <Th>Data</Th><Th>Código</Th><Th>Projeto</Th><Th>Tipo</Th>
-                  <Th align="right">Horas Vendidas</Th>
-                  <Th align="right">Horas Consumidas</Th>
-                  <Th align="right">Saldo</Th>
-                  <Th>Status</Th>
+                  <Th>Data</Th><Th>Código</Th><Th>Projeto</Th>
+                  <Th align="right">Horas Contratadas</Th>
                 </tr>
               </thead>
               <tbody>
                 {loading && (
-                  <tr><td colSpan={8} className="px-5 py-6 text-center" style={{ color: 'var(--text-muted)' }}>Carregando…</td></tr>
+                  <tr><td colSpan={4} className="px-5 py-6 text-center" style={{ color: 'var(--text-muted)' }}>Carregando…</td></tr>
                 )}
                 {!loading && rows.length === 0 && (
-                  <tr><td colSpan={8} className="px-5 py-6 text-center" style={{ color: 'var(--text-muted)' }}>Sem projetos.</td></tr>
+                  <tr><td colSpan={4} className="px-5 py-6 text-center" style={{ color: 'var(--text-muted)' }}>Sem projetos.</td></tr>
                 )}
                 {!loading && rows.map(p => (
                   <tr key={p.id} className="ds-row-hover">
@@ -238,22 +235,15 @@ export default function IndicadoresAusterPage() {
                       {p.parent_project_id && <span style={{ color: 'var(--text-light)' }}>↳ </span>}
                       {p.name}
                     </Td>
-                    <Td>{p.contract_type ?? '—'}</Td>
                     <Td align="right">{fmtHours(p.sold_hours)}</Td>
-                    <Td align="right">{fmtHours(p.consumed_hours)}</Td>
-                    <Td align="right" bold>{fmtHours(p.balance_hours)}</Td>
-                    <Td>{statusBadge(p.status, p.status_display)}</Td>
                   </tr>
                 ))}
               </tbody>
               {!loading && summary && (
                 <tfoot>
                   <tr style={{ borderTop: '1px solid var(--border)', fontWeight: 600 }}>
-                    <Td colSpan={4}>Total</Td>
+                    <Td colSpan={3}>Total</Td>
                     <Td align="right">{fmtHours(summary.total_sold_hours)}</Td>
-                    <Td align="right">{fmtHours(summary.total_consumed_hours)}</Td>
-                    <Td align="right">{fmtHours(summary.total_sold_hours - summary.total_consumed_hours)}</Td>
-                    <Td>—</Td>
                   </tr>
                 </tfoot>
               )}
