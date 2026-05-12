@@ -26,6 +26,8 @@ interface SummaryData {
   projects_month_consumed_hours?: number
   maintenance_consumed_hours?: number
   maintenance_month_consumed_hours?: number
+  architecture_consumed_hours?: number
+  architecture_month_consumed_hours?: number
   month_consumed_hours: number
   hours_balance: number
   exceeded_hours: number
@@ -33,6 +35,7 @@ interface SummaryData {
   hourly_rate: number | null
   contributed_hours_history?: ContributionItem[]
   has_support?: boolean
+  has_architecture?: boolean
 }
 
 interface ContributionItem {
@@ -161,7 +164,8 @@ function MetricCard({
 
 // ─── Breakdown Card ───────────────────────────────────────────────────────────
 
-function ConsumedBreakdownCard({ total, projetos, sustentacao }: { total: number; projetos?: number; sustentacao?: number }) {
+function ConsumedBreakdownCard({ total, projetos, sustentacao, arquitetura }: { total: number; projetos?: number; sustentacao?: number; arquitetura?: number }) {
+  const showArq = arquitetura !== undefined && arquitetura > 0
   return (
     <div className="rounded-2xl p-5 flex flex-col gap-3" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
       <div className="flex items-center gap-2">
@@ -174,12 +178,21 @@ function ConsumedBreakdownCard({ total, projetos, sustentacao }: { total: number
         <span className="text-4xl font-extrabold tracking-tight" style={{ color: '#00F5FF', lineHeight: 1 }}>{fmtH(total)}</span>
         <span className="text-base font-medium mb-0.5" style={{ color: 'var(--brand-muted)' }}>h</span>
       </div>
-      {(projetos !== undefined || sustentacao !== undefined) && (
+      {(projetos !== undefined || sustentacao !== undefined || showArq) && (
         <div className="flex gap-3 pt-1 border-t" style={{ borderColor: 'var(--brand-border)' }}>
           <div>
             <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Projetos</p>
             <p className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{fmtH(projetos ?? 0)}h</p>
           </div>
+          {showArq && (
+            <>
+              <div className="w-px" style={{ background: 'var(--brand-border)' }} />
+              <div>
+                <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Arquitetura</p>
+                <p className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{fmtH(arquitetura ?? 0)}h</p>
+              </div>
+            </>
+          )}
           <div className="w-px" style={{ background: 'var(--brand-border)' }} />
           <div>
             <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Sustentação</p>
@@ -256,7 +269,7 @@ export default function BankHoursFixedPage() {
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [loadingMaint,    setLoadingMaint]    = useState(false)
 
-  const [activeTab, setActiveTab] = useState<'total' | 'projects' | 'maintenance'>('total')
+  const [activeTab, setActiveTab] = useState<'total' | 'projects' | 'architecture' | 'maintenance'>('total')
 
   // Customers
   useEffect(() => {
@@ -519,6 +532,9 @@ export default function BankHoursFixedPage() {
             <div className="flex gap-1 p-1 rounded-2xl w-fit" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
               <Tab label="Total Geral"  active={activeTab === 'total'}       onClick={() => setActiveTab('total')} />
               <Tab label="Projetos"     active={activeTab === 'projects'}    onClick={() => setActiveTab('projects')} />
+              {summary?.has_architecture && (
+                <Tab label="Arquitetura" active={activeTab === 'architecture'} onClick={() => setActiveTab('architecture')} />
+              )}
               {(summary?.has_support ?? true) && (
                 <Tab label="Sustentação" active={activeTab === 'maintenance'} onClick={() => setActiveTab('maintenance')} />
               )}
@@ -541,6 +557,7 @@ export default function BankHoursFixedPage() {
                         total={summary.consumed_hours}
                         projetos={summary.projects_consumed_hours}
                         sustentacao={summary.maintenance_consumed_hours}
+                        arquitetura={summary.architecture_consumed_hours}
                       />
                       <MetricCard
                         label="Consumo do Mês"
@@ -631,6 +648,25 @@ export default function BankHoursFixedPage() {
                   />
                 </div>
                 <ProjectsTable items={projectsList} loading={loadingProjects} />
+              </div>
+            )}
+
+            {/* ── ARQUITETURA ── */}
+            {activeTab === 'architecture' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <MetricCard
+                    label="Consumo Acumulado"
+                    value={fmtH(summary?.architecture_consumed_hours ?? 0)}
+                    icon={Clock}
+                    accent="primary"
+                  />
+                  <MetricCard
+                    label="Consumo do Mês"
+                    value={fmtH(summary?.architecture_month_consumed_hours ?? 0)}
+                    icon={Clock}
+                  />
+                </div>
               </div>
             )}
 
