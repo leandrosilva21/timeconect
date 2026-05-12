@@ -1377,7 +1377,8 @@ function CadastrosContent() {
   const { user } = useAuth()
 
   const isAdmin = user?.type === 'admin'
-  const ep = user?.extra_permissions ?? []
+  // Lista resolvida pelo backend (base + extra + grupos); fallback pra extra_permissions
+  const ep = (user as any)?.permissions ?? user?.extra_permissions ?? []
 
   // Filtra tabs conforme permissões do usuário
   const visibleTabs = TABS.filter(t =>
