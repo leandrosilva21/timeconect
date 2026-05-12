@@ -665,9 +665,12 @@ interface ProjectEditForm {
   timesheet_retroactive_limit_days: string
   allow_manual_timesheets: boolean; allow_negative_balance: boolean
   coordinator_ids: number[]; consultant_ids: number[]; consultant_group_ids: number[]
+  kanban_coordinator_override_id: string
 }
 
 function ProjectInlineEditModal({ project, onClose, onSaved }: { project: ProjectFull; onClose: () => void; onSaved: () => void }) {
+  const { user } = useAuth()
+  const isAdmin = user?.type === 'admin'
   const d = project as any
   // Parse existing code: PREFIX001-26 → seq='001', year='26'; PREFIX001-26-01 → suffix='01'
   const parsedCode = useMemo(() => {
@@ -719,6 +722,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     coordinator_ids:                 (d.coordinators ?? d.approvers ?? []).map((c: any) => c.id),
     consultant_ids:                  (d.consultants ?? []).map((c: any) => c.id),
     consultant_group_ids:            (d.consultant_groups ?? []).map((g: any) => g.id),
+    kanban_coordinator_override_id:  d.kanban_coordinator_override_id ? String(d.kanban_coordinator_override_id) : '',
   })
   const [saving, setSaving] = useState(false)
   const [manualTimesheetIds, setManualTimesheetIds] = useState<Set<number>>(
@@ -845,6 +849,10 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       if (form.initial_cost !== '')          payload.initial_cost                 = Number(form.initial_cost)
       if (form.max_expense_per_consultant !== '') payload.max_expense_per_consultant = Number(form.max_expense_per_consultant)
       if (form.timesheet_retroactive_limit_days !== '') payload.timesheet_retroactive_limit_days = Number(form.timesheet_retroactive_limit_days)
+      // kanban_coordinator_override_id: envia null se vazio (pra limpar) ou int se preenchido
+      payload.kanban_coordinator_override_id = form.kanban_coordinator_override_id === ''
+        ? null
+        : Number(form.kanban_coordinator_override_id)
       await api.put(`/projects/${project.id}`, payload)
       // Salva allow_manual_timesheet por consultor (pivô separado)
       const directInitial: any[] = d.consultants ?? []
@@ -1124,6 +1132,30 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 </div>
               </div>
               <Toggle2 checked={form.allow_negative_balance} onChange={v => setForm(p => ({ ...p, allow_negative_balance: v }))} label="Permitir saldo negativo de horas" />
+
+              {/* Override de Coordenador (sustentação) — só admin */}
+              {(() => {
+                const stName = (optServiceTypes.find(s => s.id === Number(form.service_type_id))?.name ?? '').toLowerCase()
+                const isSustentacao = stName.includes('sustenta')
+                if (!isAdmin || !isSustentacao) return null
+                return (
+                  <div className="rounded-xl p-3 mt-2" style={{ background: 'rgba(0,245,255,0.05)', border: '1px solid rgba(0,245,255,0.2)' }}>
+                    <label style={lStyle} className="block mb-1">Gerenciado por outro coordenador</label>
+                    <p className="text-[10px] mb-2" style={{ color: 'var(--brand-subtle)' }}>
+                      Ao selecionar um coordenador, o card sai da fila de sustentação no Kanban e migra pra fila dele.
+                      O projeto também some das abas Apontamentos/Despesas/Aprovações do Portal de Sustentação.
+                    </p>
+                    <select
+                      value={form.kanban_coordinator_override_id}
+                      onChange={setF('kanban_coordinator_override_id')}
+                      style={iStyle}
+                    >
+                      <option value="">— Nenhum (segue fluxo padrão de sustentação) —</option>
+                      {optCoordinators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                )
+              })()}
             </div>
 
             {/* ── Coluna Direita — Equipe ── */}
