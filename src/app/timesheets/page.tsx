@@ -50,6 +50,15 @@ function formatMinutes(minutes: number) {
   return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}`
 }
 
+// Cor semântica do Consumo do Ticket por faixa de horas:
+// < 4h verde | 4-8h amarelo | 8-12h laranja | > 12h vermelho
+function ticketTotalColor(minutes: number): string {
+  if (minutes < 240)  return '#10B981' // green
+  if (minutes < 480)  return '#F59E0B' // amber
+  if (minutes < 720)  return '#F97316' // orange
+  return '#EF4444' // red
+}
+
 function formatDateTime(d: string | null | undefined) {
   if (!d) return '—'
   const dt = new Date(d)
@@ -1270,7 +1279,7 @@ function TimesheetsPageContent() {
                 <Th right sortable active={sortField === 'effort_hours'} dir={sortDir} onClick={() => handleSort('effort_hours')}>Tempo</Th>
                 <Th className="hidden lg:table-cell">Ticket #</Th>
                 {!isCliente && (
-                  <Th right className="hidden lg:table-cell whitespace-nowrap">Consumo do Ticket</Th>
+                  <Th className="hidden lg:table-cell whitespace-nowrap text-center">Consumo do Ticket</Th>
                 )}
                 <Th className="hidden sm:table-cell">Origem</Th>
                 {!(isAdmin || isCoordenador) && (
@@ -1394,9 +1403,9 @@ function TimesheetsPageContent() {
                       : '—'}
                   </Td>
                   {!isCliente && (
-                    <Td right className="hidden lg:table-cell font-mono">
+                    <Td className="hidden lg:table-cell font-mono text-center">
                       {ts.ticket_total_minutes != null
-                        ? formatMinutes(ts.ticket_total_minutes)
+                        ? <span style={{ color: ticketTotalColor(ts.ticket_total_minutes), fontWeight: 600 }}>{formatMinutes(ts.ticket_total_minutes)}</span>
                         : <span style={{ color: 'var(--brand-subtle)' }}>—</span>}
                     </Td>
                   )}

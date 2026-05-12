@@ -103,6 +103,15 @@ function fmtMin(minutes: number) {
   return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}`
 }
 
+// Cor semântica do Consumo do Ticket por faixa de horas:
+// < 4h verde | 4-8h amarelo | 8-12h laranja | > 12h vermelho
+function ticketTotalColor(minutes: number): string {
+  if (minutes < 240)  return '#10B981'
+  if (minutes < 480)  return '#F59E0B'
+  if (minutes < 720)  return '#F97316'
+  return '#EF4444'
+}
+
 function fmtBRL(val: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
 }
@@ -1060,7 +1069,7 @@ export default function ApprovalsPage() {
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Fim</th>}
               {tab === 'timesheets' && <th className="text-right px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Tempo</th>}
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Ticket #</th>}
-              {tab === 'timesheets' && <th className="text-right px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell whitespace-nowrap">Consumo do Ticket</th>}
+              {tab === 'timesheets' && <th className="text-center px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell whitespace-nowrap">Consumo do Ticket</th>}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Inclusão</th>
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Origem</th>}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Colaborador</th>
@@ -1149,9 +1158,9 @@ export default function ApprovalsPage() {
                       </a>
                     : '—'}
                 </td>
-                <td className="px-3 py-2.5 text-zinc-300 font-mono text-right hidden lg:table-cell">
+                <td className="px-3 py-2.5 font-mono text-center hidden lg:table-cell">
                   {ts.ticket_total_minutes != null
-                    ? fmtMin(ts.ticket_total_minutes)
+                    ? <span style={{ color: ticketTotalColor(ts.ticket_total_minutes), fontWeight: 600 }}>{fmtMin(ts.ticket_total_minutes)}</span>
                     : <span style={{ color: 'var(--brand-subtle)' }}>—</span>}
                 </td>
                 <td className="px-3 py-2.5 text-zinc-400 whitespace-nowrap hidden sm:table-cell">{fmtDateTime(ts.created_at)}</td>
