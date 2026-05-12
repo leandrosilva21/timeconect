@@ -1177,7 +1177,6 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
         </ModalOverlay>
       )}
 
-      </div>
     </div>
   )
 }

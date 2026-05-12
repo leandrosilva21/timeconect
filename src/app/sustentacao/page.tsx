@@ -15,8 +15,12 @@ import {
 import {
   AlertTriangle, CheckCircle, Clock, TrendingUp, Users, DollarSign,
   Activity, BarChart2, List, Shield, Globe, Zap, RefreshCw, Wrench,
-  ChevronDown, Check, CheckSquare, X as CloseIcon, Eye,
+  ChevronDown, Check, CheckSquare, X as CloseIcon, Eye, FileText,
 } from 'lucide-react'
+import { TimesheetsScreen }            from '@/components/screens/TimesheetsScreen'
+import { ExpensesScreen }              from '@/components/screens/ExpensesScreen'
+import { ApprovalsScreen }             from '@/components/screens/ApprovalsScreen'
+import { AuditoriaApontamentosScreen } from '@/components/screens/AuditoriaApontamentosScreen'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -172,6 +176,7 @@ const TABS = [
   { id: 'timesheets',   label: 'Apontamentos',      icon: Clock },
   { id: 'expenses',     label: 'Despesas',          icon: DollarSign },
   { id: 'approvals',    label: 'Aprovações',        icon: CheckSquare },
+  { id: 'auditoria',    label: 'Auditoria',         icon: FileText },
   { id: 'debug',        label: 'Diagnóstico',        icon: Wrench },
 ]
 
@@ -742,19 +747,9 @@ export default function SustentacaoPage() {
   })
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0])
 
-  // Fetch das rotinas embarcadas (depois das declarações de dateFrom/dateTo)
-  useEffect(() => {
-    if (!['timesheets', 'expenses', 'approvals'].includes(tab)) return
-    setRoutineLoading(true)
-    const qs = new URLSearchParams()
-    if (dateFrom) qs.set('date_from', dateFrom)
-    if (dateTo)   qs.set('date_to', dateTo)
-    qs.set('per_page', '200')
-    api.get<{ data: any[]; total: number }>(`/sustentacao/${tab}?${qs}`)
-      .then(r => { setRoutineRows(r.data ?? []); setRoutineTotal(r.total ?? 0) })
-      .catch(() => { setRoutineRows([]); setRoutineTotal(0) })
-      .finally(() => setRoutineLoading(false))
-  }, [tab, dateFrom, dateTo])
+  // As abas Apontamentos/Despesas/Aprovações/Auditoria agora renderizam as telas
+  // completas do menu (TimesheetsScreen/ExpensesScreen/etc.) com scope='sustentacao',
+  // que fazem o próprio fetch. O fetch legado em /sustentacao/{tab} foi descontinuado.
 
   // Computa from/to a partir do modo ativo
   const from = filterMode === 'month' && refMonth && refYear
@@ -1665,40 +1660,12 @@ export default function SustentacaoPage() {
           <p className="text-zinc-500 text-sm">Carregando dados...</p>
         )}
 
-        {/* DIAGNÓSTICO */}
-        {/* ── APONTAMENTOS / DESPESAS / APROVAÇÕES (filtrados por Sustentação) ── */}
-        {tab === 'timesheets' && (
-          <RoutineTable
-            kind="timesheets"
-            rows={routineRows}
-            total={routineTotal}
-            loading={routineLoading}
-            onRowClick={setRoutineDetail}
-          />
-        )}
-        {tab === 'expenses' && (
-          <RoutineTable
-            kind="expenses"
-            rows={routineRows}
-            total={routineTotal}
-            loading={routineLoading}
-            onRowClick={setRoutineDetail}
-          />
-        )}
-        {tab === 'approvals' && (
-          <RoutineTable
-            kind="approvals"
-            rows={routineRows}
-            total={routineTotal}
-            loading={routineLoading}
-            onRowClick={setRoutineDetail}
-          />
-        )}
-
-        {/* Modal de detalhe (Apontamento / Despesa) */}
-        {routineDetail && (
-          <RoutineDetailModal item={routineDetail} kind={tab as 'timesheets'|'expenses'|'approvals'} onClose={() => setRoutineDetail(null)} />
-        )}
+        {/* ── CENTRALZINHA: telas idênticas às do menu, escopadas a Sustentação ── */}
+        {/* Override de coordenador é respeitado pelo backend via ?scope=sustentacao. */}
+        {tab === 'timesheets' && <TimesheetsScreen            scope="sustentacao" embedded />}
+        {tab === 'expenses'   && <ExpensesScreen              scope="sustentacao" embedded />}
+        {tab === 'approvals'  && <ApprovalsScreen             scope="sustentacao" embedded />}
+        {tab === 'auditoria'  && <AuditoriaApontamentosScreen scope="sustentacao" embedded />}
 
         {tab === 'debug' && (
           <DiagnosticoTab

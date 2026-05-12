@@ -1615,7 +1615,6 @@ function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; emb
           </div>
         </div>
       )}
-      </div>
     </div>
   )
 }
