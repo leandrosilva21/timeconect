@@ -63,6 +63,7 @@ interface ProjectItem {
   consumed_hours: number
   hours_balance: number
   start_date: string | null
+  is_auster_frozen?: boolean
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -481,7 +482,18 @@ export default function BankHoursFixedPage() {
                     <td className="px-5 py-3.5">
                       <span className="font-mono text-xs px-2 py-1 rounded-md" style={{ background: 'var(--brand-border)', color: 'var(--brand-subtle)' }}>{p.code}</span>
                     </td>
-                    <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--brand-text)' }}>{p.name}</td>
+                    <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--brand-text)' }}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{p.name}</span>
+                        {p.is_auster_frozen && (
+                          <span
+                            className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md font-semibold whitespace-nowrap"
+                            style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+                            title="Projeto histórico — não consome do contrato atual"
+                          >Histórico</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-5 py-3.5">
                       <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{p.status_display}</span>
                     </td>
