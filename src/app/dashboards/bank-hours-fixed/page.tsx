@@ -271,6 +271,15 @@ export default function BankHoursFixedPage() {
   const [activeTab, setActiveTab] = useState<'total' | 'projects' | 'architecture' | 'maintenance' | 'expenses' | 'indicators'>('total')
   const isAusterContext = (selectedCustomer === 220) || (!selectedCustomer && user?.customer_id === 220)
 
+  // Projeto "leaf": um único projeto selecionado, sem sub-projetos de Arquitetura/Sustentação.
+  // Apontamentos vão direto no Total Geral; abas e cards monetários ficam ocultos.
+  const isLeafProject = !!selectedProject && summary != null
+    && !(summary.has_architecture) && !(summary.has_support)
+
+  useEffect(() => {
+    if (isLeafProject && activeTab === 'projects') setActiveTab('total')
+  }, [isLeafProject, activeTab])
+
   // ─── Indicadores do Suporte ────────────────────────────────────────────────
   // Usa o componente compartilhado DashboardIndicators (mesmo padrão do On Demand)
   const [indicatorParams, setIndicatorParams] = useState<URLSearchParams>(new URLSearchParams())
@@ -292,10 +301,11 @@ export default function BankHoursFixedPage() {
   const [ticketSummary, setTicketSummary] = useState<Array<{ticket: string; title: string|null; requester: string|null; period_minutes: number; lifetime_minutes: number}>>([])
   const [ticketSummaryLoading, setTicketSummaryLoading] = useState(false)
   useEffect(() => {
-    // carrega lista inline conforme aba selecionada (sustentação/arquitetura = timesheets; despesas = expenses)
+    // carrega lista inline conforme aba selecionada
     const isTimesheets = activeTab === 'maintenance' || activeTab === 'architecture'
     const isExpenses   = activeTab === 'expenses'
-    if (!isTimesheets && !isExpenses) { setInlineRows([]); setTicketSummary([]); return }
+    const isLeafTotal  = isLeafProject && activeTab === 'total'
+    if (!isTimesheets && !isExpenses && !isLeafTotal) { setInlineRows([]); setTicketSummary([]); return }
 
     setInlineLoading(true)
     const qs = new URLSearchParams()
@@ -312,9 +322,11 @@ export default function BankHoursFixedPage() {
     }
     if (effFrom) qs.set('date_from', effFrom)
     if (effTo)   qs.set('date_to',   effTo)
-    const path = isTimesheets
-      ? `/dashboards/bank-hours-fixed/category-timesheets?${qs}&category=${activeTab === 'architecture' ? 'architecture' : 'maintenance'}`
-      : `/dashboards/bank-hours-fixed/expenses?${qs}`
+    const path = isLeafTotal
+      ? `/dashboards/bank-hours-fixed/project-timesheets?${qs}`
+      : isTimesheets
+        ? `/dashboards/bank-hours-fixed/category-timesheets?${qs}&category=${activeTab === 'architecture' ? 'architecture' : 'maintenance'}`
+        : `/dashboards/bank-hours-fixed/expenses?${qs}`
     api.get<{ data: any[] }>(path)
       .then(r => setInlineRows(r.data ?? []))
       .catch(() => setInlineRows([]))
@@ -330,7 +342,7 @@ export default function BankHoursFixedPage() {
     } else {
       setTicketSummary([])
     }
-  }, [activeTab, selectedCustomer, selectedProject, dateFrom, dateTo, refMonth, refYear, user?.customer_id])
+  }, [activeTab, selectedCustomer, selectedProject, dateFrom, dateTo, refMonth, refYear, isLeafProject, user?.customer_id])
 
   // Modais da aba Projetos: Ver Apontamentos + Detalhe
   const [projectTSModal, setProjectTSModal] = useState<{ projectId: number; projectName: string; isClosed?: boolean } | null>(null)
@@ -365,6 +377,8 @@ export default function BankHoursFixedPage() {
   function exportInlineToXLSX() {
     if (inlineRows.length === 0) return
     const isExpenses = activeTab === 'expenses'
+    const isLeafTotal = isLeafProject && activeTab === 'total'
+    const useMaintenanceLayout = activeTab === 'maintenance' || isLeafTotal
     const sheetName = isExpenses ? 'Despesas' : (activeTab === 'architecture' ? 'Arquitetura' : 'Sustentação')
     const data = isExpenses
       ? inlineRows.map(r => ({
@@ -372,7 +386,7 @@ export default function BankHoursFixedPage() {
           Colaborador: r.user?.name ?? '',
           Valor: Number(r.amount) || 0,
         }))
-      : activeTab === 'maintenance'
+      : useMaintenanceLayout
         ? inlineRows.map(r => ({
             Data: r.date ? r.date.split('-').reverse().join('/') : '',
             Solicitante: r.requester ?? '',
@@ -676,7 +690,9 @@ export default function BankHoursFixedPage() {
             {/* Tabs */}
             <div className="flex gap-1 p-1 rounded-2xl w-fit" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
               <Tab label="Total Geral"  active={activeTab === 'total'}       onClick={() => setActiveTab('total')} />
-              <Tab label="Projetos"     active={activeTab === 'projects'}    onClick={() => setActiveTab('projects')} />
+              {!isLeafProject && (
+                <Tab label="Projetos"     active={activeTab === 'projects'}    onClick={() => setActiveTab('projects')} />
+              )}
               {summary?.has_architecture && (
                 <Tab label="Arquitetura" active={activeTab === 'architecture'} onClick={() => setActiveTab('architecture')} />
               )}
@@ -702,12 +718,16 @@ export default function BankHoursFixedPage() {
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                       <MetricCard label="Horas Contratadas" value={fmtH(summary.contracted_hours)} icon={BarChart2} />
                       <MetricCard label="Aporte de Horas"   value={fmtH(summary.contributed_hours)} icon={TrendingUp} />
-                      <ConsumedBreakdownCard
-                        total={summary.consumed_hours}
-                        projetos={summary.projects_consumed_hours}
-                        sustentacao={summary.maintenance_consumed_hours}
-                        arquitetura={summary.architecture_consumed_hours}
-                      />
+                      {isLeafProject ? (
+                        <MetricCard label="Consumo Acumulado" value={fmtH(summary.consumed_hours)} icon={Clock} accent="primary" />
+                      ) : (
+                        <ConsumedBreakdownCard
+                          total={summary.consumed_hours}
+                          projetos={summary.projects_consumed_hours}
+                          sustentacao={summary.maintenance_consumed_hours}
+                          arquitetura={summary.architecture_consumed_hours}
+                        />
+                      )}
                       <MetricCard
                         label="Consumo do Mês"
                         value={fmtH(summary.month_consumed_hours)}
@@ -722,23 +742,33 @@ export default function BankHoursFixedPage() {
                       />
                     </div>
 
-                    {/* Row 2: 3 highlight cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <MetricCard
-                        label="Horas Excedentes"
-                        value={fmtH(summary.exceeded_hours)}
-                        icon={AlertCircle}
-                        accent={summary.exceeded_hours > 0 ? 'danger' : 'default'}
-                      />
-                      <MetricCard label="Valor Hora"   value={fmtBRL(summary.hourly_rate)}   unit="" icon={DollarSign} />
-                      <MetricCard
-                        label="Valor a Pagar"
-                        value={fmtBRL(summary.amount_to_pay)}
-                        unit=""
-                        icon={DollarSign}
-                        accent={(summary.amount_to_pay ?? 0) > 0 ? 'danger' : 'default'}
-                      />
-                    </div>
+                    {/* Row 2: 3 highlight cards (oculto em modo leaf) */}
+                    {!isLeafProject && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <MetricCard
+                          label="Horas Excedentes"
+                          value={fmtH(summary.exceeded_hours)}
+                          icon={AlertCircle}
+                          accent={summary.exceeded_hours > 0 ? 'danger' : 'default'}
+                        />
+                        <MetricCard label="Valor Hora"   value={fmtBRL(summary.hourly_rate)}   unit="" icon={DollarSign} />
+                        <MetricCard
+                          label="Valor a Pagar"
+                          value={fmtBRL(summary.amount_to_pay)}
+                          unit=""
+                          icon={DollarSign}
+                          accent={(summary.amount_to_pay ?? 0) > 0 ? 'danger' : 'default'}
+                        />
+                      </div>
+                    )}
+
+                    {/* Apontamentos (modo leaf) */}
+                    {isLeafProject && (
+                      <>
+                        <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
+                        <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="maintenance" onRowClick={setInlineDetail} />
+                      </>
+                    )}
 
                     {/* Histórico de Aporte */}
                     {(summary.contributed_hours_history?.length ?? 0) > 0 && (
