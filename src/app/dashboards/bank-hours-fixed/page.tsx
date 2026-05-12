@@ -271,7 +271,43 @@ export default function BankHoursFixedPage() {
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [loadingMaint,    setLoadingMaint]    = useState(false)
 
-  const [activeTab, setActiveTab] = useState<'total' | 'projects' | 'architecture' | 'maintenance' | 'expenses'>('total')
+  const [activeTab, setActiveTab] = useState<'total' | 'projects' | 'architecture' | 'maintenance' | 'expenses' | 'indicators'>('total')
+  const isAusterContext = (selectedCustomer === 220) || (!selectedCustomer && user?.customer_id === 220)
+
+  // ─── Indicadores de Suporte ────────────────────────────────────────────────
+  const [indicHoursRequester, setIndicHoursRequester] = useState<any[]>([])
+  const [indicHoursService,   setIndicHoursService]   = useState<any[]>([])
+  const [indicTicketsStatus,  setIndicTicketsStatus]  = useState<any[]>([])
+  const [indicTicketsLevel,   setIndicTicketsLevel]   = useState<any[]>([])
+  const [indicTicketsAbove8,  setIndicTicketsAbove8]  = useState<any[]>([])
+  const [indicLoading,        setIndicLoading]        = useState(false)
+  useEffect(() => {
+    if (activeTab !== 'indicators') return
+    setIndicLoading(true)
+    const qs = new URLSearchParams()
+    if (selectedCustomer) qs.set('customer_id', String(selectedCustomer))
+    else if (user?.customer_id) qs.set('customer_id', String(user.customer_id))
+    if (selectedProject) qs.set('project_id', String(selectedProject))
+    const now2 = new Date()
+    const _m = refMonth ?? (dateTo ? Number(dateTo.split('-')[1]) : now2.getMonth() + 1)
+    const _y = refYear  ?? (dateTo ? Number(dateTo.split('-')[0]) : now2.getFullYear())
+    qs.set('month', String(_m)); qs.set('year', String(_y))
+    const base = `/dashboards/bank-hours-fixed/indicators`
+    Promise.all([
+      api.get<any>(`${base}/hours-by-requester?${qs}`).catch(() => null),
+      api.get<any>(`${base}/hours-by-service?${qs}`).catch(() => null),
+      api.get<any>(`${base}/tickets-by-status?${qs}`).catch(() => null),
+      api.get<any>(`${base}/tickets-by-level?${qs}`).catch(() => null),
+      api.get<any>(`${base}/tickets-above-8-hours?${qs}`).catch(() => null),
+    ]).then(([r, s, st, lv, a8]) => {
+      const extract = (x: any) => Array.isArray(x?.data) ? x.data : (Array.isArray(x?.data?.data) ? x.data.data : [])
+      setIndicHoursRequester(extract(r))
+      setIndicHoursService(extract(s))
+      setIndicTicketsStatus(extract(st))
+      setIndicTicketsLevel(extract(lv))
+      setIndicTicketsAbove8(extract(a8))
+    }).finally(() => setIndicLoading(false))
+  }, [activeTab, selectedCustomer, selectedProject, refMonth, refYear, dateTo, user?.customer_id])
 
   const [inlineRows, setInlineRows] = useState<any[]>([])
   const [inlineLoading, setInlineLoading] = useState(false)
@@ -653,6 +689,9 @@ export default function BankHoursFixedPage() {
               {(summary?.has_support ?? true) && (
                 <Tab label="Sustentação" active={activeTab === 'maintenance'} onClick={() => setActiveTab('maintenance')} />
               )}
+              {!isAusterContext && (
+                <Tab label="Indicadores do Suporte" active={activeTab === 'indicators'} onClick={() => setActiveTab('indicators')} />
+              )}
               <Tab label="Despesas" active={activeTab === 'expenses'} onClick={() => setActiveTab('expenses')} />
             </div>
 
@@ -789,6 +828,56 @@ export default function BankHoursFixedPage() {
                 <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
                 <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="maintenance" onRowClick={setInlineDetail} />
                 <InlineTicketSummaryTable rows={ticketSummary} loading={ticketSummaryLoading} />
+              </div>
+            )}
+
+            {/* ── INDICADORES DO SUPORTE ── */}
+            {activeTab === 'indicators' && !isAusterContext && (
+              <div className="space-y-4">
+                {indicLoading ? (
+                  <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando indicadores…</div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <IndicatorCard
+                      title="Horas por Solicitante"
+                      rows={indicHoursRequester}
+                      labelKey={(r) => r.requester_name ?? r.name ?? r.requester ?? '—'}
+                      valueKey={(r) => Number(r.total_hours ?? r.hours ?? r.value ?? 0)}
+                      valueFmt={(v) => `${v.toFixed(2)}h`}
+                    />
+                    <IndicatorCard
+                      title="Horas por Módulo/Serviço"
+                      rows={indicHoursService}
+                      labelKey={(r) => r.service ?? r.module ?? r.name ?? '—'}
+                      valueKey={(r) => Number(r.total_hours ?? r.hours ?? r.value ?? 0)}
+                      valueFmt={(v) => `${v.toFixed(2)}h`}
+                    />
+                    <IndicatorCard
+                      title="Tickets por Status"
+                      rows={indicTicketsStatus}
+                      labelKey={(r) => r.status_display ?? r.status ?? r.name ?? '—'}
+                      valueKey={(r) => Number(r.total_tickets ?? r.tickets ?? r.count ?? r.value ?? 0)}
+                      valueFmt={(v) => String(Math.round(v))}
+                    />
+                    <IndicatorCard
+                      title="Tickets por Nível"
+                      rows={indicTicketsLevel}
+                      labelKey={(r) => r.level ?? r.name ?? '—'}
+                      valueKey={(r) => Number(r.total_tickets ?? r.tickets ?? r.count ?? r.value ?? 0)}
+                      valueFmt={(v) => String(Math.round(v))}
+                    />
+                    <div className="lg:col-span-2">
+                      <IndicatorCard
+                        title="Tickets acima de 8 horas"
+                        rows={indicTicketsAbove8}
+                        labelKey={(r) => `#${r.ticket ?? r.ticket_id ?? '—'} · ${r.ticket_subject ?? r.subject ?? r.title ?? ''}`}
+                        valueKey={(r) => Number(r.total_hours ?? r.hours ?? r.value ?? 0)}
+                        valueFmt={(v) => `${v.toFixed(2)}h`}
+                        emptyMessage="Nenhum ticket acima de 8 horas no período."
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1025,6 +1114,50 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
 }
 
 // ─── Inline tables (visual no mesmo padrão de /timesheets) ──────────────────
+
+function IndicatorCard({
+  title, rows, labelKey, valueKey, valueFmt, emptyMessage = 'Sem dados no período.',
+}: {
+  title: string
+  rows: any[]
+  labelKey: (r: any) => string
+  valueKey: (r: any) => number
+  valueFmt: (v: number) => string
+  emptyMessage?: string
+}) {
+  const max = Math.max(1, ...rows.map(valueKey))
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="px-5 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{title}</h3>
+      </div>
+      <div className="p-5">
+        {rows.length === 0 ? (
+          <p className="text-sm text-center py-6" style={{ color: 'var(--text-muted)' }}>{emptyMessage}</p>
+        ) : (
+          <div className="space-y-2">
+            {rows.slice(0, 15).map((r, idx) => {
+              const v = valueKey(r)
+              const pct = (v / max) * 100
+              return (
+                <div key={idx} className="flex items-center gap-3">
+                  <div className="w-6 text-right text-xs font-mono shrink-0" style={{ color: 'var(--text-muted)' }}>{idx + 1}</div>
+                  <div className="w-48 shrink-0 text-sm truncate" style={{ color: 'var(--text)' }} title={labelKey(r)}>{labelKey(r)}</div>
+                  <div className="flex-1 relative h-6 rounded overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
+                    <div className="absolute inset-y-0 left-0 rounded" style={{ width: `${pct}%`, background: 'var(--primary)' }} />
+                    <div className="absolute inset-y-0 left-0 flex items-center px-2 text-xs font-semibold whitespace-nowrap" style={{ color: 'var(--primary-fg)' }}>
+                      {valueFmt(v)}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowClick }: { rows: any[]; loading: boolean; variant?: 'maintenance' | 'architecture'; onRowClick?: (r: any) => void }) {
   const isArch = variant === 'architecture'
