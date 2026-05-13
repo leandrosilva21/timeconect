@@ -4,7 +4,7 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
-import { UserCheck, FolderOpen, AlertTriangle, CheckCircle2, Sparkles, Plus, AlertOctagon } from 'lucide-react'
+import { UserCheck, FolderOpen, AlertTriangle, CheckCircle2, Sparkles, Plus, AlertOctagon, Users } from 'lucide-react'
 
 interface ProjectOption {
   id: number
@@ -64,6 +64,24 @@ interface RecommendationsResponse {
   message?: string
 }
 
+interface TeamMember {
+  consultant_id: number
+  name: string
+  type: 'internal' | 'partner' | 'candidate'
+  availability: number
+  score: number
+  skills_covered_count: number
+  skills_covered: Array<{ id: number; name: string; category: string; required_level: string }>
+}
+interface TeamRecoResponse {
+  project: { id: number; name: string }
+  team: TeamMember[]
+  coverage: { total: number; covered: number; missing: number }
+  team_score: number
+  gaps_remaining: Array<{ id: number; name: string; category: string; required_level: string }>
+  message?: string
+}
+
 export default function CoberturaSkillsPage() {
   const [projects, setProjects]                 = useState<ProjectOption[]>([])
   const [loadingProjects, setLoadingProjects]   = useState(true)
@@ -73,6 +91,9 @@ export default function CoberturaSkillsPage() {
   const [recos, setRecos]                       = useState<Recommendation[]>([])
   const [loadingRecos, setLoadingRecos]         = useState(false)
   const [allocatingId, setAllocatingId]         = useState<number | null>(null)
+  const [team, setTeam]                         = useState<TeamRecoResponse | null>(null)
+  const [loadingTeam, setLoadingTeam]           = useState(false)
+  const [allocatingTeam, setAllocatingTeam]     = useState(false)
 
   useEffect(() => {
     (async () => {
@@ -122,6 +143,56 @@ export default function CoberturaSkillsPage() {
     }
   }, [])
 
+  const loadTeam = useCallback(async (projectId: number) => {
+    setLoadingTeam(true)
+    try {
+      const data = await api.get<TeamRecoResponse>(`/projects/${projectId}/team-recommendation`)
+      setTeam(data)
+    } catch {
+      toast.error('Erro ao carregar equipe sugerida')
+      setTeam(null)
+    } finally {
+      setLoadingTeam(false)
+    }
+  }, [])
+
+  const allocateTeamFn = useCallback(async () => {
+    if (selectedProject == null || !team || team.team.length === 0) return
+    const beforeCovered = countCovered(coverage)
+    const totalRequired = coverage?.required_skills.length ?? 0
+    setAllocatingTeam(true)
+    try {
+      const consultant_ids = team.team.map(m => m.consultant_id)
+      const risk_flags     = team.team.map(m => m.score < 0.9)
+      const risk_reasons   = team.team.map(m =>
+        m.score < 0.9 ? `Time auto · score ${Math.round(m.score * 100)}%` : null
+      )
+      const r = await api.post<{ allocated_count: number }>(
+        `/projects/${selectedProject}/allocate-team`,
+        { consultant_ids, risk_flags, risk_reasons }
+      )
+      // Refetch tudo
+      const [refreshedCov] = await Promise.all([
+        api.get<CoverageResponse>(`/projects/${selectedProject}/gaps`),
+        loadRecos(selectedProject),
+        loadTeam(selectedProject),
+      ])
+      setCoverage(refreshedCov)
+      const afterCovered = countCovered(refreshedCov)
+      const delta = afterCovered - beforeCovered
+      toast.success(
+        `✓ ${r.allocated_count} consultor${r.allocated_count === 1 ? '' : 'es'} alocado${r.allocated_count === 1 ? '' : 's'}` +
+        (totalRequired > 0
+          ? ` · cobertura ${beforeCovered}/${totalRequired} → ${afterCovered}/${totalRequired}`
+          : '')
+      )
+    } catch {
+      toast.error('Erro ao alocar equipe')
+    } finally {
+      setAllocatingTeam(false)
+    }
+  }, [selectedProject, team, coverage, loadRecos, loadTeam])
+
   const countCovered = (cov: CoverageResponse | null): number =>
     cov?.required_skills.filter(s => s.consultants_covering > 0).length ?? 0
 
@@ -165,11 +236,13 @@ export default function CoberturaSkillsPage() {
     if (selectedProject != null) {
       loadCoverage(selectedProject)
       loadRecos(selectedProject)
+      loadTeam(selectedProject)
     } else {
       setCoverage(null)
       setRecos([])
+      setTeam(null)
     }
-  }, [selectedProject, loadCoverage, loadRecos])
+  }, [selectedProject, loadCoverage, loadRecos, loadTeam])
 
   const summary = useMemo(() => {
     if (!coverage) return null
@@ -311,6 +384,137 @@ export default function CoberturaSkillsPage() {
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
               Selecione um projeto acima para ver a cobertura de skills dos consultores alocados.
             </p>
+          </div>
+        )}
+
+        {/* ── Equipe sugerida (auto via greedy set-cover) ───────────────── */}
+        {selectedProject && team && team.team.length > 0 && (() => {
+          const teamPct = Math.round(team.team_score * 100)
+          const covPct = team.coverage.total > 0
+            ? Math.round((team.coverage.covered / team.coverage.total) * 100)
+            : 0
+          const fullyCovered = team.coverage.missing === 0
+          const headerColor = fullyCovered ? 'var(--success)' : 'var(--warning)'
+          return (
+          <div className="ds-card ds-card-pad" style={{ marginTop: 8 }}>
+            <div className="flex items-center justify-between flex-wrap gap-3" style={{ marginBottom: 4 }}>
+              <div className="flex items-center gap-2">
+                <Users size={16} style={{ color: headerColor }} />
+                <h3 style={{ fontSize: 14, margin: 0, color: 'var(--text)', fontWeight: 600 }}>
+                  Equipe sugerida
+                </h3>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  {team.coverage.covered}/{team.coverage.total} skills · {covPct}% cobertura
+                </span>
+                <span style={{
+                  fontSize: 12, fontWeight: 700, color: 'var(--text)',
+                  padding: '3px 10px', borderRadius: 4,
+                  background: teamPct >= 90 ? 'var(--success-bg)' : teamPct >= 70 ? 'var(--warning-bg)' : 'var(--danger-bg)',
+                  border: '1px solid',
+                  borderColor: teamPct >= 90 ? 'var(--success-border)' : teamPct >= 70 ? 'var(--warning-border)' : 'var(--danger-border)',
+                }}>
+                  Score: {teamPct}%
+                </span>
+              </div>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
+              Time mínimo (até 5 pessoas) escolhido por algoritmo greedy — cobre o máximo de skills exigidas
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {team.team.map((m, idx) => {
+                const pct = Math.round(m.score * 100)
+                const availPct = Math.round(m.availability * 100)
+                const typeBadge = m.type === 'internal' ? 'Interno'
+                                : m.type === 'partner'  ? 'Parceiro'
+                                : 'Candidato'
+                const borderColor = m.score >= 0.9 ? 'var(--success-border)'
+                                  : m.score >= 0.7 ? 'var(--warning-border)'
+                                  : 'var(--danger-border)'
+                return (
+                  <div
+                    key={m.consultant_id}
+                    style={{
+                      borderLeft: `3px solid ${borderColor}`,
+                      borderRadius: 4,
+                      padding: '10px 14px',
+                      background: idx === 0 ? 'var(--surface-hover, transparent)' : 'transparent',
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <span style={{
+                          fontSize: 11, color: 'var(--text-muted)', fontWeight: 600,
+                          minWidth: 18, textAlign: 'right',
+                        }}>
+                          {idx + 1}.
+                        </span>
+                        <span className="text-sm" style={{ color: 'var(--text)', fontWeight: 600 }}>{m.name}</span>
+                        <span style={{
+                          fontSize: 10, color: 'var(--text-muted)', border: '1px solid var(--border)',
+                          padding: '1px 6px', borderRadius: 3, fontWeight: 500,
+                          textTransform: 'uppercase', letterSpacing: '0.04em',
+                        }}>
+                          {typeBadge}
+                        </span>
+                        <span style={{ fontSize: 11, color: 'var(--text-light)' }}>
+                          · {pct}% · disp {availPct}%
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 flex-wrap" style={{ justifyContent: 'flex-end' }}>
+                        {m.skills_covered.map(sk => (
+                          <span key={sk.id} style={{
+                            fontSize: 10, color: 'var(--success)',
+                            background: 'var(--success-bg)',
+                            border: '1px solid var(--success-border)',
+                            padding: '2px 7px', borderRadius: 3, fontWeight: 600,
+                          }}>
+                            {sk.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {team.gaps_remaining.length > 0 && (
+              <div style={{
+                marginTop: 12, padding: '8px 10px',
+                background: 'var(--warning-bg)', borderRadius: 4,
+                border: '1px solid var(--warning-border)',
+              }}>
+                <p style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 600 }}>
+                  ⚠ Mesmo com esta equipe, {team.gaps_remaining.length} skill{team.gaps_remaining.length === 1 ? '' : 's'} continuam descobertas:
+                </p>
+                <p style={{ fontSize: 11, color: 'var(--text)', marginTop: 4 }}>
+                  {team.gaps_remaining.map(g => `${g.name} (${g.required_level})`).join(' · ')}
+                </p>
+              </div>
+            )}
+
+            <div style={{ marginTop: 14 }}>
+              <button
+                type="button"
+                className="ds-btn-primary"
+                disabled={allocatingTeam}
+                onClick={allocateTeamFn}
+                style={{ fontSize: 12, padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <Users size={12} />
+                {allocatingTeam ? 'Alocando…' : `Alocar equipe completa (${team.team.length})`}
+              </button>
+            </div>
+          </div>
+          )
+        })()}
+
+        {selectedProject && loadingTeam && (
+          <div className="ds-card ds-card-pad" style={{ marginTop: 8 }}>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Calculando equipe sugerida…</p>
           </div>
         )}
 
