@@ -46,6 +46,11 @@ interface Recommendation {
   consultant_id: number
   name: string
   score: number
+  base_score?: number
+  bonus?: number
+  availability: number
+  capacity_hours?: number
+  allocated_hours?: number
   coverage: 'Completo' | 'Parcial' | 'Insuficiente'
   skills_match: number
   skills_total: number
@@ -117,25 +122,44 @@ export default function CoberturaSkillsPage() {
     }
   }, [])
 
+  const countCovered = (cov: CoverageResponse | null): number =>
+    cov?.required_skills.filter(s => s.consultants_covering > 0).length ?? 0
+
   const allocate = useCallback(async (r: Recommendation, withCaveat: boolean) => {
     if (selectedProject == null) return
+    const beforeCovered = countCovered(coverage)
+    const totalRequired = coverage?.required_skills.length ?? 0
     setAllocatingId(r.consultant_id)
     try {
       await api.post(`/projects/${selectedProject}/allocate`, {
         consultant_id: r.consultant_id,
+        score: r.score,
         with_caveat: withCaveat,
+        risk_reason: withCaveat
+          ? `Score ${Math.round(r.score * 100)}% · ${r.skills_match}/${r.skills_total} skills cobertas`
+          : null,
       })
-      toast.success(`${r.name} alocado${withCaveat ? ' com ressalva' : ''}`)
-      // Atualização otimista: remove o consultor da lista local de recos
+      // Atualização otimista: remove o consultor da lista local
       setRecos(prev => prev.filter(x => x.consultant_id !== r.consultant_id))
-      // Refetch coverage (números mudam)
-      loadCoverage(selectedProject)
+      // Refetch coverage e usa o RESULT pra calcular delta
+      const refreshed = await api.get<CoverageResponse>(`/projects/${selectedProject}/gaps`)
+      setCoverage(refreshed)
+      const afterCovered = countCovered(refreshed)
+      const delta = afterCovered - beforeCovered
+      const tag = withCaveat ? ' com ressalva' : ''
+      if (totalRequired > 0 && delta > 0) {
+        toast.success(`✓ ${r.name} alocado${tag} · cobertura ${beforeCovered}/${totalRequired} → ${afterCovered}/${totalRequired}`)
+      } else if (totalRequired > 0) {
+        toast.success(`✓ ${r.name} alocado${tag} · cobertura mantida em ${afterCovered}/${totalRequired}`)
+      } else {
+        toast.success(`✓ ${r.name} alocado${tag}`)
+      }
     } catch {
       toast.error(`Erro ao alocar ${r.name}`)
     } finally {
       setAllocatingId(null)
     }
-  }, [selectedProject, loadCoverage])
+  }, [selectedProject, coverage])
 
   useEffect(() => {
     if (selectedProject != null) {
@@ -314,10 +338,12 @@ export default function CoberturaSkillsPage() {
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {recos.map((r) => {
+              {recos.map((r, idx) => {
                 const scorePct = Math.round(r.score * 100)
-                const okFit = r.coverage === 'Completo'
+                const availPct = Math.round(r.availability * 100)
+                const okFit   = r.coverage === 'Completo'
                 const partial = r.coverage === 'Parcial'
+                const showAllGaps = r.score < 0.7
                 const badgeStyle = okFit
                   ? { background: 'var(--success-bg)', color: 'var(--success)', borderColor: 'var(--success-border)' }
                   : partial
@@ -330,6 +356,8 @@ export default function CoberturaSkillsPage() {
                 const typeBadge = r.type === 'internal' ? 'Interno'
                                 : r.type === 'partner'  ? 'Parceiro'
                                 : 'Candidato'
+                const isBest = idx === 0
+                const gapsToShow = showAllGaps ? r.gaps : r.gaps.slice(0, 4)
                 return (
                   <div
                     key={r.consultant_id}
@@ -337,13 +365,16 @@ export default function CoberturaSkillsPage() {
                       borderLeft: `3px solid ${borderLeft}`,
                       borderRadius: 4,
                       padding: '12px 14px',
-                      background: 'transparent',
+                      background: isBest ? 'var(--surface-hover, transparent)' : 'transparent',
                     }}
                   >
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div className="flex items-center gap-3 min-w-0">
                         <div style={{ minWidth: 0 }}>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {isBest && (
+                              <span title="Melhor opção" style={{ fontSize: 14, lineHeight: 1 }}>🏆</span>
+                            )}
                             <span className="text-sm" style={{ color: 'var(--text)', fontWeight: 600 }}>
                               {r.name}
                             </span>
@@ -357,6 +388,7 @@ export default function CoberturaSkillsPage() {
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
                             {r.skills_match}/{r.skills_total} skills cobertas
+                            <span style={{ marginLeft: 10 }}>Disponível: {availPct}%</span>
                           </div>
                         </div>
                       </div>
@@ -380,13 +412,13 @@ export default function CoberturaSkillsPage() {
                     {r.gaps.length > 0 && (
                       <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
                         <span style={{ fontWeight: 600 }}>Gaps:</span>{' '}
-                        {r.gaps.slice(0, 4).map((g, i) => (
+                        {gapsToShow.map((g, i) => (
                           <span key={`${r.consultant_id}-${g.skill.id}-${i}`}>
                             {i > 0 && ', '}
                             {g.skill.name} ({g.type === 'missing' ? 'não possui' : `${g.actual_level} → ${g.required_level}`})
                           </span>
                         ))}
-                        {r.gaps.length > 4 && ` e mais ${r.gaps.length - 4}`}
+                        {!showAllGaps && r.gaps.length > 4 && ` e mais ${r.gaps.length - 4}`}
                       </p>
                     )}
 
