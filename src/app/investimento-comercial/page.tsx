@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
 import {
   Search, Users, X, Check, TrendingUp, Clock,
-  BarChart2, Building2, User, ChevronDown, ChevronRight, Plus, Pencil,
+  BarChart2, Building2, User, ChevronDown, ChevronRight, Plus, Pencil, Trash2,
 } from 'lucide-react'
 import { PageHeader, Table, Thead, Th, Tbody, Tr, Td, Button, SkeletonTable, EmptyState } from '@/components/ds'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
@@ -128,6 +128,7 @@ export default function InvestimentoComercialPage() {
   const [editName,        setEditName]        = useState('')
   const [editCategoria,   setEditCategoria]   = useState<EditableCategoria>('')
   const [savingEdit,      setSavingEdit]      = useState(false)
+  const [deletingEdit,    setDeletingEdit]    = useState(false)
   const openEditModal = (p: ICProject) => {
     setEditProject(p)
     setEditName(p.name ?? '')
@@ -154,6 +155,22 @@ export default function InvestimentoComercialPage() {
       toast.error(err?.message ?? 'Erro ao atualizar projeto')
     } finally {
       setSavingEdit(false)
+    }
+  }
+  const handleDeleteEdit = async () => {
+    if (!editProject) return
+    const ok = window.confirm(`Excluir o projeto "${editProject.name}" (${editProject.code})?\n\nA exclusão é bloqueada se houver apontamentos vinculados.`)
+    if (!ok) return
+    setDeletingEdit(true)
+    try {
+      await api.delete(`/projects/${editProject.id}`)
+      setProjects(prev => prev.filter(p => p.id !== editProject.id))
+      toast.success('Projeto excluído')
+      closeEditModal()
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Erro ao excluir projeto')
+    } finally {
+      setDeletingEdit(false)
     }
   }
 
@@ -798,11 +815,21 @@ export default function InvestimentoComercialPage() {
                 </select>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-              <Button variant="ghost" onClick={closeEditModal} disabled={savingEdit}>Cancelar</Button>
-              <Button variant="primary" onClick={handleSaveEdit} disabled={savingEdit || editName.trim().length < 2}>
-                {savingEdit ? 'Salvando...' : 'Salvar'}
-              </Button>
+            <div className="flex items-center justify-between gap-3 px-6 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+              <button
+                type="button"
+                onClick={handleDeleteEdit}
+                disabled={savingEdit || deletingEdit}
+                className="inline-flex items-center gap-1.5 px-3 h-9 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50"
+                style={{ background: 'rgba(239,68,68,0.10)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)' }}>
+                <Trash2 size={13} /> {deletingEdit ? 'Excluindo...' : 'Excluir'}
+              </button>
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" onClick={closeEditModal} disabled={savingEdit || deletingEdit}>Cancelar</Button>
+                <Button variant="primary" onClick={handleSaveEdit} disabled={savingEdit || deletingEdit || editName.trim().length < 2}>
+                  {savingEdit ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
