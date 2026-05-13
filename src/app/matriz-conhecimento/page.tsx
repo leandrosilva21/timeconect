@@ -212,9 +212,9 @@ export default function MatrizConhecimentoPage() {
             </p>
 
             {missingGaps.length > 0 && (
-              <div style={{ marginBottom: belowGaps.length > 0 ? 20 : 0 }}>
+              <div style={{ marginBottom: belowGaps.length > 0 ? 28 : 0 }}>
                 <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--danger)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
-                  Crítico — {missingGaps.length}
+                  Crítico — {missingGaps.length} {missingGaps.length === 1 ? 'skill' : 'skills'} sem cobertura
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {missingGaps.map((g, i) => (
@@ -226,8 +226,8 @@ export default function MatrizConhecimentoPage() {
                       <div className="flex items-center gap-3 min-w-0">
                         <span style={{
                           fontSize: 11, background: 'var(--primary-soft)', color: 'var(--primary)',
-                          padding: '4px 10px', borderRadius: 4, fontWeight: 800,
-                          letterSpacing: '0.04em', textTransform: 'uppercase', flexShrink: 0,
+                          padding: '4px 10px', borderRadius: 4, fontWeight: 600,
+                          letterSpacing: '0.02em', textTransform: 'uppercase', flexShrink: 0,
                         }}>
                           {g.required_level.name}
                         </span>
@@ -243,8 +243,8 @@ export default function MatrizConhecimentoPage() {
                       <span style={{
                         fontSize: 11, color: 'var(--danger)',
                         border: '1px dashed var(--danger-border)',
-                        padding: '4px 10px', borderRadius: 4, fontWeight: 700,
-                        textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0,
+                        padding: '6px 12px', borderRadius: 4, fontWeight: 600,
+                        textTransform: 'uppercase', letterSpacing: '0.02em', flexShrink: 0,
                       }}>
                         não possui
                       </span>
@@ -257,7 +257,7 @@ export default function MatrizConhecimentoPage() {
             {belowGaps.length > 0 && (
               <div>
                 <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--warning)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
-                  Moderado — {belowGaps.length}
+                  Moderado — {belowGaps.length} abaixo do requerido
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {belowGaps.map((g, i) => (
@@ -265,17 +265,16 @@ export default function MatrizConhecimentoPage() {
                       key={`b-${g.skill.id}-${g.context ?? ''}-${i}`}
                       className="flex items-center justify-between gap-4"
                       style={{
-                        background: 'var(--warning-bg)',
                         borderLeft: '3px solid var(--warning-border)',
                         borderRadius: 4,
-                        padding: '12px 14px',
+                        padding: '12px 14px 12px 12px',
                       }}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <span style={{
                           fontSize: 11, background: 'var(--primary-soft)', color: 'var(--primary)',
-                          padding: '3px 9px', borderRadius: 4, fontWeight: 700,
-                          letterSpacing: '0.04em', textTransform: 'uppercase', flexShrink: 0,
+                          padding: '4px 10px', borderRadius: 4, fontWeight: 600,
+                          letterSpacing: '0.02em', textTransform: 'uppercase', flexShrink: 0,
                         }}>
                           {g.required_level.name}
                         </span>
@@ -291,7 +290,7 @@ export default function MatrizConhecimentoPage() {
                       <span style={{
                         fontSize: 11, color: 'var(--warning)',
                         border: '1px solid var(--warning-border)', background: 'transparent',
-                        padding: '3px 9px', borderRadius: 4, fontWeight: 600, flexShrink: 0,
+                        padding: '6px 12px', borderRadius: 4, fontWeight: 600, flexShrink: 0,
                       }}>
                         {g.actual_level?.name}
                       </span>
