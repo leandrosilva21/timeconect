@@ -181,7 +181,7 @@ export default function InvestimentoComercialPage() {
 
   const reloadProjects = async () => {
     try {
-      const projRes = await api.get<any>('/projects?only_investimento_comercial=true&pageSize=500&gestao=true&with_team=true')
+      const projRes = await api.get<any>('/projects?only_investimento_comercial=true&pageSize=2000&gestao=true&with_team=true')
       const rawProjects: any[] = projRes?.items ?? projRes?.data ?? []
       setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, categoria_interna: p.categoria_interna ?? null, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
     } catch {
@@ -192,7 +192,7 @@ export default function InvestimentoComercialPage() {
   useEffect(() => {
     let cancelled = false
     Promise.all([
-      api.get<any>('/projects?only_investimento_comercial=true&pageSize=500&gestao=true&with_team=true'),
+      api.get<any>('/projects?only_investimento_comercial=true&pageSize=2000&gestao=true&with_team=true'),
       api.get<any>('/users?exclude_type=cliente&pageSize=500'),
       api.get<any>('/consultant-groups?pageSize=200&with_users=true'),
     ]).then(([projRes, usersRes, groupsRes]) => {
