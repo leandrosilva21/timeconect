@@ -4,7 +4,7 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
-import { Star, Users as UsersIcon, Save } from 'lucide-react'
+import { Star, Users as UsersIcon, Save, AlertTriangle } from 'lucide-react'
 
 // ── Tipos locais (mantemos aqui pra não acoplar types globais ainda) ─────────
 interface Skill {
@@ -34,6 +34,18 @@ interface ConsultantOption {
   id: number
   name: string
 }
+interface Gap {
+  skill: { id: number; name: string; category: string }
+  context: string | null
+  required_level: { id: number; name: string; weight: number }
+  actual_level: { id: number; name: string; weight: number } | null
+  type: 'missing' | 'below'
+}
+interface GapsResponse {
+  consultant_id: number
+  total: number
+  gaps: Gap[]
+}
 
 export default function MatrizConhecimentoPage() {
   const [consultants, setConsultants]               = useState<ConsultantOption[]>([])
@@ -44,6 +56,8 @@ export default function MatrizConhecimentoPage() {
   const [loadingMeta, setLoadingMeta]               = useState(true)
   const [loadingSkills, setLoadingSkills]           = useState(false)
   const [savingSkillId, setSavingSkillId]           = useState<number | null>(null)
+  const [gaps, setGaps]                             = useState<Gap[]>([])
+  const [loadingGaps, setLoadingGaps]               = useState(false)
 
   // ── Carrega skills + levels + lista de consultores ──────────────────────────
   useEffect(() => {
@@ -78,20 +92,31 @@ export default function MatrizConhecimentoPage() {
   // ── Carrega skills do consultor selecionado ────────────────────────────────
   const loadConsultantSkills = useCallback(async (consultantId: number) => {
     setLoadingSkills(true)
+    setLoadingGaps(true)
     try {
-      const data = await api.get<ConsultantSkill[]>(`/consultants/${consultantId}/skills`)
+      const [data, gapsData] = await Promise.all([
+        api.get<ConsultantSkill[]>(`/consultants/${consultantId}/skills`),
+        api.get<GapsResponse>(`/consultants/${consultantId}/gaps`).catch(() => null),
+      ])
       setConsultantSkills(Array.isArray(data) ? data : [])
+      setGaps(gapsData?.gaps ?? [])
     } catch {
       toast.error('Erro ao carregar skills do consultor')
       setConsultantSkills([])
+      setGaps([])
     } finally {
       setLoadingSkills(false)
+      setLoadingGaps(false)
     }
   }, [])
 
   useEffect(() => {
-    if (selectedConsultant != null) loadConsultantSkills(selectedConsultant)
-    else setConsultantSkills([])
+    if (selectedConsultant != null) {
+      loadConsultantSkills(selectedConsultant)
+    } else {
+      setConsultantSkills([])
+      setGaps([])
+    }
   }, [selectedConsultant, loadConsultantSkills])
 
   // ── Mapa skill_id → consultant_skill pra lookup rápido ──────────────────────
@@ -171,6 +196,51 @@ export default function MatrizConhecimentoPage() {
             <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>Carregando consultores…</p>
           )}
         </div>
+
+        {/* ── Gaps críticos ──────────────────────────────────────────────── */}
+        {selectedConsultant && !loadingGaps && gaps.length > 0 && (
+          <div className="ds-card ds-card-pad ds-card-highlight-danger">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle size={16} style={{ color: 'var(--danger-border, var(--text))' }} />
+              <h3 className="ds-card-title" style={{ fontSize: 13, margin: 0 }}>Gaps críticos</h3>
+              <span className="ds-card-sub" style={{ marginLeft: 8 }}>{gaps.length} skill{gaps.length === 1 ? '' : 's'} abaixo do requerido</span>
+            </div>
+            <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+              {gaps.map((g, i) => (
+                <div
+                  key={`${g.skill.id}-${g.context ?? ''}-${i}`}
+                  className="flex items-center justify-between gap-4 py-2"
+                  style={{ borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{g.skill.name}</span>
+                    <span className="ds-card-sub" style={{ fontSize: 11 }}>{g.skill.category}</span>
+                    {g.context && (
+                      <span className="ds-status ds-status-info" style={{ fontSize: 10 }}>{g.context}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 text-xs">
+                    {g.type === 'missing' ? (
+                      <span className="ds-status ds-status-danger">não possui</span>
+                    ) : (
+                      <span className="ds-status ds-status-warning">{g.actual_level?.name}</span>
+                    )}
+                    <span style={{ color: 'var(--text-muted)' }}>→</span>
+                    <span className="ds-status ds-status-info">{g.required_level.name}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {selectedConsultant && !loadingGaps && gaps.length === 0 && (
+          <div className="ds-card ds-card-pad ds-card-highlight-success">
+            <p className="text-sm" style={{ color: 'var(--text)' }}>
+              ✓ Sem gaps críticos.
+            </p>
+          </div>
+        )}
 
         {/* ── Skills agrupadas ──────────────────────────────────────────────── */}
         {selectedConsultant && (

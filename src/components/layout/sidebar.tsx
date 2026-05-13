@@ -163,6 +163,7 @@ const NAV: NavEntry[] = [
     ],
   },
   { type: 'item', label: 'Matriz de Conhecimento', href: '/matriz-conhecimento', icon: Star },
+  { type: 'item', label: 'Cobertura de Skills',    href: '/projetos/cobertura-skills', icon: UserCheck },
   {
     type: 'group',
     label: 'Cadastros',
