@@ -1,10 +1,11 @@
 'use client'
 
 import { AppLayout } from '@/components/layout/app-layout'
+import Link from 'next/link'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
-import { UserCheck, FolderOpen, AlertTriangle, CheckCircle2, Sparkles, Plus, AlertOctagon, Users } from 'lucide-react'
+import { UserCheck, FolderOpen, AlertTriangle, CheckCircle2, Sparkles, Plus, AlertOctagon, Users, Flame } from 'lucide-react'
 
 interface ProjectOption {
   id: number
@@ -55,6 +56,7 @@ interface Recommendation {
   skills_match: number
   skills_total: number
   type: 'internal' | 'partner' | 'candidate'
+  pending?: boolean
   gaps: RecommendationGap[]
 }
 interface RecommendationsResponse {
@@ -94,6 +96,7 @@ export default function CoberturaSkillsPage() {
   const [team, setTeam]                         = useState<TeamRecoResponse | null>(null)
   const [loadingTeam, setLoadingTeam]           = useState(false)
   const [allocatingTeam, setAllocatingTeam]     = useState(false)
+  const [triageQueueCount, setTriageQueueCount] = useState(0)
 
   useEffect(() => {
     (async () => {
@@ -233,6 +236,13 @@ export default function CoberturaSkillsPage() {
   }, [selectedProject, coverage])
 
   useEffect(() => {
+    // Triage queue é independente do projeto selecionado
+    api.get<{ triage_queue: any[]; total: number }>('/candidates/triage-queue?limit=10')
+      .then(r => setTriageQueueCount(r.total ?? 0))
+      .catch(() => setTriageQueueCount(0))
+  }, [])
+
+  useEffect(() => {
     if (selectedProject != null) {
       loadCoverage(selectedProject)
       loadRecos(selectedProject)
@@ -298,6 +308,35 @@ export default function CoberturaSkillsPage() {
                 POST /api/v1/projects/{coverage.project.id}/required-skills
               </code>.
             </p>
+          </div>
+        )}
+
+        {/* ── Banner: candidatos pré-triagem com potencial ──────────────── */}
+        {selectedProject && triageQueueCount > 0 && (
+          <div className="ds-card ds-card-pad ds-card-highlight-warning"
+               style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div className="flex items-center gap-2">
+              <Flame size={16} style={{ color: 'var(--warning-border)' }} />
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
+                  {triageQueueCount} {triageQueueCount === 1 ? 'candidato com potencial' : 'candidatos com potencial'}
+                </p>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                  Candidatos em triagem com score ≥ 80 — alguns podem caber neste projeto
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/candidatos"
+              style={{
+                fontSize: 12, padding: '6px 12px', borderRadius: 4,
+                background: 'transparent', border: '1px solid var(--warning-border)',
+                color: 'var(--warning)', fontWeight: 600, textDecoration: 'none',
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+              }}
+            >
+              Ver candidatos →
+            </Link>
           </div>
         )}
 
@@ -589,6 +628,17 @@ export default function CoberturaSkillsPage() {
                             }}>
                               {typeBadge}
                             </span>
+                            {r.pending && (
+                              <span style={{
+                                fontSize: 10, color: 'var(--warning)',
+                                background: 'var(--warning-bg)',
+                                border: '1px solid var(--warning-border)',
+                                padding: '1px 6px', borderRadius: 3, fontWeight: 600,
+                                textTransform: 'uppercase', letterSpacing: '0.04em',
+                              }} title="Em triagem — score alto mas ainda não aprovado">
+                                ⏳ pendente
+                              </span>
+                            )}
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
                             {r.skills_match}/{r.skills_total} skills cobertas

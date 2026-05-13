@@ -7,6 +7,7 @@ import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import {
   Users as UsersIcon, Check, X, ExternalLink, RefreshCw,
+  Flame, AlertTriangle, ChevronDown, ArrowDownToLine,
 } from 'lucide-react'
 
 type CandStatus = 'new' | 'screening' | 'interview' | 'approved' | 'rejected' | 'hired' | 'allocated'
@@ -29,6 +30,9 @@ interface Candidate {
   expected_rate: number | null
   notes: string | null
   top_skills: Array<{ name: string; level: string }>
+  triage_score: number
+  recency: number
+  fit_critico: number
 }
 
 const COLUMNS: Array<{ status: CandStatus; label: string; color: string; bg: string }> = [
@@ -45,6 +49,8 @@ export default function CandidatosKanbanPage() {
   const [loading, setLoading] = useState(true)
   const [movingId, setMovingId] = useState<number | null>(null)
   const [dragOverCol, setDragOverCol] = useState<CandStatus | null>(null)
+  const [filterStrong, setFilterStrong] = useState(false)
+  const [filterAvailable, setFilterAvailable] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -60,17 +66,38 @@ export default function CandidatosKanbanPage() {
 
   useEffect(() => { load() }, [load])
 
-  // Agrupar por status (consolida 'hired' dentro de 'allocated' pra simplificar visualização)
+  // Filtros + agrupamento + ordenação especial pra Novo (triage_score desc)
+  const filtered = useMemo(() => {
+    return candidates.filter(c => {
+      if (filterStrong && c.triage_score < 80) return false
+      if (filterAvailable && c.availability < 0.8 && c.availability_status !== 'integral') return false
+      return true
+    })
+  }, [candidates, filterStrong, filterAvailable])
+
   const byStatus = useMemo(() => {
     const map = new Map<CandStatus, Candidate[]>()
     COLUMNS.forEach(c => map.set(c.status, []))
-    candidates.forEach(c => {
+    filtered.forEach(c => {
       const status: CandStatus = c.status === 'hired' ? 'allocated' : c.status
       const arr = map.get(status) ?? []
       arr.push(c); map.set(status, arr)
     })
+    // Ordena coluna Novo por triage_score desc; outras mantêm ordem do backend (alphabetical)
+    const newCol = map.get('new')
+    if (newCol) {
+      newCol.sort((a, b) => b.triage_score - a.triage_score
+                          || a.name.localeCompare(b.name, 'pt-BR'))
+    }
     return map
-  }, [candidates])
+  }, [filtered, filterStrong, filterAvailable])
+
+  // Contagem "fila de hoje" — pending (new/screening) com triage_score >= 80
+  const queueCount = useMemo(() =>
+    candidates.filter(c =>
+      (c.status === 'new' || c.status === 'screening') && c.triage_score >= 80
+    ).length
+  , [candidates])
 
   async function updateStatus(c: Candidate, newStatus: CandStatus) {
     if (c.status === newStatus) return
@@ -111,6 +138,23 @@ export default function CandidatosKanbanPage() {
   return (
     <AppLayout title="Candidatos">
       <div className="space-y-3">
+        {/* Banner fila de hoje */}
+        {queueCount > 0 && (
+          <div className="ds-card ds-card-pad ds-card-highlight-warning">
+            <div className="flex items-center gap-2">
+              <Flame size={18} style={{ color: 'var(--warning-border)' }} />
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
+                  Fila de hoje — {queueCount} {queueCount === 1 ? 'candidato' : 'candidatos'} com alto potencial
+                </p>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                  Candidatos em <code>Novo</code>/<code>Triagem</code> com triage_score ≥ 80 — priorize na triagem
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="ds-card ds-card-pad">
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -120,13 +164,41 @@ export default function CandidatosKanbanPage() {
                 Pipeline de Candidatos
               </h2>
               <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>
-                {candidates.length} no total
+                {filtered.length}/{candidates.length}
               </span>
             </div>
-            <div className="flex items-center gap-3">
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                Apenas <strong style={{ color: 'var(--success)' }}>Aprovado</strong> aparece nas recomendações
-              </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setFilterStrong(v => !v)}
+                style={{
+                  fontSize: 11, padding: '5px 10px', borderRadius: 4,
+                  background: filterStrong ? 'var(--primary-soft)' : 'transparent',
+                  border: '1px solid',
+                  borderColor: filterStrong ? 'var(--primary)' : 'var(--border)',
+                  color: filterStrong ? 'var(--primary)' : 'var(--text-muted)',
+                  fontWeight: 600, cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}
+                title="triage_score ≥ 80"
+              >
+                <Flame size={11} /> Fortes
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterAvailable(v => !v)}
+                style={{
+                  fontSize: 11, padding: '5px 10px', borderRadius: 4,
+                  background: filterAvailable ? 'var(--primary-soft)' : 'transparent',
+                  border: '1px solid',
+                  borderColor: filterAvailable ? 'var(--primary)' : 'var(--border)',
+                  color: filterAvailable ? 'var(--primary)' : 'var(--text-muted)',
+                  fontWeight: 600, cursor: 'pointer',
+                }}
+                title="Disponibilidade ≥ 80% ou status integral"
+              >
+                Disponíveis
+              </button>
               <button
                 type="button"
                 onClick={load}
@@ -202,6 +274,7 @@ export default function CandidatosKanbanPage() {
                         onDragStart={onDragStart}
                         onApprove={() => updateStatus(c, 'approved')}
                         onReject={() => updateStatus(c, 'rejected')}
+                        onScreening={() => updateStatus(c, 'screening')}
                       />
                     ))}
                     {items.length === 0 && (
@@ -221,13 +294,14 @@ export default function CandidatosKanbanPage() {
 }
 
 function CandidateCard({
-  c, moving, onDragStart, onApprove, onReject,
+  c, moving, onDragStart, onApprove, onReject, onScreening,
 }: {
   c: Candidate
   moving: boolean
   onDragStart: (e: React.DragEvent, c: Candidate) => void
   onApprove: () => void
   onReject: () => void
+  onScreening: () => void
 }) {
   const availPct = Math.round(c.availability * 100)
   const scorePct = c.score_initial != null ? Math.round(c.score_initial * 100) : null
@@ -256,15 +330,18 @@ function CandidateCard({
           {c.name}
           <ExternalLink size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
         </Link>
-        {scorePct !== null && (
-          <span style={{
-            fontSize: 10, fontWeight: 700, color: 'var(--text)',
-            padding: '1px 6px', borderRadius: 3,
-            background: scorePct >= 90 ? 'var(--success-bg)' : scorePct >= 70 ? 'var(--warning-bg)' : 'var(--danger-bg)',
-          }}>
-            {scorePct}%
-          </span>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          <TriageBadge score={c.triage_score} />
+          {scorePct !== null && (
+            <span style={{
+              fontSize: 10, fontWeight: 700, color: 'var(--text)',
+              padding: '1px 6px', borderRadius: 3,
+              background: scorePct >= 90 ? 'var(--success-bg)' : scorePct >= 70 ? 'var(--warning-bg)' : 'var(--danger-bg)',
+            }} title={`Score inicial: ${scorePct}%`}>
+              {scorePct}%
+            </span>
+          )}
+        </div>
       </div>
 
       <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
@@ -290,7 +367,22 @@ function CandidateCard({
 
       {/* Quick actions: aprovar/rejeitar visíveis se ainda não nesse estado */}
       {!isApproved && !isRejected && (
-        <div className="flex items-center gap-1" style={{ marginTop: 6 }}>
+        <div className="flex items-center gap-1 flex-wrap" style={{ marginTop: 6 }}>
+          {c.status === 'new' && (
+            <button
+              type="button"
+              onClick={onScreening}
+              style={{
+                fontSize: 10, padding: '2px 8px', borderRadius: 3,
+                background: 'transparent', border: '1px solid var(--border)',
+                color: 'var(--text-muted)', fontWeight: 600, cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+              }}
+              title="Move pra coluna Triagem"
+            >
+              <ArrowDownToLine size={9} /> Triar
+            </button>
+          )}
           <button
             type="button"
             onClick={onApprove}
@@ -318,6 +410,27 @@ function CandidateCard({
         </div>
       )}
     </div>
+  )
+}
+
+function TriageBadge({ score }: { score: number }) {
+  const tier = score >= 80 ? 'hot' : score >= 60 ? 'mid' : 'low'
+  const Icon = tier === 'hot' ? Flame : tier === 'mid' ? AlertTriangle : ChevronDown
+  const bg = tier === 'hot' ? 'var(--warning-bg)' : tier === 'mid' ? 'var(--surface-hover, transparent)' : 'transparent'
+  const color = tier === 'hot' ? 'var(--warning-border)' : tier === 'mid' ? 'var(--warning)' : 'var(--text-muted)'
+  return (
+    <span
+      title={`triage_score: ${score}`}
+      style={{
+        fontSize: 10, fontWeight: 700, color,
+        padding: '1px 6px', borderRadius: 3, background: bg,
+        border: '1px solid', borderColor: tier === 'hot' ? 'var(--warning-border)' : 'transparent',
+        display: 'inline-flex', alignItems: 'center', gap: 3,
+      }}
+    >
+      <Icon size={9} />
+      {Math.round(score)}
+    </span>
   )
 }
 
