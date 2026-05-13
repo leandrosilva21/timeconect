@@ -1762,8 +1762,8 @@ export default function GestaoProjetosPage() {
         }
         if (consultantGroups.length === 0) {
           promises.push(
-            api.get<{ data: { id: number; name: string }[] }>('/consultant-groups?pageSize=200')
-              .then(r => setConsultantGroups(r.data ?? []))
+            api.get<any>('/consultant-groups?pageSize=200')
+              .then(r => setConsultantGroups(r.items ?? r.data ?? []))
           )
         }
         await Promise.all(promises)
