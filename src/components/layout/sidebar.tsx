@@ -162,6 +162,7 @@ const NAV: NavEntry[] = [
       { label: 'Apontamentos', href: '/relatorios/apontamentos', icon: Clock },
     ],
   },
+  { type: 'item', label: 'Matriz de Conhecimento', href: '/matriz-conhecimento', icon: Star },
   {
     type: 'group',
     label: 'Cadastros',
