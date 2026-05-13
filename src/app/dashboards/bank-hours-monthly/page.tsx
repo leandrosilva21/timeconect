@@ -112,16 +112,15 @@ function ProjectsTable({ items, loading }: { items: ProjectItem[]; loading: bool
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10" style={{ borderBottom: '1px solid var(--brand-border)', background: 'rgba(255,255,255,0.02)' }}>
               <tr>
-                {['Código','Projeto','Status','Tipo','Horas Vendidas','Saldo','Início'].map(col => (
-                  <th key={col} className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wider ${col === 'Saldo' || col === 'Horas Vendidas' ? 'text-right' : 'text-left'}`} style={{ color: 'var(--brand-subtle)' }}>{col}</th>
+                {['Código','Projeto','Status','Tipo','Horas Vendidas','Início'].map(col => (
+                  <th key={col} className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wider ${col === 'Horas Vendidas' ? 'text-right' : 'text-left'}`} style={{ color: 'var(--brand-subtle)' }}>{col}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {items.length === 0
-                ? <tr><td colSpan={7} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
+                ? <tr><td colSpan={6} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
                 : items.map(p => {
-                  const balance = p.hours_balance ?? 0
                   const contributions = p.total_contributions_hours || p.hour_contribution || 0
                   return (
                     <tr key={p.id} className="transition-colors" style={{ borderBottom: '1px solid var(--brand-border)' }}
@@ -139,7 +138,6 @@ function ProjectsTable({ items, loading }: { items: ProjectItem[]; loading: bool
                       <td className="px-5 py-3.5 text-right font-medium" style={{ color: 'var(--brand-text)' }}>
                         {p.sold_hours !== null ? (contributions > 0 ? `${p.sold_hours} (+${contributions})` : String(p.sold_hours)) : '—'}
                       </td>
-                      <td className="px-5 py-3.5 text-right font-bold" style={{ color: balance >= 0 ? '#10B981' : '#EF4444' }}>{fmtH(balance)}</td>
                       <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--brand-muted)' }}>{p.start_date ? fmtDate(p.start_date) : '—'}</td>
                     </tr>
                   )
