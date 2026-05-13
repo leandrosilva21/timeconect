@@ -1751,7 +1751,9 @@ export default function GestaoProjetosPage() {
       setTeamSearch('')
       setTeamTab('consultores')
       setSelectedIds(new Set((project.consultants ?? []).map(c => c.id)))
-      setSelectedGroupIds(new Set())
+      // Pré-seleciona os grupos já vinculados ao projeto (antes começava vazio,
+      // dando impressão de que o save não persistia).
+      setSelectedGroupIds(new Set(((project as any).consultant_groups ?? []).map((g: any) => g.id)))
       try {
         const promises: Promise<void>[] = []
         if (allConsultants.length === 0) {
@@ -1788,7 +1790,11 @@ export default function GestaoProjetosPage() {
       toast.success('Equipe atualizada')
       setTeamProject(null)
       setProjects(prev => prev.map(p => p.id === teamProject.id
-        ? { ...p, consultants: allConsultants.filter(c => selectedIds.has(c.id)).map(c => ({ ...c, email: '' })) }
+        ? {
+            ...p,
+            consultants: allConsultants.filter(c => selectedIds.has(c.id)).map(c => ({ ...c, email: '' })),
+            consultant_groups: consultantGroups.filter(g => selectedGroupIds.has(g.id)).map(g => ({ id: g.id, name: g.name })),
+          } as typeof p
         : p
       ))
       if (viewProject?.id === teamProject.id) {
