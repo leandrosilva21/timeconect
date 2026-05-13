@@ -1,13 +1,16 @@
 import type { NextConfig } from "next";
 
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:8000'
+const BACKEND_URL = process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 // Detecta ambiente pelo padrão da URL do backend.
-// `-dev.onrender.com` → dev; outros onrender → homolog; resto → production.
+// `-dev2.onrender.com` → dev2; `-dev.onrender.com` → dev; outros onrender → homolog; resto → production.
+// Override explícito via NEXT_PUBLIC_APP_ENV tem prioridade (útil em Vercel/CI).
 const APP_ENV =
-  BACKEND_URL.includes('-dev.onrender.com') ? 'dev' :
-  BACKEND_URL.includes('onrender.com')      ? 'homolog' :
-                                              'production'
+  process.env.NEXT_PUBLIC_APP_ENV ??
+  (BACKEND_URL.includes('-dev2.onrender.com') ? 'dev2' :
+   BACKEND_URL.includes('-dev.onrender.com')  ? 'dev' :
+   BACKEND_URL.includes('onrender.com')       ? 'homolog' :
+                                                'production')
 
 const isProd = process.env.NODE_ENV === 'production'
 
