@@ -177,6 +177,13 @@ export default function InvestimentoComercialPage() {
     return () => { cancelled = true }
   }, [])
 
+  // Auto-expandir o cliente ERPSERV ao carregar (é o destaque da página)
+  useEffect(() => {
+    const erpserv = projects.find(p => (p.customer?.name ?? '').toUpperCase().includes('ERPSERV'))?.customer
+    if (!erpserv) return
+    setExpandedCustomers(prev => prev.has(erpserv.id) ? prev : new Set(prev).add(erpserv.id))
+  }, [projects])
+
   const handleCreateProject = async () => {
     const name = newProjectName.trim()
     if (name.length < 2) { toast.error('Informe um nome válido (mín. 2 caracteres)'); return }
@@ -276,7 +283,15 @@ export default function InvestimentoComercialPage() {
       if (!groups.has(key)) groups.set(key, { customer: p.customer, projects: [] })
       groups.get(key)!.projects.push(p)
     }
-    const groupList = [...groups.values()].sort((a, b) => a.customer.name.localeCompare(b.customer.name))
+    const isErpserv = (name: string) => name.toUpperCase().includes('ERPSERV')
+    const groupList = [...groups.values()].sort((a, b) => {
+      const aErp = isErpserv(a.customer.name)
+      const bErp = isErpserv(b.customer.name)
+      if (aErp && !bErp) return -1
+      if (!aErp && bErp) return 1
+      return a.customer.name.localeCompare(b.customer.name)
+    })
+    const firstNonErpservId = groupList.find(g => !isErpserv(g.customer.name))?.customer.id
 
     return (
       <Table>
@@ -292,17 +307,36 @@ export default function InvestimentoComercialPage() {
             const expanded = expandedCustomers.has(customer.id)
             const totalHoursCustomer = projects.reduce((s, p) => s + (hoursMap[p.id] ?? 0), 0)
             const totalConsultorIds = new Set(projects.flatMap(p => p.consultants.map(c => c.id)))
+            const erpservRow = isErpserv(customer.name)
+            const showDivider = customer.id === firstNonErpservId
             return (
               <Fragment key={customer.id}>
+                {showDivider && (
+                  <Tr baseBackground="transparent">
+                    <Td colSpan={5}>
+                      <div className="flex items-center gap-2 py-1">
+                        <div className="flex-1 h-px" style={{ background: 'var(--brand-border)' }} />
+                        <span className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--brand-subtle)' }}>Clientes</span>
+                        <div className="flex-1 h-px" style={{ background: 'var(--brand-border)' }} />
+                      </div>
+                    </Td>
+                  </Tr>
+                )}
                 {/* Linha do cliente (pai) */}
-                <Tr>
+                <Tr baseBackground={erpservRow ? 'rgba(0,245,255,0.04)' : undefined}>
                   <Td>
                     <button onClick={() => toggleCustomerExpand(customer.id)}
                       className="flex items-center gap-2 text-left w-full hover:opacity-80 transition-opacity">
                       {expanded
                         ? <ChevronDown size={14} style={{ color: 'var(--brand-muted)' }} />
                         : <ChevronRight size={14} style={{ color: 'var(--brand-muted)' }} />}
-                      <span className="font-medium text-sm" style={{ color: 'var(--brand-text)' }}>{customer.name}</span>
+                      <span className="font-medium text-sm" style={{ color: erpservRow ? '#00F5FF' : 'var(--brand-text)' }}>{customer.name}</span>
+                      {erpservRow && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded uppercase tracking-widest font-bold"
+                          style={{ background: 'rgba(0,245,255,0.12)', color: '#00F5FF', border: '1px solid rgba(0,245,255,0.25)' }}>
+                          Casa
+                        </span>
+                      )}
                       <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>{projects.length}</span>
                     </button>
                   </Td>
