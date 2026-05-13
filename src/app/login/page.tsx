@@ -152,17 +152,23 @@ function LoginForm() {
   )
 }
 
-const IS_HOMOLOG = process.env.NEXT_PUBLIC_APP_ENV === 'homolog'
+const APP_ENV = process.env.NEXT_PUBLIC_APP_ENV
+const ENV_BANNER =
+  APP_ENV === 'dev'
+    ? { bg: '#FACC15', fg: '#000', text: '⚠ AMBIENTE DE DESENVOLVIMENTO — DADOS DESCARTÁVEIS ⚠' }
+    : APP_ENV === 'homolog'
+    ? { bg: '#DC2626', fg: '#fff', text: '⚠ AMBIENTE DE HOMOLOGAÇÃO — NÃO USE DADOS REAIS ⚠' }
+    : null
 
 export default function LoginPage() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#07090F', position: 'relative', overflow: 'hidden' }}>
 
-      {/* Faixa HOMOLOG */}
-      {IS_HOMOLOG && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 0' }}>
-          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.25em', color: '#fff', textTransform: 'uppercase', fontFamily: 'monospace' }}>
-            ⚠ AMBIENTE DE HOMOLOGAÇÃO — NÃO USE DADOS REAIS ⚠
+      {/* Faixa de ambiente — DEV (amarelo) ou HOMOLOG (vermelho) */}
+      {ENV_BANNER && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: ENV_BANNER.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 0' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.25em', color: ENV_BANNER.fg, textTransform: 'uppercase', fontFamily: 'monospace' }}>
+            {ENV_BANNER.text}
           </span>
         </div>
       )}
