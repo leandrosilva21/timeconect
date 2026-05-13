@@ -33,6 +33,7 @@ interface UserItem {
   coordinator_type?: 'projetos' | 'sustentacao' | null
   guaranteed_hours?: number | null
   customer_id?: number | null
+  customer?: { id: number; name: string } | null
   partner_id?: number | null
   partner?: { id: number; name: string } | null
   is_executive?: boolean
@@ -347,13 +348,14 @@ export default function UsersPage() {
   const { filters: flt, set: setFilter } = usePersistedFilters(
     'users',
     authUser?.id,
-    { search: '', filterEnabled: '', filterRole: '', filterPartner: '', sort: 'name', sortDir: 'asc' as 'asc' | 'desc', page: 1 },
+    { search: '', filterEnabled: '', filterRole: '', filterPartner: '', filterCustomer: '', sort: 'name', sortDir: 'asc' as 'asc' | 'desc', page: 1 },
   )
-  const { search, filterEnabled, filterRole, filterPartner, sort, sortDir, page } = flt
-  const setSearch        = (v: string) => setFilter('search', v)
-  const setFilterEnabled = (v: string) => setFilter('filterEnabled', v)
-  const setFilterRole    = (v: string) => { setFilter({ filterRole: v, filterPartner: '', page: 1 } as any) }
-  const setFilterPartner = (v: string) => setFilter('filterPartner', v)
+  const { search, filterEnabled, filterRole, filterPartner, filterCustomer, sort, sortDir, page } = flt
+  const setSearch         = (v: string) => setFilter('search', v)
+  const setFilterEnabled  = (v: string) => setFilter('filterEnabled', v)
+  const setFilterRole     = (v: string) => { setFilter({ filterRole: v, filterPartner: '', filterCustomer: '', page: 1 } as any) }
+  const setFilterPartner  = (v: string) => setFilter('filterPartner', v)
+  const setFilterCustomer = (v: string) => setFilter('filterCustomer', v)
   const setSort = (field: string) => {
     if (sort === field) {
       setFilter('sortDir', (sortDir === 'asc' ? 'desc' : 'asc') as any)
@@ -405,8 +407,9 @@ export default function UsersPage() {
       const p = new URLSearchParams({ page: String(page), pageSize: '100' })
       if (search)        p.set('search', search)
       if (filterEnabled) p.set('enabled', filterEnabled)
-      if (filterRole)    p.set('role', filterRole)
-      if (filterPartner) p.set('partner_id', filterPartner)
+      if (filterRole)     p.set('role', filterRole)
+      if (filterPartner)  p.set('partner_id', filterPartner)
+      if (filterCustomer) p.set('customer_id', filterCustomer)
       p.set('order', sortDir === 'desc' ? `-${sort}` : sort)
       const r = await api.get<{ items?: UserItem[]; data?: UserItem[]; hasNext?: boolean; meta?: { last_page: number } }>(`/users?${p}`)
       const list = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
@@ -415,7 +418,7 @@ export default function UsersPage() {
       setHasNext(!!(r?.hasNext || (r?.meta && page < r.meta.last_page)))
     } catch { toast.error('Erro ao carregar usuários') }
     finally   { setLoading(false) }
-  }, [page, search, filterEnabled, filterRole, filterPartner, sort, sortDir])
+  }, [page, search, filterEnabled, filterRole, filterPartner, filterCustomer, sort, sortDir])
 
   useEffect(() => { load() }, [load])
 
@@ -697,6 +700,15 @@ export default function UsersPage() {
             {partners.map(p => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
           </select>
         )}
+        {filterRole === 'cliente' && customers.length > 0 && (
+          <select
+            value={filterCustomer}
+            onChange={e => { setFilterCustomer(e.target.value); setPage(1) }}
+            className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-md h-8 px-2">
+            <option value="">Todos os clientes</option>
+            {customers.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+          </select>
+        )}
         {canCreate && (
         <Button onClick={openCreate} className="bg-blue-600 hover:bg-blue-500 text-white h-8 text-xs gap-1.5">
           <Plus size={13} /> Novo
@@ -782,6 +794,9 @@ export default function UsersPage() {
                   Empresa<SortIcon active={sort === 'partner_name'} dir={sortDir as 'asc' | 'desc'} />
                 </th>
               )}
+              {filterRole === 'cliente' && (
+                <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Cliente</th>
+              )}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Perfil</th>
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Sustentação</th>
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Status</th>
@@ -789,7 +804,7 @@ export default function UsersPage() {
           </thead>
           <tbody>
             {loading ? <TableSkeleton /> : users.length === 0 ? (
-              <tr><td colSpan={canResetPwd ? 7 : 6} className="px-3 py-8 text-center text-zinc-500">Nenhum usuário encontrado</td></tr>
+              <tr><td colSpan={(canResetPwd ? 7 : 6) + ((filterRole === 'parceiro_admin' || filterRole === 'cliente') ? 1 : 0)} className="px-3 py-8 text-center text-zinc-500">Nenhum usuário encontrado</td></tr>
             ) : users.map(user => (
               <tr key={user.id} className={`border-b border-zinc-800 hover:bg-zinc-800/40 transition-colors ${selectedIds.has(user.id) ? 'bg-cyan-500/5' : ''}`}>
                 {canResetPwd && (
@@ -819,6 +834,13 @@ export default function UsersPage() {
                       : <span className="text-xs text-zinc-600">—</span>}
                   </td>
                 )}
+                {filterRole === 'cliente' && (
+                  <td className="px-3 py-2.5 hidden sm:table-cell">
+                    {user.customer?.name
+                      ? <span className="text-xs font-medium text-zinc-200">{user.customer.name}</span>
+                      : <span className="text-xs text-zinc-600">—</span>}
+                  </td>
+                )}
                 <td className="px-3 py-2.5 hidden sm:table-cell">
                   <div className="flex flex-wrap gap-1 items-center">
                     {user.type && (
@@ -831,7 +853,9 @@ export default function UsersPage() {
                         Parceiro ADM
                       </Badge>
                     )}
-                    {user.consultant_type && (
+                    {/* consultant_type só faz sentido pra consultor/parceiro_admin —
+                        evita "Banco de Horas" aparecer para cliente/admin/etc por dado stale. */}
+                    {user.consultant_type && (user.type === 'consultor' || user.type === 'parceiro_admin') && (
                       <span className="text-[10px] text-zinc-500">
                         {CONSULTANT_OPTIONS.find(o => o.value === user.consultant_type)?.label ?? user.consultant_type}
                       </span>
