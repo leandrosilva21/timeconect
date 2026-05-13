@@ -4,7 +4,7 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
-import { Star, Users as UsersIcon, Save, AlertTriangle } from 'lucide-react'
+import { Star, Users as UsersIcon, Save, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react'
 
 // ── Tipos locais (mantemos aqui pra não acoplar types globais ainda) ─────────
 interface Skill {
@@ -46,6 +46,58 @@ interface GapsResponse {
   total: number
   gaps: Gap[]
 }
+interface Holder {
+  consultant_id: number
+  name: string
+  level: string
+  level_weight: number
+  consultant_type: 'internal' | 'candidate' | null
+}
+interface HoldersResponse {
+  skill: { id: number; name: string; category: string }
+  min_weight: number | null
+  total: number
+  holders: Holder[]
+}
+
+// ── Helpers de apresentação ──────────────────────────────────────────────────
+function gapKey(g: Gap): string {
+  return `${g.skill.id}::${g.context ?? ''}`
+}
+
+function distanceLabel(actualWeight: number | null | undefined, requiredWeight: number): string {
+  if (actualWeight == null) return ''
+  const diff = requiredWeight - actualWeight
+  if (diff <= 0) return ''
+  return ` (-${diff} ${diff === 1 ? 'nível' : 'níveis'})`
+}
+
+/** Reduz redundância entre category e context, anexa tag de impacto se detectável. */
+function contextLabel(context: string | null, category: string): string {
+  if (!context) return category
+  let label = context.trim()
+  // Remove palavras da category embutidas no context (ex: "Implementação Protheus" + cat "Protheus" → "Implementação")
+  const catWords = category.toLowerCase().split(/\s+/).filter(w => w.length > 3)
+  catWords.forEach(w => {
+    label = label.replace(new RegExp(`\\b${w}\\b`, 'gi'), '').trim()
+  })
+  label = label.replace(/\s{2,}/g, ' ').replace(/^[-·\s]+|[-·\s]+$/g, '').trim()
+  if (!label) label = context
+  const c = context.toLowerCase()
+  if (/impleme|implant/.test(c)) return `${label} (crítico)`
+  if (/suporte|manuten/.test(c))  return `${label} (baixo impacto)`
+  return label
+}
+
+function actionSuggestion(g: Gap): string {
+  if (g.type === 'missing') {
+    return `Alocar consultor com nível ${g.required_level.name} · ou treinar (estimativa: alta)`
+  }
+  const diff = g.required_level.weight - (g.actual_level?.weight ?? 0)
+  if (diff >= 2) return `Treinar — gap de ${diff} níveis · ou atuar somente com apoio`
+  return 'Pode executar com apoio'
+}
+
 
 export default function MatrizConhecimentoPage() {
   const [consultants, setConsultants]               = useState<ConsultantOption[]>([])
@@ -58,6 +110,9 @@ export default function MatrizConhecimentoPage() {
   const [savingSkillId, setSavingSkillId]           = useState<number | null>(null)
   const [gaps, setGaps]                             = useState<Gap[]>([])
   const [loadingGaps, setLoadingGaps]               = useState(false)
+  const [expandedGapKey, setExpandedGapKey]         = useState<string | null>(null)
+  const [holdersByKey, setHoldersByKey]             = useState<Record<string, Holder[]>>({})
+  const [loadingHoldersKey, setLoadingHoldersKey]   = useState<string | null>(null)
 
   // ── Carrega skills + levels + lista de consultores ──────────────────────────
   useEffect(() => {
@@ -111,6 +166,8 @@ export default function MatrizConhecimentoPage() {
   }, [])
 
   useEffect(() => {
+    setExpandedGapKey(null)
+    setHoldersByKey({})
     if (selectedConsultant != null) {
       loadConsultantSkills(selectedConsultant)
     } else {
@@ -118,6 +175,28 @@ export default function MatrizConhecimentoPage() {
       setGaps([])
     }
   }, [selectedConsultant, loadConsultantSkills])
+
+  const toggleHolders = useCallback(async (g: Gap) => {
+    const key = gapKey(g)
+    if (expandedGapKey === key) {
+      setExpandedGapKey(null)
+      return
+    }
+    setExpandedGapKey(key)
+    if (holdersByKey[key]) return // cache
+    setLoadingHoldersKey(key)
+    try {
+      const data = await api.get<HoldersResponse>(
+        `/skills/${g.skill.id}/holders?min_level_id=${g.required_level.id}`
+      )
+      setHoldersByKey(prev => ({ ...prev, [key]: data.holders ?? [] }))
+    } catch {
+      toast.error('Erro ao carregar quem possui essa skill')
+      setHoldersByKey(prev => ({ ...prev, [key]: [] }))
+    } finally {
+      setLoadingHoldersKey(null)
+    }
+  }, [expandedGapKey, holdersByKey])
 
   // ── Mapa skill_id → consultant_skill pra lookup rápido ──────────────────────
   const csBySkill = useMemo(() => {
@@ -199,8 +278,80 @@ export default function MatrizConhecimentoPage() {
 
         {/* ── Gaps críticos ──────────────────────────────────────────────── */}
         {selectedConsultant && !loadingGaps && gaps.length > 0 && (() => {
-          const missingGaps = gaps.filter(g => g.type === 'missing')
-          const belowGaps   = gaps.filter(g => g.type === 'below')
+          // Sort: missing por required_level desc; below por (req - actual) desc.
+          const missingGaps = gaps
+            .filter(g => g.type === 'missing')
+            .slice()
+            .sort((a, b) => b.required_level.weight - a.required_level.weight
+                          || a.skill.name.localeCompare(b.skill.name, 'pt-BR'))
+          const belowGaps = gaps
+            .filter(g => g.type === 'below')
+            .slice()
+            .sort((a, b) => {
+              const da = a.required_level.weight - (a.actual_level?.weight ?? 0)
+              const db = b.required_level.weight - (b.actual_level?.weight ?? 0)
+              return db - da
+                  || b.required_level.weight - a.required_level.weight
+                  || a.skill.name.localeCompare(b.skill.name, 'pt-BR')
+            })
+
+          const renderHoldersInline = (g: Gap) => {
+            const key = gapKey(g)
+            const expanded = expandedGapKey === key
+            const list = holdersByKey[key]
+            const loading = loadingHoldersKey === key
+            return (
+              <>
+                <button
+                  type="button"
+                  onClick={() => toggleHolders(g)}
+                  className="flex items-center gap-1"
+                  style={{
+                    marginTop: 10, fontSize: 11, color: 'var(--text-muted)',
+                    background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+                    fontWeight: 500,
+                  }}
+                >
+                  {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                  <span style={{ textDecoration: 'underline', textUnderlineOffset: 2 }}>
+                    {expanded ? 'Ocultar quem possui' : 'Ver quem possui'}
+                  </span>
+                </button>
+                {expanded && (
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                    {loading && (
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>Carregando…</p>
+                    )}
+                    {!loading && list && list.length === 0 && (
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        Ninguém alcança {g.required_level.name} ainda.
+                      </p>
+                    )}
+                    {!loading && list && list.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {list.map(h => (
+                          <span
+                            key={h.consultant_id}
+                            title={`${h.level}${h.consultant_type === 'candidate' ? ' · candidato' : ''}`}
+                            style={{
+                              fontSize: 11, color: 'var(--text)',
+                              border: '1px solid var(--border)', borderRadius: 4,
+                              padding: '2px 8px', fontWeight: 500,
+                              background: h.consultant_type === 'candidate'
+                                ? 'transparent' : 'var(--surface-hover, transparent)',
+                            }}
+                          >
+                            {h.name} <span style={{ color: 'var(--text-muted)' }}>· {h.level}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )
+          }
+
           return (
           <div className="ds-card ds-card-pad ds-card-highlight-danger">
             <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
@@ -217,37 +368,42 @@ export default function MatrizConhecimentoPage() {
                   Crítico — {missingGaps.length} {missingGaps.length === 1 ? 'skill' : 'skills'} sem cobertura
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {missingGaps.map((g, i) => (
+                  {missingGaps.map(g => (
                     <div
-                      key={`m-${g.skill.id}-${g.context ?? ''}-${i}`}
-                      className="flex items-center justify-between gap-4"
+                      key={`m-${gapKey(g)}`}
                       style={{ background: 'var(--danger-bg)', border: '1.5px solid var(--danger-border)', borderRadius: 8, padding: '14px' }}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span style={{
-                          fontSize: 11, background: 'var(--primary-soft)', color: 'var(--primary)',
-                          padding: '4px 10px', borderRadius: 4, fontWeight: 600,
-                          letterSpacing: '0.02em', textTransform: 'uppercase', flexShrink: 0,
-                        }}>
-                          {g.required_level.name}
-                        </span>
-                        <div style={{ minWidth: 0 }}>
-                          <div className="text-sm truncate" style={{ color: 'var(--text)', fontWeight: 600 }}>
-                            {g.skill.name}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
-                            {g.skill.category}{g.context ? ` · ${g.context}` : ''}
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span style={{
+                            fontSize: 11, background: 'var(--primary-soft)', color: 'var(--primary)',
+                            padding: '4px 10px', borderRadius: 4, fontWeight: 600,
+                            letterSpacing: '0.02em', textTransform: 'uppercase', flexShrink: 0,
+                          }}>
+                            {g.required_level.name}
+                          </span>
+                          <div style={{ minWidth: 0 }}>
+                            <div className="text-sm truncate" style={{ color: 'var(--text)', fontWeight: 600 }}>
+                              {g.skill.name}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
+                              Contexto: {contextLabel(g.context, g.skill.category)}
+                            </div>
                           </div>
                         </div>
+                        <span style={{
+                          fontSize: 11, color: 'var(--danger)',
+                          border: '1px dashed var(--danger-border)',
+                          padding: '6px 12px', borderRadius: 4, fontWeight: 600,
+                          textTransform: 'uppercase', letterSpacing: '0.02em', flexShrink: 0,
+                        }}>
+                          não possui
+                        </span>
                       </div>
-                      <span style={{
-                        fontSize: 11, color: 'var(--danger)',
-                        border: '1px dashed var(--danger-border)',
-                        padding: '6px 12px', borderRadius: 4, fontWeight: 600,
-                        textTransform: 'uppercase', letterSpacing: '0.02em', flexShrink: 0,
-                      }}>
-                        não possui
-                      </span>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>
+                        ↪ {actionSuggestion(g)}
+                      </p>
+                      {renderHoldersInline(g)}
                     </div>
                   ))}
                 </div>
@@ -260,40 +416,45 @@ export default function MatrizConhecimentoPage() {
                   Moderado — {belowGaps.length} abaixo do requerido
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {belowGaps.map((g, i) => (
+                  {belowGaps.map(g => (
                     <div
-                      key={`b-${g.skill.id}-${g.context ?? ''}-${i}`}
-                      className="flex items-center justify-between gap-4"
+                      key={`b-${gapKey(g)}`}
                       style={{
                         borderLeft: '3px solid var(--warning-border)',
                         borderRadius: 4,
                         padding: '12px 14px 12px 12px',
                       }}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span style={{
-                          fontSize: 11, background: 'var(--primary-soft)', color: 'var(--primary)',
-                          padding: '4px 10px', borderRadius: 4, fontWeight: 600,
-                          letterSpacing: '0.02em', textTransform: 'uppercase', flexShrink: 0,
-                        }}>
-                          {g.required_level.name}
-                        </span>
-                        <div style={{ minWidth: 0 }}>
-                          <div className="text-sm truncate" style={{ color: 'var(--text)', fontWeight: 500 }}>
-                            {g.skill.name}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
-                            {g.skill.category}{g.context ? ` · ${g.context}` : ''}
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span style={{
+                            fontSize: 11, background: 'var(--primary-soft)', color: 'var(--primary)',
+                            padding: '4px 10px', borderRadius: 4, fontWeight: 600,
+                            letterSpacing: '0.02em', textTransform: 'uppercase', flexShrink: 0,
+                          }}>
+                            {g.required_level.name}
+                          </span>
+                          <div style={{ minWidth: 0 }}>
+                            <div className="text-sm truncate" style={{ color: 'var(--text)', fontWeight: 500 }}>
+                              {g.skill.name}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
+                              Contexto: {contextLabel(g.context, g.skill.category)}
+                            </div>
                           </div>
                         </div>
+                        <span style={{
+                          fontSize: 11, color: 'var(--warning)',
+                          border: '1px solid var(--warning-border)', background: 'transparent',
+                          padding: '6px 12px', borderRadius: 4, fontWeight: 600, flexShrink: 0,
+                        }}>
+                          {g.actual_level?.name}{distanceLabel(g.actual_level?.weight, g.required_level.weight)}
+                        </span>
                       </div>
-                      <span style={{
-                        fontSize: 11, color: 'var(--warning)',
-                        border: '1px solid var(--warning-border)', background: 'transparent',
-                        padding: '6px 12px', borderRadius: 4, fontWeight: 600, flexShrink: 0,
-                      }}>
-                        {g.actual_level?.name}
-                      </span>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>
+                        ↪ {actionSuggestion(g)}
+                      </p>
+                      {renderHoldersInline(g)}
                     </div>
                   ))}
                 </div>
