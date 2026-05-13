@@ -198,41 +198,93 @@ export default function MatrizConhecimentoPage() {
         </div>
 
         {/* ── Gaps críticos ──────────────────────────────────────────────── */}
-        {selectedConsultant && !loadingGaps && gaps.length > 0 && (
+        {selectedConsultant && !loadingGaps && gaps.length > 0 && (() => {
+          const missingGaps = gaps.filter(g => g.type === 'missing')
+          const belowGaps   = gaps.filter(g => g.type === 'below')
+          return (
           <div className="ds-card ds-card-pad ds-card-highlight-danger">
-            <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle size={16} style={{ color: 'var(--danger-border, var(--text))' }} />
-              <h3 className="ds-card-title" style={{ fontSize: 13, margin: 0 }}>Gaps críticos</h3>
-              <span className="ds-card-sub" style={{ marginLeft: 8 }}>{gaps.length} skill{gaps.length === 1 ? '' : 's'} abaixo do requerido</span>
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle size={16} style={{ color: 'var(--danger)' }} />
+              <h3 style={{ fontSize: 14, margin: 0, color: 'var(--danger)', fontWeight: 600 }}>Gaps críticos</h3>
+              <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--text-muted)' }}>
+                {gaps.length} {gaps.length === 1 ? 'skill' : 'skills'}
+              </span>
             </div>
-            <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
-              {gaps.map((g, i) => (
-                <div
-                  key={`${g.skill.id}-${g.context ?? ''}-${i}`}
-                  className="flex items-center justify-between gap-4 py-2"
-                  style={{ borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{g.skill.name}</span>
-                    <span className="ds-card-sub" style={{ fontSize: 11 }}>{g.skill.category}</span>
-                    {g.context && (
-                      <span className="ds-status ds-status-info" style={{ fontSize: 10 }}>{g.context}</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 text-xs">
-                    {g.type === 'missing' ? (
-                      <span className="ds-status ds-status-danger">não possui</span>
-                    ) : (
-                      <span className="ds-status ds-status-warning">{g.actual_level?.name}</span>
-                    )}
-                    <span style={{ color: 'var(--text-muted)' }}>→</span>
-                    <span className="ds-status ds-status-info">{g.required_level.name}</span>
-                  </div>
+
+            {missingGaps.length > 0 && (
+              <div style={{ marginBottom: belowGaps.length > 0 ? 16 : 0 }}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--danger)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Crítico — {missingGaps.length}
+                </p>
+                <div className="space-y-2">
+                  {missingGaps.map((g, i) => (
+                    <div
+                      key={`m-${g.skill.id}-${g.context ?? ''}-${i}`}
+                      className="flex items-center justify-between gap-4"
+                      style={{ background: 'var(--danger-bg)', border: '1.5px solid var(--danger-border)', borderRadius: 8, padding: '10px 12px' }}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm truncate" style={{ color: 'var(--text)', fontWeight: 600 }}>{g.skill.name}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{g.skill.category}</span>
+                        {g.context && (
+                          <span style={{ fontSize: 10, color: 'var(--text-muted)', border: '1px dashed var(--border)', borderRadius: 4, padding: '1px 6px', fontWeight: 500 }}>
+                            {g.context}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span style={{ fontSize: 11, background: 'var(--primary-soft)', color: 'var(--primary)', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
+                          {g.required_level.name}
+                        </span>
+                        <span style={{ color: 'var(--text-muted)' }}>→</span>
+                        <span style={{ fontSize: 11, color: 'var(--danger)', border: '1px dashed var(--danger-border)', padding: '3px 8px', borderRadius: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          não possui
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+
+            {belowGaps.length > 0 && (
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--warning-border)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Moderado — {belowGaps.length}
+                </p>
+                <div>
+                  {belowGaps.map((g, i) => (
+                    <div
+                      key={`b-${g.skill.id}-${g.context ?? ''}-${i}`}
+                      className="flex items-center justify-between gap-4 py-2"
+                      style={{ borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm truncate" style={{ color: 'var(--text)' }}>{g.skill.name}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{g.skill.category}</span>
+                        {g.context && (
+                          <span style={{ fontSize: 10, color: 'var(--text-muted)', border: '1px dashed var(--border)', borderRadius: 4, padding: '1px 6px', fontWeight: 500 }}>
+                            {g.context}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 text-xs">
+                        <span style={{ background: 'var(--primary-soft)', color: 'var(--primary)', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
+                          {g.required_level.name}
+                        </span>
+                        <span style={{ color: 'var(--text-muted)' }}>→</span>
+                        <span style={{ color: 'var(--text-muted)', border: '1px dashed var(--border)', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>
+                          {g.actual_level?.name}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        )}
+          )
+        })()}
 
         {selectedConsultant && !loadingGaps && gaps.length === 0 && (
           <div className="ds-card ds-card-pad ds-card-highlight-success">
