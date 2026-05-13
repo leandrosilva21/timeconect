@@ -203,44 +203,51 @@ export default function MatrizConhecimentoPage() {
           const belowGaps   = gaps.filter(g => g.type === 'below')
           return (
           <div className="ds-card ds-card-pad ds-card-highlight-danger">
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
               <AlertTriangle size={16} style={{ color: 'var(--danger)' }} />
               <h3 style={{ fontSize: 14, margin: 0, color: 'var(--danger)', fontWeight: 600 }}>Gaps críticos</h3>
-              <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--text-muted)' }}>
-                {gaps.length} {gaps.length === 1 ? 'skill' : 'skills'}
-              </span>
             </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+              {gaps.length} {gaps.length === 1 ? 'skill abaixo' : 'skills abaixo'} do requerido
+            </p>
 
             {missingGaps.length > 0 && (
-              <div style={{ marginBottom: belowGaps.length > 0 ? 16 : 0 }}>
-                <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--danger)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+              <div style={{ marginBottom: belowGaps.length > 0 ? 20 : 0 }}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--danger)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
                   Crítico — {missingGaps.length}
                 </p>
-                <div className="space-y-2">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {missingGaps.map((g, i) => (
                     <div
                       key={`m-${g.skill.id}-${g.context ?? ''}-${i}`}
                       className="flex items-center justify-between gap-4"
-                      style={{ background: 'var(--danger-bg)', border: '1.5px solid var(--danger-border)', borderRadius: 8, padding: '10px 12px' }}
+                      style={{ background: 'var(--danger-bg)', border: '1.5px solid var(--danger-border)', borderRadius: 8, padding: '14px' }}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm truncate" style={{ color: 'var(--text)', fontWeight: 600 }}>{g.skill.name}</span>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{g.skill.category}</span>
-                        {g.context && (
-                          <span style={{ fontSize: 10, color: 'var(--text-muted)', border: '1px dashed var(--border)', borderRadius: 4, padding: '1px 6px', fontWeight: 500 }}>
-                            {g.context}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span style={{ fontSize: 11, background: 'var(--primary-soft)', color: 'var(--primary)', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span style={{
+                          fontSize: 11, background: 'var(--primary-soft)', color: 'var(--primary)',
+                          padding: '4px 10px', borderRadius: 4, fontWeight: 800,
+                          letterSpacing: '0.04em', textTransform: 'uppercase', flexShrink: 0,
+                        }}>
                           {g.required_level.name}
                         </span>
-                        <span style={{ color: 'var(--text-muted)' }}>→</span>
-                        <span style={{ fontSize: 11, color: 'var(--danger)', border: '1px dashed var(--danger-border)', padding: '3px 8px', borderRadius: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          não possui
-                        </span>
+                        <div style={{ minWidth: 0 }}>
+                          <div className="text-sm truncate" style={{ color: 'var(--text)', fontWeight: 600 }}>
+                            {g.skill.name}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
+                            {g.skill.category}{g.context ? ` · ${g.context}` : ''}
+                          </div>
+                        </div>
                       </div>
+                      <span style={{
+                        fontSize: 11, color: 'var(--danger)',
+                        border: '1px dashed var(--danger-border)',
+                        padding: '4px 10px', borderRadius: 4, fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0,
+                      }}>
+                        não possui
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -249,34 +256,45 @@ export default function MatrizConhecimentoPage() {
 
             {belowGaps.length > 0 && (
               <div>
-                <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--warning-border)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--warning)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
                   Moderado — {belowGaps.length}
                 </p>
-                <div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {belowGaps.map((g, i) => (
                     <div
                       key={`b-${g.skill.id}-${g.context ?? ''}-${i}`}
-                      className="flex items-center justify-between gap-4 py-2"
-                      style={{ borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}
+                      className="flex items-center justify-between gap-4"
+                      style={{
+                        background: 'var(--warning-bg)',
+                        borderLeft: '3px solid var(--warning-border)',
+                        borderRadius: 4,
+                        padding: '12px 14px',
+                      }}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm truncate" style={{ color: 'var(--text)' }}>{g.skill.name}</span>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{g.skill.category}</span>
-                        {g.context && (
-                          <span style={{ fontSize: 10, color: 'var(--text-muted)', border: '1px dashed var(--border)', borderRadius: 4, padding: '1px 6px', fontWeight: 500 }}>
-                            {g.context}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0 text-xs">
-                        <span style={{ background: 'var(--primary-soft)', color: 'var(--primary)', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span style={{
+                          fontSize: 11, background: 'var(--primary-soft)', color: 'var(--primary)',
+                          padding: '3px 9px', borderRadius: 4, fontWeight: 700,
+                          letterSpacing: '0.04em', textTransform: 'uppercase', flexShrink: 0,
+                        }}>
                           {g.required_level.name}
                         </span>
-                        <span style={{ color: 'var(--text-muted)' }}>→</span>
-                        <span style={{ color: 'var(--text-muted)', border: '1px dashed var(--border)', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>
-                          {g.actual_level?.name}
-                        </span>
+                        <div style={{ minWidth: 0 }}>
+                          <div className="text-sm truncate" style={{ color: 'var(--text)', fontWeight: 500 }}>
+                            {g.skill.name}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
+                            {g.skill.category}{g.context ? ` · ${g.context}` : ''}
+                          </div>
+                        </div>
                       </div>
+                      <span style={{
+                        fontSize: 11, color: 'var(--warning)',
+                        border: '1px solid var(--warning-border)', background: 'transparent',
+                        padding: '3px 9px', borderRadius: 4, fontWeight: 600, flexShrink: 0,
+                      }}>
+                        {g.actual_level?.name}
+                      </span>
                     </div>
                   ))}
                 </div>
