@@ -12,9 +12,9 @@ import { Building2, User } from 'lucide-react'
 const APP_ENV = process.env.NEXT_PUBLIC_APP_ENV
 const ENV_BANNER =
   APP_ENV === 'dev'
-    ? { bg: '#EA580C', text: '⚠ AMBIENTE DE DESENVOLVIMENTO — DADOS DESCARTÁVEIS ⚠' }
+    ? { bg: '#FACC15', fg: '#000', text: '⚠ AMBIENTE DE DESENVOLVIMENTO — DADOS DESCARTÁVEIS ⚠' }
     : APP_ENV === 'homolog'
-    ? { bg: '#DC2626', text: '⚠ AMBIENTE DE HOMOLOGAÇÃO — NÃO USE DADOS REAIS ⚠' }
+    ? { bg: '#DC2626', fg: '#fff', text: '⚠ AMBIENTE DE HOMOLOGAÇÃO — NÃO USE DADOS REAIS ⚠' }
     : null
 
 interface AppLayoutProps {
@@ -66,7 +66,7 @@ export function AppLayout({ children, title, actions }: AppLayoutProps) {
             fontSize: '11px',
             fontWeight: 800,
             letterSpacing: '0.25em',
-            color: '#fff',
+            color: ENV_BANNER.fg,
             textTransform: 'uppercase',
             fontFamily: 'monospace',
           }}>
