@@ -4,7 +4,7 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
-import { UserCheck, FolderOpen, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { UserCheck, FolderOpen, AlertTriangle, CheckCircle2, Sparkles, Plus, AlertOctagon } from 'lucide-react'
 
 interface ProjectOption {
   id: number
@@ -36,12 +36,38 @@ interface CoverageResponse {
   required_skills: RequiredSkillCoverage[]
 }
 
+interface RecommendationGap {
+  skill: { id: number; name: string; category: string }
+  required_level: string
+  actual_level: string | null
+  type: 'missing' | 'below'
+}
+interface Recommendation {
+  consultant_id: number
+  name: string
+  score: number
+  coverage: 'Completo' | 'Parcial' | 'Insuficiente'
+  skills_match: number
+  skills_total: number
+  type: 'internal' | 'partner' | 'candidate'
+  gaps: RecommendationGap[]
+}
+interface RecommendationsResponse {
+  project: { id: number; name: string }
+  required_count?: number
+  recommendations: Recommendation[]
+  message?: string
+}
+
 export default function CoberturaSkillsPage() {
   const [projects, setProjects]                 = useState<ProjectOption[]>([])
   const [loadingProjects, setLoadingProjects]   = useState(true)
   const [selectedProject, setSelectedProject]   = useState<number | null>(null)
   const [coverage, setCoverage]                 = useState<CoverageResponse | null>(null)
   const [loadingCoverage, setLoadingCoverage]   = useState(false)
+  const [recos, setRecos]                       = useState<Recommendation[]>([])
+  const [loadingRecos, setLoadingRecos]         = useState(false)
+  const [allocatingId, setAllocatingId]         = useState<number | null>(null)
 
   useEffect(() => {
     (async () => {
@@ -78,10 +104,48 @@ export default function CoberturaSkillsPage() {
     }
   }, [])
 
-  useEffect(() => {
-    if (selectedProject != null) loadCoverage(selectedProject)
-    else setCoverage(null)
+  const loadRecos = useCallback(async (projectId: number) => {
+    setLoadingRecos(true)
+    try {
+      const data = await api.get<RecommendationsResponse>(`/projects/${projectId}/recommendations`)
+      setRecos(data.recommendations ?? [])
+    } catch {
+      toast.error('Erro ao carregar recomendações')
+      setRecos([])
+    } finally {
+      setLoadingRecos(false)
+    }
+  }, [])
+
+  const allocate = useCallback(async (r: Recommendation, withCaveat: boolean) => {
+    if (selectedProject == null) return
+    setAllocatingId(r.consultant_id)
+    try {
+      await api.post(`/projects/${selectedProject}/allocate`, {
+        consultant_id: r.consultant_id,
+        with_caveat: withCaveat,
+      })
+      toast.success(`${r.name} alocado${withCaveat ? ' com ressalva' : ''}`)
+      // Atualização otimista: remove o consultor da lista local de recos
+      setRecos(prev => prev.filter(x => x.consultant_id !== r.consultant_id))
+      // Refetch coverage (números mudam)
+      loadCoverage(selectedProject)
+    } catch {
+      toast.error(`Erro ao alocar ${r.name}`)
+    } finally {
+      setAllocatingId(null)
+    }
   }, [selectedProject, loadCoverage])
+
+  useEffect(() => {
+    if (selectedProject != null) {
+      loadCoverage(selectedProject)
+      loadRecos(selectedProject)
+    } else {
+      setCoverage(null)
+      setRecos([])
+    }
+  }, [selectedProject, loadCoverage, loadRecos])
 
   const summary = useMemo(() => {
     if (!coverage) return null
@@ -223,6 +287,147 @@ export default function CoberturaSkillsPage() {
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
               Selecione um projeto acima para ver a cobertura de skills dos consultores alocados.
             </p>
+          </div>
+        )}
+
+        {/* ── Sugestões de Alocação ─────────────────────────────────────── */}
+        {selectedProject && (
+          <div className="ds-card ds-card-pad" style={{ marginTop: 8 }}>
+            <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
+              <Sparkles size={16} style={{ color: 'var(--primary)' }} />
+              <h3 style={{ fontSize: 14, margin: 0, color: 'var(--text)', fontWeight: 600 }}>
+                Sugestões de Alocação
+              </h3>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
+              Top 10 consultores com melhor match para as skills exigidas (exclui já alocados)
+            </p>
+
+            {loadingRecos && (
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Carregando recomendações…</p>
+            )}
+
+            {!loadingRecos && recos.length === 0 && (
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                Sem sugestões disponíveis. Cadastre skills exigidas no projeto e tenha consultores com matriz preenchida.
+              </p>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {recos.map((r) => {
+                const scorePct = Math.round(r.score * 100)
+                const okFit = r.coverage === 'Completo'
+                const partial = r.coverage === 'Parcial'
+                const badgeStyle = okFit
+                  ? { background: 'var(--success-bg)', color: 'var(--success)', borderColor: 'var(--success-border)' }
+                  : partial
+                  ? { background: 'var(--warning-bg)', color: 'var(--warning)', borderColor: 'var(--warning-border)' }
+                  : { background: 'var(--danger-bg)', color: 'var(--danger)', borderColor: 'var(--danger-border)' }
+                const borderLeft = okFit ? 'var(--success-border)'
+                                 : partial ? 'var(--warning-border)'
+                                 : 'var(--danger-border)'
+                const allocating = allocatingId === r.consultant_id
+                const typeBadge = r.type === 'internal' ? 'Interno'
+                                : r.type === 'partner'  ? 'Parceiro'
+                                : 'Candidato'
+                return (
+                  <div
+                    key={r.consultant_id}
+                    style={{
+                      borderLeft: `3px solid ${borderLeft}`,
+                      borderRadius: 4,
+                      padding: '12px 14px',
+                      background: 'transparent',
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div style={{ minWidth: 0 }}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm" style={{ color: 'var(--text)', fontWeight: 600 }}>
+                              {r.name}
+                            </span>
+                            <span style={{
+                              fontSize: 10, color: 'var(--text-muted)', border: '1px solid var(--border)',
+                              padding: '1px 6px', borderRadius: 3, fontWeight: 500,
+                              textTransform: 'uppercase', letterSpacing: '0.04em',
+                            }}>
+                              {typeBadge}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
+                            {r.skills_match}/{r.skills_total} skills cobertas
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span style={{
+                          fontSize: 14, fontWeight: 700, color: 'var(--text)',
+                          minWidth: 44, textAlign: 'right',
+                        }}>
+                          {scorePct}%
+                        </span>
+                        <span style={{
+                          fontSize: 11, fontWeight: 600,
+                          padding: '4px 10px', borderRadius: 4,
+                          border: '1px solid', ...badgeStyle,
+                        }}>
+                          {r.coverage}
+                        </span>
+                      </div>
+                    </div>
+
+                    {r.gaps.length > 0 && (
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+                        <span style={{ fontWeight: 600 }}>Gaps:</span>{' '}
+                        {r.gaps.slice(0, 4).map((g, i) => (
+                          <span key={`${r.consultant_id}-${g.skill.id}-${i}`}>
+                            {i > 0 && ', '}
+                            {g.skill.name} ({g.type === 'missing' ? 'não possui' : `${g.actual_level} → ${g.required_level}`})
+                          </span>
+                        ))}
+                        {r.gaps.length > 4 && ` e mais ${r.gaps.length - 4}`}
+                      </p>
+                    )}
+
+                    <div style={{ marginTop: 10 }}>
+                      {okFit ? (
+                        <button
+                          type="button"
+                          className="ds-btn-primary"
+                          disabled={allocating}
+                          onClick={() => allocate(r, false)}
+                          style={{ fontSize: 12, padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        >
+                          <Plus size={12} />
+                          Alocar no projeto
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={allocating}
+                          onClick={() => allocate(r, true)}
+                          style={{
+                            fontSize: 12, padding: '6px 14px',
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                            background: 'transparent',
+                            color: 'var(--warning)',
+                            border: '1px solid var(--warning-border)',
+                            borderRadius: 4,
+                            fontWeight: 600,
+                            cursor: allocating ? 'wait' : 'pointer',
+                            opacity: allocating ? 0.6 : 1,
+                          }}
+                        >
+                          <AlertOctagon size={12} />
+                          Alocar com ressalva
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>
