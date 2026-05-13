@@ -8,7 +8,14 @@ import { useAuth } from '@/hooks/use-auth'
 import { api } from '@/lib/api'
 import { Building2, User } from 'lucide-react'
 
-const IS_HOMOLOG = process.env.NEXT_PUBLIC_APP_ENV === 'homolog'
+// Banner de ambiente: cores distintas para evitar confundir DEV ↔ HOMOLOG ↔ PROD.
+const APP_ENV = process.env.NEXT_PUBLIC_APP_ENV
+const ENV_BANNER =
+  APP_ENV === 'dev'
+    ? { bg: '#EA580C', text: '⚠ AMBIENTE DE DESENVOLVIMENTO — DADOS DESCARTÁVEIS ⚠' }
+    : APP_ENV === 'homolog'
+    ? { bg: '#DC2626', text: '⚠ AMBIENTE DE HOMOLOGAÇÃO — NÃO USE DADOS REAIS ⚠' }
+    : null
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -51,10 +58,10 @@ export function AppLayout({ children, title, actions }: AppLayoutProps) {
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: 'var(--brand-bg)' }}>
 
-      {/* ── Faixa HOMOLOG — só aparece quando NEXT_PUBLIC_APP_ENV=homolog ── */}
-      {IS_HOMOLOG && (
+      {/* ── Faixa de ambiente — só aparece em DEV ou HOMOLOG ── */}
+      {ENV_BANNER && (
         <div className="shrink-0 flex items-center justify-center gap-3 py-1.5 z-50"
-          style={{ background: '#DC2626' }}>
+          style={{ background: ENV_BANNER.bg }}>
           <span style={{
             fontSize: '11px',
             fontWeight: 800,
@@ -63,7 +70,7 @@ export function AppLayout({ children, title, actions }: AppLayoutProps) {
             textTransform: 'uppercase',
             fontFamily: 'monospace',
           }}>
-            ⚠ AMBIENTE DE HOMOLOGAÇÃO — NÃO USE DADOS REAIS ⚠
+            {ENV_BANNER.text}
           </span>
         </div>
       )}
