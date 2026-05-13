@@ -1,10 +1,11 @@
 'use client'
 
 import { AppLayout } from '@/components/layout/app-layout'
+import Link from 'next/link'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
-import { Star, Users as UsersIcon, Save, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react'
+import { Star, Users as UsersIcon, Save, AlertTriangle, ChevronRight, ChevronDown, Edit3 } from 'lucide-react'
 
 // ── Tipos locais (mantemos aqui pra não acoplar types globais ainda) ─────────
 interface Skill {
@@ -260,17 +261,37 @@ export default function MatrizConhecimentoPage() {
             <UsersIcon size={18} style={{ color: 'var(--text-muted)' }} />
             <h2 className="ds-card-title" style={{ fontSize: 14, margin: 0 }}>Consultor</h2>
           </div>
-          <select
-            className="ds-input w-full"
-            value={selectedConsultant ?? ''}
-            onChange={(e) => setSelectedConsultant(e.target.value ? Number(e.target.value) : null)}
-            disabled={loadingMeta}
-          >
-            <option value="">— Selecione um consultor —</option>
-            {consultants.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <select
+              className="ds-input"
+              style={{ flex: 1 }}
+              value={selectedConsultant ?? ''}
+              onChange={(e) => setSelectedConsultant(e.target.value ? Number(e.target.value) : null)}
+              disabled={loadingMeta}
+            >
+              <option value="">— Selecione um consultor —</option>
+              {consultants.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            {selectedConsultant && (
+              <Link
+                href={`/perfil-skills/${selectedConsultant}`}
+                style={{
+                  fontSize: 12, padding: '7px 12px',
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  background: 'transparent',
+                  color: 'var(--primary)',
+                  border: '1px solid var(--primary)',
+                  borderRadius: 4, fontWeight: 600,
+                  textDecoration: 'none', whiteSpace: 'nowrap',
+                }}
+              >
+                <Edit3 size={12} />
+                Editar perfil
+              </Link>
+            )}
+          </div>
           {loadingMeta && (
             <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>Carregando consultores…</p>
           )}
