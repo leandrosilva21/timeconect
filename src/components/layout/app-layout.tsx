@@ -13,6 +13,8 @@ const APP_ENV = process.env.NEXT_PUBLIC_APP_ENV
 const ENV_BANNER =
   APP_ENV === 'dev'
     ? { bg: '#FACC15', fg: '#000', text: '⚠ AMBIENTE DE DESENVOLVIMENTO — DADOS DESCARTÁVEIS ⚠' }
+    : APP_ENV === 'dev2'
+    ? { bg: '#7C3AED', fg: '#fff', text: '⚠ AMBIENTE DE DESENVOLVIMENTO 2 — DADOS DESCARTÁVEIS ⚠' }
     : APP_ENV === 'homolog'
     ? { bg: '#DC2626', fg: '#fff', text: '⚠ AMBIENTE DE HOMOLOGAÇÃO — NÃO USE DADOS REAIS ⚠' }
     : null
