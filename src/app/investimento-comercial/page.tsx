@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
 import {
   Search, Users, X, Check, TrendingUp, Clock,
-  BarChart2, Building2, User, ChevronDown, ChevronRight, Plus,
+  BarChart2, Building2, User, ChevronDown, ChevronRight, Plus, Pencil,
 } from 'lucide-react'
 import { PageHeader, Table, Thead, Th, Tbody, Tr, Td, Button, SkeletonTable, EmptyState } from '@/components/ds'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
@@ -121,6 +121,41 @@ export default function InvestimentoComercialPage() {
   const [newProjectName,      setNewProjectName]      = useState('')
   const [newProjectCategoria, setNewProjectCategoria] = useState<'Sustentação' | 'Projeto' | 'Suporte' | 'Comercial'>('Projeto')
   const [creatingProject,     setCreatingProject]     = useState(false)
+
+  // Modal de edição de projeto interno
+  type EditableCategoria = '' | 'Sustentação' | 'Projeto' | 'Suporte' | 'Comercial'
+  const [editProject,     setEditProject]     = useState<ICProject | null>(null)
+  const [editName,        setEditName]        = useState('')
+  const [editCategoria,   setEditCategoria]   = useState<EditableCategoria>('')
+  const [savingEdit,      setSavingEdit]      = useState(false)
+  const openEditModal = (p: ICProject) => {
+    setEditProject(p)
+    setEditName(p.name ?? '')
+    setEditCategoria(((p.categoria_interna ?? '') as EditableCategoria))
+  }
+  const closeEditModal = () => { setEditProject(null); setEditName(''); setEditCategoria('') }
+  const handleSaveEdit = async () => {
+    if (!editProject) return
+    const name = editName.trim()
+    if (name.length < 2) { toast.error('Informe um nome válido (mín. 2 caracteres)'); return }
+    setSavingEdit(true)
+    try {
+      const payload: { name: string; categoria_interna: string | null } = {
+        name,
+        categoria_interna: editCategoria === '' ? null : editCategoria,
+      }
+      await api.patch(`/projects/${editProject.id}`, payload)
+      setProjects(prev => prev.map(p => p.id === editProject.id
+        ? { ...p, name, categoria_interna: payload.categoria_interna }
+        : p))
+      toast.success('Projeto atualizado')
+      closeEditModal()
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Erro ao atualizar projeto')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
 
   // Árvore: clientes expandidos
   const [expandedCustomers, setExpandedCustomers] = useState<Set<number>>(new Set())
@@ -388,7 +423,16 @@ export default function InvestimentoComercialPage() {
                           : <span className="text-sm font-semibold tabular-nums" style={{ color: hours > 0 ? '#00F5FF' : 'var(--brand-subtle)' }}>{fmtHours(hours)}</span>
                         }
                       </Td>
-                      <Td><Button size="sm" variant="ghost" onClick={() => openModal(project)}><Users size={13} className="mr-1" /> Alocação</Button></Td>
+                      <Td>
+                        <div className="flex items-center gap-1 justify-end">
+                          <Button size="sm" variant="ghost" onClick={() => openEditModal(project)} aria-label="Editar projeto">
+                            <Pencil size={13} className="mr-1" /> Editar
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => openModal(project)}>
+                            <Users size={13} className="mr-1" /> Alocação
+                          </Button>
+                        </div>
+                      </Td>
                     </Tr>
                   )
                 })}
@@ -709,6 +753,55 @@ export default function InvestimentoComercialPage() {
               <Button variant="ghost" onClick={() => setNewProjectOpen(false)} disabled={creatingProject}>Cancelar</Button>
               <Button variant="primary" onClick={handleCreateProject} disabled={creatingProject || newProjectName.trim().length < 2}>
                 {creatingProject ? 'Criando...' : 'Criar Projeto'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Editar Projeto Interno */}
+      {editProject && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}
+          onClick={() => !savingEdit && closeEditModal()}>
+          <div className="flex flex-col rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+              <h2 className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>Editar Projeto Interno</h2>
+              <button onClick={() => !savingEdit && closeEditModal()} className="p-1.5 rounded-lg hover:bg-white/5">
+                <X size={16} style={{ color: 'var(--brand-muted)' }} />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>
+                Cliente: <span className="font-semibold" style={{ color: 'var(--brand-text)' }}>{editProject.customer?.name ?? '—'}</span>
+                {' · '}<span className="font-mono">{editProject.code}</span>
+              </p>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--brand-muted)' }}>
+                  Nome do Projeto <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input type="text" autoFocus value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !savingEdit) handleSaveEdit() }}
+                  className="w-full px-3 h-9 rounded-xl text-sm outline-none" style={inputStyle} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--brand-muted)' }}>Categoria</label>
+                <select value={editCategoria}
+                  onChange={e => setEditCategoria(e.target.value as EditableCategoria)}
+                  className="w-full px-3 h-9 rounded-xl text-sm outline-none" style={inputStyle}>
+                  <option value="">— Sem categoria —</option>
+                  <option value="Sustentação">Sustentação</option>
+                  <option value="Projeto">Projeto</option>
+                  <option value="Suporte">Suporte</option>
+                  <option value="Comercial">Comercial</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+              <Button variant="ghost" onClick={closeEditModal} disabled={savingEdit}>Cancelar</Button>
+              <Button variant="primary" onClick={handleSaveEdit} disabled={savingEdit || editName.trim().length < 2}>
+                {savingEdit ? 'Salvando...' : 'Salvar'}
               </Button>
             </div>
           </div>
