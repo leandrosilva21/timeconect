@@ -22,12 +22,14 @@ export function RowMenu({ items }: { items: RowMenuItem[] }) {
     function handler(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setPos(null)
     }
-    function onScroll() { setPos(null) }
     document.addEventListener('mousedown', handler)
-    window.addEventListener('scroll', onScroll, { passive: true })
+    // Fecha em ESC; scroll NÃO fecha mais (era hostil quando o dropdown
+    // tem muitos itens e a página rola um pixel só de mover o mouse).
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setPos(null) }
+    document.addEventListener('keydown', onKey)
     return () => {
       document.removeEventListener('mousedown', handler)
-      window.removeEventListener('scroll', onScroll)
+      document.removeEventListener('keydown', onKey)
     }
   }, [open])
 
@@ -38,9 +40,27 @@ export function RowMenu({ items }: { items: RowMenuItem[] }) {
     if (open) { setPos(null); return }
     if (!btnRef.current) return
     const r = btnRef.current.getBoundingClientRect()
-    const dropH = items.length * 36 + 8
-    const up = r.bottom + dropH > window.innerHeight
-    setPos({ left: r.right + 4, top: up ? r.top - dropH : r.top })
+    const vh = window.innerHeight
+    const vw = window.innerWidth
+    const W  = 200
+    const margin = 8
+    // Altura desejada limitada a 70vh — itens em excesso ganham scroll interno.
+    const desiredH = items.length * 36 + 8
+    const maxH     = Math.floor(vh * 0.7)
+    const dropH    = Math.min(desiredH, maxH)
+    // Vertical: abre embaixo do botão se couber, senão acima; sempre cola no botão.
+    const spaceBelow = vh - r.bottom - margin
+    const spaceAbove = r.top - margin
+    let top: number
+    if (spaceBelow >= dropH || spaceBelow >= spaceAbove) {
+      top = r.bottom + 4
+    } else {
+      top = Math.max(margin, r.top - dropH - 4)
+    }
+    // Horizontal: à direita do botão; se estourar, alinha à esquerda do botão.
+    let left = r.right + 4
+    if (left + W > vw - margin) left = Math.max(margin, r.left - W - 4)
+    setPos({ left, top })
   }
 
   return (
@@ -56,8 +76,8 @@ export function RowMenu({ items }: { items: RowMenuItem[] }) {
       </button>
       {pos && (
         <div
-          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
-          className="min-w-[160px] bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl py-1 overflow-hidden"
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999, maxHeight: '70vh' }}
+          className="min-w-[160px] bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl py-1 overflow-y-auto"
         >
           {items.map((item, i) => (
             <button
