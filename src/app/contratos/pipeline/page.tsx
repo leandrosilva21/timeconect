@@ -4375,15 +4375,15 @@ function KanbanContent() {
                         <th className="text-left px-4 py-3 text-zinc-400 font-medium">Tipo Serviço</th>
                         <th className="text-left px-4 py-3 text-zinc-400 font-medium">Fase</th>
                         <th className="text-center px-4 py-3 text-zinc-400 font-medium">Horas</th>
-                        <th className="text-center px-4 py-3 text-zinc-400 font-medium">HS Consumidas</th>
-                        <th className="text-center px-4 py-3 text-zinc-400 font-medium">Saldo</th>
+                        {!isCliente && <th className="text-center px-4 py-3 text-zinc-400 font-medium">HS Consumidas</th>}
+                        {!isCliente && <th className="text-center px-4 py-3 text-zinc-400 font-medium">Saldo</th>}
                         <th className="text-center px-4 py-3 text-zinc-400 font-medium">Status</th>
                         {!isCliente && <th className="px-4 py-3" />}
                       </tr>
                     </thead>
                     <tbody>
                       {allProjects.length === 0 && (
-                        <tr><td colSpan={isCliente ? 7 : 8} className="px-4 py-8 text-center text-zinc-600 text-xs">Nenhum projeto.</td></tr>
+                        <tr><td colSpan={isCliente ? 5 : 8} className="px-4 py-8 text-center text-zinc-600 text-xs">Nenhum projeto.</td></tr>
                       )}
                       {allProjects.map(p => {
                         const isClosed  = p.status === 'finished' || p.status === 'cancelled'
@@ -4400,13 +4400,17 @@ function KanbanContent() {
                             <td className="px-4 py-3 text-zinc-400 text-xs">{p.service_type ?? '—'}</td>
                             <td className="px-4 py-3 text-zinc-400 text-xs">{PROJECT_COLS.find(c => c.id === PROJECT_STATUS_TO_COL[p.status])?.label ?? 'Projeto'}</td>
                             <td className="px-4 py-3 text-center text-zinc-300">{p.sold_hours != null ? `${p.sold_hours}h` : '—'}</td>
-                            <td className="px-4 py-3 text-center text-zinc-300">
-                              {hideHours ? '—' : p.consumed_hours != null ? `${p.consumed_hours.toFixed(1)}h` : '—'}
-                            </td>
-                            <td className="px-4 py-3 text-center"
-                              style={{ color: !hideHours && (p.general_hours_balance ?? 0) < 0 ? '#ef4444' : 'rgb(212 212 216)' }}>
-                              {hideHours ? '—' : p.general_hours_balance != null ? `${p.general_hours_balance.toFixed(1)}h` : '—'}
-                            </td>
+                            {!isCliente && (
+                              <td className="px-4 py-3 text-center text-zinc-300">
+                                {hideHours ? '—' : p.consumed_hours != null ? `${p.consumed_hours.toFixed(1)}h` : '—'}
+                              </td>
+                            )}
+                            {!isCliente && (
+                              <td className="px-4 py-3 text-center"
+                                style={{ color: !hideHours && (p.general_hours_balance ?? 0) < 0 ? '#ef4444' : 'rgb(212 212 216)' }}>
+                                {hideHours ? '—' : p.general_hours_balance != null ? `${p.general_hours_balance.toFixed(1)}h` : '—'}
+                              </td>
+                            )}
                             <td className="px-4 py-3 text-center">
                               {(() => { const b = STATUS_BADGE[p.status] ?? { label: p.status, color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' }; return (
                                 <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: b.bg, color: b.color }}>{b.label}</span>
