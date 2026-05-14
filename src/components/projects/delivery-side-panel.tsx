@@ -8,9 +8,12 @@ import type { StageDelivery, DeliveryStatus, DeliveryPriority } from '@/lib/type
 import { DeliveryTimeline } from './delivery-timeline'
 import { ActivityCommentComposer } from './activity-comment-composer'
 import { StageActivityTimeline } from './stage-activity-timeline'
+import { ActivityAporteDialog } from './activity-aporte-dialog'
+import { PlusCircle } from 'lucide-react'
 
 interface Props {
   delivery: StageDelivery
+  projectId: number
   onClose: () => void
   onUpdated: (d: StageDelivery) => void
   onDeleted: (id: number) => void
@@ -30,7 +33,7 @@ const PRIORITY_OPTIONS: { value: DeliveryPriority; label: string }[] = [
   { value: 'high', label: 'Alta' },
 ]
 
-export function DeliverySidePanel({ delivery, onClose, onUpdated, onDeleted }: Props) {
+export function DeliverySidePanel({ delivery, projectId, onClose, onUpdated, onDeleted }: Props) {
   const [title, setTitle] = useState(delivery.title)
   const [description, setDescription] = useState(delivery.description ?? '')
   const [hours, setHours] = useState(String(delivery.hours_planned ?? ''))
@@ -39,6 +42,7 @@ export function DeliverySidePanel({ delivery, onClose, onUpdated, onDeleted }: P
   const [due, setDue] = useState(delivery.due_date ?? '')
   const [saving, setSaving] = useState(false)
   const [timelineKey, setTimelineKey] = useState(0)
+  const [aporteOpen, setAporteOpen] = useState(false)
 
   // Reset state quando troca de delivery
   useEffect(() => {
@@ -197,7 +201,7 @@ export function DeliverySidePanel({ delivery, onClose, onUpdated, onDeleted }: P
             </Field>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+          <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
             <button
               type="button"
               className="ds-btn-primary"
@@ -209,6 +213,19 @@ export function DeliverySidePanel({ delivery, onClose, onUpdated, onDeleted }: P
             </button>
             <button
               type="button"
+              onClick={() => setAporteOpen(true)}
+              className="ds-btn-ghost"
+              style={{
+                fontSize: 13, padding: '8px 14px',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                color: 'var(--primary)',
+              }}
+              title="Aportar horas com justificativa"
+            >
+              <PlusCircle size={13} /> Aportar
+            </button>
+            <button
+              type="button"
               onClick={handleDelete}
               style={{
                 fontSize: 13, padding: '8px 16px',
@@ -216,11 +233,28 @@ export function DeliverySidePanel({ delivery, onClose, onUpdated, onDeleted }: P
                 border: '1px solid var(--border)',
                 color: 'var(--danger)',
                 borderRadius: 6, cursor: 'pointer',
+                marginLeft: 'auto',
               }}
             >
               Excluir
             </button>
           </div>
+
+          {aporteOpen && (
+            <ActivityAporteDialog
+              deliveryId={delivery.id}
+              deliveryName={delivery.title}
+              deliveryHoursPlanned={Number(delivery.hours_planned ?? 0)}
+              projectId={projectId}
+              onClose={() => setAporteOpen(false)}
+              onCreated={() => {
+                setAporteOpen(false)
+                setTimelineKey(k => k + 1)
+                // Atualiza horas locais (aporte mudou hours_planned)
+                onUpdated({ ...delivery })
+              }}
+            />
+          )}
 
           <div style={{ marginTop: 28 }}>
             <div style={{
