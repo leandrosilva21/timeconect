@@ -257,6 +257,14 @@ export function StageOperationalBlock({
       {/* Conteúdo expandido: alocação + kanban */}
       {expanded && (
         <div style={{ padding: 16 }}>
+          {stage.derived_status === 'bloqueada' && (
+            <BlockedReasonEditor
+              stage={stage}
+              canEdit={canEdit}
+              onSaved={onChanged}
+            />
+          )}
+
           <div style={{ marginBottom: 16 }}>
             <StageTeamAllocation stageId={stage.id} projectId={projectId} canEdit={canEdit} />
           </div>
@@ -289,5 +297,94 @@ export function StageOperationalBlock({
         </div>
       )}
     </section>
+  )
+}
+
+function BlockedReasonEditor({
+  stage, canEdit, onSaved,
+}: {
+  stage: ProjectStage
+  canEdit: boolean
+  onSaved: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(stage.blocked_reason ?? '')
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      await api.patch(`/stages/${stage.id}`, { blocked_reason: value.trim() || null })
+      setEditing(false)
+      onSaved()
+      toast.success(value.trim() ? 'Motivo do bloqueio atualizado' : 'Bloqueio limpo')
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Erro ao salvar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{
+      marginBottom: 16, padding: 12,
+      background: 'var(--danger-bg)',
+      border: '1px solid var(--danger)',
+      borderRadius: 6,
+    }}>
+      <div style={{
+        fontSize: 11, color: 'var(--danger)',
+        textTransform: 'uppercase', letterSpacing: '.04em',
+        marginBottom: 6, fontWeight: 600,
+      }}>
+        Bloqueada por
+      </div>
+
+      {editing ? (
+        <>
+          <textarea
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            placeholder="Ex: Aguardando retorno fiscal do cliente"
+            rows={2}
+            maxLength={500}
+            autoFocus
+            className="ds-input"
+            style={{ width: '100%', padding: 8, fontSize: 13, fontFamily: 'inherit' }}
+          />
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <button
+              type="button"
+              className="ds-btn-primary"
+              disabled={saving}
+              onClick={handleSave}
+              style={{ fontSize: 12, padding: '4px 12px' }}
+            >
+              {saving ? 'Salvando…' : 'Salvar'}
+            </button>
+            <button
+              type="button"
+              className="ds-btn-ghost"
+              onClick={() => { setEditing(false); setValue(stage.blocked_reason ?? '') }}
+              style={{ fontSize: 12, padding: '4px 12px' }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </>
+      ) : (
+        <div
+          onClick={() => canEdit && setEditing(true)}
+          style={{
+            fontSize: 13, color: 'var(--text)',
+            cursor: canEdit ? 'text' : 'default',
+            minHeight: 18,
+            fontStyle: stage.blocked_reason ? 'normal' : 'italic',
+          }}
+        >
+          {stage.blocked_reason || (canEdit ? 'Clique pra explicar o motivo do bloqueio…' : 'Sem motivo registrado.')}
+        </div>
+      )}
+    </div>
   )
 }

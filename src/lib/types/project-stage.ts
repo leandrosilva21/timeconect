@@ -44,6 +44,8 @@ export interface ProjectStage {
   team_overrun_count?: number
   last_activity_at?: string | null
   days_since_activity?: number | null
+  blocked_reason?: string | null
+  aportes_hours_sum?: number | string | null
   created_at: string
   updated_at: string
 }

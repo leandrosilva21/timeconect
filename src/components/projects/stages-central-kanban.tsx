@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { Users, Layers, Clock, AlarmClock } from 'lucide-react'
+import { Users, Layers, Clock, AlarmClock, PlusCircle } from 'lucide-react'
 import { computeStageHealth } from '@/lib/utils/stage-health'
 import { HealthDots } from './health-dots'
 import type { ProjectStage, StageDerivedStatus } from '@/lib/types/project-stage'
@@ -136,6 +136,19 @@ function StageMacroCard({ stage, projectId }: { stage: ProjectStage; projectId: 
               {stage.responsible.name}
             </div>
           )}
+          {stage.derived_status === 'bloqueada' && stage.blocked_reason && (
+            <div
+              title={stage.blocked_reason}
+              style={{
+                fontSize: 11, fontStyle: 'italic',
+                color: 'var(--danger)',
+                marginTop: 4,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}
+            >
+              {stage.blocked_reason}
+            </div>
+          )}
         </div>
         <HealthDots health={health} />
       </div>
@@ -182,6 +195,17 @@ function StageMacroCard({ stage, projectId }: { stage: ProjectStage; projectId: 
             color: 'var(--danger)',
           }}>
             <Users size={10} /> {stage.team_overrun_count}
+          </span>
+        )}
+        {Number(stage.aportes_hours_sum ?? 0) !== 0 && (
+          <span
+            title={`Aportes operacionais: ${formatHours(Number(stage.aportes_hours_sum))}`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              color: 'var(--primary)',
+            }}
+          >
+            <PlusCircle size={10} /> {formatHours(Number(stage.aportes_hours_sum))}
           </span>
         )}
         {typeof stage.days_since_activity === 'number' && stage.days_since_activity >= 5 && (
