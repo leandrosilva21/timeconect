@@ -244,9 +244,8 @@ export default function LoginPage() {
         html h1.login-title,
         html:not(.dark) h1.login-title,
         html.dark h1.login-title { color: #FFFFFF !important; }
-        /* Logo ERPServ: branco no dark, roxo (~#4F46E5 indigo) no light */
-        :root .login-erpserv-logo { filter: brightness(0) saturate(100%) invert(28%) sepia(86%) saturate(2756%) hue-rotate(238deg) brightness(91%) contrast(95%); opacity: 0.95; }
-        html.dark .login-erpserv-logo { filter: brightness(0) invert(1); opacity: 0.75; }
+        /* Logo ERPServ: branco em ambos os temas (splash é sempre escuro) */
+        .login-erpserv-logo { filter: brightness(0) invert(1); opacity: 0.85; }
         .login-input::placeholder { color: rgba(255,255,255,0.22); }
         .login-input:focus {
           border: 1px solid rgba(0,212,232,0.55) !important;
