@@ -1,10 +1,7 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
 import { AppLayout } from '@/components/layout/app-layout'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
@@ -148,15 +145,16 @@ export default function MatrizConhecimentoPage() {
     })()
   }, [])
 
-  // Deep-link: ?consultor=N do SearchBox auto-seleciona o consultor
-  const searchParams = useSearchParams()
+  // Deep-link: ?consultor=N auto-seleciona o consultor (window.location pra evitar Suspense boundary)
   useEffect(() => {
-    const consultorParam = searchParams.get('consultor')
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const consultorParam = params.get('consultor')
     if (consultorParam) {
       const n = Number(consultorParam)
       if (!isNaN(n)) setSelectedConsultant(n)
     }
-  }, [searchParams])
+  }, [])
 
   // ── Carrega skills do consultor selecionado ────────────────────────────────
   const loadConsultantSkills = useCallback(async (consultantId: number) => {

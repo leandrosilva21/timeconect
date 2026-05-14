@@ -1,11 +1,8 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
 import { AppLayout } from '@/components/layout/app-layout'
 import Link from 'next/link'
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import { UserCheck, FolderOpen, AlertTriangle, CheckCircle2, Sparkles, Plus, AlertOctagon, Users, Flame, Check } from 'lucide-react'
@@ -343,15 +340,16 @@ export default function CoberturaSkillsPage() {
       .catch(() => setTriageQueueCount(0))
   }, [])
 
-  // Deep-link: ?project=N do SearchBox seleciona projeto automaticamente
-  const searchParams = useSearchParams()
+  // Deep-link: ?project=N seleciona projeto (window.location pra evitar Suspense boundary)
   useEffect(() => {
-    const projectParam = searchParams.get('project')
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const projectParam = params.get('project')
     if (projectParam) {
       const n = Number(projectParam)
       if (!isNaN(n)) setSelectedProject(n)
     }
-  }, [searchParams])
+  }, [])
 
   useEffect(() => {
     if (selectedProject != null) {
