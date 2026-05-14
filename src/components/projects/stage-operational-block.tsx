@@ -249,6 +249,7 @@ export function StageOperationalBlock({
         <StageAporteDialog
           stageId={stage.id}
           stageName={stage.name}
+          projectId={projectId}
           onClose={() => setAporteOpen(false)}
           onCreated={onChanged}
         />

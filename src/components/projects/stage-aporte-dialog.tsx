@@ -1,16 +1,28 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { X, PlusCircle, Clock } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { X, PlusCircle, Clock, AlertTriangle } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import { useStageAportes } from '@/hooks/use-stage-aportes'
+import { useApiQuery } from '@/hooks/use-query'
+import { useProjectStages } from '@/hooks/use-project-stages'
 
 interface Props {
   stageId: number
   stageName: string
+  projectId: number
   onClose: () => void
   onCreated: () => void
+}
+
+interface ProjectBalance {
+  sold_hours?: number | string | null
+}
+
+function num(v: unknown): number {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
 }
 
 function formatHours(n: number): string {
@@ -33,11 +45,21 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString('pt-BR')
 }
 
-export function StageAporteDialog({ stageId, stageName, onClose, onCreated }: Props) {
+export function StageAporteDialog({ stageId, stageName, projectId, onClose, onCreated }: Props) {
   const { items, totals, loading, refetch } = useStageAportes(stageId)
+  const { data: project } = useApiQuery<ProjectBalance>(`/projects/${projectId}`)
+  const { stages } = useProjectStages(projectId)
   const [hours, setHours] = useState('')
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const sold = num(project?.sold_hours)
+  const allocated = useMemo(() => stages.reduce((s, st) => s + num(st.hours_planned), 0), [stages])
+  const remaining = sold - allocated
+  const aporteHours = Number(hours)
+  const isValidAporteValue = Number.isFinite(aporteHours) && aporteHours !== 0
+  const projectedRemaining = isValidAporteValue ? remaining - aporteHours : remaining
+  const projectedNegative = isValidAporteValue && aporteHours > 0 && projectedRemaining < 0
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -116,6 +138,48 @@ export function StageAporteDialog({ stageId, stageName, onClose, onCreated }: Pr
         </div>
 
         <div style={{ padding: 18, overflowY: 'auto', flex: 1 }}>
+          <div
+            className="ds-card"
+            style={{
+              padding: '10px 12px',
+              marginBottom: 12,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+              borderLeft: projectedNegative ? '3px solid var(--danger)' : '3px solid var(--success)',
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                Saldo do projeto
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: remaining < 0 ? 'var(--danger)' : 'var(--text)', marginTop: 2 }}>
+                {formatHours(remaining)}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-light)', marginTop: 2 }}>
+                {formatHours(sold)} vendidas − {formatHours(allocated)} alocadas
+              </div>
+            </div>
+            {isValidAporteValue && (
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                  Após aporte
+                </div>
+                <div style={{
+                  fontSize: 16, fontWeight: 600, marginTop: 2,
+                  color: projectedNegative ? 'var(--danger)' : 'var(--text)',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}>
+                  {projectedNegative && <AlertTriangle size={13} />}
+                  {formatHours(projectedRemaining)}
+                </div>
+                {projectedNegative && (
+                  <div style={{ fontSize: 10, color: 'var(--danger)', marginTop: 2 }}>
+                    excede saldo
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <form onSubmit={handleSubmit} className="ds-card ds-card-pad" style={{ padding: 14, marginBottom: 18 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 10, alignItems: 'flex-end' }}>
               <div>
@@ -166,7 +230,7 @@ export function StageAporteDialog({ stageId, stageName, onClose, onCreated }: Pr
             <button
               type="submit"
               className="ds-btn-primary"
-              disabled={saving || !hours || reason.trim().length < 5}
+              disabled={saving || !hours || reason.trim().length < 5 || projectedNegative}
               style={{ fontSize: 13, padding: '8px 16px', marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
               <PlusCircle size={13} /> {saving ? 'Registrando…' : 'Registrar aporte'}
