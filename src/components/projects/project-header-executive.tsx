@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { CalendarDays, Pencil } from 'lucide-react'
+import { CalendarDays, Pencil, AlertTriangle } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/use-auth'
 import { useApiQuery } from '@/hooks/use-query'
+import { useDelayRisk } from '@/hooks/use-delay-risk'
 
 interface Project {
   id: number
@@ -229,6 +230,9 @@ export function ProjectHeaderExecutive({ project, onProjectChange }: Props) {
   )
   const last = tsResp?.items?.[0]
 
+  // Risco de atraso (Pilar 2): última etapa termina depois do prazo macro?
+  const { data: delayRisk } = useDelayRisk(project.id)
+
   return (
     <div style={{
       padding: '16px 24px',
@@ -294,6 +298,29 @@ export function ProjectHeaderExecutive({ project, onProjectChange }: Props) {
               transition: 'width .3s ease',
             }} />
           </div>
+        </div>
+      )}
+
+      {delayRisk?.has_risk && delayRisk.latest_stage_end && (
+        <div style={{
+          marginTop: 12,
+          padding: '6px 10px',
+          borderRadius: 6,
+          background: delayRisk.delay_days >= 14 ? 'var(--danger-bg)' : 'var(--warning-bg)',
+          color: delayRisk.delay_days >= 14 ? 'var(--danger)' : 'var(--warning)',
+          fontSize: 12,
+          fontWeight: 500,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+        }}>
+          <AlertTriangle size={13} />
+          <span>
+            Última etapa termina em{' '}
+            <strong>{new Date(delayRisk.latest_stage_end).toLocaleDateString('pt-BR')}</strong>
+            {' — '}
+            {delayRisk.delay_days} dia{delayRisk.delay_days === 1 ? '' : 's'} após o prazo do projeto
+          </span>
         </div>
       )}
 

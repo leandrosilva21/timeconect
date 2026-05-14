@@ -266,6 +266,8 @@ export function StageOperationalBlock({
             />
           )}
 
+          <StageDatesEditor stage={stage} canEdit={canEdit} onSaved={onChanged} />
+
           <div style={{ marginBottom: 16 }}>
             <StageTeamAllocation stageId={stage.id} projectId={projectId} canEdit={canEdit} />
           </div>
@@ -386,6 +388,73 @@ function BlockedReasonEditor({
           {stage.blocked_reason || (canEdit ? 'Clique pra explicar o motivo do bloqueio…' : 'Sem motivo registrado.')}
         </div>
       )}
+    </div>
+  )
+}
+
+function StageDatesEditor({
+  stage, canEdit, onSaved,
+}: {
+  stage: ProjectStage
+  canEdit: boolean
+  onSaved: () => void
+}) {
+  const [startAt, setStartAt] = useState(stage.stage_start_at ? stage.stage_start_at.slice(0, 10) : '')
+  const [endAt, setEndAt] = useState(stage.expected_end_date ? stage.expected_end_date.slice(0, 10) : '')
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave(field: 'stage_start_at' | 'expected_end_date', value: string) {
+    if (saving) return
+    setSaving(true)
+    try {
+      await api.patch(`/stages/${stage.id}`, { [field]: value || null })
+      toast.success('Prazo atualizado')
+      onSaved()
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Erro ao salvar prazo')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{
+      marginBottom: 16, padding: 12,
+      background: 'var(--surface-hover)',
+      border: '1px solid var(--border)',
+      borderRadius: 6,
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+      gap: 12,
+    }}>
+      <div>
+        <label style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+          Início previsto
+        </label>
+        <input
+          type="date"
+          className="ds-input"
+          value={startAt}
+          disabled={!canEdit || saving}
+          onChange={e => setStartAt(e.target.value)}
+          onBlur={e => { if (e.target.value !== (stage.stage_start_at ?? '').slice(0, 10)) handleSave('stage_start_at', e.target.value) }}
+          style={{ width: '100%', marginTop: 4, fontSize: 13, padding: '4px 8px' }}
+        />
+      </div>
+      <div>
+        <label style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+          Entrega prevista
+        </label>
+        <input
+          type="date"
+          className="ds-input"
+          value={endAt}
+          disabled={!canEdit || saving}
+          onChange={e => setEndAt(e.target.value)}
+          onBlur={e => { if (e.target.value !== (stage.expected_end_date ?? '').slice(0, 10)) handleSave('expected_end_date', e.target.value) }}
+          style={{ width: '100%', marginTop: 4, fontSize: 13, padding: '4px 8px' }}
+        />
+      </div>
     </div>
   )
 }
