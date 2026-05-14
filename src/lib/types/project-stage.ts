@@ -46,6 +46,9 @@ export interface ProjectStage {
   days_since_activity?: number | null
   blocked_reason?: string | null
   aportes_hours_sum?: number | string | null
+  actual_hours?: number
+  risk_level?: 'low' | 'medium' | 'high'
+  risk_reasons?: string[]
   created_at: string
   updated_at: string
 }
