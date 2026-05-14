@@ -6,19 +6,28 @@ import { usePathname } from 'next/navigation'
 interface Tab {
   label: string
   segment: string
+  /** Se true, aparece apenas em projetos operacionais (não sustentação). */
+  operationalOnly?: boolean
 }
 
 const TABS: Tab[] = [
   { label: 'Visão Geral', segment: 'visao-geral' },
-  { label: 'Etapas',      segment: 'etapas' },
+  { label: 'Etapas',      segment: 'etapas',      operationalOnly: true },
   { label: 'Horas',       segment: 'horas' },
   { label: 'Financeiro',  segment: 'financeiro' },
   { label: 'Arquivos',    segment: 'arquivos' },
 ]
 
-export function ProjectTabs({ projectId }: { projectId: number }) {
+interface Props {
+  projectId: number
+  isOperational?: boolean
+}
+
+export function ProjectTabs({ projectId, isOperational = true }: Props) {
   const pathname = usePathname()
   const basePath = `/projetos/${projectId}`
+
+  const visible = TABS.filter(t => !t.operationalOnly || isOperational)
 
   return (
     <nav style={{
@@ -27,7 +36,7 @@ export function ProjectTabs({ projectId }: { projectId: number }) {
       borderBottom: '1px solid var(--border)',
       overflowX: 'auto',
     }}>
-      {TABS.map(tab => {
+      {visible.map(tab => {
         const href = `${basePath}/${tab.segment}`
         const active = pathname === href || pathname.startsWith(href + '/')
         return (

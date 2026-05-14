@@ -1,36 +1,62 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { Plus } from 'lucide-react'
+import { Plus, Info } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
-import { StageCard } from '@/components/projects/stage-card'
+import { StageOperationalBlock } from '@/components/projects/stage-operational-block'
 import { useProjectStages } from '@/hooks/use-project-stages'
+import { useApiQuery } from '@/hooks/use-query'
 import type { ProjectStage } from '@/lib/types/project-stage'
+
+interface ProjectMini {
+  id: number
+  is_operational?: boolean
+  sold_hours?: number | string | null
+}
+
+function n(v: unknown): number {
+  const x = Number(v)
+  return Number.isFinite(x) ? x : 0
+}
+
+function formatHours(v: number): string {
+  return v >= 10 ? `${Math.round(v)}h` : `${v.toFixed(1)}h`
+}
 
 export default function EtapasPage() {
   const params = useParams<{ id: string }>()
   const projectId = Number(params.id)
   const { stages, loading, error, refetch } = useProjectStages(projectId)
+  const { data: project } = useApiQuery<ProjectMini>(
+    Number.isFinite(projectId) ? `/projects/${projectId}` : null
+  )
 
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [hours, setHours] = useState('')
   const [saving, setSaving] = useState(false)
 
+  const sold = n(project?.sold_hours)
+  const allocated = useMemo(
+    () => stages.reduce((s, st) => s + n(st.hours_planned), 0),
+    [stages]
+  )
+  const remaining = Math.max(0, sold - allocated)
+  const exceededProject = allocated > sold
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) return
+    const hoursNum = hours ? Number(hours) : 0
     setSaving(true)
     try {
       await api.post<ProjectStage>(`/projects/${projectId}/stages`, {
         name: name.trim(),
-        hours_planned: hours ? Number(hours) : 0,
+        hours_planned: hoursNum,
       })
-      setName('')
-      setHours('')
-      setCreating(false)
+      setName(''); setHours(''); setCreating(false)
       refetch()
       toast.success('Etapa criada')
     } catch (e) {
@@ -40,31 +66,64 @@ export default function EtapasPage() {
     }
   }
 
-  if (loading) {
-    return <div style={{ color: 'var(--text-muted)' }}>Carregando etapas…</div>
-  }
+  if (loading) return <div style={{ color: 'var(--text-muted)' }}>Carregando…</div>
+  if (error) return <div style={{ color: 'var(--danger)' }}>{error}</div>
 
-  if (error) {
-    return <div style={{ color: 'var(--danger)' }}>{error}</div>
+  // Projeto NÃO operacional: mensagem clara, sem etapas
+  if (project && project.is_operational === false) {
+    return (
+      <div style={{
+        padding: '32px 24px',
+        textAlign: 'center',
+        border: '1px dashed var(--border)',
+        borderRadius: 8,
+      }}>
+        <Info size={20} style={{ color: 'var(--text-muted)', marginBottom: 8 }} />
+        <div style={{ fontSize: 14, color: 'var(--text)', fontWeight: 500 }}>
+          Projeto de sustentação
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6, maxWidth: 480, margin: '6px auto 0' }}>
+          Este projeto usa modelo de sustentação — alocação direta no projeto, sem etapas operacionais.
+          A gestão por etapas é exclusiva de projetos de implantação, evolutivos, migração e similares.
+        </div>
+      </div>
+    )
   }
 
   return (
     <div>
+      {/* Header geral — capacidade do projeto */}
       <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 16,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap', gap: 12, marginBottom: 20,
+        padding: '12px 16px',
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
       }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>
-          Etapas <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· {stages.length}</span>
-        </h2>
+        <div style={{ display: 'flex', gap: 18, fontSize: 13, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+          <span>
+            <strong style={{ color: 'var(--text)' }}>Saldo operacional</strong>
+          </span>
+          <span>
+            Vendidas: <strong style={{ color: 'var(--text)' }}>{formatHours(sold)}</strong>
+          </span>
+          <span>
+            Alocadas: <strong style={{ color: exceededProject ? 'var(--danger)' : 'var(--text)' }}>
+              {formatHours(allocated)}
+            </strong>
+          </span>
+          <span style={{ color: exceededProject ? 'var(--danger)' : 'var(--text-muted)' }}>
+            {exceededProject ? 'Estourado' : `Restantes: `}
+            {!exceededProject && <strong style={{ color: 'var(--text)' }}>{formatHours(remaining)}</strong>}
+          </span>
+        </div>
         {!creating && (
           <button
             type="button"
-            className="ds-btn-secondary"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '6px 12px' }}
+            className="ds-btn-primary"
             onClick={() => setCreating(true)}
+            style={{ fontSize: 13, padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             <Plus size={14} /> Nova etapa
           </button>
@@ -91,7 +150,7 @@ export default function EtapasPage() {
               style={{ width: '100%', marginTop: 4 }}
             />
           </div>
-          <div style={{ width: 120 }}>
+          <div style={{ width: 140 }}>
             <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
               Horas previstas
             </label>
@@ -125,13 +184,12 @@ export default function EtapasPage() {
         </form>
       )}
 
+      {/* Board consolidado: cada etapa renderiza inline (header + alocação + kanban) */}
       {stages.length === 0 ? (
         <div style={{
-          padding: '48px 24px',
-          textAlign: 'center',
+          padding: '48px 24px', textAlign: 'center',
           color: 'var(--text-muted)',
-          border: '1px dashed var(--border)',
-          borderRadius: 8,
+          border: '1px dashed var(--border)', borderRadius: 8,
         }}>
           <div style={{ fontSize: 14, color: 'var(--text)', fontWeight: 500 }}>
             Nenhuma etapa ainda
@@ -141,15 +199,14 @@ export default function EtapasPage() {
           </div>
         </div>
       ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-          gap: 12,
-        }}>
-          {stages.map(stage => (
-            <StageCard key={stage.id} stage={stage} projectId={projectId} />
-          ))}
-        </div>
+        stages.map(stage => (
+          <StageOperationalBlock
+            key={stage.id}
+            stage={stage}
+            projectId={projectId}
+            onChanged={refetch}
+          />
+        ))
       )}
     </div>
   )
