@@ -193,7 +193,8 @@ export default function LoginPage() {
                 alt="ERPServ"
                 width={96}
                 height={32}
-                style={{ objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.75 }}
+                className="login-erpserv-logo"
+                style={{ objectFit: 'contain' }}
               />
             </div>
 
@@ -203,7 +204,7 @@ export default function LoginPage() {
                 <MinutorIcon size={19} />
               </div>
               <div>
-                <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: '#FFFFFF', lineHeight: 1.05 }}>
+                <h1 className="login-title" style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: '#FFFFFF', lineHeight: 1.05 }}>
                   Minutor
                 </h1>
                 <p style={{ margin: '4px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.38)', fontWeight: 400, letterSpacing: 0 }}>
@@ -239,6 +240,11 @@ export default function LoginPage() {
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
+        /* Splash do login é sempre escuro — escapa do rule global que força h1 preto no light */
+        .login-title { color: #FFFFFF !important; }
+        /* Logo ERPServ: branco no dark, roxo (~#4F46E5 indigo) no light */
+        :root .login-erpserv-logo { filter: brightness(0) saturate(100%) invert(28%) sepia(86%) saturate(2756%) hue-rotate(238deg) brightness(91%) contrast(95%); opacity: 0.95; }
+        html.dark .login-erpserv-logo { filter: brightness(0) invert(1); opacity: 0.75; }
         .login-input::placeholder { color: rgba(255,255,255,0.22); }
         .login-input:focus {
           border: 1px solid rgba(0,212,232,0.55) !important;
