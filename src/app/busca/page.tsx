@@ -52,7 +52,7 @@ const AVAIL_OPTIONS: Array<{ value: string; label: string }> = [
 export default function BuscaPage() {
   const [q, setQ] = useState('')
   const [types, setTypes] = useState<string[]>([])
-  const [minLevel, setMinLevel] = useState<number>(0)
+  const [levels, setLevels] = useState<number[]>([])
   const [availability, setAvailability] = useState<string[]>([])
   const [rows, setRows] = useState<SearchRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -67,6 +67,10 @@ export default function BuscaPage() {
     if (qp) setQ(qp)
     const tp = params.get('type')
     if (tp) setTypes(tp.split(','))
+    const lv = params.get('levels')
+    if (lv) setLevels(lv.split(',').map(Number).filter(n => !isNaN(n) && n >= 1 && n <= 4))
+    const av = params.get('availability')
+    if (av) setAvailability(av.split(','))
   }, [])
 
   // Sync URL
@@ -75,12 +79,12 @@ export default function BuscaPage() {
     const params = new URLSearchParams()
     if (q) params.set('q', q)
     if (types.length) params.set('type', types.join(','))
-    if (minLevel > 0) params.set('min_level', String(minLevel))
+    if (levels.length > 0) params.set('levels', levels.slice().sort().join(','))
     if (availability.length) params.set('availability', availability.join(','))
     const qs = params.toString()
     const newUrl = qs ? `?${qs}` : window.location.pathname
     window.history.replaceState({}, '', newUrl)
-  }, [q, types, minLevel, availability])
+  }, [q, types, levels, availability])
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -88,7 +92,7 @@ export default function BuscaPage() {
       const params: string[] = []
       if (q.trim()) params.push(`q=${encodeURIComponent(q.trim())}`)
       if (types.length) params.push(`type=${types.join(',')}`)
-      if (minLevel > 0) params.push(`min_level=${minLevel}`)
+      if (levels.length > 0) params.push(`levels=${levels.slice().sort().join(',')}`)
       if (availability.length) params.push(`availability=${availability.join(',')}`)
       const qs = params.length ? `?${params.join('&')}` : ''
       const r = await api.get<AdvancedResponse>(`/search/advanced${qs}`)
@@ -100,7 +104,7 @@ export default function BuscaPage() {
     } finally {
       setLoading(false)
     }
-  }, [q, types, minLevel, availability])
+  }, [q, types, levels, availability])
 
   // Debounce 350ms ao mudar q; mudanças de filtro disparam imediato
   useEffect(() => {
@@ -161,13 +165,19 @@ export default function BuscaPage() {
               })}
             </FilterGroup>
 
-            <FilterGroup label="Nível mínimo">
-              <Chip on={minLevel === 0} onClick={() => setMinLevel(0)}>Todos</Chip>
-              {LEVEL_OPTIONS.map(o => (
-                <Chip key={o.value} on={minLevel === o.value} onClick={() => setMinLevel(o.value)}>
-                  {o.label}+
-                </Chip>
-              ))}
+            <FilterGroup label="Nível">
+              {LEVEL_OPTIONS.map(o => {
+                const on = levels.includes(o.value)
+                return (
+                  <Chip
+                    key={o.value}
+                    on={on}
+                    onClick={() => setLevels(toggleArr(levels, o.value))}
+                  >
+                    {o.label}
+                  </Chip>
+                )
+              })}
             </FilterGroup>
 
             <FilterGroup label="Disponibilidade">
@@ -194,10 +204,10 @@ export default function BuscaPage() {
                 </>
               )}
             </span>
-            {(q || types.length > 0 || minLevel > 0 || availability.length > 0) && (
+            {(q || types.length > 0 || levels.length > 0 || availability.length > 0) && (
               <button
                 type="button"
-                onClick={() => { setQ(''); setTypes([]); setMinLevel(0); setAvailability([]) }}
+                onClick={() => { setQ(''); setTypes([]); setLevels([]); setAvailability([]) }}
                 style={{
                   fontSize: 11, padding: '4px 10px', borderRadius: 4,
                   background: 'transparent', border: '1px solid var(--border)',
