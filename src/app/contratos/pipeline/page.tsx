@@ -833,6 +833,7 @@ function ContractDetailModal({ card, onClose, onGenerate, coordinators, canGener
     }
   }, [tab, card.id, logsLoaded])
 
+  const isCliente = userRole === 'cliente'
   const tabStyle = (t: string) => tab === t
     ? { background: 'rgba(234,179,8,0.12)', color: '#eab308', border: '1px solid rgba(234,179,8,0.3)' }
     : { color: 'var(--brand-subtle)', border: '1px solid transparent' }
@@ -861,7 +862,7 @@ function ContractDetailModal({ card, onClose, onGenerate, coordinators, canGener
               <ExternalLink size={11} /> Detalhes
             </button>
             <button onClick={() => setTab('chat')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all" style={tabStyle('chat')}>
-              <MessageSquare size={11} /> Chat
+              <MessageSquare size={11} /> {isCliente ? 'Histórico de Mensagens' : 'Chat'}
             </button>
             <button onClick={() => setTab('log')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all" style={tabStyle('log')}>
               <Clock size={11} /> Histórico
@@ -874,7 +875,7 @@ function ContractDetailModal({ card, onClose, onGenerate, coordinators, canGener
           </div>
         ) : tab === 'chat' ? (
           <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-            <ContractMessages contractId={card.id} userRole={userRole} />
+            <ContractMessages contractId={card.id} userRole={userRole} readOnly={isCliente} />
           </div>
         ) : (
         <>
@@ -1008,10 +1009,11 @@ function ProjectDetailModal({ card, onClose, userRole, initialTab }: { card: Pro
     } catch { toast.error('Erro ao abrir arquivo') }
   }
 
+  const isCliente = userRole === 'cliente'
   const tabs = [
     { id: 'details', label: 'Detalhes', icon: <ExternalLink size={11} /> },
     ...(hasReq ? [{ id: 'req', label: 'Requisição', icon: <Layers size={11} /> }] : []),
-    { id: 'chat', label: 'Chat', icon: <MessageSquare size={11} /> },
+    { id: 'chat', label: isCliente ? 'Histórico de Mensagens' : 'Chat', icon: <MessageSquare size={11} /> },
     { id: 'log', label: 'Histórico', icon: <Clock size={11} /> },
   ] as const
 
@@ -1209,7 +1211,7 @@ function ProjectDetailModal({ card, onClose, userRole, initialTab }: { card: Pro
           </>
         ) : (
           <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-            <ProjectMessages projectId={card.id} userRole={userRole} />
+            <ProjectMessages projectId={card.id} userRole={userRole} readOnly={isCliente} />
           </div>
         )}
       </div>

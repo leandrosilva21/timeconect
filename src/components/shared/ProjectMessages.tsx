@@ -24,6 +24,7 @@ interface MessageWithAttachments extends ProjectMessage {
 interface Props {
   projectId: number
   userRole?: string // 'admin' | 'coordenador' | 'consultor' | 'cliente'
+  readOnly?: boolean // esconde composer — usado pra histórico do cliente após virar projeto
 }
 
 function MessageText({ text }: { text: string }) {
@@ -98,7 +99,7 @@ function AttachmentChip({ att, messageId }: { att: Attachment; messageId: number
   )
 }
 
-export function ProjectMessages({ projectId, userRole }: Props) {
+export function ProjectMessages({ projectId, userRole, readOnly }: Props) {
   const isCliente = userRole === 'cliente'
   const isAdmin   = userRole === 'admin'
 
@@ -346,7 +347,12 @@ export function ProjectMessages({ projectId, userRole }: Props) {
         </div>
       )}
 
-      {/* Input area */}
+      {/* Input area — cliente em modo histórico não vê composer */}
+      {readOnly ? (
+        <div className="px-4 py-3 border-t text-center text-[11px]" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-subtle)' }}>
+          Você está visualizando o histórico de mensagens. O envio foi encerrado.
+        </div>
+      ) : (
       <div className="px-4 pb-4 pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
         {/* Visibility toggle — hidden for clients and admins (admins always post internal) */}
         {!isCliente && !isAdmin && (
@@ -409,6 +415,7 @@ export function ProjectMessages({ projectId, userRole }: Props) {
           Enter para enviar · Shift+Enter para nova linha · Máx. 10 arquivos por mensagem (20 MB cada)
         </p>
       </div>
+      )}
     </div>
   )
 }

@@ -301,6 +301,13 @@ export default function PortalClientePage() {
                           <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>
                             {fmtH(p.consumed_hours)} / {fmtH(p.sold_hours)}
                           </p>
+                          {p.balance_hours !== null && (
+                            <p className="text-[11px] font-semibold mt-0.5" style={{
+                              color: p.balance_hours < 0 ? '#EF4444' : p.balance_hours <= 0.1 * p.sold_hours ? '#F59E0B' : '#10B981',
+                            }}>
+                              Saldo: {fmtH(p.balance_hours)}
+                            </p>
+                          )}
                           <span className="inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
                             style={{ background: meta.bg, color: meta.color }}>
                             {meta.label}{p.percentage !== null && ` · ${p.percentage.toFixed(0)}%`}

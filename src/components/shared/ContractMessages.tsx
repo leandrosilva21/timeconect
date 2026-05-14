@@ -27,6 +27,7 @@ interface ContractMessage {
 interface Props {
   contractId: number
   userRole?: string
+  readOnly?: boolean
 }
 
 function MessageText({ text }: { text: string }) {
@@ -93,7 +94,7 @@ function AttachmentChip({ att, messageId }: { att: Attachment; messageId: number
   )
 }
 
-export function ContractMessages({ contractId, userRole }: Props) {
+export function ContractMessages({ contractId, userRole, readOnly }: Props) {
   const isCliente = userRole === 'cliente'
   const isAdmin   = userRole === 'admin'
 
@@ -307,7 +308,12 @@ export function ContractMessages({ contractId, userRole }: Props) {
         </div>
       )}
 
-      {/* Input */}
+      {/* Input — cliente em modo histórico não vê composer */}
+      {readOnly ? (
+        <div className="px-4 py-3 border-t text-center text-[11px]" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-subtle)' }}>
+          Você está visualizando o histórico de mensagens. O envio foi encerrado.
+        </div>
+      ) : (
       <div className="px-4 pb-4 pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
         {!isCliente && !isAdmin && (
           <div className="flex items-center gap-2 mb-2">
@@ -356,6 +362,7 @@ export function ContractMessages({ contractId, userRole }: Props) {
           Enter para enviar · Shift+Enter para nova linha · Máx. 10 arquivos (20 MB cada)
         </p>
       </div>
+      )}
     </div>
   )
 }
