@@ -75,21 +75,28 @@ interface SelectOption { id: number; name: string; code_prefix?: string | null }
 // - Projeto     → permite: BH Fixo, BH Mensal, Fechado          (proíbe: On Demand, SaaS, Cloud)
 // - Sustentação → permite: BH Fixo, BH Mensal, On Demand, Cloud (proíbe: Fechado, SaaS)
 // - Bizify      → permite: BH Fixo, Fechado, On Demand, SaaS    (proíbe: BH Mensal, Cloud)
+// Subprojeto (filho) → remove "Banco de Horas Mensal" (só pai) e libera "On Demand"
+// (filhos On Demand consomem do saldo do pai, não entram em fechamento separado).
 // O contract_type atualmente selecionado é sempre mantido visível (caso de edição
 // de contrato pré-existente que viole a nova regra).
 const allowedForService = (
   contractTypes: SelectOption[],
   serviceTypeName: string | null | undefined,
   selectedContractTypeId: string | number | null | undefined,
+  isSubproject: boolean = false,
 ): SelectOption[] => {
   const sn = (serviceTypeName ?? '').toLowerCase()
   const isProjeto = sn.includes('projeto')
   const isSustenta = sn.includes('sustenta')
   const isBizify = sn.includes('bizify')
-  if (!isProjeto && !isSustenta && !isBizify) return contractTypes
   return contractTypes.filter(ct => {
     if (String(ct.id) === String(selectedContractTypeId ?? '')) return true
     const n = String(ct.name ?? '').toLowerCase()
+    if (isSubproject) {
+      if (n.includes('banco de horas mensal')) return false
+      if (n.includes('on demand')) return true
+    }
+    if (!isProjeto && !isSustenta && !isBizify) return true
     if (isProjeto && (n.includes('on demand') || n.includes('saas') || n === 'cloud')) return false
     if (isSustenta && (n.includes('fechado') || n.includes('saas'))) return false
     if (isBizify && (n.includes('banco de horas mensal') || n === 'cloud')) return false
@@ -632,6 +639,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                   contractTypes,
                   serviceTypes.find(s => String(s.id) === String(form.service_type_id))?.name,
                   form.contract_type_id,
+                  form.is_subproject && !!form.parent_project_id,
                 ).map(ct => (
                   <label key={ct.id} className="flex items-center gap-2 cursor-pointer">
                     <input type="radio" name="contract_type_id" value={ct.id}
