@@ -11,7 +11,6 @@ import {
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip,
 } from 'recharts'
-import Link from 'next/link'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -108,13 +107,10 @@ function MonthlyEvolution({ series }: { series: MonthlyPoint[] }) {
   const hasAny = series.some(p => p.tickets > 0 || p.consumed_hours > 0)
   return (
     <div className="rounded-2xl p-5" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-      <div className="flex items-center justify-between gap-2 mb-1">
+      <div className="mb-1">
         <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--brand-muted)' }}>
           Evolução Mensal — Tickets e Consumo de Horas
         </h2>
-        <Link href="/timesheets" className="text-[11px] hover:opacity-80 transition-opacity" style={{ color: 'var(--brand-primary)' }}>
-          Ver apontamentos →
-        </Link>
       </div>
       <p className="text-[10px] mb-4" style={{ color: 'var(--brand-subtle)' }}>
         Horas referem-se apenas a apontamentos de <strong style={{ color: 'var(--brand-muted)' }}>Sustentação</strong>.
