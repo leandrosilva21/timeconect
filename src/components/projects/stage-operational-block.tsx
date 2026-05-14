@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, Pencil, Trash2, PlusCircle } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
@@ -33,6 +33,9 @@ interface Props {
   projectId: number
   onChanged: () => void
   canEdit?: boolean
+  /** Comando bulk vindo do pai (Expandir todos / Recolher todos). */
+  bulkAction?: 'expand' | 'collapse' | null
+  bulkKey?: number
 }
 
 function formatHours(n: number): string {
@@ -40,8 +43,28 @@ function formatHours(n: number): string {
   return v >= 10 ? `${Math.round(v)}h` : `${v.toFixed(1)}h`
 }
 
-export function StageOperationalBlock({ stage, projectId, onChanged, canEdit = true }: Props) {
+export function StageOperationalBlock({
+  stage, projectId, onChanged, canEdit = true,
+  bulkAction = null, bulkKey = 0,
+}: Props) {
   const [expanded, setExpanded] = useState(true)
+
+  // Mobile: colapsa por default. Roda 1x no mount; usuário pode toggle manualmente.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      setExpanded(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Reage a comandos bulk do pai (Expandir todos / Recolher todos)
+  useEffect(() => {
+    if (bulkAction === 'expand') setExpanded(true)
+    if (bulkAction === 'collapse') setExpanded(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bulkKey])
+
   const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState(stage.name)
   const [savingName, setSavingName] = useState(false)
