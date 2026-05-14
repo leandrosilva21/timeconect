@@ -68,7 +68,7 @@ export function DeliverySidePanel({ delivery, onClose, onUpdated, onDeleted }: P
       })
       onUpdated(updated)
       setTimelineKey(k => k + 1)
-      toast.success('Entrega atualizada')
+      toast.success('Atividade atualizada')
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Erro ao salvar')
     } finally {
@@ -77,11 +77,11 @@ export function DeliverySidePanel({ delivery, onClose, onUpdated, onDeleted }: P
   }
 
   async function handleDelete() {
-    if (!confirm(`Excluir a entrega "${delivery.title}"?`)) return
+    if (!confirm(`Excluir a atividade "${delivery.title}"?`)) return
     try {
       await api.delete(`/deliveries/${delivery.id}`)
       onDeleted(delivery.id)
-      toast.success('Entrega excluída')
+      toast.success('Atividade excluída')
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Erro ao excluir')
     }
@@ -117,7 +117,7 @@ export function DeliverySidePanel({ delivery, onClose, onUpdated, onDeleted }: P
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
-            Entrega #{delivery.id}
+            Atividade #{delivery.id}
           </div>
           <button
             type="button"

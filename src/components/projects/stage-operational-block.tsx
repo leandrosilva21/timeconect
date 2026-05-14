@@ -97,7 +97,7 @@ export function StageOperationalBlock({
   }
 
   async function handleDelete() {
-    if (!confirm(`Excluir a etapa "${stage.name}"?\n\nEsta ação remove todas as entregas e alocações desta etapa.`)) return
+    if (!confirm(`Excluir a etapa "${stage.name}"?\n\nEsta ação remove todas as atividades e alocações desta etapa.`)) return
     try {
       await api.delete(`/stages/${stage.id}`)
       onChanged()
@@ -163,7 +163,7 @@ export function StageOperationalBlock({
             )}
             {stage.derived_status && (
               <span
-                title="Status derivado das entregas"
+                title="Status derivado das atividades"
                 style={{
                   fontSize: 10, fontWeight: 600,
                   padding: '2px 8px',
@@ -228,7 +228,7 @@ export function StageOperationalBlock({
           }}>
             {planned > 0 && <span>{formatHours(planned)} planejadas</span>}
             {totalDeliveries > 0 && (
-              <span>{doneDeliveries}/{totalDeliveries} entregas · {pctDeliveries}%</span>
+              <span>{doneDeliveries}/{totalDeliveries} atividades · {pctDeliveries}%</span>
             )}
             {stage.responsible?.name && <span>Resp: {stage.responsible.name}</span>}
           </div>
@@ -279,12 +279,12 @@ export function StageOperationalBlock({
             textTransform: 'uppercase', letterSpacing: '.04em',
             marginBottom: 8,
           }}>
-            Entregas
+            Atividades
           </div>
 
           {error && <div style={{ color: 'var(--danger)', marginBottom: 8 }}>{error}</div>}
           {loading ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Carregando entregas…</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Carregando atividades…</div>
           ) : (
             <StageKanbanBoard stageId={stage.id} deliveries={deliveries} onChanged={refetch} canEdit={canEdit} />
           )}
