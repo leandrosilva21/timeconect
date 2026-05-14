@@ -3,6 +3,7 @@
 import { AppLayout } from '@/components/layout/app-layout'
 import Link from 'next/link'
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import { UserCheck, FolderOpen, AlertTriangle, CheckCircle2, Sparkles, Plus, AlertOctagon, Users, Flame, Check } from 'lucide-react'
@@ -339,6 +340,16 @@ export default function CoberturaSkillsPage() {
       .then(r => setTriageQueueCount(r.total ?? 0))
       .catch(() => setTriageQueueCount(0))
   }, [])
+
+  // Deep-link: ?project=N do SearchBox seleciona projeto automaticamente
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    const projectParam = searchParams.get('project')
+    if (projectParam) {
+      const n = Number(projectParam)
+      if (!isNaN(n)) setSelectedProject(n)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     if (selectedProject != null) {
