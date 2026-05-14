@@ -10,6 +10,7 @@ import { StageTeamAllocation } from './stage-team-allocation'
 import { StageKanbanBoard } from './stage-kanban-board'
 import { StageAporteDialog } from './stage-aporte-dialog'
 import { StageActivityTimeline } from './stage-activity-timeline'
+import { StageCommentComposer } from './stage-comment-composer'
 import { useStageDeliveries } from '@/hooks/use-stage-deliveries'
 import type { ProjectStage, StageDerivedStatus } from '@/lib/types/project-stage'
 
@@ -49,6 +50,7 @@ export function StageOperationalBlock({
   bulkAction = null, bulkKey = 0,
 }: Props) {
   const [expanded, setExpanded] = useState(true)
+  const [activityKey, setActivityKey] = useState(0)
 
   // Mobile: colapsa por default. Roda 1x no mount; usuário pode toggle manualmente.
   useEffect(() => {
@@ -295,7 +297,11 @@ export function StageOperationalBlock({
             }}>
               Atividade
             </div>
-            <StageActivityTimeline stageId={stage.id} />
+            <StageCommentComposer
+              stageId={stage.id}
+              onCreated={() => setActivityKey(k => k + 1)}
+            />
+            <StageActivityTimeline key={activityKey} stageId={stage.id} />
           </div>
         </div>
       )}
