@@ -170,11 +170,14 @@ const NAV: NavEntry[] = [
       { label: 'Apontamentos', href: '/relatorios/apontamentos', icon: Clock },
     ],
   },
-  { type: 'item', label: 'Matriz de Conhecimento', href: '/matriz-conhecimento', icon: Star },
-  { type: 'item', label: 'Cobertura de Skills',    href: '/projetos/cobertura-skills', icon: UserCheck },
-  { type: 'item', label: 'Candidatos',             href: '/candidatos',                icon: Briefcase },
-  { type: 'item', label: 'Busca Avançada',         href: '/busca',                     icon: Search },
-  { type: 'item', label: 'Novo Candidato',         href: '/candidato/cadastro',        icon: UserPlus },
+  // 🧪 Features experimentais — só em DEV1 (escondidas em homolog/prod)
+  ...(process.env.NEXT_PUBLIC_APP_ENV === 'dev' ? [
+    { type: 'item' as const, label: 'Matriz de Conhecimento', href: '/matriz-conhecimento', icon: Star },
+    { type: 'item' as const, label: 'Cobertura de Skills',    href: '/projetos/cobertura-skills', icon: UserCheck },
+    { type: 'item' as const, label: 'Candidatos',             href: '/candidatos',                icon: Briefcase },
+    { type: 'item' as const, label: 'Busca Avançada',         href: '/busca',                     icon: Search },
+    { type: 'item' as const, label: 'Novo Candidato',         href: '/candidato/cadastro',        icon: UserPlus },
+  ] : []),
   {
     type: 'group',
     label: 'Cadastros',
