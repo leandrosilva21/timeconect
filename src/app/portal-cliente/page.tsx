@@ -11,18 +11,20 @@ import {
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type Health = 'ok' | 'warning' | 'critical' | 'unknown'
+type Health = 'ok' | 'warning' | 'critical' | 'unknown' | 'closed'
 
 interface ProjectHealth {
   id: number
   code: string
   name: string
   contract_type: string | null
+  is_closed: boolean
   sold_hours: number
   consumed_hours: number | null
   balance_hours: number | null
   percentage: number | null
   status: Health
+  children?: ProjectHealth[]
 }
 
 interface MonthlyPoint {
@@ -57,6 +59,7 @@ const HEALTH_META: Record<Health, { label: string; color: string; bg: string }> 
   warning:  { label: 'Atenção',  color: '#F59E0B', bg: 'rgba(245,158,11,0.14)' },
   critical: { label: 'Crítico',  color: '#EF4444', bg: 'rgba(239,68,68,0.14)' },
   unknown:  { label: '—',        color: '#A1A1AA', bg: 'rgba(161,161,170,0.10)' },
+  closed:   { label: 'Fechado',  color: '#A78BFA', bg: 'rgba(167,139,250,0.12)' },
 }
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
@@ -133,6 +136,89 @@ function HealthBar({ pct }: { pct: number | null }) {
   )
 }
 
+// Linha de projeto na árvore. Pai pode expandir/colapsar filhos; filho é
+// indentado com prefixo └. Fechados não mostram saldo nem barra — só
+// horas vendidas.
+function ProjectTreeNode({
+  project: p, isChild, isExpanded, onToggle, childExpanded, onToggleChild,
+}: {
+  project: ProjectHealth
+  isChild: boolean
+  isExpanded: boolean
+  onToggle: () => void
+  childExpanded: (id: number) => boolean
+  onToggleChild: (id: number) => void
+}) {
+  const meta = HEALTH_META[p.status]
+  const hasChildren = !isChild && (p.children?.length ?? 0) > 0
+
+  return (
+    <>
+      <li className={isChild ? 'px-5 py-3 flex items-center gap-3' : 'px-5 py-4 flex items-center gap-3'}>
+        {isChild && <span className="ml-4 text-zinc-600 select-none">└</span>}
+        {!isChild && hasChildren && (
+          <button onClick={onToggle} className="p-1 rounded hover:bg-white/[0.04]" aria-label={isExpanded ? 'Recolher' : 'Expandir'}>
+            <span style={{ color: 'var(--brand-subtle)', display: 'inline-block', transition: 'transform 120ms', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
+          </button>
+        )}
+        {!isChild && !hasChildren && <span className="w-7" />}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>{p.code}</span>
+            <span className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>{p.name}</span>
+            {p.contract_type && (
+              <span className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>· {p.contract_type}</span>
+            )}
+            {hasChildren && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>
+                {p.children!.length} {p.children!.length === 1 ? 'sub' : 'subs'}
+              </span>
+            )}
+          </div>
+          {!p.is_closed && <HealthBar pct={p.percentage} />}
+        </div>
+
+        <div className="text-right shrink-0">
+          {p.is_closed ? (
+            <p className="text-[11px] font-semibold tabular-nums" style={{ color: 'var(--brand-text)' }}>
+              {fmtH(p.sold_hours)}
+            </p>
+          ) : (
+            <>
+              <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>
+                {fmtH(p.consumed_hours)} / {fmtH(p.sold_hours)}
+              </p>
+              {p.balance_hours !== null && (
+                <p className="text-[11px] font-semibold mt-0.5" style={{
+                  color: p.balance_hours < 0 ? '#EF4444' : p.balance_hours <= 0.1 * p.sold_hours ? '#F59E0B' : '#10B981',
+                }}>
+                  Saldo: {fmtH(p.balance_hours)}
+                </p>
+              )}
+            </>
+          )}
+          <span className="inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+            style={{ background: meta.bg, color: meta.color }}>
+            {meta.label}{!p.is_closed && p.percentage !== null && ` · ${p.percentage.toFixed(0)}%`}
+          </span>
+        </div>
+      </li>
+      {hasChildren && isExpanded && p.children!.map(c => (
+        <ProjectTreeNode
+          key={c.id}
+          project={c}
+          isChild
+          isExpanded={childExpanded(c.id)}
+          onToggle={() => onToggleChild(c.id)}
+          childExpanded={childExpanded}
+          onToggleChild={onToggleChild}
+        />
+      ))}
+    </>
+  )
+}
+
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function PortalClientePage() {
@@ -144,6 +230,10 @@ export default function PortalClientePage() {
   const [error, setError]         = useState<string | null>(null)
   const [customers, setCustomers] = useState<CustomerOpt[]>([])
   const [customerId, setCustomerId] = useState<number | ''>('')
+  const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  const toggle = (id: number) => setExpanded(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
+  })
 
   const isCliente = user?.type === 'cliente'
   const isAdmin   = user?.type === 'admin'
@@ -184,7 +274,7 @@ export default function PortalClientePage() {
 
   const projetos = summary?.projects_health ?? []
   const projetosOrdenados = useMemo(() => {
-    const order: Record<Health, number> = { critical: 0, warning: 1, ok: 2, unknown: 3 }
+    const order: Record<Health, number> = { critical: 0, warning: 1, ok: 2, unknown: 3, closed: 4 }
     return [...projetos].sort((a, b) => {
       const d = order[a.status] - order[b.status]
       if (d !== 0) return d
@@ -271,51 +361,26 @@ export default function PortalClientePage() {
             <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
               <div className="px-5 py-3.5 flex items-center gap-2 border-b" style={{ borderColor: 'var(--brand-border)' }}>
                 <TrendingUp size={14} style={{ color: 'var(--brand-primary)' }} />
-                <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--brand-muted)' }}>Saúde dos Projetos</h2>
-                <span className="text-[10px] ml-auto" style={{ color: 'var(--brand-subtle)' }}>
-                  Não considera projetos do tipo Fechado
-                </span>
+                <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--brand-muted)' }}>Projetos</h2>
               </div>
 
               {projetosOrdenados.length === 0 ? (
                 <div className="p-8 text-center text-sm" style={{ color: 'var(--brand-subtle)' }}>
-                  Nenhum projeto com saldo ativo no momento.
+                  Nenhum projeto cadastrado.
                 </div>
               ) : (
                 <ul className="divide-y" style={{ borderColor: 'var(--brand-border)' }}>
-                  {projetosOrdenados.map(p => {
-                    const meta = HEALTH_META[p.status]
-                    return (
-                      <li key={p.id} className="px-5 py-4 flex items-center gap-4">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>{p.code}</span>
-                            <span className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>{p.name}</span>
-                            {p.contract_type && (
-                              <span className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>· {p.contract_type}</span>
-                            )}
-                          </div>
-                          <HealthBar pct={p.percentage} />
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>
-                            {fmtH(p.consumed_hours)} / {fmtH(p.sold_hours)}
-                          </p>
-                          {p.balance_hours !== null && (
-                            <p className="text-[11px] font-semibold mt-0.5" style={{
-                              color: p.balance_hours < 0 ? '#EF4444' : p.balance_hours <= 0.1 * p.sold_hours ? '#F59E0B' : '#10B981',
-                            }}>
-                              Saldo: {fmtH(p.balance_hours)}
-                            </p>
-                          )}
-                          <span className="inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
-                            style={{ background: meta.bg, color: meta.color }}>
-                            {meta.label}{p.percentage !== null && ` · ${p.percentage.toFixed(0)}%`}
-                          </span>
-                        </div>
-                      </li>
-                    )
-                  })}
+                  {projetosOrdenados.map(p => (
+                    <ProjectTreeNode
+                      key={p.id}
+                      project={p}
+                      isChild={false}
+                      isExpanded={expanded.has(p.id)}
+                      onToggle={() => toggle(p.id)}
+                      childExpanded={(cid) => expanded.has(cid)}
+                      onToggleChild={(cid) => toggle(cid)}
+                    />
+                  ))}
                 </ul>
               )}
             </div>
