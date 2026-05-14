@@ -1,0 +1,143 @@
+'use client'
+
+import { useEffect } from 'react'
+import Link from 'next/link'
+import { X, ExternalLink, Layers } from 'lucide-react'
+import { useProjectStages } from '@/hooks/use-project-stages'
+
+interface Props {
+  projectId: number
+  projectName: string
+  customerName?: string | null
+  onClose: () => void
+}
+
+function n(v: unknown): number {
+  const x = Number(v)
+  return Number.isFinite(x) ? x : 0
+}
+
+function formatHours(v: number): string {
+  return v >= 10 ? `${Math.round(v)}h` : `${v.toFixed(1)}h`
+}
+
+/**
+ * Side panel simplificado (Fase 1 do board consolidado / ADR 0004).
+ * Não duplica a lista detalhada de etapas — só dá pulo rápido pro workspace.
+ */
+export function ProjectStagesSidePanel({
+  projectId, projectName, customerName, onClose,
+}: Props) {
+  const { stages } = useProjectStages(projectId)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  const total = stages.length
+  const planned = stages.reduce((s, st) => s + n(st.hours_planned), 0)
+  const totalDeliv = stages.reduce((s, st) => s + (st.deliveries_count ?? 0), 0)
+  const doneDeliv = stages.reduce((s, st) => s + (st.deliveries_done_count ?? 0), 0)
+  const pct = totalDeliv > 0 ? Math.round((doneDeliv / totalDeliv) * 100) : 0
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 60 }}
+      />
+      <aside
+        style={{
+          position: 'fixed', top: 0, right: 0, bottom: 0,
+          width: 'min(420px, 100vw)',
+          background: 'var(--bg)',
+          borderLeft: '1px solid var(--border)',
+          boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
+          zIndex: 70,
+          display: 'flex', flexDirection: 'column',
+          animation: 'slideInPanel .18s ease',
+        }}
+      >
+        <style>{`@keyframes slideInPanel { from { transform: translateX(20px); opacity: 0 } to { transform: none; opacity: 1 } }`}</style>
+
+        <div style={{
+          padding: '14px 18px',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8,
+        }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            {customerName && (
+              <div style={{
+                fontSize: 11, color: 'var(--text-muted)',
+                textTransform: 'uppercase', letterSpacing: '.04em',
+              }}>
+                {customerName}
+              </div>
+            )}
+            <div style={{
+              fontSize: 15, fontWeight: 600, color: 'var(--text)',
+              marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {projectName}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            style={{
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--text-muted)', padding: 4, flexShrink: 0,
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div style={{ padding: 18, flex: 1, overflowY: 'auto' }}>
+          <div style={{
+            padding: '12px 14px',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            marginBottom: 14,
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontSize: 11, color: 'var(--text-muted)',
+              textTransform: 'uppercase', letterSpacing: '.04em',
+              marginBottom: 8,
+            }}>
+              <Layers size={11} /> Resumo
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span><strong>{total}</strong> etapa{total !== 1 ? 's' : ''}</span>
+              <span><strong>{formatHours(planned)}</strong> planejadas</span>
+              <span><strong>{doneDeliv}/{totalDeliv}</strong> entregas concluídas{totalDeliv > 0 ? ` · ${pct}%` : ''}</span>
+            </div>
+          </div>
+
+          <Link
+            href={`/projetos/${projectId}/etapas?from=pipeline`}
+            className="ds-btn-primary"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontSize: 13, padding: '10px 16px', textDecoration: 'none',
+              width: '100%', justifyContent: 'center',
+            }}
+          >
+            <ExternalLink size={14} /> Abrir Workspace
+          </Link>
+
+          <p style={{
+            marginTop: 16, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5,
+          }}>
+            O workspace mostra todas as etapas com seus consultores alocados, horas e kanban operacional num único board.
+          </p>
+        </div>
+      </aside>
+    </>
+  )
+}

@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation'
 import { secureUrl, api } from '@/lib/api'
 import { useState, useEffect, useRef } from 'react'
 import { ThemeToggle } from './ThemeToggle'
+import { SearchBox } from '@/components/SearchBox'
 
 interface HeaderProps {
   title?: string
@@ -94,6 +95,7 @@ export function Header({ title, actions }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2">
+        <SearchBox />
         {actions}
 
         {/* Theme toggle — sun/moon */}

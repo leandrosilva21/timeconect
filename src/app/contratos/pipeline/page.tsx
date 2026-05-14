@@ -3,6 +3,7 @@
 import { AppLayout } from '@/components/layout/app-layout'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import { ProjectStagesSidePanel } from '@/components/projects/project-stages-side-panel'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
@@ -157,8 +158,10 @@ const TRANSITION_COL: Column = {
 }
 
 const PROJECT_COLS: Column[] = [
-  { id: 'em_andamento',        label: 'Em Andamento',        phase: 'project', projectStatuses: ['awaiting_start', 'started'] },
-  { id: 'liberado_para_testes',label: 'Liberado p/ Testes',  phase: 'project', projectStatuses: ['liberado_para_testes'] },
+  { id: 'proj_backlog',        label: 'Backlog',             phase: 'project', projectStatuses: ['backlog'],         color: '#94a3b8' },
+  { id: 'proj_planning',       label: 'Planejamento',        phase: 'project', projectStatuses: ['planning'],        color: '#60a5fa' },
+  { id: 'em_andamento',        label: 'Em Execução',         phase: 'project', projectStatuses: ['awaiting_start', 'started'] },
+  { id: 'liberado_para_testes',label: 'Homologação',         phase: 'project', projectStatuses: ['liberado_para_testes'] },
   { id: 'encerrado',           label: 'Encerrado',           phase: 'project', projectStatuses: ['finished'],   color: '#22c55e' },
   { id: 'pausado',             label: 'Pausado',             phase: 'project', projectStatuses: ['paused'],     color: '#eab308' },
   { id: 'cancelado',           label: 'Cancelado',           phase: 'project', projectStatuses: ['cancelled'],  color: '#ef4444' },
@@ -166,6 +169,8 @@ const PROJECT_COLS: Column[] = [
 
 const PROJECT_STATUS_TO_COL: Record<string, string> = {
   awaiting_start:       'em_andamento',
+  backlog:              'proj_backlog',
+  planning:             'proj_planning',
   started:              'em_andamento',
   liberado_para_testes: 'liberado_para_testes',
   paused:               'pausado',
@@ -174,6 +179,8 @@ const PROJECT_STATUS_TO_COL: Record<string, string> = {
 }
 
 const PROJECT_COL_TO_STATUS: Record<string, string> = {
+  proj_backlog:         'backlog',
+  proj_planning:        'planning',
   em_andamento:         'started',
   liberado_para_testes: 'liberado_para_testes',
   pausado:              'paused',
@@ -191,8 +198,10 @@ const TIPO_LABEL: Record<string, string> = {
 
 const STATUS_LABEL: Record<string, string> = {
   awaiting_start:       'Aguardando',
-  started:              'Em Andamento',
-  liberado_para_testes: 'Em Testes',
+  backlog:              'Backlog',
+  planning:             'Planejamento',
+  started:              'Em Execução',
+  liberado_para_testes: 'Homologação',
   finished:             'Encerrado',
   paused:               'Pausado',
   cancelled:            'Cancelado',
@@ -689,6 +698,31 @@ function ProjectKanbanCard({
               )}
             </div>
           )}
+          {(() => {
+            const sold = Number(card.sold_hours ?? 0)
+            const consumed = Number(card.consumed_hours ?? 0)
+            const pct = sold > 0 ? Math.min(100, Math.round((consumed / sold) * 100)) : 0
+            const barColor = pct >= 100 ? '#ef4444' : pct >= 90 ? '#f97316' : pct >= 70 ? '#eab308' : '#22c55e'
+            const consultantCount = card.consultants?.length ?? 0
+            if (sold <= 0 && consumed <= 0) return null
+            return (
+              <div className="mt-2 mb-1">
+                <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: barColor, transition: 'width .2s ease' }} />
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>
+                    {Math.round(consumed)}h / {Math.round(sold)}h
+                  </span>
+                  <span className="text-[10px]" style={{ color: barColor }}>{pct}%</span>
+                </div>
+                <div className="flex items-center gap-1 mt-1">
+                  <Users size={10} style={{ color: 'var(--brand-subtle)' }} />
+                  <span className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{consultantCount}</span>
+                </div>
+              </div>
+            )
+          })()}
           <div className="flex items-center justify-between mt-1 pt-2" style={{ borderTop: '1px solid rgba(99,102,241,0.15)' }}>
             <div className="flex items-center gap-2">
               {card.coordinators && card.coordinators.length > 0 && (
@@ -1836,9 +1870,10 @@ const STATUS_BADGE: Record<string, { label: string; color: string; bg: string }>
   inicio_autorizado:      { label: 'Início Autorizado',        color: '#eab308', bg: 'rgba(234,179,8,0.12)'   },
   alocado:                { label: 'Início Autorizado',        color: '#eab308', bg: 'rgba(234,179,8,0.12)'   },
   // project statuses
-  awaiting_start:         { label: 'Em Andamento',             color: '#818cf8', bg: 'rgba(99,102,241,0.12)'  },
-  started:                { label: 'Em Andamento',             color: '#818cf8', bg: 'rgba(99,102,241,0.12)'  },
-  liberado_para_testes:   { label: 'Lib. p/ Testes',           color: '#38bdf8', bg: 'rgba(56,189,248,0.12)'  },
+  awaiting_start:         { label: 'Aguardando',               color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' },
+  planning:               { label: 'Planejamento',             color: '#60a5fa', bg: 'rgba(96,165,250,0.12)'  },
+  started:                { label: 'Em Execução',              color: '#818cf8', bg: 'rgba(99,102,241,0.12)'  },
+  liberado_para_testes:   { label: 'Homologação',              color: '#38bdf8', bg: 'rgba(56,189,248,0.12)'  },
   paused:                 { label: 'Pausado',                  color: '#eab308', bg: 'rgba(234,179,8,0.12)'   },
   finished:               { label: 'Encerrado',                color: '#22c55e', bg: 'rgba(34,197,94,0.12)'   },
   cancelled:              { label: 'Cancelado',                color: '#ef4444', bg: 'rgba(239,68,68,0.12)'   },
@@ -3727,6 +3762,7 @@ function KanbanContent() {
   const [contractFilhoCard,     setContractFilhoCard]     = useState<ContractCard | null>(null)
   const [contractCreateForDecision, setContractCreateForDecision] = useState<ContractCard | null>(null)
   const [selectedProject,       setSelectedProject]       = useState<ProjectCard | null>(null)
+  const [stagesPanelProject,   setStagesPanelProject]   = useState<ProjectCard | null>(null)
   const [generateTarget,       setGenerateTarget]       = useState<ContractCard | null>(null)
   const [projectAction,    setProjectAction]    = useState<{ card: ProjectCard; action: string } | null>(null)
   const [viewMode,         setViewMode]         = useState<'kanban' | 'list'>('kanban')
@@ -4570,7 +4606,7 @@ function KanbanContent() {
                   unreadContractIds={unreadContractIds}
                   onContractClick={setSelectedContract}
                   onContractAction={(card, action) => setContractAction({ card, action })}
-                  onProjectClick={setSelectedProject}
+                  onProjectClick={card => setStagesPanelProject(card)}
                   onProjectAction={(card, action) => setProjectAction({ card, action })}
                   onRequestClick={card =>
                     card.kanban_column === 'req_inicio_autorizado' && !card.req_decision
@@ -4617,7 +4653,7 @@ function KanbanContent() {
                       }
                     }}
                     onContractAction={(card, action) => setContractAction({ card, action })}
-                    onProjectClick={setSelectedProject}
+                    onProjectClick={card => setStagesPanelProject(card)}
                     onProjectAction={(card, action) => setProjectAction({ card, action })}
                     onRequestClick={setSelectedRequest}
                     onContractMove={(card, toCol) => handleContractMove(card.id, card, 'inicio_autorizado', toCol)}
@@ -4642,7 +4678,7 @@ function KanbanContent() {
                   onContractClick={setSelectedContract}
                   onProjectClick={card => {
                     if (newProjectIds?.has(card.id)) markProjectSeen(card.id)
-                    setSelectedProject(card)
+                    setStagesPanelProject(card)
                   }}
                   onProjectAction={(card, action) => setProjectAction({ card, action })}
                   onProjectMove={(card, toCol) => handleProjectMove(card.id, toCol)}
@@ -4684,6 +4720,14 @@ function KanbanContent() {
       )}
       {selectedProject && (
         <ProjectDetailModal card={selectedProject} onClose={() => setSelectedProject(null)} userRole={userRole} />
+      )}
+      {stagesPanelProject && (
+        <ProjectStagesSidePanel
+          projectId={stagesPanelProject.id}
+          projectName={stagesPanelProject.project_name}
+          customerName={stagesPanelProject.customer_name}
+          onClose={() => setStagesPanelProject(null)}
+        />
       )}
       {selectedRequest && (
         <RequestDetailModal card={selectedRequest} onClose={() => setSelectedRequest(null)} />

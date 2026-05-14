@@ -37,6 +37,10 @@ import {
   LayoutGrid,
   DollarSign,
   Webhook,
+  Briefcase,
+  UserPlus,
+  Search,
+  Inbox,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
@@ -66,6 +70,8 @@ type NavGroup = {
 type NavEntry = NavItem | NavGroup
 
 const NAV_COORDINATOR: NavEntry[] = [
+  { type: 'item', label: 'Meus Cards', href: '/meus-cards', icon: Inbox },
+  { type: 'item', label: 'Capacidade', href: '/capacidade', icon: Users },
   {
     type: 'group',
     label: 'Apontamentos & Despesas',
@@ -83,6 +89,8 @@ const NAV_COORDINATOR: NavEntry[] = [
 const NAV: NavEntry[] = [
   { type: 'item', label: 'Meu Painel',            href: '/meu-painel',      icon: LayoutDashboard },
   { type: 'item', label: 'Início',                href: '/dashboard',       icon: Home },
+  { type: 'item', label: 'Meus Cards',            href: '/meus-cards',      icon: Inbox },
+  { type: 'item', label: 'Capacidade',            href: '/capacidade',      icon: Users },
   {
     type: 'group',
     label: 'Projetos',
@@ -146,6 +154,11 @@ const NAV: NavEntry[] = [
       { label: 'Apontamentos', href: '/relatorios/apontamentos', icon: Clock },
     ],
   },
+  { type: 'item', label: 'Matriz de Conhecimento', href: '/matriz-conhecimento', icon: Star },
+  { type: 'item', label: 'Cobertura de Skills',    href: '/projetos/cobertura-skills', icon: UserCheck },
+  { type: 'item', label: 'Candidatos',             href: '/candidatos',                icon: Briefcase },
+  { type: 'item', label: 'Busca Avançada',         href: '/busca',                     icon: Search },
+  { type: 'item', label: 'Novo Candidato',         href: '/candidato/cadastro',        icon: UserPlus },
   {
     type: 'group',
     label: 'Cadastros',
@@ -370,6 +383,7 @@ function SidebarInner({ user }: { user: User }) {
       const baseNav: NavEntry[] = [
         { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard },
         { type: 'item', label: 'Início',     href: '/dashboard',  icon: Home },
+        { type: 'item', label: 'Meus Cards', href: '/meus-cards', icon: Inbox },
       ]
       if (ep.includes('gestao_projetos.view') || ep.includes('gestao_projetos.update'))
         baseNav.push({ type: 'item', label: 'Gestão de Projetos', href: '/gestao-projetos', icon: Layers })
