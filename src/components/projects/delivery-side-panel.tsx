@@ -9,6 +9,7 @@ import { DeliveryTimeline } from './delivery-timeline'
 import { ActivityCommentComposer } from './activity-comment-composer'
 import { StageActivityTimeline } from './stage-activity-timeline'
 import { ActivityAporteDialog } from './activity-aporte-dialog'
+import { ActivityTeamAllocation } from './activity-team-allocation'
 import { PlusCircle } from 'lucide-react'
 
 interface Props {
@@ -238,6 +239,10 @@ export function DeliverySidePanel({ delivery, projectId, onClose, onUpdated, onD
             >
               Excluir
             </button>
+          </div>
+
+          <div style={{ marginTop: 24 }}>
+            <ActivityTeamAllocation deliveryId={delivery.id} />
           </div>
 
           {aporteOpen && (
