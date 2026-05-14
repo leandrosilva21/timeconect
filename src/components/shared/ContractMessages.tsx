@@ -36,7 +36,7 @@ function MessageText({ text }: { text: string }) {
     <>
       {parts.map((part, i) => {
         const m = part.match(/@\[(\d+):([^\]]+)\]/)
-        if (m) return <span key={i} style={{ color: '#eab308', fontWeight: 600 }}>@{m[2]}</span>
+        if (m) return <span key={i} style={{ color: 'var(--warning)', fontWeight: 600 }}>@{m[2]}</span>
         return <span key={i}>{part}</span>
       })}
     </>
@@ -83,11 +83,11 @@ function AttachmentChip({ att, messageId }: { att: Attachment; messageId: number
       style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--brand-border)', color: 'var(--brand-muted)' }}
     >
       {att.mime_type?.startsWith('image/') ? (
-        <Eye size={11} style={{ color: '#eab308' }} />
+        <Eye size={11} style={{ color: 'var(--warning)' }} />
       ) : (
-        <FileText size={11} style={{ color: '#eab308' }} />
+        <FileText size={11} style={{ color: 'var(--warning)' }} />
       )}
-      <span className="truncate flex-1 text-left" style={{ color: '#D4D4D8' }}>{att.original_name}</span>
+      <span className="truncate flex-1 text-left" style={{ color: 'var(--brand-text)' }}>{att.original_name}</span>
       <span className="shrink-0" style={{ color: 'var(--brand-subtle)' }}>{formatBytes(att.file_size)}</span>
       <Download size={10} className="shrink-0" style={{ color: 'var(--brand-subtle)' }} />
     </button>
@@ -243,7 +243,7 @@ export function ContractMessages({ contractId, userRole, readOnly }: Props) {
           <div key={msg.id} className="flex gap-2.5 items-start rounded-lg px-3 py-2"
             style={msg.is_mentioned ? { background: 'rgba(234,179,8,0.04)', borderLeft: '2px solid #eab308' } : {}}>
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5"
-              style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308' }}>
+              style={{ background: 'rgba(234,179,8,0.15)', color: 'var(--warning)' }}>
               {getInitials(msg.author?.name ?? '?')}
             </div>
             <div className="flex-1 min-w-0">
@@ -260,7 +260,7 @@ export function ContractMessages({ contractId, userRole, readOnly }: Props) {
                 )}
               </div>
               {msg.message && (
-                <p className="text-sm leading-relaxed break-words" style={{ color: '#D4D4D8' }}>
+                <p className="text-sm leading-relaxed break-words" style={{ color: 'var(--brand-text)' }}>
                   <MessageText text={msg.message} />
                 </p>
               )}
@@ -281,9 +281,9 @@ export function ContractMessages({ contractId, userRole, readOnly }: Props) {
           {filteredMentions.slice(0, 6).map(u => (
             <button key={u.id} onMouseDown={e => { e.preventDefault(); insertMention(u) }}
               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-white/5 transition-colors"
-              style={{ color: '#D4D4D8' }}>
+              style={{ color: 'var(--brand-text)' }}>
               <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0"
-                style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308' }}>
+                style={{ background: 'rgba(234,179,8,0.15)', color: 'var(--warning)' }}>
                 {getInitials(u.name)}
               </div>
               {u.name}
@@ -298,8 +298,8 @@ export function ContractMessages({ contractId, userRole, readOnly }: Props) {
           {files.map((f, idx) => (
             <div key={idx} className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs"
               style={{ background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.2)' }}>
-              <FileText size={11} style={{ color: '#eab308' }} />
-              <span className="max-w-[120px] truncate" style={{ color: '#D4D4D8' }}>{f.name}</span>
+              <FileText size={11} style={{ color: 'var(--warning)' }} />
+              <span className="max-w-[120px] truncate" style={{ color: 'var(--brand-text)' }}>{f.name}</span>
               <button onClick={() => setFiles(prev => prev.filter((_, i) => i !== idx))} className="hover:opacity-70 shrink-0" style={{ color: 'var(--brand-subtle)' }}>
                 <X size={11} />
               </button>
@@ -337,7 +337,7 @@ export function ContractMessages({ contractId, userRole, readOnly }: Props) {
           <button onClick={() => fileInputRef.current?.click()}
             className="flex items-center justify-center w-9 h-9 rounded-lg transition-all shrink-0"
             title="Adicionar anexos"
-            style={{ background: files.length > 0 ? 'rgba(234,179,8,0.08)' : 'rgba(255,255,255,0.04)', border: '1px solid var(--brand-border)', color: files.length > 0 ? '#eab308' : 'var(--brand-subtle)' }}>
+            style={{ background: files.length > 0 ? 'rgba(234,179,8,0.08)' : 'rgba(255,255,255,0.04)', border: '1px solid var(--brand-border)', color: files.length > 0 ? 'var(--warning)' : 'var(--brand-subtle)' }}>
             <Paperclip size={15} />
           </button>
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
@@ -353,7 +353,7 @@ export function ContractMessages({ contractId, userRole, readOnly }: Props) {
           <button onClick={handleSend} disabled={(!input.trim() && files.length === 0) || sending}
             className="flex items-center justify-center w-9 h-9 rounded-lg transition-all shrink-0"
             style={(input.trim() || files.length > 0)
-              ? { background: '#eab308', color: '#000' }
+              ? { background: 'var(--warning)', color: '#000' }
               : { background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)' }}>
             <Send size={15} />
           </button>

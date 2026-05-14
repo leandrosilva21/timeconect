@@ -3395,7 +3395,7 @@ function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () 
                         {new Date(msg.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                    <p className="text-sm leading-relaxed break-words" style={{ color: '#D4D4D8' }}>{msg.message}</p>
+                    <p className="text-sm leading-relaxed break-words" style={{ color: 'var(--brand-text)' }}>{msg.message}</p>
                     {msg.attachments && msg.attachments.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-1.5">
                         {msg.attachments.map(att => (

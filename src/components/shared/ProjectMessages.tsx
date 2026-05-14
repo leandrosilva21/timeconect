@@ -33,7 +33,7 @@ function MessageText({ text }: { text: string }) {
     <>
       {parts.map((part, i) => {
         const m = part.match(/@\[(\d+):([^\]]+)\]/)
-        if (m) return <span key={i} style={{ color: '#00F5FF', fontWeight: 600 }}>@{m[2]}</span>
+        if (m) return <span key={i} style={{ color: 'var(--brand-primary)', fontWeight: 600 }}>@{m[2]}</span>
         return <span key={i}>{part}</span>
       })}
     </>
@@ -88,11 +88,11 @@ function AttachmentChip({ att, messageId }: { att: Attachment; messageId: number
       style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--brand-border)', color: 'var(--brand-muted)' }}
     >
       {isImage(att.mime_type) ? (
-        <Eye size={11} style={{ color: '#00F5FF' }} />
+        <Eye size={11} style={{ color: 'var(--brand-primary)' }} />
       ) : (
-        <FileText size={11} style={{ color: '#00F5FF' }} />
+        <FileText size={11} style={{ color: 'var(--brand-primary)' }} />
       )}
-      <span className="truncate flex-1 text-left" style={{ color: '#D4D4D8' }}>{att.original_name}</span>
+      <span className="truncate flex-1 text-left" style={{ color: 'var(--brand-text)' }}>{att.original_name}</span>
       <span className="shrink-0" style={{ color: 'var(--brand-subtle)' }}>{formatBytes(att.file_size)}</span>
       <Download size={10} className="shrink-0" style={{ color: 'var(--brand-subtle)' }} />
     </button>
@@ -272,7 +272,7 @@ export function ProjectMessages({ projectId, userRole, readOnly }: Props) {
           >
             <div
               className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5"
-              style={{ background: 'rgba(0,245,255,0.15)', color: '#00F5FF' }}
+              style={{ background: 'rgba(0,245,255,0.15)', color: 'var(--brand-primary)' }}
             >
               {getInitials(msg.author?.name ?? '?')}
             </div>
@@ -296,7 +296,7 @@ export function ProjectMessages({ projectId, userRole, readOnly }: Props) {
                 )}
               </div>
               {msg.message && (
-                <p className="text-sm leading-relaxed break-words" style={{ color: '#D4D4D8' }}>
+                <p className="text-sm leading-relaxed break-words" style={{ color: 'var(--brand-text)' }}>
                   <MessageText text={msg.message} />
                 </p>
               )}
@@ -321,9 +321,9 @@ export function ProjectMessages({ projectId, userRole, readOnly }: Props) {
               key={u.id}
               onMouseDown={e => { e.preventDefault(); insertMention(u) }}
               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-white/5 transition-colors"
-              style={{ color: '#D4D4D8' }}
+              style={{ color: 'var(--brand-text)' }}
             >
-              <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0" style={{ background: 'rgba(0,245,255,0.15)', color: '#00F5FF' }}>
+              <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0" style={{ background: 'rgba(0,245,255,0.15)', color: 'var(--brand-primary)' }}>
                 {getInitials(u.name)}
               </div>
               {u.name}
@@ -337,8 +337,8 @@ export function ProjectMessages({ projectId, userRole, readOnly }: Props) {
         <div className="mx-4 mb-2 flex flex-wrap gap-1.5">
           {files.map((f, idx) => (
             <div key={idx} className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs" style={{ background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.2)' }}>
-              <FileText size={11} style={{ color: '#00F5FF' }} />
-              <span className="max-w-[120px] truncate" style={{ color: '#D4D4D8' }}>{f.name}</span>
+              <FileText size={11} style={{ color: 'var(--brand-primary)' }} />
+              <span className="max-w-[120px] truncate" style={{ color: 'var(--brand-text)' }}>{f.name}</span>
               <button onClick={() => removeFile(idx)} className="hover:opacity-70 shrink-0" style={{ color: 'var(--brand-subtle)' }}>
                 <X size={11} />
               </button>
