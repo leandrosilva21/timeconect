@@ -38,6 +38,8 @@ import {
   DollarSign,
   Webhook,
   Activity,
+  Inbox as InboxIcon,
+  Bot,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
@@ -99,8 +101,9 @@ const NAV_CLIENTE: NavEntry[] = [
 
 const NAV: NavEntry[] = [
   { type: 'item', label: 'Início',                href: '/dashboard',       icon: Home },
+  { type: 'item', label: 'Inbox',                 href: '/inbox',           icon: InboxIcon },
   { type: 'item', label: 'Meu Painel',            href: '/meu-painel',      icon: LayoutDashboard },
-  { type: 'item', label: 'Feed Operacional',      href: '/feed-operacional', icon: Activity },
+  { type: 'item', label: 'Histórico Operacional', href: '/feed-operacional', icon: Activity },
   {
     type: 'group',
     label: 'Projetos',
@@ -186,7 +189,15 @@ const NAV: NavEntry[] = [
     ],
   },
   { type: 'item', label: 'Usuários',      href: '/users',    icon: Users },
-  { type: 'item', label: 'Configurações', href: '/settings', icon: Settings },
+  {
+    type: 'group',
+    label: 'Configurações',
+    icon: Settings,
+    items: [
+      { label: 'Geral',         href: '/settings',                   icon: Settings },
+      { label: 'BOT Minutor',   href: '/configuracoes/bot-minutor',  icon: Bot },
+    ],
+  },
 ]
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
