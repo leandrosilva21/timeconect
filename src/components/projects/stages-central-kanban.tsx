@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import Link from 'next/link'
 import { Users, Layers, Clock, AlarmClock, PlusCircle, AlertTriangle } from 'lucide-react'
 import { computeStageHealth } from '@/lib/utils/stage-health'
+import { useExecutiveMode } from '@/hooks/use-executive-mode'
 import { HealthDots } from './health-dots'
 import type { ProjectStage, StageDerivedStatus } from '@/lib/types/project-stage'
 
@@ -36,6 +37,8 @@ function formatHours(v: number): string {
 }
 
 export function StagesCentralKanban({ projectId, stages }: Props) {
+  const [executive] = useExecutiveMode()
+
   const byColumn = useMemo(() => {
     const map: Record<StageDerivedStatus, ProjectStage[]> = {
       planejamento: [], execucao: [], homologacao: [], bloqueada: [], concluida: [],
@@ -81,7 +84,7 @@ export function StagesCentralKanban({ projectId, stages }: Props) {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
               {items.map(stage => (
-                <StageMacroCard key={stage.id} stage={stage} projectId={projectId} />
+                <StageMacroCard key={stage.id} stage={stage} projectId={projectId} executive={executive} />
               ))}
               {items.length === 0 && (
                 <div style={{
@@ -100,14 +103,12 @@ export function StagesCentralKanban({ projectId, stages }: Props) {
   )
 }
 
-function StageMacroCard({ stage, projectId }: { stage: ProjectStage; projectId: number }) {
+function StageMacroCard({ stage, projectId, executive }: { stage: ProjectStage; projectId: number; executive: boolean }) {
   const health = computeStageHealth({ stage })
   const planned = n(stage.hours_planned)
   const totalDeliv = stage.deliveries_count ?? 0
   const doneDeliv = stage.deliveries_done_count ?? 0
   const pct = totalDeliv > 0 ? Math.round((doneDeliv / totalDeliv) * 100) : 0
-  const teamCount = stage.team_overrun_count !== undefined ? 'alocados' : null
-  void teamCount
 
   return (
     <Link
@@ -168,7 +169,7 @@ function StageMacroCard({ stage, projectId }: { stage: ProjectStage; projectId: 
               <AlertTriangle size={9} /> {stage.risk_level === 'high' ? 'Alto' : 'Médio'}
             </span>
           )}
-          <HealthDots health={health} />
+          {!executive && <HealthDots health={health} />}
         </div>
       </div>
 
@@ -189,57 +190,74 @@ function StageMacroCard({ stage, projectId }: { stage: ProjectStage; projectId: 
             display: 'flex', justifyContent: 'space-between',
             fontSize: 11, color: 'var(--text-muted)', marginTop: 4,
           }}>
-            <span>{doneDeliv}/{totalDeliv} entregas</span>
-            <span>{pct}%</span>
+            {executive ? (
+              <span style={{ marginLeft: 'auto' }}>{pct}%</span>
+            ) : (
+              <>
+                <span>{doneDeliv}/{totalDeliv} entregas</span>
+                <span>{pct}%</span>
+              </>
+            )}
           </div>
         </div>
       )}
 
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        marginTop: 10, fontSize: 11, color: 'var(--text-muted)',
-        gap: 8,
-      }}>
-        {planned > 0 && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <Clock size={10} /> {formatHours(planned)}
-          </span>
-        )}
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <Layers size={10} /> {totalDeliv}
-        </span>
-        {(stage.team_overrun_count ?? 0) > 0 && (
-          <span style={{
+      {executive ? (
+        planned > 0 && (
+          <div style={{
+            marginTop: 10, fontSize: 11, color: 'var(--text-muted)',
             display: 'inline-flex', alignItems: 'center', gap: 4,
-            color: 'var(--danger)',
           }}>
-            <Users size={10} /> {stage.team_overrun_count}
+            <Clock size={10} /> {formatHours(planned)}
+          </div>
+        )
+      ) : (
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginTop: 10, fontSize: 11, color: 'var(--text-muted)',
+          gap: 8,
+        }}>
+          {planned > 0 && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <Clock size={10} /> {formatHours(planned)}
+            </span>
+          )}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Layers size={10} /> {totalDeliv}
           </span>
-        )}
-        {Number(stage.aportes_hours_sum ?? 0) !== 0 && (
-          <span
-            title={`Aportes operacionais: ${formatHours(Number(stage.aportes_hours_sum))}`}
-            style={{
+          {(stage.team_overrun_count ?? 0) > 0 && (
+            <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
-              color: 'var(--primary)',
-            }}
-          >
-            <PlusCircle size={10} /> {formatHours(Number(stage.aportes_hours_sum))}
-          </span>
-        )}
-        {typeof stage.days_since_activity === 'number' && stage.days_since_activity >= 5 && (
-          <span
-            title={`Sem movimentação há ${stage.days_since_activity} dia(s)`}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              color: stage.days_since_activity >= 8 ? 'var(--danger)' : 'var(--warning)',
-              marginLeft: 'auto',
-            }}
-          >
-            <AlarmClock size={10} /> {stage.days_since_activity}d
-          </span>
-        )}
-      </div>
+              color: 'var(--danger)',
+            }}>
+              <Users size={10} /> {stage.team_overrun_count}
+            </span>
+          )}
+          {Number(stage.aportes_hours_sum ?? 0) !== 0 && (
+            <span
+              title={`Aportes operacionais: ${formatHours(Number(stage.aportes_hours_sum))}`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                color: 'var(--primary)',
+              }}
+            >
+              <PlusCircle size={10} /> {formatHours(Number(stage.aportes_hours_sum))}
+            </span>
+          )}
+          {typeof stage.days_since_activity === 'number' && stage.days_since_activity >= 5 && (
+            <span
+              title={`Sem movimentação há ${stage.days_since_activity} dia(s)`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                color: stage.days_since_activity >= 8 ? 'var(--danger)' : 'var(--warning)',
+                marginLeft: 'auto',
+              }}
+            >
+              <AlarmClock size={10} /> {stage.days_since_activity}d
+            </span>
+          )}
+        </div>
+      )}
     </Link>
   )
 }
