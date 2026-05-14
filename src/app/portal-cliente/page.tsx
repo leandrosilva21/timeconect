@@ -8,6 +8,10 @@ import { useRouter } from 'next/navigation'
 import {
   Building2, Briefcase, Clock, Headphones, TrendingUp, ChevronDown,
 } from 'lucide-react'
+import {
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip,
+} from 'recharts'
+import Link from 'next/link'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -30,8 +34,8 @@ interface ProjectHealth {
 interface MonthlyPoint {
   month: string
   label: string
-  projects: number
-  sold_hours: number
+  tickets: number
+  consumed_hours: number
 }
 
 interface Summary {
@@ -87,67 +91,57 @@ function KpiCard({
   )
 }
 
-function MonthlyEvolution({ series }: { series: MonthlyPoint[] }) {
-  const maxProjects = Math.max(1, ...series.map(p => p.projects))
-  const maxHours    = Math.max(1, ...series.map(p => p.sold_hours))
-  const hasAny      = series.some(p => p.projects > 0 || p.sold_hours > 0)
-  const [hovered, setHovered] = useState<string | null>(null)
+function EvolutionTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
+  const tickets = payload.find((p: any) => p.dataKey === 'tickets')?.value ?? 0
+  const horas   = payload.find((p: any) => p.dataKey === 'consumed_hours')?.value ?? 0
+  return (
+    <div className="px-3 py-2 rounded-lg shadow-xl text-[11px]" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <p className="font-semibold mb-1" style={{ color: 'var(--brand-text)' }}>{label}</p>
+      <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm shrink-0" style={{ background: '#00F5FF' }} /><span style={{ color: 'var(--brand-muted)' }}>{tickets} ticket{tickets === 1 ? '' : 's'}</span></div>
+      <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm shrink-0" style={{ background: '#A78BFA' }} /><span style={{ color: 'var(--brand-muted)' }}>{Number(horas).toFixed(1)}h consumidas</span></div>
+    </div>
+  )
+}
 
+function MonthlyEvolution({ series }: { series: MonthlyPoint[] }) {
+  const hasAny = series.some(p => p.tickets > 0 || p.consumed_hours > 0)
   return (
     <div className="rounded-2xl p-5" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
       <div className="flex items-center justify-between gap-2 mb-4">
-        <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--brand-muted)' }}>Evolução · 12 Meses</h2>
-        <div className="flex items-center gap-4 text-[10px]" style={{ color: 'var(--brand-subtle)' }}>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ background: '#00F5FF' }} />Projetos contratados</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ background: '#A78BFA' }} />Horas vendidas</span>
-        </div>
+        <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--brand-muted)' }}>
+          Evolução Mensal — Tickets e Consumo de Horas
+        </h2>
+        <Link href="/timesheets" className="text-[11px] hover:opacity-80 transition-opacity" style={{ color: 'var(--brand-primary)' }}>
+          Ver apontamentos →
+        </Link>
       </div>
       {!hasAny ? (
-        <p className="py-6 text-center text-sm" style={{ color: 'var(--brand-subtle)' }}>Nenhum projeto contratado nos últimos 12 meses.</p>
+        <p className="py-10 text-center text-sm" style={{ color: 'var(--brand-subtle)' }}>Sem movimentação nos últimos 12 meses.</p>
       ) : (
-        <div className="flex items-stretch gap-2 h-44">
-          {series.map(p => {
-            const tPct = (p.projects / maxProjects) * 100
-            const hPct = (p.sold_hours / maxHours) * 100
-            const isHovered = hovered === p.month
-            return (
-              <div
-                key={p.month}
-                className="flex-1 flex flex-col items-center gap-1 group min-w-0 h-full relative cursor-default"
-                onMouseEnter={() => setHovered(p.month)}
-                onMouseLeave={() => setHovered(prev => prev === p.month ? null : prev)}
-              >
-                {isHovered && (
-                  <div
-                    className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full z-10 px-3 py-2 rounded-lg shadow-xl whitespace-nowrap text-[11px] pointer-events-none"
-                    style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
-                  >
-                    <p className="font-semibold mb-1" style={{ color: 'var(--brand-text)' }}>{p.label}</p>
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: '#00F5FF' }} />
-                      <span style={{ color: 'var(--brand-muted)' }}>
-                        {p.projects} projeto{p.projects === 1 ? '' : 's'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: '#A78BFA' }} />
-                      <span style={{ color: 'var(--brand-muted)' }}>
-                        {p.sold_hours.toFixed(1)}h vendidas
-                      </span>
-                    </div>
-                  </div>
-                )}
-                <div className="w-full flex items-end justify-center gap-0.5 flex-1 min-h-0">
-                  <div className="w-1/2 rounded-t transition-all"
-                    style={{ height: `${Math.max(2, tPct)}%`, background: isHovered ? '#00F5FF' : 'rgba(0,245,255,0.85)' }} />
-                  <div className="w-1/2 rounded-t transition-all"
-                    style={{ height: `${Math.max(2, hPct)}%`, background: isHovered ? '#A78BFA' : 'rgba(167,139,250,0.85)' }} />
-                </div>
-                <span className="text-[9px] truncate w-full text-center" style={{ color: isHovered ? 'var(--brand-text)' : 'var(--brand-subtle)' }}>{p.label}</span>
-              </div>
-            )
-          })}
-        </div>
+        <>
+          <div className="h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={series} margin={{ top: 16, right: 24, left: 8, bottom: 28 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical />
+                <XAxis dataKey="label" tick={{ fill: 'var(--brand-subtle)', fontSize: 11 }} tickLine={false} axisLine={false} />
+                <YAxis yAxisId="left"  orientation="left"  tick={{ fill: '#00F5FF', fontSize: 11 }} tickLine={false} axisLine={false} label={{ value: 'Tickets', angle: -90, position: 'insideLeft', fill: '#00F5FF', fontSize: 11 }} allowDecimals={false} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fill: '#A78BFA', fontSize: 11 }} tickLine={false} axisLine={false} label={{ value: 'Horas',   angle: 90,  position: 'insideRight', fill: '#A78BFA', fontSize: 11 }} tickFormatter={(v: number) => `${v}h`} />
+                <RTooltip content={<EvolutionTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.08)' }} />
+                <Line yAxisId="right" type="monotone" dataKey="consumed_hours" stroke="#A78BFA" strokeWidth={2.5} dot={{ r: 4, fill: 'var(--brand-surface)', strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                <Line yAxisId="left"  type="monotone" dataKey="tickets"        stroke="#00F5FF" strokeWidth={2.5} dot={{ r: 4, fill: 'var(--brand-surface)', strokeWidth: 2 }} activeDot={{ r: 6 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex items-center justify-center gap-6 mt-2 text-[11px]">
+            <span className="flex items-center gap-1.5" style={{ color: '#A78BFA' }}>
+              <span className="w-3 h-0.5 rounded-full" style={{ background: '#A78BFA' }} />Horas consumidas
+            </span>
+            <span className="flex items-center gap-1.5" style={{ color: '#00F5FF' }}>
+              <span className="w-3 h-0.5 rounded-full" style={{ background: '#00F5FF' }} />Tickets
+            </span>
+          </div>
+        </>
       )}
     </div>
   )
