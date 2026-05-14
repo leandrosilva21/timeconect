@@ -3390,7 +3390,7 @@ function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () 
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2 mb-0.5">
-                      <span className="text-xs font-semibold" style={{ color: '#FAFAFA' }}>{msg.author?.name ?? 'Usuário'}</span>
+                      <span className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>{msg.author?.name ?? 'Usuário'}</span>
                       <span className="text-[10px]" style={{ color: 'var(--brand-muted)' }}>
                         {new Date(msg.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </span>
@@ -3455,7 +3455,7 @@ function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () 
                     {filteredMentions.map(u => (
                       <button key={u.id} onClick={() => insertMention(u)}
                         className="w-full text-left px-3 py-2 text-sm hover:opacity-80 transition-opacity"
-                        style={{ color: '#FAFAFA' }}>
+                        style={{ color: 'var(--brand-text)' }}>
                         <span className="text-[#a78bfa] font-semibold">@</span>{u.name}
                       </button>
                     ))}
@@ -3473,7 +3473,7 @@ function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () 
                     placeholder="Escreva um comentário... Use @ para mencionar"
                     rows={2}
                     className="flex-1 resize-none rounded-lg px-3 py-2 text-sm outline-none"
-                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(139,92,246,0.25)', color: '#FAFAFA' }}
+                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(139,92,246,0.25)', color: 'var(--brand-text)' }}
                   />
                   <div className="flex flex-col gap-1 shrink-0">
                     <button onClick={() => fileInputRef.current?.click()}

@@ -278,7 +278,7 @@ export function ProjectMessages({ projectId, userRole, readOnly }: Props) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-2 mb-0.5">
-                <span className="text-xs font-semibold" style={{ color: '#FAFAFA' }}>
+                <span className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>
                   {msg.author?.name ?? 'Usuário'}
                 </span>
                 <span className="text-[10px]" style={{ color: 'var(--brand-muted)' }}>
@@ -361,7 +361,7 @@ export function ProjectMessages({ projectId, userRole, readOnly }: Props) {
               onClick={() => setVisibility('internal')}
               className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all"
               style={visibility === 'internal'
-                ? { background: 'rgba(255,255,255,0.08)', color: '#FAFAFA', border: '1px solid var(--brand-border)' }
+                ? { background: 'rgba(255,255,255,0.08)', color: 'var(--brand-text)', border: '1px solid var(--brand-border)' }
                 : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid transparent' }}
             >
               <Lock size={10} /> Interno
@@ -398,7 +398,7 @@ export function ProjectMessages({ projectId, userRole, readOnly }: Props) {
             placeholder={isCliente ? 'Escreva uma mensagem...' : 'Escreva uma mensagem... Use @ para mencionar'}
             rows={2}
             className="flex-1 resize-none rounded-lg px-3 py-2 text-sm outline-none transition-colors"
-            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--brand-border)', color: '#FAFAFA' }}
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
           />
           <button
             onClick={handleSend}
