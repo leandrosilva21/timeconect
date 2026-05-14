@@ -4,17 +4,13 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { ArrowLeft, Save, AlertTriangle, X } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/use-auth'
 import { SearchSelect } from '@/components/ui/search-select'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-
-// Next.js 16: useSearchParams() em client component exige Suspense boundary OU
-// page dinâmica. force-dynamic é simples e a página é interativa (formulário).
-export const dynamic = 'force-dynamic'
 
 interface SelectOption { id: number; name: string; service_type_code?: string | null }
 interface PaginatedResponse<T> { items: T[] }
@@ -38,7 +34,17 @@ function parseHHMM(s: string): number | null {
   return parts[0] * 60 + parts[1]
 }
 
+// Next.js 16 exige Suspense quando há useSearchParams em client component
+// na prerender estática. A page outer só envolve o form interno.
 export default function NewTimesheetPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewTimesheetForm />
+    </Suspense>
+  )
+}
+
+function NewTimesheetForm() {
   const { user } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
