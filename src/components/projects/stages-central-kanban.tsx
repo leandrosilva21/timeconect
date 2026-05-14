@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { Users, Layers, Clock, AlarmClock, PlusCircle } from 'lucide-react'
+import { Users, Layers, Clock, AlarmClock, PlusCircle, AlertTriangle } from 'lucide-react'
 import { computeStageHealth } from '@/lib/utils/stage-health'
 import { HealthDots } from './health-dots'
 import type { ProjectStage, StageDerivedStatus } from '@/lib/types/project-stage'
@@ -150,7 +150,26 @@ function StageMacroCard({ stage, projectId }: { stage: ProjectStage; projectId: 
             </div>
           )}
         </div>
-        <HealthDots health={health} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          {stage.risk_level && stage.risk_level !== 'low' && (
+            <span
+              title={(stage.risk_reasons ?? []).join(' · ') || undefined}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                fontSize: 9, fontWeight: 700,
+                padding: '2px 6px',
+                borderRadius: 999,
+                color: stage.risk_level === 'high' ? 'var(--danger)' : 'var(--warning)',
+                background: stage.risk_level === 'high' ? 'var(--danger-bg)' : 'var(--warning-bg)',
+                textTransform: 'uppercase', letterSpacing: '.04em',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <AlertTriangle size={9} /> {stage.risk_level === 'high' ? 'Alto' : 'Médio'}
+            </span>
+          )}
+          <HealthDots health={health} />
+        </div>
       </div>
 
       {totalDeliv > 0 && (
