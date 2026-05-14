@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { Plus, Info } from 'lucide-react'
+import { Plus, Info, Eye, EyeOff } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import { StagesCentralKanban } from '@/components/projects/stages-central-kanban'
 import { useProjectStages } from '@/hooks/use-project-stages'
 import { useApiQuery } from '@/hooks/use-query'
 import { useAuth } from '@/hooks/use-auth'
+import { useExecutiveMode } from '@/hooks/use-executive-mode'
 import type { ProjectStage } from '@/lib/types/project-stage'
 
 interface ProjectMini {
@@ -44,6 +45,7 @@ export default function EtapasPage() {
   )
   const { user } = useAuth()
   const canEdit = user?.type !== 'consultor'
+  const [executive, toggleExecutive] = useExecutiveMode()
 
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -121,16 +123,33 @@ export default function EtapasPage() {
             {!exceededProject && <strong style={{ color: 'var(--text)' }}>{formatHours(remaining)}</strong>}
           </span>
         </div>
-        {canEdit && !creating && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             type="button"
-            className="ds-btn-primary"
-            onClick={() => setCreating(true)}
-            style={{ fontSize: 13, padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            onClick={() => toggleExecutive()}
+            title={executive ? 'Sair do modo executivo' : 'Ativar modo executivo — esconde detalhes operacionais'}
+            className="ds-btn-ghost"
+            style={{
+              fontSize: 12, padding: '6px 10px',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              color: executive ? 'var(--primary)' : 'var(--text-muted)',
+              fontWeight: executive ? 600 : 400,
+            }}
           >
-            <Plus size={14} /> Nova etapa
+            {executive ? <EyeOff size={12} /> : <Eye size={12} />}
+            Modo executivo
           </button>
-        )}
+          {canEdit && !creating && (
+            <button
+              type="button"
+              className="ds-btn-primary"
+              onClick={() => setCreating(true)}
+              style={{ fontSize: 13, padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <Plus size={14} /> Nova etapa
+            </button>
+          )}
+        </div>
       </div>
 
       {creating && (
