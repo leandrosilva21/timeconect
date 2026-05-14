@@ -4598,7 +4598,7 @@ function KanbanContent() {
                   unreadContractIds={unreadContractIds}
                   onContractClick={setSelectedContract}
                   onContractAction={(card, action) => setContractAction({ card, action })}
-                  onProjectClick={setSelectedProject}
+                  onProjectClick={card => router.push(`/projetos/${card.id}/etapas`)}
                   onProjectAction={(card, action) => setProjectAction({ card, action })}
                   onRequestClick={card =>
                     card.kanban_column === 'req_inicio_autorizado' && !card.req_decision
@@ -4645,7 +4645,7 @@ function KanbanContent() {
                       }
                     }}
                     onContractAction={(card, action) => setContractAction({ card, action })}
-                    onProjectClick={setSelectedProject}
+                    onProjectClick={card => router.push(`/projetos/${card.id}/etapas`)}
                     onProjectAction={(card, action) => setProjectAction({ card, action })}
                     onRequestClick={setSelectedRequest}
                     onContractMove={(card, toCol) => handleContractMove(card.id, card, 'inicio_autorizado', toCol)}
@@ -4670,7 +4670,7 @@ function KanbanContent() {
                   onContractClick={setSelectedContract}
                   onProjectClick={card => {
                     if (newProjectIds?.has(card.id)) markProjectSeen(card.id)
-                    setSelectedProject(card)
+                    router.push(`/projetos/${card.id}/etapas`)
                   }}
                   onProjectAction={(card, action) => setProjectAction({ card, action })}
                   onProjectMove={(card, toCol) => handleProjectMove(card.id, toCol)}
