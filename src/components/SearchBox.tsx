@@ -14,7 +14,12 @@ interface PersonResult {
   main_skill_level: string | null
   matched_by_skill: boolean
 }
-interface SkillResult { id: number; name: string; category: string }
+interface SkillResult {
+  id: number
+  name: string
+  category: string
+  matched_alias?: string | null
+}
 interface ProjectResult { id: number; name: string; code: string }
 
 interface SearchResponse {
@@ -200,6 +205,14 @@ export function SearchBox() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>
                       {s.name}
+                      {s.matched_alias && (
+                        <span style={{
+                          marginLeft: 6, fontSize: 10, fontWeight: 500,
+                          color: 'var(--primary)',
+                        }} title={`Encontrado via alias: ${s.matched_alias}`}>
+                          ← {s.matched_alias}
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
                       {s.category}
