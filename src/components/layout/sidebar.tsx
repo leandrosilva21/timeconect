@@ -71,6 +71,7 @@ type NavEntry = NavItem | NavGroup
 
 const NAV_COORDINATOR: NavEntry[] = [
   { type: 'item', label: 'Meus Cards', href: '/meus-cards', icon: Inbox },
+  { type: 'item', label: 'Capacidade', href: '/capacidade', icon: Users },
   {
     type: 'group',
     label: 'Apontamentos & Despesas',
@@ -105,6 +106,7 @@ const NAV: NavEntry[] = [
   { type: 'item', label: 'Início',                href: '/dashboard',       icon: Home },
   { type: 'item', label: 'Meu Painel',            href: '/meu-painel',      icon: LayoutDashboard },
   { type: 'item', label: 'Meus Cards',            href: '/meus-cards',      icon: Inbox },
+  { type: 'item', label: 'Capacidade',            href: '/capacidade',      icon: Users },
   {
     type: 'group',
     label: 'Projetos',
