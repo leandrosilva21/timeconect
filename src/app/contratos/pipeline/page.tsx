@@ -158,8 +158,8 @@ const TRANSITION_COL: Column = {
 
 const PROJECT_COLS: Column[] = [
   { id: 'proj_backlog',        label: 'Backlog',             phase: 'project', projectStatuses: ['backlog'],         color: '#94a3b8' },
-  { id: 'em_andamento',        label: 'Em Andamento',        phase: 'project', projectStatuses: ['awaiting_start', 'started'] },
-  { id: 'liberado_para_testes',label: 'Liberado p/ Testes',  phase: 'project', projectStatuses: ['liberado_para_testes'] },
+  { id: 'em_andamento',        label: 'Em Execução',         phase: 'project', projectStatuses: ['awaiting_start', 'started'] },
+  { id: 'liberado_para_testes',label: 'Homologação',         phase: 'project', projectStatuses: ['liberado_para_testes'] },
   { id: 'encerrado',           label: 'Encerrado',           phase: 'project', projectStatuses: ['finished'],   color: '#22c55e' },
   { id: 'pausado',             label: 'Pausado',             phase: 'project', projectStatuses: ['paused'],     color: '#eab308' },
   { id: 'cancelado',           label: 'Cancelado',           phase: 'project', projectStatuses: ['cancelled'],  color: '#ef4444' },
@@ -195,8 +195,8 @@ const TIPO_LABEL: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   awaiting_start:       'Aguardando',
   backlog:              'Backlog',
-  started:              'Em Andamento',
-  liberado_para_testes: 'Em Testes',
+  started:              'Em Execução',
+  liberado_para_testes: 'Homologação',
   finished:             'Encerrado',
   paused:               'Pausado',
   cancelled:            'Cancelado',
@@ -1838,9 +1838,9 @@ const STATUS_BADGE: Record<string, { label: string; color: string; bg: string }>
   inicio_autorizado:      { label: 'Início Autorizado',        color: '#eab308', bg: 'rgba(234,179,8,0.12)'   },
   alocado:                { label: 'Início Autorizado',        color: '#eab308', bg: 'rgba(234,179,8,0.12)'   },
   // project statuses
-  awaiting_start:         { label: 'Em Andamento',             color: '#818cf8', bg: 'rgba(99,102,241,0.12)'  },
-  started:                { label: 'Em Andamento',             color: '#818cf8', bg: 'rgba(99,102,241,0.12)'  },
-  liberado_para_testes:   { label: 'Lib. p/ Testes',           color: '#38bdf8', bg: 'rgba(56,189,248,0.12)'  },
+  awaiting_start:         { label: 'Aguardando',               color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' },
+  started:                { label: 'Em Execução',              color: '#818cf8', bg: 'rgba(99,102,241,0.12)'  },
+  liberado_para_testes:   { label: 'Homologação',              color: '#38bdf8', bg: 'rgba(56,189,248,0.12)'  },
   paused:                 { label: 'Pausado',                  color: '#eab308', bg: 'rgba(234,179,8,0.12)'   },
   finished:               { label: 'Encerrado',                color: '#22c55e', bg: 'rgba(34,197,94,0.12)'   },
   cancelled:              { label: 'Cancelado',                color: '#ef4444', bg: 'rgba(239,68,68,0.12)'   },
