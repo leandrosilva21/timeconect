@@ -104,13 +104,13 @@ function MonthlyEvolution({ series }: { series: MonthlyPoint[] }) {
       {!hasAny ? (
         <p className="py-6 text-center text-sm" style={{ color: 'var(--brand-subtle)' }}>Nenhum projeto contratado nos últimos 12 meses.</p>
       ) : (
-        <div className="flex items-end gap-2 h-44">
+        <div className="flex items-stretch gap-2 h-44">
           {series.map(p => {
             const tPct = (p.projects / maxProjects) * 100
             const hPct = (p.sold_hours / maxHours) * 100
             return (
-              <div key={p.month} className="flex-1 flex flex-col items-center gap-1 group min-w-0">
-                <div className="w-full flex items-end justify-center gap-0.5" style={{ height: 'calc(100% - 22px)' }}>
+              <div key={p.month} className="flex-1 flex flex-col items-center gap-1 group min-w-0 h-full">
+                <div className="w-full flex items-end justify-center gap-0.5 flex-1 min-h-0">
                   <div className="w-1/2 rounded-t" title={`${p.projects} projeto${p.projects === 1 ? '' : 's'}`}
                     style={{ height: `${Math.max(2, tPct)}%`, background: 'rgba(0,245,255,0.85)' }} />
                   <div className="w-1/2 rounded-t" title={`${p.sold_hours.toFixed(1)}h vendidas`}
