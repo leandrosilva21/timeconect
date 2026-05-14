@@ -612,8 +612,7 @@ function SidebarInner({ user }: { user: User }) {
             alt="ERPServ"
             width={90}
             height={36}
-            className="object-contain opacity-40"
-            style={{ filter: 'grayscale(1) invert(1) brightness(10)' }}
+            className="object-contain sidebar-erpserv-logo"
           />
         </div>
       )}
