@@ -1,13 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Pencil, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Pencil, Trash2, PlusCircle } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import { computeStageHealth } from '@/lib/utils/stage-health'
 import { HealthDots } from './health-dots'
 import { StageTeamAllocation } from './stage-team-allocation'
 import { StageKanbanBoard } from './stage-kanban-board'
+import { StageAporteDialog } from './stage-aporte-dialog'
 import { useStageDeliveries } from '@/hooks/use-stage-deliveries'
 import type { ProjectStage, StageDerivedStatus } from '@/lib/types/project-stage'
 
@@ -43,6 +44,7 @@ export function StageOperationalBlock({ stage, projectId, onChanged }: Props) {
   const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState(stage.name)
   const [savingName, setSavingName] = useState(false)
+  const [aporteOpen, setAporteOpen] = useState(false)
   const { deliveries, loading, error, refetch } = useStageDeliveries(expanded ? stage.id : null)
 
   const health = computeStageHealth({ stage })
@@ -153,6 +155,20 @@ export function StageOperationalBlock({ stage, projectId, onChanged }: Props) {
             <HealthDots health={health} />
             <button
               type="button"
+              onClick={() => setAporteOpen(true)}
+              aria-label="Aportar horas"
+              title="Aportar horas (com justificativa)"
+              style={{
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                color: 'var(--text-muted)', padding: 2,
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 11,
+              }}
+            >
+              <PlusCircle size={12} /> Aportar
+            </button>
+            <button
+              type="button"
               onClick={() => setEditingName(true)}
               aria-label="Editar nome"
               style={{
@@ -199,6 +215,15 @@ export function StageOperationalBlock({ stage, projectId, onChanged }: Props) {
           )}
         </div>
       </header>
+
+      {aporteOpen && (
+        <StageAporteDialog
+          stageId={stage.id}
+          stageName={stage.name}
+          onClose={() => setAporteOpen(false)}
+          onCreated={onChanged}
+        />
+      )}
 
       {/* Conteúdo expandido: alocação + kanban */}
       {expanded && (
