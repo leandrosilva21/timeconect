@@ -22,6 +22,10 @@ export interface StageActivityEvent {
   type: StageActivityType
   payload: Record<string, unknown> | null
   created_at: string
+  attachment_path?: string | null
+  attachment_original_name?: string | null
+  attachment_mime?: string | null
+  attachment_size?: number | null
 }
 
 export interface StageActivityResponse {

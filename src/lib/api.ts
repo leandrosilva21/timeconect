@@ -31,8 +31,10 @@ async function request<T>(
 ): Promise<T> {
   // Auth: o cookie httpOnly minutor_token é enviado pelo browser; o middleware
   // Next.js (src/middleware.ts) injeta o header Authorization server-side.
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+    // FormData: browser monta Content-Type com boundary correto; não setar manualmente.
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     Accept: 'application/json',
     ...options.headers,
   }
@@ -75,16 +77,22 @@ async function request<T>(
   return res.json()
 }
 
+function serialize(body: unknown): BodyInit | undefined {
+  if (body === undefined) return undefined
+  if (typeof FormData !== 'undefined' && body instanceof FormData) return body
+  return JSON.stringify(body)
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
+    request<T>(path, { method: 'POST', body: serialize(body) }),
   put: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
+    request<T>(path, { method: 'PUT', body: serialize(body) }),
   patch: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
+    request<T>(path, { method: 'PATCH', body: serialize(body) }),
   delete: <T>(path: string, body?: unknown) =>
     request<T>(path, body !== undefined
-      ? { method: 'DELETE', body: JSON.stringify(body) }
+      ? { method: 'DELETE', body: serialize(body) }
       : { method: 'DELETE' }),
 }
