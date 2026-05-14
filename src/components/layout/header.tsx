@@ -15,6 +15,7 @@ import { secureUrl, api } from '@/lib/api'
 import { useState, useEffect, useRef } from 'react'
 import { ThemeToggle } from './ThemeToggle'
 import { SearchBox } from '@/components/SearchBox'
+import { MentionsBell } from './mentions-bell'
 
 interface HeaderProps {
   title?: string
@@ -100,6 +101,9 @@ export function Header({ title, actions }: HeaderProps) {
 
         {/* Theme toggle — sun/moon */}
         <ThemeToggle />
+
+        {/* Mentions bell — comentários onde o usuário foi @-mencionado */}
+        {user && user.type !== 'cliente' && <MentionsBell />}
 
         {/* Bell notification — visible for all logged-in users; content scoped server-side */}
         {user && (
