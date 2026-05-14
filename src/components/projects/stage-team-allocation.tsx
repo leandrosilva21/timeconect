@@ -5,6 +5,7 @@ import { Plus, Pencil, Trash2, Users } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import { useStageAllocations } from '@/hooks/use-stage-allocations'
+import { useUserCapacityIndex } from '@/hooks/use-user-capacity'
 import type { AllocationHealth, StageAllocationItem } from '@/lib/types/stage-allocation'
 
 interface Props {
@@ -51,6 +52,7 @@ function HealthDot({ level }: { level: AllocationHealth }) {
 
 export function StageTeamAllocation({ stageId, projectId, canEdit = true }: Props) {
   const { items, totals, loading, error, refetch } = useStageAllocations(stageId)
+  const { byUserId: capacityByUserId } = useUserCapacityIndex()
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<number | null>(null)
   const [editHours, setEditHours] = useState('')
@@ -152,6 +154,22 @@ export function StageTeamAllocation({ stageId, projectId, canEdit = true }: Prop
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
                       <HealthDot level={a.health} />
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.user?.name ?? '—'}</span>
+                      {a.user_id && capacityByUserId[a.user_id]?.overload && (
+                        <span
+                          title={capacityByUserId[a.user_id].overload_reasons.join(' · ') || 'Sobrecarregado'}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 3,
+                            fontSize: 10, fontWeight: 600,
+                            padding: '1px 6px', borderRadius: 4,
+                            background: 'var(--danger-bg)', color: 'var(--danger)',
+                            border: '1px solid var(--danger)',
+                            textTransform: 'uppercase', letterSpacing: 0.3,
+                            flexShrink: 0,
+                          }}
+                        >
+                          Sobrecarregado
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: 12, color: a.health === 'estourado' ? 'var(--danger)' : 'var(--text-muted)', marginTop: 4, fontWeight: a.health === 'estourado' ? 500 : 400 }}>
                       {a.health === 'estourado'
