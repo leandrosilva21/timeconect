@@ -10,7 +10,6 @@ import { StageTeamAllocation } from './stage-team-allocation'
 import { StageKanbanBoard } from './stage-kanban-board'
 import { StageAporteDialog } from './stage-aporte-dialog'
 import { StageActivityTimeline } from './stage-activity-timeline'
-import { StageCommentComposer } from './stage-comment-composer'
 import { useStageDeliveries } from '@/hooks/use-stage-deliveries'
 import type { ProjectStage, StageDerivedStatus } from '@/lib/types/project-stage'
 
@@ -291,16 +290,19 @@ export function StageOperationalBlock({
 
           <div style={{ marginTop: 20 }}>
             <div style={{
-              fontSize: 11, color: 'var(--text-muted)',
-              textTransform: 'uppercase', letterSpacing: '.04em',
+              display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
               marginBottom: 8,
             }}>
-              Atividade
+              <div style={{
+                fontSize: 11, color: 'var(--text-muted)',
+                textTransform: 'uppercase', letterSpacing: '.04em',
+              }}>
+                Timeline agregada da etapa
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-light)' }}>
+                Comentários e anexos agora moram na atividade · abra a atividade pra conversar
+              </div>
             </div>
-            <StageCommentComposer
-              stageId={stage.id}
-              onCreated={() => setActivityKey(k => k + 1)}
-            />
             <StageActivityTimeline key={activityKey} stageId={stage.id} />
           </div>
         </div>
