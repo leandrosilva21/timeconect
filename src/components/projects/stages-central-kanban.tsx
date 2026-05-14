@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { Users, Layers, Clock } from 'lucide-react'
+import { Users, Layers, Clock, AlarmClock } from 'lucide-react'
 import { computeStageHealth } from '@/lib/utils/stage-health'
 import { HealthDots } from './health-dots'
 import type { ProjectStage, StageDerivedStatus } from '@/lib/types/project-stage'
@@ -182,6 +182,18 @@ function StageMacroCard({ stage, projectId }: { stage: ProjectStage; projectId: 
             color: 'var(--danger)',
           }}>
             <Users size={10} /> {stage.team_overrun_count}
+          </span>
+        )}
+        {typeof stage.days_since_activity === 'number' && stage.days_since_activity >= 5 && (
+          <span
+            title={`Sem movimentação há ${stage.days_since_activity} dia(s)`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              color: stage.days_since_activity >= 8 ? 'var(--danger)' : 'var(--warning)',
+              marginLeft: 'auto',
+            }}
+          >
+            <AlarmClock size={10} /> {stage.days_since_activity}d
           </span>
         )}
       </div>
