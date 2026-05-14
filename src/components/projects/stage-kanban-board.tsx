@@ -82,7 +82,7 @@ export function StageKanbanBoard({ stageId, deliveries, onChanged, canEdit = tru
       setNewTitle('')
       setCreatingIn(null)
       onChanged()
-      toast.success('Entrega criada')
+      toast.success('Atividade criada')
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Erro ao criar')
     }
@@ -131,7 +131,7 @@ export function StageKanbanBoard({ stageId, deliveries, onChanged, canEdit = tru
                         <button
                           type="button"
                           onClick={() => { setCreatingIn(col.status); setNewTitle('') }}
-                          aria-label={`Nova entrega em ${col.label}`}
+                          aria-label={`Nova atividade em ${col.label}`}
                           style={{
                             background: 'transparent', border: 'none', cursor: 'pointer',
                             color: 'var(--text-muted)', padding: 2,
@@ -154,7 +154,7 @@ export function StageKanbanBoard({ stageId, deliveries, onChanged, canEdit = tru
                           onChange={e => setNewTitle(e.target.value)}
                           onBlur={() => { if (!newTitle.trim()) setCreatingIn(null) }}
                           onKeyDown={e => { if (e.key === 'Escape') setCreatingIn(null) }}
-                          placeholder="Título da entrega…"
+                          placeholder="Título da atividade…"
                           maxLength={200}
                           style={{ width: '100%', fontSize: 13, padding: '6px 8px' }}
                         />

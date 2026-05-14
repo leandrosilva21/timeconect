@@ -46,7 +46,7 @@ function describe(ev: StageActivityEvent): string {
       return `moveu "${title}" de ${from} para ${to}`
     }
     case 'delivery_created':
-      return `criou entrega "${p.title ?? ''}"`
+      return `criou atividade "${p.title ?? ''}"`
     case 'delivery_completed':
       return `concluiu "${p.title ?? ''}"`
     case 'aporte_created': {

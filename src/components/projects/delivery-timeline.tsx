@@ -38,8 +38,8 @@ function describe(ev: DeliveryEvent): string {
     const to = STATUS_LABEL[ev.payload?.to as string] ?? '—'
     return `mudou status: ${from} → ${to}`
   }
-  if (ev.type === 'completed') return 'concluiu a entrega'
-  if (ev.type === 'created') return 'criou a entrega'
+  if (ev.type === 'completed') return 'concluiu a atividade'
+  if (ev.type === 'created') return 'criou a atividade'
   if (ev.type === 'reassigned') return 'reatribuiu responsável'
   return TYPE_LABEL[ev.type] ?? ev.type
 }

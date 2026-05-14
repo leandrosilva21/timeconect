@@ -194,7 +194,7 @@ function StageMacroCard({ stage, projectId, executive }: { stage: ProjectStage; 
               <span style={{ marginLeft: 'auto' }}>{pct}%</span>
             ) : (
               <>
-                <span>{doneDeliv}/{totalDeliv} entregas</span>
+                <span>{doneDeliv}/{totalDeliv} atividades</span>
                 <span>{pct}%</span>
               </>
             )}
