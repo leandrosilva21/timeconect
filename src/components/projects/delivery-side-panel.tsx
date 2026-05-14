@@ -10,7 +10,8 @@ import { ActivityCommentComposer } from './activity-comment-composer'
 import { StageActivityTimeline } from './stage-activity-timeline'
 import { ActivityAporteDialog } from './activity-aporte-dialog'
 import { ActivityTeamAllocation } from './activity-team-allocation'
-import { PlusCircle } from 'lucide-react'
+import { PlusCircle, Clock } from 'lucide-react'
+import Link from 'next/link'
 
 interface Props {
   delivery: StageDelivery
@@ -225,6 +226,19 @@ export function DeliverySidePanel({ delivery, projectId, onClose, onUpdated, onD
             >
               <PlusCircle size={13} /> Aportar
             </button>
+            <Link
+              href={`/timesheets/new?project_id=${projectId}&stage_delivery_id=${delivery.id}`}
+              className="ds-btn-ghost"
+              style={{
+                fontSize: 13, padding: '8px 14px',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                color: 'var(--text)',
+                textDecoration: 'none',
+              }}
+              title="Apontar horas trabalhadas nesta atividade"
+            >
+              <Clock size={13} /> Apontar
+            </Link>
             <button
               type="button"
               onClick={handleDelete}
