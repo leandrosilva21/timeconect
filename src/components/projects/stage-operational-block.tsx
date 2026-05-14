@@ -32,6 +32,7 @@ interface Props {
   stage: ProjectStage
   projectId: number
   onChanged: () => void
+  canEdit?: boolean
 }
 
 function formatHours(n: number): string {
@@ -39,7 +40,7 @@ function formatHours(n: number): string {
   return v >= 10 ? `${Math.round(v)}h` : `${v.toFixed(1)}h`
 }
 
-export function StageOperationalBlock({ stage, projectId, onChanged }: Props) {
+export function StageOperationalBlock({ stage, projectId, onChanged, canEdit = true }: Props) {
   const [expanded, setExpanded] = useState(true)
   const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState(stage.name)
@@ -125,10 +126,10 @@ export function StageOperationalBlock({ stage, projectId, onChanged }: Props) {
               />
             ) : (
               <h3
-                onClick={() => setEditingName(true)}
+                onClick={() => { if (canEdit) setEditingName(true) }}
                 style={{
                   fontSize: 15, fontWeight: 600, color: 'var(--text)',
-                  margin: 0, cursor: 'text',
+                  margin: 0, cursor: canEdit ? 'text' : 'default',
                 }}
               >
                 {stage.name}
@@ -153,42 +154,46 @@ export function StageOperationalBlock({ stage, projectId, onChanged }: Props) {
               </span>
             )}
             <HealthDots health={health} />
-            <button
-              type="button"
-              onClick={() => setAporteOpen(true)}
-              aria-label="Aportar horas"
-              title="Aportar horas (com justificativa)"
-              style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                color: 'var(--text-muted)', padding: 2,
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontSize: 11,
-              }}
-            >
-              <PlusCircle size={12} /> Aportar
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditingName(true)}
-              aria-label="Editar nome"
-              style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                color: 'var(--text-muted)', padding: 2,
-              }}
-            >
-              <Pencil size={12} />
-            </button>
-            <button
-              type="button"
-              onClick={handleDelete}
-              aria-label="Excluir"
-              style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                color: 'var(--text-muted)', padding: 2,
-              }}
-            >
-              <Trash2 size={12} />
-            </button>
+            {canEdit && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setAporteOpen(true)}
+                  aria-label="Aportar horas"
+                  title="Aportar horas (com justificativa)"
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-muted)', padding: 2,
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    fontSize: 11,
+                  }}
+                >
+                  <PlusCircle size={12} /> Aportar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingName(true)}
+                  aria-label="Editar nome"
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-muted)', padding: 2,
+                  }}
+                >
+                  <Pencil size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  aria-label="Excluir"
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-muted)', padding: 2,
+                  }}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </>
+            )}
           </div>
 
           <div style={{
@@ -229,7 +234,7 @@ export function StageOperationalBlock({ stage, projectId, onChanged }: Props) {
       {expanded && (
         <div style={{ padding: 16 }}>
           <div style={{ marginBottom: 16 }}>
-            <StageTeamAllocation stageId={stage.id} projectId={projectId} />
+            <StageTeamAllocation stageId={stage.id} projectId={projectId} canEdit={canEdit} />
           </div>
 
           <div style={{
@@ -244,7 +249,7 @@ export function StageOperationalBlock({ stage, projectId, onChanged }: Props) {
           {loading ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Carregando entregas…</div>
           ) : (
-            <StageKanbanBoard stageId={stage.id} deliveries={deliveries} onChanged={refetch} />
+            <StageKanbanBoard stageId={stage.id} deliveries={deliveries} onChanged={refetch} canEdit={canEdit} />
           )}
         </div>
       )}

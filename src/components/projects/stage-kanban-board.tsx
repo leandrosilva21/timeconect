@@ -13,6 +13,7 @@ interface Props {
   stageId: number
   deliveries: StageDelivery[]
   onChanged: () => void
+  canEdit?: boolean
 }
 
 const COLUMNS: { status: DeliveryStatus; label: string }[] = [
@@ -23,7 +24,7 @@ const COLUMNS: { status: DeliveryStatus; label: string }[] = [
   { status: 'done', label: 'Concluído' },
 ]
 
-export function StageKanbanBoard({ stageId, deliveries, onChanged }: Props) {
+export function StageKanbanBoard({ stageId, deliveries, onChanged, canEdit = true }: Props) {
   const [local, setLocal] = useState<StageDelivery[]>(deliveries)
   const [selected, setSelected] = useState<StageDelivery | null>(null)
   const [creatingIn, setCreatingIn] = useState<DeliveryStatus | null>(null)
@@ -126,17 +127,19 @@ export function StageKanbanBoard({ stageId, deliveries, onChanged }: Props) {
                         {col.label}
                         <span style={{ opacity: .6, marginLeft: 6, fontWeight: 400 }}>{items.length}</span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => { setCreatingIn(col.status); setNewTitle('') }}
-                        aria-label={`Nova entrega em ${col.label}`}
-                        style={{
-                          background: 'transparent', border: 'none', cursor: 'pointer',
-                          color: 'var(--text-muted)', padding: 2,
-                        }}
-                      >
-                        <Plus size={14} />
-                      </button>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => { setCreatingIn(col.status); setNewTitle('') }}
+                          aria-label={`Nova entrega em ${col.label}`}
+                          style={{
+                            background: 'transparent', border: 'none', cursor: 'pointer',
+                            color: 'var(--text-muted)', padding: 2,
+                          }}
+                        >
+                          <Plus size={14} />
+                        </button>
+                      )}
                     </div>
 
                     {creatingIn === col.status && (
