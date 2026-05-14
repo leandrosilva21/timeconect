@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { AppLayout } from '@/components/layout/app-layout'
 import Link from 'next/link'
 import { useState, useEffect, useCallback, useMemo } from 'react'
