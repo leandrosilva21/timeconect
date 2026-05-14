@@ -25,12 +25,22 @@ interface ProjectHealth {
   status: Health
 }
 
+interface MonthlyPoint {
+  month: string
+  label: string
+  tickets: number
+  sold_hours: number
+}
+
 interface Summary {
-  customer:         { id: number; name: string }
-  open_tickets:     number
-  total_projects:   number
-  total_sold_hours: number
-  projects_health:  ProjectHealth[]
+  customer:                      { id: number; name: string }
+  open_tickets:                  number
+  open_tickets_current_month:    number
+  current_month_label:           string
+  total_projects:                number
+  total_sold_hours:              number
+  projects_health:               ProjectHealth[]
+  monthly_series:                MonthlyPoint[]
 }
 
 interface CustomerOpt { id: number; name: string }
@@ -70,6 +80,45 @@ function KpiCard({
         <p className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: 'var(--brand-subtle)' }}>{label}</p>
         <p className="text-2xl font-extrabold tracking-tight leading-none" style={{ color }}>{value}</p>
       </div>
+    </div>
+  )
+}
+
+function MonthlyEvolution({ series }: { series: MonthlyPoint[] }) {
+  const maxTickets = Math.max(1, ...series.map(p => p.tickets))
+  const maxHours   = Math.max(1, ...series.map(p => p.sold_hours))
+  const hasAny     = series.some(p => p.tickets > 0 || p.sold_hours > 0)
+
+  return (
+    <div className="rounded-2xl p-5" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--brand-muted)' }}>Evolução · 12 Meses</h2>
+        <div className="flex items-center gap-4 text-[10px]" style={{ color: 'var(--brand-subtle)' }}>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ background: '#F59E0B' }} />Tickets abertos</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ background: '#A78BFA' }} />Horas vendidas</span>
+        </div>
+      </div>
+      {!hasAny ? (
+        <p className="py-6 text-center text-sm" style={{ color: 'var(--brand-subtle)' }}>Sem movimentação nos últimos 12 meses.</p>
+      ) : (
+        <div className="flex items-end gap-2 h-44">
+          {series.map(p => {
+            const tPct = (p.tickets / maxTickets) * 100
+            const hPct = (p.sold_hours / maxHours) * 100
+            return (
+              <div key={p.month} className="flex-1 flex flex-col items-center gap-1 group min-w-0">
+                <div className="w-full flex items-end justify-center gap-0.5" style={{ height: 'calc(100% - 22px)' }}>
+                  <div className="w-1/2 rounded-t" title={`${p.tickets} tickets`}
+                    style={{ height: `${Math.max(2, tPct)}%`, background: 'rgba(245,158,11,0.85)' }} />
+                  <div className="w-1/2 rounded-t" title={`${p.sold_hours.toFixed(1)}h vendidas`}
+                    style={{ height: `${Math.max(2, hPct)}%`, background: 'rgba(167,139,250,0.85)' }} />
+                </div>
+                <span className="text-[9px] truncate w-full text-center" style={{ color: 'var(--brand-subtle)' }}>{p.label}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -204,12 +253,19 @@ export default function PortalClientePage() {
           <>
             {/* KPIs */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {summary.open_tickets > 0 && (
-                <KpiCard icon={Headphones} label="Tickets Abertos"   value={String(summary.open_tickets)}            accent="amber" />
-              )}
-              <KpiCard   icon={Briefcase}  label="Projetos"          value={String(summary.total_projects)}          accent="primary" />
-              <KpiCard   icon={Clock}      label="Horas Contratadas" value={fmtH(summary.total_sold_hours)}          accent="purple" />
+              <KpiCard
+                icon={Headphones}
+                label={`Tickets Abertos em ${summary.current_month_label}`}
+                value={String(summary.open_tickets_current_month)}
+                accent="amber"
+              />
+              <KpiCard   icon={Briefcase}  label="Projetos"          value={String(summary.total_projects)} accent="primary" />
+              <KpiCard   icon={Clock}      label="Horas Contratadas" value={fmtH(summary.total_sold_hours)} accent="purple" />
             </div>
+
+            {/* Evolução 12 meses */}
+            <MonthlyEvolution series={summary.monthly_series} />
+
 
             {/* Saúde dos projetos (não-Fechados) */}
             <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
