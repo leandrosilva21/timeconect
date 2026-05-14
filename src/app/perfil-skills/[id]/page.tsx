@@ -552,7 +552,7 @@ function StepSkills({
 }) {
   // Filtros locais pra navegar lista longa
   const [search, setSearch]                 = useState('')
-  const [onlyFilled, setOnlyFilled]         = useState(false)
+  const [levelFilter, setLevelFilter]       = useState<Array<number | 'unset'>>([])
   const [onlyFormsReview, setOnlyFormsReview] = useState(false)
 
   const csBySkill = useMemo(() => {
@@ -570,7 +570,17 @@ function StepSkills({
         const visible = items.filter(sk => {
           if (q && !sk.name.toLowerCase().includes(q)) return false
           const e = edits[sk.id]
-          if (onlyFilled && !(e?.level_id)) return false
+          if (levelFilter.length > 0) {
+            // Resolve weight do nível atual; 'unset' se não tem level_id
+            const currentLevelId = e?.level_id
+            if (!currentLevelId) {
+              if (!levelFilter.includes('unset')) return false
+            } else {
+              const lvl = levels.find(l => l.id === currentLevelId)
+              const weight = lvl?.weight
+              if (weight == null || !levelFilter.includes(weight)) return false
+            }
+          }
           if (onlyFormsReview) {
             const existing = csBySkill.get(sk.id)
             if (existing?.source !== 'forms_import') return false
@@ -580,7 +590,7 @@ function StepSkills({
         return [cat, visible] as const
       })
       .filter(([, items]) => items.length > 0)
-  }, [skillsByCat, categories, search, onlyFilled, onlyFormsReview, edits, csBySkill])
+  }, [skillsByCat, categories, search, levelFilter, onlyFormsReview, edits, csBySkill, levels])
 
   const totalVisible = filteredGroups.reduce((sum, [, items]) => sum + items.length, 0)
   const totalAll = skillsByCat
@@ -631,21 +641,41 @@ function StepSkills({
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+        {/* Chips de nível (multi-select): inclui as MESMAS opções do dropdown de seleção */}
+        <div className="flex items-center gap-1 flex-wrap" style={{ marginBottom: 6 }}>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, marginRight: 4, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+            Nível:
+          </span>
+          {([
+            { v: 'unset' as const, label: '— sem nível —' },
+            ...levels.map(l => ({ v: l.weight, label: l.name })),
+          ]).map(opt => {
+            const on = levelFilter.includes(opt.v as number | 'unset')
+            return (
+              <button
+                key={String(opt.v)}
+                type="button"
+                onClick={() => setLevelFilter(prev =>
+                  prev.includes(opt.v as number | 'unset')
+                    ? prev.filter(x => x !== opt.v)
+                    : [...prev, opt.v as number | 'unset']
+                )}
+                style={{
+                  fontSize: 10, padding: '3px 9px', borderRadius: 3,
+                  background: on ? 'var(--primary-soft)' : 'transparent',
+                  border: '1px solid',
+                  borderColor: on ? 'var(--primary)' : 'var(--border)',
+                  color: on ? 'var(--primary)' : 'var(--text-muted)',
+                  fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setOnlyFilled(v => !v)}
-            style={{
-              fontSize: 10, padding: '3px 9px', borderRadius: 3,
-              background: onlyFilled ? 'var(--primary-soft)' : 'transparent',
-              border: '1px solid',
-              borderColor: onlyFilled ? 'var(--primary)' : 'var(--border)',
-              color: onlyFilled ? 'var(--primary)' : 'var(--text-muted)',
-              fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            Só preenchidas
-          </button>
           <button
             type="button"
             onClick={() => setOnlyFormsReview(v => !v)}
@@ -661,10 +691,10 @@ function StepSkills({
           >
             Só forms (revisar)
           </button>
-          {(search || onlyFilled || onlyFormsReview) && (
+          {(search || levelFilter.length > 0 || onlyFormsReview) && (
             <button
               type="button"
-              onClick={() => { setSearch(''); setOnlyFilled(false); setOnlyFormsReview(false) }}
+              onClick={() => { setSearch(''); setLevelFilter([]); setOnlyFormsReview(false) }}
               style={{
                 fontSize: 10, padding: '3px 9px', borderRadius: 3,
                 background: 'transparent', border: '1px solid var(--border)',
