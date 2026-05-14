@@ -12,6 +12,10 @@ import { SearchSelect } from '@/components/ui/search-select'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 
+// Next.js 16: useSearchParams() em client component exige Suspense boundary OU
+// page dinâmica. force-dynamic é simples e a página é interativa (formulário).
+export const dynamic = 'force-dynamic'
+
 interface SelectOption { id: number; name: string; service_type_code?: string | null }
 interface PaginatedResponse<T> { items: T[] }
 
