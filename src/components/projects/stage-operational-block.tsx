@@ -6,7 +6,6 @@ import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import { computeStageHealth } from '@/lib/utils/stage-health'
 import { HealthDots } from './health-dots'
-import { StageTeamAllocation } from './stage-team-allocation'
 import { StageKanbanBoard } from './stage-kanban-board'
 import { StageActivityTimeline } from './stage-activity-timeline'
 import { useStageDeliveries } from '@/hooks/use-stage-deliveries'
@@ -242,10 +241,6 @@ export function StageOperationalBlock({
           )}
 
           <StageDatesEditor stage={stage} canEdit={canEdit} onSaved={onChanged} />
-
-          <div style={{ marginBottom: 16 }}>
-            <StageTeamAllocation stageId={stage.id} projectId={projectId} canEdit={canEdit} />
-          </div>
 
           <div style={{
             fontSize: 11, color: 'var(--text-muted)',
