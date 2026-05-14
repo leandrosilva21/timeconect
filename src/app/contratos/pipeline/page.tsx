@@ -3,6 +3,7 @@
 import { AppLayout } from '@/components/layout/app-layout'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import { ProjectStagesSidePanel } from '@/components/projects/project-stages-side-panel'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
@@ -3759,6 +3760,7 @@ function KanbanContent() {
   const [contractFilhoCard,     setContractFilhoCard]     = useState<ContractCard | null>(null)
   const [contractCreateForDecision, setContractCreateForDecision] = useState<ContractCard | null>(null)
   const [selectedProject,       setSelectedProject]       = useState<ProjectCard | null>(null)
+  const [stagesPanelProject,   setStagesPanelProject]   = useState<ProjectCard | null>(null)
   const [generateTarget,       setGenerateTarget]       = useState<ContractCard | null>(null)
   const [projectAction,    setProjectAction]    = useState<{ card: ProjectCard; action: string } | null>(null)
   const [viewMode,         setViewMode]         = useState<'kanban' | 'list'>('kanban')
@@ -4598,7 +4600,7 @@ function KanbanContent() {
                   unreadContractIds={unreadContractIds}
                   onContractClick={setSelectedContract}
                   onContractAction={(card, action) => setContractAction({ card, action })}
-                  onProjectClick={card => router.push(`/projetos/${card.id}/etapas`)}
+                  onProjectClick={card => setStagesPanelProject(card)}
                   onProjectAction={(card, action) => setProjectAction({ card, action })}
                   onRequestClick={card =>
                     card.kanban_column === 'req_inicio_autorizado' && !card.req_decision
@@ -4645,7 +4647,7 @@ function KanbanContent() {
                       }
                     }}
                     onContractAction={(card, action) => setContractAction({ card, action })}
-                    onProjectClick={card => router.push(`/projetos/${card.id}/etapas`)}
+                    onProjectClick={card => setStagesPanelProject(card)}
                     onProjectAction={(card, action) => setProjectAction({ card, action })}
                     onRequestClick={setSelectedRequest}
                     onContractMove={(card, toCol) => handleContractMove(card.id, card, 'inicio_autorizado', toCol)}
@@ -4670,7 +4672,7 @@ function KanbanContent() {
                   onContractClick={setSelectedContract}
                   onProjectClick={card => {
                     if (newProjectIds?.has(card.id)) markProjectSeen(card.id)
-                    router.push(`/projetos/${card.id}/etapas`)
+                    setStagesPanelProject(card)
                   }}
                   onProjectAction={(card, action) => setProjectAction({ card, action })}
                   onProjectMove={(card, toCol) => handleProjectMove(card.id, toCol)}
@@ -4712,6 +4714,14 @@ function KanbanContent() {
       )}
       {selectedProject && (
         <ProjectDetailModal card={selectedProject} onClose={() => setSelectedProject(null)} userRole={userRole} />
+      )}
+      {stagesPanelProject && (
+        <ProjectStagesSidePanel
+          projectId={stagesPanelProject.id}
+          projectName={stagesPanelProject.project_name}
+          customerName={stagesPanelProject.customer_name}
+          onClose={() => setStagesPanelProject(null)}
+        />
       )}
       {selectedRequest && (
         <RequestDetailModal card={selectedRequest} onClose={() => setSelectedRequest(null)} />
