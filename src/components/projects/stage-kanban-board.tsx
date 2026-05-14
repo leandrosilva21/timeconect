@@ -11,6 +11,7 @@ import { DeliverySidePanel } from './delivery-side-panel'
 
 interface Props {
   stageId: number
+  projectId: number
   deliveries: StageDelivery[]
   onChanged: () => void
   canEdit?: boolean
@@ -24,7 +25,7 @@ const COLUMNS: { status: DeliveryStatus; label: string }[] = [
   { status: 'done', label: 'Concluído' },
 ]
 
-export function StageKanbanBoard({ stageId, deliveries, onChanged, canEdit = true }: Props) {
+export function StageKanbanBoard({ stageId, projectId, deliveries, onChanged, canEdit = true }: Props) {
   const [local, setLocal] = useState<StageDelivery[]>(deliveries)
   const [selected, setSelected] = useState<StageDelivery | null>(null)
   const [creatingIn, setCreatingIn] = useState<DeliveryStatus | null>(null)
@@ -193,6 +194,7 @@ export function StageKanbanBoard({ stageId, deliveries, onChanged, canEdit = tru
       {selected && (
         <DeliverySidePanel
           delivery={selected}
+          projectId={projectId}
           onClose={() => setSelected(null)}
           onUpdated={(updated) => {
             setLocal(prev => prev.map(d => d.id === updated.id ? updated : d))
