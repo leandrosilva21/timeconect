@@ -6,6 +6,7 @@ import { ChevronLeft } from 'lucide-react'
 import { useApiQuery } from '@/hooks/use-query'
 import { useStageDeliveries } from '@/hooks/use-stage-deliveries'
 import { StageKanbanBoard } from '@/components/projects/stage-kanban-board'
+import { StageTeamAllocation } from '@/components/projects/stage-team-allocation'
 import type { ProjectStage } from '@/lib/types/project-stage'
 
 export default function StageKanbanPage() {
@@ -49,6 +50,18 @@ export default function StageKanbanPage() {
             {Number(stage.hours_planned) > 0 && <span> · {Number(stage.hours_planned)}h previstas</span>}
           </div>
         </div>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <StageTeamAllocation stageId={stageId} projectId={projectId} />
+      </div>
+
+      <div style={{
+        fontSize: 11, color: 'var(--text-muted)',
+        textTransform: 'uppercase', letterSpacing: '.04em',
+        marginBottom: 10,
+      }}>
+        Entregas
       </div>
 
       {error && <div style={{ color: 'var(--danger)', marginBottom: 12 }}>{error}</div>}
