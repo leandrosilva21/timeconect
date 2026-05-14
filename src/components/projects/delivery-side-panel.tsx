@@ -6,6 +6,8 @@ import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import type { StageDelivery, DeliveryStatus, DeliveryPriority } from '@/lib/types/project-stage'
 import { DeliveryTimeline } from './delivery-timeline'
+import { ActivityCommentComposer } from './activity-comment-composer'
+import { StageActivityTimeline } from './stage-activity-timeline'
 
 interface Props {
   delivery: StageDelivery
@@ -99,7 +101,7 @@ export function DeliverySidePanel({ delivery, onClose, onUpdated, onDeleted }: P
       <aside
         style={{
           position: 'fixed', top: 0, right: 0, bottom: 0,
-          width: 'min(480px, 100vw)',
+          width: 'min(640px, 100vw)',
           background: 'var(--bg)',
           borderLeft: '1px solid var(--border)',
           boxShadow: '-8px 0 24px rgba(0,0,0,0.18)',
@@ -226,9 +228,29 @@ export function DeliverySidePanel({ delivery, onClose, onUpdated, onDeleted }: P
               textTransform: 'uppercase', letterSpacing: '.04em',
               marginBottom: 8,
             }}>
-              Atividade
+              Conversação
             </div>
-            <DeliveryTimeline key={timelineKey} deliveryId={delivery.id} />
+            <div style={{ marginBottom: 12 }}>
+              <ActivityCommentComposer
+                deliveryId={delivery.id}
+                onCreated={() => setTimelineKey(k => k + 1)}
+              />
+            </div>
+            <StageActivityTimeline
+              key={`conv-${timelineKey}`}
+              deliveryId={delivery.id}
+            />
+          </div>
+
+          <div style={{ marginTop: 28 }}>
+            <div style={{
+              fontSize: 11, color: 'var(--text-muted)',
+              textTransform: 'uppercase', letterSpacing: '.04em',
+              marginBottom: 8,
+            }}>
+              Histórico operacional
+            </div>
+            <DeliveryTimeline key={`hist-${timelineKey}`} deliveryId={delivery.id} />
           </div>
         </div>
       </aside>
