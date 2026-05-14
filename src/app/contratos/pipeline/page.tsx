@@ -2,6 +2,7 @@
 
 import { AppLayout } from '@/components/layout/app-layout'
 import { useEffect, useState, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
@@ -1034,6 +1035,14 @@ function ProjectDetailModal({ card, onClose, userRole, initialTab }: { card: Pro
               <span className="text-xs px-2 py-1 rounded-full shrink-0 font-semibold" style={{ background: `${color}20`, color }}>
                 {STATUS_LABEL[card.status] ?? card.status}
               </span>
+              <Link
+                href={`/projetos/${card.id}`}
+                className="text-xs px-2.5 py-1 rounded-lg font-medium inline-flex items-center gap-1.5"
+                style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--primary)' }}
+                title="Abrir workspace operacional (etapas, entregas, timeline)"
+              >
+                <Layers size={11} /> Workspace
+              </Link>
               <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10" style={{ color: 'var(--brand-subtle)' }}><X size={16} /></button>
             </div>
           </div>
