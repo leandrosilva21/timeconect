@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { Plus, Info } from 'lucide-react'
+import { Plus, Info, ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import { StageOperationalBlock } from '@/components/projects/stage-operational-block'
@@ -38,6 +38,13 @@ export default function EtapasPage() {
   const canEdit = !isConsultor
 
   const [creating, setCreating] = useState(false)
+  const [bulkAction, setBulkAction] = useState<'expand' | 'collapse' | null>(null)
+  const [bulkKey, setBulkKey] = useState(0)
+
+  function bulkToggle(action: 'expand' | 'collapse') {
+    setBulkAction(action)
+    setBulkKey(k => k + 1)
+  }
   const [name, setName] = useState('')
   const [hours, setHours] = useState('')
   const [saving, setSaving] = useState(false)
@@ -122,16 +129,48 @@ export default function EtapasPage() {
             {!exceededProject && <strong style={{ color: 'var(--text)' }}>{formatHours(remaining)}</strong>}
           </span>
         </div>
-        {canEdit && !creating && (
-          <button
-            type="button"
-            className="ds-btn-primary"
-            onClick={() => setCreating(true)}
-            style={{ fontSize: 13, padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          >
-            <Plus size={14} /> Nova etapa
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {stages.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={() => bulkToggle('collapse')}
+                title="Recolher todas as etapas"
+                style={{
+                  background: 'transparent', border: '1px solid var(--border)',
+                  cursor: 'pointer', color: 'var(--text-muted)',
+                  padding: '5px 10px', borderRadius: 6, fontSize: 12,
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}
+              >
+                <ChevronsDownUp size={12} /> Recolher
+              </button>
+              <button
+                type="button"
+                onClick={() => bulkToggle('expand')}
+                title="Expandir todas as etapas"
+                style={{
+                  background: 'transparent', border: '1px solid var(--border)',
+                  cursor: 'pointer', color: 'var(--text-muted)',
+                  padding: '5px 10px', borderRadius: 6, fontSize: 12,
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}
+              >
+                <ChevronsUpDown size={12} /> Expandir
+              </button>
+            </>
+          )}
+          {canEdit && !creating && (
+            <button
+              type="button"
+              className="ds-btn-primary"
+              onClick={() => setCreating(true)}
+              style={{ fontSize: 13, padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <Plus size={14} /> Nova etapa
+            </button>
+          )}
+        </div>
       </div>
 
       {creating && (
@@ -210,6 +249,8 @@ export default function EtapasPage() {
             projectId={projectId}
             canEdit={canEdit}
             onChanged={refetch}
+            bulkAction={bulkAction}
+            bulkKey={bulkKey}
           />
         ))
       )}
