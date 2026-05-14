@@ -11,6 +11,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { List, Plus, ExternalLink, AlertCircle, AlertTriangle, Clock, ChevronRight, Rocket, Layers, FolderKanban, MessageSquare, Send, Paperclip, X, Download, MoreVertical, Eye, Pencil, DollarSign, TrendingUp, Users, BarChart2, UserCheck, Check, Trash2, Search } from 'lucide-react'
 import { ProjectMessages } from '@/components/shared/ProjectMessages'
 import { ContractMessages } from '@/components/shared/ContractMessages'
+import CardEnvolvidos from '@/components/shared/CardEnvolvidos'
 import { ContractCreateModal } from '@/components/shared/ContractCreateModal'
 import { ProjectDataModal } from '@/components/shared/ProjectDataModal'
 import { ContractFormModal } from '@/components/contracts/ContractFormModal'
@@ -931,8 +932,8 @@ function ContractDetailModal({ card, onClose, onGenerate, coordinators, canGener
   )
 }
 
-function ProjectDetailModal({ card, onClose, userRole, initialTab }: { card: ProjectCard; onClose: () => void; userRole: string; initialTab?: 'details' | 'req' | 'chat' | 'log' }) {
-  const [tab, setTab]             = useState<'details' | 'req' | 'chat' | 'log'>(initialTab ?? 'details')
+function ProjectDetailModal({ card, onClose, userRole, initialTab }: { card: ProjectCard; onClose: () => void; userRole: string; initialTab?: 'details' | 'req' | 'chat' | 'envolvidos' | 'log' }) {
+  const [tab, setTab]             = useState<'details' | 'req' | 'chat' | 'envolvidos' | 'log'>(initialTab ?? 'details')
   const [logs, setLogs]           = useState<KanbanLogEntry[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
   const [logsLoaded, setLogsLoaded]   = useState(false)
@@ -1015,6 +1016,7 @@ function ProjectDetailModal({ card, onClose, userRole, initialTab }: { card: Pro
     { id: 'details', label: 'Detalhes', icon: <ExternalLink size={11} /> },
     ...(hasReq ? [{ id: 'req', label: 'Requisição', icon: <Layers size={11} /> }] : []),
     { id: 'chat', label: isCliente ? 'Histórico de Mensagens' : 'Chat', icon: <MessageSquare size={11} /> },
+    ...(isCliente ? [] : [{ id: 'envolvidos', label: 'Envolvidos', icon: <Users size={11} /> }]),
     { id: 'log', label: 'Histórico', icon: <Clock size={11} /> },
   ] as const
 
@@ -1065,6 +1067,10 @@ function ProjectDetailModal({ card, onClose, userRole, initialTab }: { card: Pro
         {tab === 'log' ? (
           <div className="flex-1 overflow-y-auto">
             <KanbanLogTab logs={logs} loading={logsLoading} />
+          </div>
+        ) : tab === 'envolvidos' ? (
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <CardEnvolvidos cardType="projects" cardId={card.id} clientBlocked />
           </div>
         ) : tab === 'req' ? (
           <div className="flex-1 overflow-y-auto">
@@ -3157,7 +3163,7 @@ function ProjectTeamModal({ projectId, projectName, onClose, onSaved }: { projec
 }
 
 function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () => void }) {
-  const [tab, setTab]               = useState<'details' | 'comments' | 'log'>('details')
+  const [tab, setTab]               = useState<'details' | 'comments' | 'envolvidos' | 'log'>('details')
   const [msgs, setMsgs]             = useState<ReqMsg[]>([])
   const [msgsLoaded, setMsgsLoaded] = useState(false)
   const [logs, setLogs]             = useState<KanbanLogEntry[]>([])
@@ -3300,6 +3306,13 @@ function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () 
                 : { color: 'var(--brand-subtle)', border: '1px solid transparent' }}>
               <MessageSquare size={11} /> Comentários {msgs.length > 0 && `(${msgs.length})`}
             </button>
+            <button onClick={() => setTab('envolvidos')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={tab === 'envolvidos'
+                ? { background: 'rgba(139,92,246,0.15)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)' }
+                : { color: 'var(--brand-subtle)', border: '1px solid transparent' }}>
+              <Users size={11} /> Envolvidos
+            </button>
             <button onClick={() => setTab('log')}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
               style={tab === 'log'
@@ -3314,6 +3327,10 @@ function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () 
         {tab === 'log' ? (
           <div className="flex-1 overflow-y-auto">
             <KanbanLogTab logs={logs} loading={logsLoading} />
+          </div>
+        ) : tab === 'envolvidos' ? (
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <CardEnvolvidos cardType="contract-requests" cardId={card.id} clientBlocked={Boolean((card as any).req_decided_at)} />
           </div>
         ) : tab === 'details' ? (
           <>

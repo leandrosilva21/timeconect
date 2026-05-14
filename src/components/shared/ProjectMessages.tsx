@@ -118,8 +118,14 @@ export function ProjectMessages({ projectId, userRole, readOnly }: Props) {
   const lastIdRef   = useRef<number>(0)
 
   useEffect(() => {
-    api.get<MentionUser[]>(`/messages/mentionable-users?project_id=${projectId}`)
-      .then(r => setMentionUsers(Array.isArray(r) ? r : []))
+    // @menção: apenas envolvidos do card. Backend filtra (cliente nunca em chat de projeto).
+    api.get<Array<{ user_id: number | null; display_name: string }>>(`/projects/${projectId}/mention-candidates`)
+      .then(r => {
+        const list = Array.isArray(r) ? r : []
+        setMentionUsers(list
+          .filter(c => c.user_id !== null)
+          .map(c => ({ id: c.user_id as number, name: c.display_name })))
+      })
       .catch(() => {})
   }, [projectId])
 
