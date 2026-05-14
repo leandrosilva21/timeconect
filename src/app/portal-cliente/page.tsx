@@ -91,6 +91,7 @@ function MonthlyEvolution({ series }: { series: MonthlyPoint[] }) {
   const maxProjects = Math.max(1, ...series.map(p => p.projects))
   const maxHours    = Math.max(1, ...series.map(p => p.sold_hours))
   const hasAny      = series.some(p => p.projects > 0 || p.sold_hours > 0)
+  const [hovered, setHovered] = useState<string | null>(null)
 
   return (
     <div className="rounded-2xl p-5" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
@@ -108,15 +109,41 @@ function MonthlyEvolution({ series }: { series: MonthlyPoint[] }) {
           {series.map(p => {
             const tPct = (p.projects / maxProjects) * 100
             const hPct = (p.sold_hours / maxHours) * 100
+            const isHovered = hovered === p.month
             return (
-              <div key={p.month} className="flex-1 flex flex-col items-center gap-1 group min-w-0 h-full">
+              <div
+                key={p.month}
+                className="flex-1 flex flex-col items-center gap-1 group min-w-0 h-full relative cursor-default"
+                onMouseEnter={() => setHovered(p.month)}
+                onMouseLeave={() => setHovered(prev => prev === p.month ? null : prev)}
+              >
+                {isHovered && (
+                  <div
+                    className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full z-10 px-3 py-2 rounded-lg shadow-xl whitespace-nowrap text-[11px] pointer-events-none"
+                    style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
+                  >
+                    <p className="font-semibold mb-1" style={{ color: 'var(--brand-text)' }}>{p.label}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: '#00F5FF' }} />
+                      <span style={{ color: 'var(--brand-muted)' }}>
+                        {p.projects} projeto{p.projects === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: '#A78BFA' }} />
+                      <span style={{ color: 'var(--brand-muted)' }}>
+                        {p.sold_hours.toFixed(1)}h vendidas
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <div className="w-full flex items-end justify-center gap-0.5 flex-1 min-h-0">
-                  <div className="w-1/2 rounded-t" title={`${p.projects} projeto${p.projects === 1 ? '' : 's'}`}
-                    style={{ height: `${Math.max(2, tPct)}%`, background: 'rgba(0,245,255,0.85)' }} />
-                  <div className="w-1/2 rounded-t" title={`${p.sold_hours.toFixed(1)}h vendidas`}
-                    style={{ height: `${Math.max(2, hPct)}%`, background: 'rgba(167,139,250,0.85)' }} />
+                  <div className="w-1/2 rounded-t transition-all"
+                    style={{ height: `${Math.max(2, tPct)}%`, background: isHovered ? '#00F5FF' : 'rgba(0,245,255,0.85)' }} />
+                  <div className="w-1/2 rounded-t transition-all"
+                    style={{ height: `${Math.max(2, hPct)}%`, background: isHovered ? '#A78BFA' : 'rgba(167,139,250,0.85)' }} />
                 </div>
-                <span className="text-[9px] truncate w-full text-center" style={{ color: 'var(--brand-subtle)' }}>{p.label}</span>
+                <span className="text-[9px] truncate w-full text-center" style={{ color: isHovered ? 'var(--brand-text)' : 'var(--brand-subtle)' }}>{p.label}</span>
               </div>
             )
           })}
