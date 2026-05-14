@@ -2,6 +2,7 @@
 
 import { useParams } from 'next/navigation'
 import { useApiQuery } from '@/hooks/use-query'
+import { ProjectConsolidatedTeam } from '@/components/projects/project-consolidated-team'
 
 interface ProjectFull {
   id: number
@@ -10,6 +11,7 @@ interface ProjectFull {
   description: string | null
   start_date: string | null
   expected_end_date: string | null
+  is_operational?: boolean
   customer?: { id: number; name: string } | null
   consultants?: { id: number; name: string }[]
   coordinators?: { id: number; name: string }[]
@@ -47,38 +49,53 @@ export default function VisaoGeralPage() {
     ...(project.consultants ?? []).map(u => ({ ...u, role: 'Consultor' as const })),
   ]
 
+  const isOperational = project.is_operational !== false
+  // Em projeto operacional: equipe vem das etapas (consolidated). Em sustentação:
+  // equipe direta do projeto (project_consultants) ainda é válida.
+  const directTeam = isOperational ? (project.coordinators ?? []).map(u => ({ ...u, role: 'Coordenador' as const })) : team
+
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-      gap: 12,
-    }}>
-      <Block title="Descrição">
-        {project.description?.trim() || <span style={{ color: 'var(--text-muted)' }}>Sem descrição.</span>}
-      </Block>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        gap: 12,
+      }}>
+        <Block title="Descrição">
+          {project.description?.trim() || <span style={{ color: 'var(--text-muted)' }}>Sem descrição.</span>}
+        </Block>
 
-      <Block title="Período">
-        Início: {fmtDate(project.start_date)}<br />
-        Previsto: {fmtDate(project.expected_end_date)}
-      </Block>
+        <Block title="Período">
+          Início: {fmtDate(project.start_date)}<br />
+          Previsto: {fmtDate(project.expected_end_date)}
+        </Block>
 
-      <Block title="Cliente">
-        {project.customer?.name ?? '—'}
-      </Block>
+        <Block title="Cliente">
+          {project.customer?.name ?? '—'}
+        </Block>
 
-      <Block title="Equipe">
-        {team.length === 0 ? (
-          <span style={{ color: 'var(--text-muted)' }}>Sem alocações.</span>
-        ) : (
-          <ul style={{ margin: 0, paddingLeft: 16 }}>
-            {team.map(u => (
-              <li key={`${u.role}-${u.id}`} style={{ marginBottom: 2 }}>
-                {u.name} <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>· {u.role}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Block>
+        <Block title={isOperational ? 'Coordenação' : 'Equipe'}>
+          {directTeam.length === 0 ? (
+            <span style={{ color: 'var(--text-muted)' }}>
+              {isOperational ? 'Sem coordenador.' : 'Sem alocações.'}
+            </span>
+          ) : (
+            <ul style={{ margin: 0, paddingLeft: 16 }}>
+              {directTeam.map(u => (
+                <li key={`${u.role}-${u.id}`} style={{ marginBottom: 2 }}>
+                  {u.name} <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>· {u.role}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Block>
+      </div>
+
+      {isOperational && (
+        <div className="ds-card ds-card-pad">
+          <ProjectConsolidatedTeam projectId={id} />
+        </div>
+      )}
     </div>
   )
 }
