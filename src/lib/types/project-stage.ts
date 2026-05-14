@@ -42,6 +42,8 @@ export interface ProjectStage {
   progress_pct?: number
   derived_status?: StageDerivedStatus
   team_overrun_count?: number
+  last_activity_at?: string | null
+  days_since_activity?: number | null
   created_at: string
   updated_at: string
 }

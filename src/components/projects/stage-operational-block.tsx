@@ -9,6 +9,7 @@ import { HealthDots } from './health-dots'
 import { StageTeamAllocation } from './stage-team-allocation'
 import { StageKanbanBoard } from './stage-kanban-board'
 import { StageAporteDialog } from './stage-aporte-dialog'
+import { StageActivityTimeline } from './stage-activity-timeline'
 import { useStageDeliveries } from '@/hooks/use-stage-deliveries'
 import type { ProjectStage, StageDerivedStatus } from '@/lib/types/project-stage'
 
@@ -274,6 +275,17 @@ export function StageOperationalBlock({
           ) : (
             <StageKanbanBoard stageId={stage.id} deliveries={deliveries} onChanged={refetch} canEdit={canEdit} />
           )}
+
+          <div style={{ marginTop: 20 }}>
+            <div style={{
+              fontSize: 11, color: 'var(--text-muted)',
+              textTransform: 'uppercase', letterSpacing: '.04em',
+              marginBottom: 8,
+            }}>
+              Atividade
+            </div>
+            <StageActivityTimeline stageId={stage.id} />
+          </div>
         </div>
       )}
     </section>
