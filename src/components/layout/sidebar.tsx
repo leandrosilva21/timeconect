@@ -39,6 +39,7 @@ import {
   Webhook,
   Briefcase,
   UserPlus,
+  Search,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
@@ -167,6 +168,7 @@ const NAV: NavEntry[] = [
   { type: 'item', label: 'Matriz de Conhecimento', href: '/matriz-conhecimento', icon: Star },
   { type: 'item', label: 'Cobertura de Skills',    href: '/projetos/cobertura-skills', icon: UserCheck },
   { type: 'item', label: 'Candidatos',             href: '/candidatos',                icon: Briefcase },
+  { type: 'item', label: 'Busca Avançada',         href: '/busca',                     icon: Search },
   { type: 'item', label: 'Novo Candidato',         href: '/candidato/cadastro',        icon: UserPlus },
   {
     type: 'group',
