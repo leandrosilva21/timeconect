@@ -40,6 +40,7 @@ import {
   Briefcase,
   UserPlus,
   Search,
+  Inbox,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
@@ -69,6 +70,7 @@ type NavGroup = {
 type NavEntry = NavItem | NavGroup
 
 const NAV_COORDINATOR: NavEntry[] = [
+  { type: 'item', label: 'Meus Cards', href: '/meus-cards', icon: Inbox },
   {
     type: 'group',
     label: 'Apontamentos & Despesas',
@@ -102,6 +104,7 @@ const NAV_CLIENTE: NavEntry[] = [
 const NAV: NavEntry[] = [
   { type: 'item', label: 'Início',                href: '/dashboard',       icon: Home },
   { type: 'item', label: 'Meu Painel',            href: '/meu-painel',      icon: LayoutDashboard },
+  { type: 'item', label: 'Meus Cards',            href: '/meus-cards',      icon: Inbox },
   {
     type: 'group',
     label: 'Projetos',
@@ -368,6 +371,7 @@ function SidebarInner({ user }: { user: User }) {
       const baseNav: NavEntry[] = [
         { type: 'item', label: 'Início',     href: '/dashboard',  icon: Home },
         { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard },
+        { type: 'item', label: 'Meus Cards', href: '/meus-cards', icon: Inbox },
       ]
       if (ep.includes('gestao_projetos.view') || ep.includes('gestao_projetos.update'))
         baseNav.push({ type: 'item', label: 'Gestão de Projetos', href: '/gestao-projetos', icon: Layers })
