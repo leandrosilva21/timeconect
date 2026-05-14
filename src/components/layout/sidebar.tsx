@@ -354,7 +354,7 @@ function SidebarInner({ user }: { user: User }) {
         .filter(([code]) => clienteContractCodes.has(code))
         .map(([, item]) => item)
       const nav: NavEntry[] = [
-        { type: 'item', label: 'Portal Cliente',      href: '/portal-cliente',      icon: Building2 },
+        { type: 'item', label: 'Home',                 href: '/portal-cliente',      icon: Building2 },
         { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline',  icon: LayoutGrid },
       ]
       if (dashItems.length > 0) {
