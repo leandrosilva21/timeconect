@@ -249,6 +249,8 @@ export default function EtapasPage() {
             projectId={projectId}
             canEdit={canEdit}
             onChanged={refetch}
+            bulkAction={bulkAction}
+            bulkKey={bulkKey}
           />
         ))
       )}
