@@ -38,7 +38,8 @@ export function HealthDots({ health }: { health: StageHealth }) {
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <Dot level={health.deadline} title={`Prazo: ${LABEL[health.deadline]}`} />
       <Dot level={health.hours} title={`Horas: ${LABEL[health.hours]}`} />
-      <Dot level={health.delivery} title={`Entrega: ${LABEL[health.delivery]}`} />
+      <Dot level={health.delivery} title={`Entregas: ${LABEL[health.delivery]}`} />
+      <Dot level={health.team} title={`Equipe: ${LABEL[health.team]}`} />
     </div>
   )
 }
