@@ -1,6 +1,8 @@
 'use client'
 
+import { Paperclip } from 'lucide-react'
 import { useStageActivity } from '@/hooks/use-stage-activity'
+import { secureUrl } from '@/lib/api'
 import type { StageActivityEvent, StageActivityType } from '@/lib/types/stage-activity'
 
 const TYPE_LABEL: Record<StageActivityType, string> = {
@@ -59,7 +61,7 @@ function describe(ev: StageActivityEvent): string {
     case 'hours_logged':
       return `apontou ${p.hours ?? '?'}h`
     case 'comment':
-      return `comentou: ${p.text ?? ''}`
+      return 'comentou'
     default:
       return TYPE_LABEL[ev.type] ?? ev.type
   }
@@ -105,6 +107,9 @@ export function StageActivityTimeline({ stageId, limit = 50 }: Props) {
               <strong style={{ fontWeight: 500 }}>{ev.actor?.name ?? 'Sistema'}</strong>{' '}
               <span style={{ color: 'var(--text-muted)' }}>{describe(ev)}</span>
             </div>
+            {ev.type === 'comment' && (
+              <CommentBody event={ev} />
+            )}
             <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
               {timeAgo(ev.created_at)}
             </div>
@@ -113,4 +118,94 @@ export function StageActivityTimeline({ stageId, limit = 50 }: Props) {
       ))}
     </ul>
   )
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`
+}
+
+/**
+ * Render do corpo de um comentário: texto com mentions parseadas + anexo.
+ * Mentions seguem o pattern `@[id:Name]` (server-side parse).
+ */
+function CommentBody({ event }: { event: StageActivityEvent }) {
+  const p = event.payload || {}
+  const text = String(p.text ?? '')
+  const path = event.attachment_path
+  const url = path ? secureUrl(`/storage/${path}`) : null
+
+  return (
+    <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {text && (
+        <div style={{
+          fontSize: 13, color: 'var(--text)',
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          lineHeight: 1.4,
+        }}>
+          {renderTextWithMentions(text)}
+        </div>
+      )}
+      {url && (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontSize: 11, color: 'var(--primary)',
+            padding: '4px 8px',
+            background: 'var(--surface-hover)',
+            borderRadius: 4,
+            textDecoration: 'none',
+            maxWidth: '100%',
+            width: 'fit-content',
+          }}
+        >
+          <Paperclip size={11} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {event.attachment_original_name ?? 'anexo'}
+          </span>
+          {typeof event.attachment_size === 'number' && (
+            <span style={{ color: 'var(--text-light)' }}>· {formatSize(event.attachment_size)}</span>
+          )}
+        </a>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Parseia `@[id:Name]` como chip clickable. Tudo fora é texto plano.
+ */
+function renderTextWithMentions(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = []
+  const re = /@\[(\d+):([^\]]+)\]/g
+  let lastIndex = 0
+  let m: RegExpExecArray | null
+  let key = 0
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > lastIndex) {
+      parts.push(text.slice(lastIndex, m.index))
+    }
+    parts.push(
+      <span
+        key={`m-${key++}`}
+        style={{
+          display: 'inline-block',
+          padding: '0 4px',
+          borderRadius: 3,
+          background: 'var(--primary-soft)',
+          color: 'var(--primary)',
+          fontWeight: 500,
+        }}
+      >
+        @{m[2]}
+      </span>
+    )
+    lastIndex = m.index + m[0].length
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex))
+  return parts
 }

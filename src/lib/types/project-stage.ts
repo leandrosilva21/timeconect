@@ -33,6 +33,7 @@ export interface ProjectStage {
   status: StageStatus
   order_index: number
   expected_end_date: string | null
+  stage_start_at?: string | null
   deliveries_count?: number
   deliveries_done_count?: number
   deliveries_in_progress_count?: number

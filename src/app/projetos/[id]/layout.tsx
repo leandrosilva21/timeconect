@@ -34,7 +34,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
   const from = searchParams.get('from') ?? 'pipeline'
   const back = BACK_MAP[from] ?? BACK_MAP.pipeline
 
-  const { data: project, loading, error } = useApiQuery<ProjectResponse>(
+  const { data: project, loading, error, refetch } = useApiQuery<ProjectResponse>(
     Number.isFinite(id) ? `/projects/${id}` : null
   )
 
@@ -74,7 +74,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
             <ChevronLeft size={14} /> Voltar para {back.label}
           </Link>
         </div>
-        <ProjectHeaderExecutive project={project} />
+        <ProjectHeaderExecutive project={project} onProjectChange={refetch} />
         <div style={{ padding: '0 24px', background: 'var(--brand-bg)' }}>
           <ProjectTabs projectId={project.id} isOperational={project.is_operational !== false} />
         </div>

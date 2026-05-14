@@ -1,6 +1,12 @@
 'use client'
 
+import { useState } from 'react'
+import { CalendarDays, Pencil, AlertTriangle } from 'lucide-react'
+import { api, ApiError } from '@/lib/api'
+import { toast } from 'sonner'
+import { useAuth } from '@/hooks/use-auth'
 import { useApiQuery } from '@/hooks/use-query'
+import { useDelayRisk } from '@/hooks/use-delay-risk'
 
 interface Project {
   id: number
@@ -26,6 +32,7 @@ interface TimesheetItem {
 interface Props {
   project: Project
   consultantsCount?: number
+  onProjectChange?: () => void
 }
 
 function n(v: unknown): number {
@@ -73,7 +80,141 @@ function KPI({ label, value, sub }: { label: string; value: string; sub?: string
   )
 }
 
-export function ProjectHeaderExecutive({ project }: Props) {
+function PrazoKPI({
+  projectId,
+  expectedEndDate,
+  canEdit,
+  onChange,
+}: {
+  projectId: number
+  expectedEndDate: string | null | undefined
+  canEdit: boolean
+  onChange?: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(expectedEndDate ? expectedEndDate.slice(0, 10) : '')
+  const [saving, setSaving] = useState(false)
+
+  const hasDate = Boolean(expectedEndDate)
+  const isOverdue = hasDate && new Date(expectedEndDate as string) < new Date(new Date().toDateString())
+
+  const displayDate = hasDate
+    ? new Date(expectedEndDate as string).toLocaleDateString('pt-BR')
+    : '—'
+
+  async function save() {
+    if (saving) return
+    setSaving(true)
+    try {
+      await api.patch(`/projects/${projectId}`, { expected_end_date: value || null })
+      toast.success('Prazo atualizado')
+      setEditing(false)
+      onChange?.()
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Erro ao salvar prazo')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{
+      padding: '12px 14px',
+      borderRadius: 8,
+      background: 'var(--surface)',
+      border: `1px solid ${isOverdue ? 'var(--danger)' : 'var(--border)'}`,
+      minWidth: 0,
+      position: 'relative',
+    }}>
+      <div style={{
+        fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.04em',
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        <CalendarDays size={11} /> Prazo de entrega
+      </div>
+
+      {!editing ? (
+        <button
+          type="button"
+          onClick={canEdit ? () => { setValue(expectedEndDate ? expectedEndDate.slice(0, 10) : ''); setEditing(true) } : undefined}
+          disabled={!canEdit}
+          style={{
+            background: 'transparent', border: 'none', padding: 0, margin: 0,
+            cursor: canEdit ? 'pointer' : 'default',
+            display: 'flex', alignItems: 'baseline', gap: 8,
+            marginTop: 2, width: '100%', textAlign: 'left',
+          }}
+        >
+          <span style={{
+            fontSize: 20, fontWeight: 600,
+            color: hasDate ? (isOverdue ? 'var(--danger)' : 'var(--text)') : 'var(--text-muted)',
+            fontStyle: hasDate ? 'normal' : 'italic',
+          }}>
+            {hasDate ? displayDate : 'Definir prazo'}
+          </span>
+          {canEdit && (
+            <Pencil size={11} style={{ color: 'var(--text-light)', marginLeft: 'auto' }} />
+          )}
+        </button>
+      ) : (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
+          <input
+            type="date"
+            className="ds-input"
+            autoFocus
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') save()
+              if (e.key === 'Escape') setEditing(false)
+            }}
+            style={{ fontSize: 14, padding: '4px 8px', flex: 1, minWidth: 0 }}
+          />
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            className="ds-btn-primary"
+            style={{ fontSize: 12, padding: '4px 10px', flexShrink: 0 }}
+          >
+            {saving ? '…' : 'Salvar'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="ds-btn-ghost"
+            style={{ fontSize: 12, padding: '4px 8px', flexShrink: 0 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {hasDate && !editing && (
+        <div style={{ fontSize: 11, color: isOverdue ? 'var(--danger)' : 'var(--text-muted)', marginTop: 2 }}>
+          {(() => {
+            const d = new Date(expectedEndDate as string)
+            d.setHours(0, 0, 0, 0)
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+            const days = Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+            if (days === 0) return 'hoje'
+            if (days === 1) return 'amanhã'
+            if (days < 0)  return `${Math.abs(days)} dia(s) em atraso`
+            if (days < 30) return `em ${days} dia(s)`
+            const months = Math.round(days / 30)
+            return `em ~${months} mês${months === 1 ? '' : 'es'}`
+          })()}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function ProjectHeaderExecutive({ project, onProjectChange }: Props) {
+  const { user } = useAuth()
+  const canEditPrazo = user?.type !== 'consultor' && user?.type !== 'cliente'
+
   const sold = n(project.sold_hours)
   const consumed = n(project.consumed_hours)
   const balance = n(project.general_hours_balance)
@@ -88,6 +229,9 @@ export function ProjectHeaderExecutive({ project }: Props) {
     `/timesheets?project_id=${project.id}&pageSize=1&order=-date,-created_at`
   )
   const last = tsResp?.items?.[0]
+
+  // Risco de atraso (Pilar 2): última etapa termina depois do prazo macro?
+  const { data: delayRisk } = useDelayRisk(project.id)
 
   return (
     <div style={{
@@ -130,9 +274,12 @@ export function ProjectHeaderExecutive({ project }: Props) {
         <KPI label="Vendidas" value={formatHours(sold)} />
         <KPI label="Consumidas" value={formatHours(consumed)} sub={`${Math.round(pct)}%`} />
         <KPI label="Saldo" value={formatHours(balance)} />
-        {project.expected_end_date && (
-          <KPI label="Prazo" value={new Date(project.expected_end_date).toLocaleDateString('pt-BR')} />
-        )}
+        <PrazoKPI
+          projectId={project.id}
+          expectedEndDate={project.expected_end_date}
+          canEdit={canEditPrazo}
+          onChange={onProjectChange}
+        />
       </div>
 
       {sold > 0 && (
@@ -151,6 +298,29 @@ export function ProjectHeaderExecutive({ project }: Props) {
               transition: 'width .3s ease',
             }} />
           </div>
+        </div>
+      )}
+
+      {delayRisk?.has_risk && delayRisk.latest_stage_end && (
+        <div style={{
+          marginTop: 12,
+          padding: '6px 10px',
+          borderRadius: 6,
+          background: delayRisk.delay_days >= 14 ? 'var(--danger-bg)' : 'var(--warning-bg)',
+          color: delayRisk.delay_days >= 14 ? 'var(--danger)' : 'var(--warning)',
+          fontSize: 12,
+          fontWeight: 500,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+        }}>
+          <AlertTriangle size={13} />
+          <span>
+            Última etapa termina em{' '}
+            <strong>{new Date(delayRisk.latest_stage_end).toLocaleDateString('pt-BR')}</strong>
+            {' — '}
+            {delayRisk.delay_days} dia{delayRisk.delay_days === 1 ? '' : 's'} após o prazo do projeto
+          </span>
         </div>
       )}
 
