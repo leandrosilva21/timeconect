@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
-import { UserCheck, FolderOpen, AlertTriangle, CheckCircle2, Sparkles, Plus, AlertOctagon, Users, Flame } from 'lucide-react'
+import { UserCheck, FolderOpen, AlertTriangle, CheckCircle2, Sparkles, Plus, AlertOctagon, Users, Flame, Check } from 'lucide-react'
 
 interface ProjectOption {
   id: number
@@ -78,6 +78,8 @@ interface MatchRow {
   fit: 'Alto' | 'Médio' | 'Baixo'
   coverage: { covered: number; total: number; ratio: number }
   skill_score: number
+  avg_skill_weight: number
+  protheus_years_experience: number | null
   penalties: string[]
   missing_critical: boolean
   gaps: RecommendationGap[]
@@ -233,16 +235,38 @@ export default function CoberturaSkillsPage() {
     }
   }, [])
 
+  const approveCandidate = useCallback(async (m: MatchRow) => {
+    setAllocatingId(m.consultant_id)
+    try {
+      await api.patch(`/candidates/${m.consultant_id}/status`, { status: 'approved' })
+      toast.success(`✓ ${m.name} aprovado — clique em Alocar pra adicionar ao projeto`)
+      // Otimisticamente: marca essa row como não-pending; libera botão Alocar
+      setMatchRows(prev => prev.map(x =>
+        x.consultant_id === m.consultant_id
+          ? { ...x, is_pending: false, status: 'approved' as const }
+          : x
+      ))
+      // Atualiza também triage queue count
+      api.get<{ total: number }>('/candidates/triage-queue?limit=10')
+        .then(r => setTriageQueueCount(r.total ?? 0))
+        .catch(() => {})
+    } catch {
+      toast.error(`Erro ao aprovar ${m.name}`)
+    } finally {
+      setAllocatingId(null)
+    }
+  }, [])
+
   const allocateCandidate = useCallback(async (m: MatchRow) => {
     if (selectedProject == null) return
+    if (m.is_pending) {
+      toast.error('Aprove o candidato antes de alocar.')
+      return
+    }
     const beforeCovered = countCovered(coverage)
     const totalRequired = coverage?.required_skills.length ?? 0
     setAllocatingId(m.consultant_id)
     try {
-      // Se pending, aprovamos primeiro (status='approved') — allocate depois flipa pra 'allocated' automaticamente
-      if (m.is_pending) {
-        await api.patch(`/candidates/${m.consultant_id}/status`, { status: 'approved' })
-      }
       await api.post(`/projects/${selectedProject}/allocate`, {
         consultant_id: m.consultant_id,
         score: m.match_score,
@@ -259,11 +283,10 @@ export default function CoberturaSkillsPage() {
       loadTeam(selectedProject)
       loadCandidateMatch(selectedProject)
       const afterCovered = countCovered(refreshedCov)
-      const verb = m.is_pending ? 'aprovado + alocado' : 'alocado'
       const tag = totalRequired > 0
         ? ` · cobertura ${beforeCovered}/${totalRequired} → ${afterCovered}/${totalRequired}`
         : ''
-      toast.success(`✓ ${m.name} ${verb}${tag}`)
+      toast.success(`✓ ${m.name} alocado${tag}`)
     } catch {
       toast.error(`Erro ao alocar ${m.name}`)
     } finally {
@@ -666,7 +689,8 @@ export default function CoberturaSkillsPage() {
 
                 // Compor "motivo" do match
                 const reasonParts: string[] = []
-                reasonParts.push(`${m.coverage.covered}/${m.coverage.total} skills`)
+                reasonParts.push(`${m.coverage.covered}/${m.coverage.total} skills cobertas`)
+                if (m.protheus_years_experience != null) reasonParts.push(`${m.protheus_years_experience} anos Protheus`)
                 reasonParts.push(`disp ${Math.round(m.availability * 100)}%`)
                 reasonParts.push(`triage ${Math.round(m.triage_score)}`)
                 if (m.penalties.includes('critical-skill-missing')) reasonParts.push('⚠ skill crítica ausente')
@@ -739,17 +763,35 @@ export default function CoberturaSkillsPage() {
                       </p>
                     )}
 
-                    <div className="flex items-center gap-2" style={{ marginTop: 10 }}>
-                      <button
-                        type="button"
-                        className="ds-btn-primary"
-                        disabled={allocating}
-                        onClick={() => allocateCandidate(m)}
-                        style={{ fontSize: 12, padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                      >
-                        <Plus size={12} />
-                        {m.is_pending ? 'Aprovar + Alocar' : 'Alocar'}
-                      </button>
+                    <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 10 }}>
+                      {m.is_pending ? (
+                        <button
+                          type="button"
+                          disabled={allocating}
+                          onClick={() => approveCandidate(m)}
+                          style={{
+                            fontSize: 12, padding: '6px 14px', borderRadius: 4,
+                            background: 'var(--success-bg)', border: '1px solid var(--success-border)',
+                            color: 'var(--success)', fontWeight: 600, cursor: 'pointer',
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                            opacity: allocating ? 0.6 : 1,
+                          }}
+                          title="Move pra coluna Aprovado antes de alocar (pipeline com revisão)"
+                        >
+                          <Check size={12} /> Aprovar
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="ds-btn-primary"
+                          disabled={allocating}
+                          onClick={() => allocateCandidate(m)}
+                          style={{ fontSize: 12, padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        >
+                          <Plus size={12} />
+                          Alocar
+                        </button>
+                      )}
                       <Link
                         href={`/perfil-skills/${m.consultant_id}`}
                         style={{
