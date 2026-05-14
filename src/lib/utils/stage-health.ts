@@ -6,6 +6,7 @@ export interface StageHealth {
   deadline: HealthLevel
   hours: HealthLevel
   delivery: HealthLevel
+  team: HealthLevel
 }
 
 interface StageHealthInput {
@@ -57,5 +58,13 @@ export function computeStageHealth({ stage, hoursActual }: StageHealthInput): St
     }
   }
 
-  return { deadline, hours, delivery }
+  // Equipe — derivado de team_overrun_count (alocações com actual > planned)
+  let team: HealthLevel = 'unknown'
+  const overrun = stage.team_overrun_count
+  if (overrun !== undefined) {
+    if (overrun > 0) team = 'bad'
+    else team = 'ok'
+  }
+
+  return { deadline, hours, delivery, team }
 }

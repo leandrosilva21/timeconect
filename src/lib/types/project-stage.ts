@@ -16,6 +16,13 @@ export interface UserMini {
   profile_photo_url?: string | null
 }
 
+export type StageDerivedStatus =
+  | 'planejamento'
+  | 'execucao'
+  | 'homologacao'
+  | 'bloqueada'
+  | 'concluida'
+
 export interface ProjectStage {
   id: number
   project_id: number
@@ -28,7 +35,13 @@ export interface ProjectStage {
   expected_end_date: string | null
   deliveries_count?: number
   deliveries_done_count?: number
+  deliveries_in_progress_count?: number
+  deliveries_waiting_client_count?: number
+  deliveries_review_count?: number
   deliveries_hours_planned_sum?: string | number | null
+  progress_pct?: number
+  derived_status?: StageDerivedStatus
+  team_overrun_count?: number
   created_at: string
   updated_at: string
 }

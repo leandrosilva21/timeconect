@@ -9,7 +9,23 @@ import { HealthDots } from './health-dots'
 import { StageTeamAllocation } from './stage-team-allocation'
 import { StageKanbanBoard } from './stage-kanban-board'
 import { useStageDeliveries } from '@/hooks/use-stage-deliveries'
-import type { ProjectStage } from '@/lib/types/project-stage'
+import type { ProjectStage, StageDerivedStatus } from '@/lib/types/project-stage'
+
+const DERIVED_STATUS_LABEL: Record<StageDerivedStatus, string> = {
+  planejamento: 'Planejamento',
+  execucao:     'Execução',
+  homologacao:  'Homologação',
+  bloqueada:    'Bloqueada',
+  concluida:    'Concluída',
+}
+
+const DERIVED_STATUS_COLOR: Record<StageDerivedStatus, string> = {
+  planejamento: 'var(--text-muted)',
+  execucao:     'var(--primary)',
+  homologacao:  'var(--warning)',
+  bloqueada:    'var(--danger)',
+  concluida:    'var(--success)',
+}
 
 interface Props {
   stage: ProjectStage
@@ -115,6 +131,24 @@ export function StageOperationalBlock({ stage, projectId, onChanged }: Props) {
               >
                 {stage.name}
               </h3>
+            )}
+            {stage.derived_status && (
+              <span
+                title="Status derivado das entregas"
+                style={{
+                  fontSize: 10, fontWeight: 600,
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  color: DERIVED_STATUS_COLOR[stage.derived_status],
+                  background: 'var(--surface-hover)',
+                  border: `1px solid ${DERIVED_STATUS_COLOR[stage.derived_status]}`,
+                  textTransform: 'uppercase',
+                  letterSpacing: '.04em',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {DERIVED_STATUS_LABEL[stage.derived_status]}
+              </span>
             )}
             <HealthDots health={health} />
             <button
