@@ -39,6 +39,7 @@ export interface ProjectStage {
   deliveries_in_progress_count?: number
   deliveries_waiting_client_count?: number
   deliveries_review_count?: number
+  deliveries_backlog_count?: number
   deliveries_hours_planned_sum?: string | number | null
   progress_pct?: number
   derived_status?: StageDerivedStatus
