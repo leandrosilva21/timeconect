@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { StageOperationalBlock } from '@/components/projects/stage-operational-block'
 import { useProjectStages } from '@/hooks/use-project-stages'
 import { useApiQuery } from '@/hooks/use-query'
+import { useAuth } from '@/hooks/use-auth'
 import type { ProjectStage } from '@/lib/types/project-stage'
 
 interface ProjectMini {
@@ -32,6 +33,9 @@ export default function EtapasPage() {
   const { data: project } = useApiQuery<ProjectMini>(
     Number.isFinite(projectId) ? `/projects/${projectId}` : null
   )
+  const { user } = useAuth()
+  const isConsultor = user?.type === 'consultor'
+  const canEdit = !isConsultor
 
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -118,7 +122,7 @@ export default function EtapasPage() {
             {!exceededProject && <strong style={{ color: 'var(--text)' }}>{formatHours(remaining)}</strong>}
           </span>
         </div>
-        {!creating && (
+        {canEdit && !creating && (
           <button
             type="button"
             className="ds-btn-primary"
@@ -204,6 +208,7 @@ export default function EtapasPage() {
             key={stage.id}
             stage={stage}
             projectId={projectId}
+            canEdit={canEdit}
             onChanged={refetch}
           />
         ))
