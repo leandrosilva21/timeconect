@@ -108,7 +108,7 @@ function MonthlyEvolution({ series }: { series: MonthlyPoint[] }) {
   const hasAny = series.some(p => p.tickets > 0 || p.consumed_hours > 0)
   return (
     <div className="rounded-2xl p-5" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-      <div className="flex items-center justify-between gap-2 mb-4">
+      <div className="flex items-center justify-between gap-2 mb-1">
         <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--brand-muted)' }}>
           Evolução Mensal — Tickets e Consumo de Horas
         </h2>
@@ -116,6 +116,10 @@ function MonthlyEvolution({ series }: { series: MonthlyPoint[] }) {
           Ver apontamentos →
         </Link>
       </div>
+      <p className="text-[10px] mb-4" style={{ color: 'var(--brand-subtle)' }}>
+        Horas referem-se apenas a apontamentos de <strong style={{ color: 'var(--brand-muted)' }}>Sustentação</strong>.
+        Histórico apurado a partir de <strong style={{ color: 'var(--brand-muted)' }}>maio/2025</strong> (início do Minutor).
+      </p>
       {!hasAny ? (
         <p className="py-10 text-center text-sm" style={{ color: 'var(--brand-subtle)' }}>Sem movimentação nos últimos 12 meses.</p>
       ) : (
