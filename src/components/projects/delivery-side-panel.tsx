@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X } from 'lucide-react'
+import { X, PlusCircle, Clock, MessageSquare, Users, History, FileText } from 'lucide-react'
+import Link from 'next/link'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import type { StageDelivery, DeliveryStatus, DeliveryPriority } from '@/lib/types/project-stage'
@@ -10,8 +11,6 @@ import { ActivityCommentComposer } from './activity-comment-composer'
 import { StageActivityTimeline } from './stage-activity-timeline'
 import { ActivityAporteDialog } from './activity-aporte-dialog'
 import { ActivityTeamAllocation } from './activity-team-allocation'
-import { PlusCircle, Clock } from 'lucide-react'
-import Link from 'next/link'
 
 interface Props {
   delivery: StageDelivery
@@ -35,7 +34,17 @@ const PRIORITY_OPTIONS: { value: DeliveryPriority; label: string }[] = [
   { value: 'high', label: 'Alta' },
 ]
 
+type Tab = 'detalhes' | 'conversa' | 'equipe' | 'historico'
+
+const TABS: { id: Tab; label: string; icon: typeof FileText }[] = [
+  { id: 'detalhes',  label: 'Detalhes',   icon: FileText },
+  { id: 'conversa',  label: 'Conversação', icon: MessageSquare },
+  { id: 'equipe',    label: 'Equipe',     icon: Users },
+  { id: 'historico', label: 'Histórico',  icon: History },
+]
+
 export function DeliverySidePanel({ delivery, projectId, onClose, onUpdated, onDeleted }: Props) {
+  const [tab, setTab] = useState<Tab>('detalhes')
   const [title, setTitle] = useState(delivery.title)
   const [description, setDescription] = useState(delivery.description ?? '')
   const [hours, setHours] = useState(String(delivery.hours_planned ?? ''))
@@ -46,7 +55,6 @@ export function DeliverySidePanel({ delivery, projectId, onClose, onUpdated, onD
   const [timelineKey, setTimelineKey] = useState(0)
   const [aporteOpen, setAporteOpen] = useState(false)
 
-  // Reset state quando troca de delivery
   useEffect(() => {
     setTitle(delivery.title)
     setDescription(delivery.description ?? '')
@@ -54,9 +62,9 @@ export function DeliverySidePanel({ delivery, projectId, onClose, onUpdated, onD
     setPriority(delivery.priority)
     setStatus(delivery.status)
     setDue(delivery.due_date ?? '')
+    setTab('detalhes')
   }, [delivery.id])
 
-  // Esc fecha
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
@@ -122,10 +130,15 @@ export function DeliverySidePanel({ delivery, projectId, onClose, onUpdated, onD
         <div style={{
           padding: '14px 18px',
           borderBottom: '1px solid var(--border)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10,
         }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
-            Atividade #{delivery.id}
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+              Atividade #{delivery.id}
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {delivery.title}
+            </div>
           </div>
           <button
             type="button"
@@ -133,179 +146,213 @@ export function DeliverySidePanel({ delivery, projectId, onClose, onUpdated, onD
             aria-label="Fechar"
             style={{
               background: 'transparent', border: 'none', cursor: 'pointer',
-              color: 'var(--text-muted)', padding: 4,
+              color: 'var(--text-muted)', padding: 4, flexShrink: 0,
             }}
           >
             <X size={16} />
           </button>
         </div>
 
-        {/* Form */}
+        {/* Action bar — sempre visível, sem depender da tab */}
+        <div style={{
+          padding: '8px 18px',
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--surface)',
+          display: 'flex', gap: 6, flexWrap: 'wrap',
+        }}>
+          <button
+            type="button"
+            onClick={() => setAporteOpen(true)}
+            className="ds-btn-ghost"
+            style={{
+              fontSize: 12, padding: '5px 10px',
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              color: 'var(--primary)',
+            }}
+            title="Aportar horas com justificativa"
+          >
+            <PlusCircle size={12} /> Aportar
+          </button>
+          <Link
+            href={`/timesheets/new?project_id=${projectId}&stage_delivery_id=${delivery.id}`}
+            className="ds-btn-ghost"
+            style={{
+              fontSize: 12, padding: '5px 10px',
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              color: 'var(--text)',
+              textDecoration: 'none',
+            }}
+            title="Apontar horas trabalhadas nesta atividade"
+          >
+            <Clock size={12} /> Apontar
+          </Link>
+        </div>
+
+        {/* Tabs */}
+        <div style={{
+          display: 'flex',
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--bg)',
+        }}>
+          {TABS.map(t => {
+            const Icon = t.icon
+            const active = tab === t.id
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                style={{
+                  flex: 1,
+                  padding: '10px 8px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: active ? '2px solid var(--primary)' : '2px solid transparent',
+                  color: active ? 'var(--primary)' : 'var(--text-muted)',
+                  fontWeight: active ? 600 : 400,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                  transition: 'color .12s ease, border-color .12s ease',
+                }}
+              >
+                <Icon size={12} /> {t.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Tab content */}
         <div style={{ padding: 18, overflowY: 'auto', flex: 1 }}>
-          <input
-            className="ds-input"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="Título"
-            style={{ width: '100%', fontSize: 16, fontWeight: 500, padding: '10px 12px' }}
-          />
-
-          <textarea
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            placeholder="Descrição (opcional)"
-            rows={3}
-            className="ds-input"
-            style={{ width: '100%', marginTop: 10, padding: 10, resize: 'vertical', fontFamily: 'inherit' }}
-          />
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
-            <Field label="Status">
-              <select
-                className="ds-input"
-                value={status}
-                onChange={e => setStatus(e.target.value as DeliveryStatus)}
-                style={{ width: '100%' }}
-              >
-                {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </Field>
-
-            <Field label="Prioridade">
-              <select
-                className="ds-input"
-                value={priority}
-                onChange={e => setPriority(e.target.value as DeliveryPriority)}
-                style={{ width: '100%' }}
-              >
-                {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </Field>
-
-            <Field label="Horas previstas">
+          {tab === 'detalhes' && (
+            <>
               <input
-                type="number" min={0} step="0.5"
                 className="ds-input"
-                value={hours}
-                onChange={e => setHours(e.target.value)}
-                style={{ width: '100%' }}
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="Título"
+                style={{ width: '100%', fontSize: 16, fontWeight: 500, padding: '10px 12px' }}
               />
-            </Field>
 
-            <Field label="Prazo">
-              <input
-                type="date"
+              <textarea
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Descrição (opcional)"
+                rows={3}
                 className="ds-input"
-                value={due}
-                onChange={e => setDue(e.target.value)}
-                style={{ width: '100%' }}
+                style={{ width: '100%', marginTop: 10, padding: 10, resize: 'vertical', fontFamily: 'inherit' }}
               />
-            </Field>
-          </div>
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className="ds-btn-primary"
-              onClick={handleSave}
-              disabled={saving || !title.trim()}
-              style={{ fontSize: 13, padding: '8px 16px' }}
-            >
-              {saving ? 'Salvando…' : 'Salvar'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setAporteOpen(true)}
-              className="ds-btn-ghost"
-              style={{
-                fontSize: 13, padding: '8px 14px',
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                color: 'var(--primary)',
-              }}
-              title="Aportar horas com justificativa"
-            >
-              <PlusCircle size={13} /> Aportar
-            </button>
-            <Link
-              href={`/timesheets/new?project_id=${projectId}&stage_delivery_id=${delivery.id}`}
-              className="ds-btn-ghost"
-              style={{
-                fontSize: 13, padding: '8px 14px',
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                color: 'var(--text)',
-                textDecoration: 'none',
-              }}
-              title="Apontar horas trabalhadas nesta atividade"
-            >
-              <Clock size={13} /> Apontar
-            </Link>
-            <button
-              type="button"
-              onClick={handleDelete}
-              style={{
-                fontSize: 13, padding: '8px 16px',
-                background: 'transparent',
-                border: '1px solid var(--border)',
-                color: 'var(--danger)',
-                borderRadius: 6, cursor: 'pointer',
-                marginLeft: 'auto',
-              }}
-            >
-              Excluir
-            </button>
-          </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
+                <Field label="Status">
+                  <select
+                    className="ds-input"
+                    value={status}
+                    onChange={e => setStatus(e.target.value as DeliveryStatus)}
+                    style={{ width: '100%' }}
+                  >
+                    {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </Field>
 
-          <div style={{ marginTop: 24 }}>
-            <ActivityTeamAllocation deliveryId={delivery.id} />
-          </div>
+                <Field label="Prioridade">
+                  <select
+                    className="ds-input"
+                    value={priority}
+                    onChange={e => setPriority(e.target.value as DeliveryPriority)}
+                    style={{ width: '100%' }}
+                  >
+                    {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </Field>
 
-          {aporteOpen && (
-            <ActivityAporteDialog
-              deliveryId={delivery.id}
-              deliveryName={delivery.title}
-              deliveryHoursPlanned={Number(delivery.hours_planned ?? 0)}
-              projectId={projectId}
-              onClose={() => setAporteOpen(false)}
-              onCreated={() => {
-                setAporteOpen(false)
-                setTimelineKey(k => k + 1)
-                // Atualiza horas locais (aporte mudou hours_planned)
-                onUpdated({ ...delivery })
-              }}
-            />
+                <Field label="Horas previstas">
+                  <input
+                    type="number" min={0} step="0.5"
+                    className="ds-input"
+                    value={hours}
+                    onChange={e => setHours(e.target.value)}
+                    style={{ width: '100%' }}
+                  />
+                </Field>
+
+                <Field label="Prazo">
+                  <input
+                    type="date"
+                    className="ds-input"
+                    value={due}
+                    onChange={e => setDue(e.target.value)}
+                    style={{ width: '100%' }}
+                  />
+                </Field>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="ds-btn-primary"
+                  onClick={handleSave}
+                  disabled={saving || !title.trim()}
+                  style={{ fontSize: 13, padding: '8px 16px' }}
+                >
+                  {saving ? 'Salvando…' : 'Salvar'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  style={{
+                    fontSize: 13, padding: '8px 16px',
+                    background: 'transparent',
+                    border: '1px solid var(--border)',
+                    color: 'var(--danger)',
+                    borderRadius: 6, cursor: 'pointer',
+                    marginLeft: 'auto',
+                  }}
+                >
+                  Excluir
+                </button>
+              </div>
+            </>
           )}
 
-          <div style={{ marginTop: 28 }}>
-            <div style={{
-              fontSize: 11, color: 'var(--text-muted)',
-              textTransform: 'uppercase', letterSpacing: '.04em',
-              marginBottom: 8,
-            }}>
-              Conversação
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <ActivityCommentComposer
+          {tab === 'conversa' && (
+            <>
+              <div style={{ marginBottom: 12 }}>
+                <ActivityCommentComposer
+                  deliveryId={delivery.id}
+                  onCreated={() => setTimelineKey(k => k + 1)}
+                />
+              </div>
+              <StageActivityTimeline
+                key={`conv-${timelineKey}`}
                 deliveryId={delivery.id}
-                onCreated={() => setTimelineKey(k => k + 1)}
               />
-            </div>
-            <StageActivityTimeline
-              key={`conv-${timelineKey}`}
-              deliveryId={delivery.id}
-            />
-          </div>
+            </>
+          )}
 
-          <div style={{ marginTop: 28 }}>
-            <div style={{
-              fontSize: 11, color: 'var(--text-muted)',
-              textTransform: 'uppercase', letterSpacing: '.04em',
-              marginBottom: 8,
-            }}>
-              Histórico operacional
-            </div>
+          {tab === 'equipe' && (
+            <ActivityTeamAllocation deliveryId={delivery.id} />
+          )}
+
+          {tab === 'historico' && (
             <DeliveryTimeline key={`hist-${timelineKey}`} deliveryId={delivery.id} />
-          </div>
+          )}
         </div>
+
+        {aporteOpen && (
+          <ActivityAporteDialog
+            deliveryId={delivery.id}
+            deliveryName={delivery.title}
+            deliveryHoursPlanned={Number(delivery.hours_planned ?? 0)}
+            projectId={projectId}
+            onClose={() => setAporteOpen(false)}
+            onCreated={() => {
+              setAporteOpen(false)
+              setTimelineKey(k => k + 1)
+              onUpdated({ ...delivery })
+            }}
+          />
+        )}
       </aside>
     </>
   )
