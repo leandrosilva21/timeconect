@@ -19,6 +19,7 @@ interface ProjectResponse {
   consumed_hours?: number | string | null
   general_hours_balance?: number | string | null
   expected_end_date?: string | null
+  is_operational?: boolean
 }
 
 const BACK_MAP: Record<string, { href: string; label: string }> = {
@@ -75,7 +76,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
         </div>
         <ProjectHeaderExecutive project={project} />
         <div style={{ padding: '0 24px', background: 'var(--brand-bg)' }}>
-          <ProjectTabs projectId={project.id} />
+          <ProjectTabs projectId={project.id} isOperational={project.is_operational !== false} />
         </div>
         <div style={{ flex: 1, padding: 24, background: 'var(--bg)' }}>
           {children}
