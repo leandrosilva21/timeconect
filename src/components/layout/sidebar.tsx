@@ -37,6 +37,7 @@ import {
   LayoutGrid,
   DollarSign,
   Webhook,
+  Activity,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
@@ -99,6 +100,7 @@ const NAV_CLIENTE: NavEntry[] = [
 const NAV: NavEntry[] = [
   { type: 'item', label: 'Início',                href: '/dashboard',       icon: Home },
   { type: 'item', label: 'Meu Painel',            href: '/meu-painel',      icon: LayoutDashboard },
+  { type: 'item', label: 'Feed Operacional',      href: '/feed-operacional', icon: Activity },
   {
     type: 'group',
     label: 'Projetos',
