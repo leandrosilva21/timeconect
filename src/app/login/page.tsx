@@ -241,7 +241,9 @@ export default function LoginPage() {
           to { transform: rotate(360deg); }
         }
         /* Splash do login é sempre escuro — escapa do rule global que força h1 preto no light */
-        .login-title { color: #FFFFFF !important; }
+        html h1.login-title,
+        html:not(.dark) h1.login-title,
+        html.dark h1.login-title { color: #FFFFFF !important; }
         /* Logo ERPServ: branco no dark, roxo (~#4F46E5 indigo) no light */
         :root .login-erpserv-logo { filter: brightness(0) saturate(100%) invert(28%) sepia(86%) saturate(2756%) hue-rotate(238deg) brightness(91%) contrast(95%); opacity: 0.95; }
         html.dark .login-erpserv-logo { filter: brightness(0) invert(1); opacity: 0.75; }
