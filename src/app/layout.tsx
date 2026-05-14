@@ -5,8 +5,16 @@ import { Providers } from './providers'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
+// Favicon env-aware: cores das faixas (dev=amarelo, homolog=vermelho, prod=cyan original)
+const APP_ENV = process.env.NEXT_PUBLIC_APP_ENV
+const ICON_HREF =
+  APP_ENV === 'dev'     ? '/favicon-dev.svg' :
+  APP_ENV === 'homolog' ? '/favicon-homolog.svg' :
+                          '/favicon-prod.svg'
+
 export const metadata: Metadata = {
   title: 'Minutor',
+  icons: { icon: [{ url: ICON_HREF, type: 'image/svg+xml' }] },
   description: 'Gestão de horas e despesas',
   appleWebApp: {
     capable: true,
