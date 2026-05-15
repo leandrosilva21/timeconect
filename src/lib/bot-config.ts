@@ -1,5 +1,9 @@
 import { api } from './api'
-import type { BotAgent, BotGeneralConfig, BotProvider, BotRule, BotSkill } from '@/types/bot'
+import type {
+  BotAgent, BotGeneralConfig, BotProvider, BotRule, BotSkill,
+  RuleOptions, RuleTestPreview,
+} from '@/types/bot'
+import type { ChatUser } from '@/types/inbox'
 
 // General
 export const getBotConfig    = (): Promise<{ data: BotGeneralConfig }> => api.get('/bot/config')
@@ -17,6 +21,11 @@ export const updateAgent     = (id: number, payload: Partial<BotAgent>) => api.p
 export const listSkills      = (): Promise<{ data: BotSkill[] }>      => api.get('/bot/skills')
 export const updateSkill     = (id: number, payload: Partial<BotSkill>) => api.put<{ data: BotSkill[] }>(`/bot/skills/${id}`, payload)
 
-// Rules
+// Rules — CRUD completo
 export const listRules       = (): Promise<{ data: BotRule[] }>       => api.get('/bot/rules')
-export const updateRule      = (id: number, payload: Partial<BotRule>) => api.put<{ data: BotRule[] }>(`/bot/rules/${id}`, payload)
+export const getRuleOptions  = (): Promise<{ data: RuleOptions }>     => api.get('/bot/rules/options')
+export const createRule      = (payload: Partial<BotRule>): Promise<{ data: BotRule }> => api.post('/bot/rules', payload)
+export const updateRule      = (id: number, payload: Partial<BotRule>): Promise<{ data: BotRule }> => api.put(`/bot/rules/${id}`, payload)
+export const deleteRule      = (id: number): Promise<{ deleted: boolean }> => api.delete(`/bot/rules/${id}`)
+export const testRule        = (id: number, feedId?: number): Promise<{ data: RuleTestPreview }> => api.post(`/bot/rules/${id}/test`, feedId ? { feed_id: feedId } : {})
+export const listChatUsersForRule = (): Promise<{ data: ChatUser[] }> => api.get('/conversations/users')

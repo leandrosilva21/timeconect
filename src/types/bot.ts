@@ -36,15 +36,45 @@ export interface BotSkill {
   active: boolean
 }
 
+export type RuleTargetType = 'user' | 'role' | 'group' | 'all_admins' | 'customer_team' | 'all_users'
+export type RuleChannel    = 'inbox' | 'bot_dm' | 'group' | 'email' | 'teams'
+export type RuleSeverity   = 'info' | 'low' | 'medium' | 'high' | 'critical'
+
 export interface BotRule {
   id: number
   name: string
+  description?: string | null
   trigger_event: string
-  severity_min: string
-  target_type: 'user' | 'role' | 'customer_team' | 'all_admins'
+  event_type?: string | null
+  skill_slug?: string | null
+  severity_min: RuleSeverity
+  target_type: RuleTargetType
   target_value: string | null
-  channel: 'inbox' | 'teams' | 'email'
+  target_label?: string | null
+  channel: RuleChannel
   active: boolean
+  priority: number
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface RuleOptions {
+  severities: RuleSeverity[]
+  target_types: RuleTargetType[]
+  channels: RuleChannel[]
+  roles: string[]
+  groups: Array<{ id: number; name: string }>
+  skills: Array<{ slug: string; name: string }>
+  event_types: Array<{ value: string; label: string }>
+  trigger_events: string[]
+}
+
+export interface RuleTestPreview {
+  rule: BotRule
+  severity_match: boolean
+  recipients: Array<{ id: number; name: string }>
+  channel: RuleChannel
+  group: { id: number; title: string | null } | null
 }
 
 export interface BotGeneralConfig {
