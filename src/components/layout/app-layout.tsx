@@ -23,9 +23,14 @@ interface AppLayoutProps {
   children: React.ReactNode
   title?: string
   actions?: React.ReactNode
+  /**
+   * Quando true: <main> sem padding e sem scroll interno —
+   * filho controla layout/altura/scroll. Usado pelo /inbox (chat full-height).
+   */
+  fullBleed?: boolean
 }
 
-export function AppLayout({ children, title, actions }: AppLayoutProps) {
+export function AppLayout({ children, title, actions, fullBleed = false }: AppLayoutProps) {
   const { user, loading } = useAuth()
   const router = useRouter()
   const [companyName, setCompanyName] = useState<string | null>(null)
@@ -124,7 +129,7 @@ export function AppLayout({ children, title, actions }: AppLayoutProps) {
             </div>
           )}
 
-          <main className="flex-1 overflow-y-auto p-8">
+          <main className={fullBleed ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 overflow-y-auto p-8'}>
             {children}
           </main>
         </div>

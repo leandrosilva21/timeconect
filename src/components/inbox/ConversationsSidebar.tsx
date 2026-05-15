@@ -178,7 +178,11 @@ export function ConversationsSidebar({
             ))}
           </Section>
 
-          <Section title="Grupos" empty="Nenhum grupo">
+          <Section
+            title="Grupos"
+            empty="Nenhum grupo ainda."
+            emptyAction={{ label: 'Criar grupo', onClick: onNew }}
+          >
             {groups.map(c => (
               <ConversationRow key={c.id} conv={c} selected={selectedId === c.id} onClick={() => onSelect(c.id)} />
             ))}
@@ -189,7 +193,14 @@ export function ConversationsSidebar({
   )
 }
 
-function Section({ title, children, empty }: { title: string; children: React.ReactNode; empty?: string }) {
+function Section({
+  title, children, empty, emptyAction,
+}: {
+  title: string
+  children: React.ReactNode
+  empty?: string
+  emptyAction?: { label: string; onClick: () => void }
+}) {
   const arr = Array.isArray(children) ? children : [children]
   const hasItems = arr.filter(Boolean).length > 0
   return (
@@ -198,7 +209,18 @@ function Section({ title, children, empty }: { title: string; children: React.Re
         <UserIcon size={10} /> {title}
       </div>
       {hasItems ? <ul className="pb-1">{children}</ul> : empty ? (
-        <p className="px-3 pb-3 text-[11px] text-zinc-600 italic">{empty}</p>
+        <div className="px-3 pb-3 space-y-1.5">
+          <p className="text-[11px] text-zinc-600 italic">{empty}</p>
+          {emptyAction && (
+            <button
+              type="button"
+              onClick={emptyAction.onClick}
+              className="inline-flex items-center gap-1 text-[11px] text-emerald-300 hover:text-emerald-200 underline-offset-2 hover:underline"
+            >
+              + {emptyAction.label}
+            </button>
+          )}
+        </div>
       ) : null}
     </div>
   )

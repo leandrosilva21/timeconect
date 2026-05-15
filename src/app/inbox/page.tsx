@@ -84,8 +84,8 @@ export default function InboxPage() {
     : undefined
 
   return (
-    <AppLayout>
-      <div className="h-[calc(100vh-3.5rem)] flex bg-zinc-950">
+    <AppLayout fullBleed>
+      <div className="h-full flex bg-zinc-950 overflow-hidden">
         <ConversationsSidebar
           conversations={conversations}
           selectedId={selectedId}

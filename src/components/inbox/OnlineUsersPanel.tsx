@@ -17,7 +17,9 @@ export function OnlineUsersPanel({ onStartDirect }: Props) {
   const { data } = useQuery({
     queryKey: ['chat-users-online'],
     queryFn: () => listChatUsers(),
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
   })
 
   const all: ChatUser[] = data?.data ?? []
