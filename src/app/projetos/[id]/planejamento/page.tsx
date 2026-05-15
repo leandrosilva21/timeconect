@@ -1,11 +1,13 @@
 'use client'
 
+import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Info } from 'lucide-react'
 import { useProjectSchedule } from '@/hooks/use-project-schedule'
 import { useAuth } from '@/hooks/use-auth'
 import { ProjectScheduleTable } from '@/components/projects/project-schedule-table'
 import { ProjectScheduleGantt } from '@/components/projects/project-schedule-gantt'
+import { ProjectScheduleCapacity } from '@/components/projects/project-schedule-capacity'
 
 /**
  * Cronograma operacional do projeto (ADR 0009).
@@ -19,6 +21,7 @@ export default function PlanejamentoPage() {
   const projectId = Number(params.id)
   const { user } = useAuth()
   const canEdit = user?.type !== 'consultor' && user?.type !== 'cliente'
+  const [highlightUserId, setHighlightUserId] = useState<number | null>(null)
 
   const { isOperational, project, stages, projectWindow, loading, error, refetch } = useProjectSchedule(projectId)
 
@@ -112,6 +115,13 @@ export default function PlanejamentoPage() {
           projectWindow={projectWindow}
           canEdit={canEdit}
           onChanged={refetch}
+          highlightUserId={highlightUserId}
+        />
+
+        <ProjectScheduleCapacity
+          stages={stages}
+          selectedUserId={highlightUserId}
+          onSelectUser={setHighlightUserId}
         />
       </div>
     </div>
