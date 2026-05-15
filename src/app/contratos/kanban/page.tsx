@@ -294,7 +294,10 @@ function contractColumnId(card: ContractCard): string {
 }
 
 function isActiveProject(p: ProjectCard): boolean {
-  return ['awaiting_start', 'started', 'liberado_para_testes'].includes(p.status)
+  // Status não-terminais: projeto está em algum momento do ciclo operacional.
+  // Inclui 'backlog' (coordenador alocado mas execução não iniciada) e 'planning'
+  // — adicionados no roadmap de gestão operacional (Fase 5).
+  return ['awaiting_start', 'backlog', 'planning', 'started', 'liberado_para_testes'].includes(p.status)
 }
 
 function statusBadge(card: ContractCard) {
