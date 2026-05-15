@@ -54,6 +54,16 @@ export function StageKanbanBoard({ stageId, projectId, deliveries, onChanged, ca
 
     const newStatus = destination.droppableId as DeliveryStatus
 
+    // Bloqueio operacional FS: predecessor pending impede sair de backlog (ADR 0009 appendix)
+    if (moved.status === 'backlog' && newStatus !== 'backlog'
+        && moved.predecessor_state === 'pending'
+        && moved.depends_on_delivery_id) {
+      const pred = local.find(d => d.id === moved.depends_on_delivery_id)
+      const predTitle = pred?.title ?? 'predecessor'
+      toast.error(`Conclua a atividade '${predTitle}' antes de iniciar esta.`)
+      return
+    }
+
     // Otimismo: atualiza local imediatamente
     const next = local.filter(d => d.id !== movedId)
     const targetCol = next.filter(d => d.status === newStatus).sort((a, b) => a.order_index - b.order_index)

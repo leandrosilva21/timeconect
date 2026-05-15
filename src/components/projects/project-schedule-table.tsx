@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Plus, Trash2, Calendar } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Trash2, Calendar, Lock } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import type { ScheduleStage, ProjectCoordinator } from '@/hooks/use-project-schedule'
@@ -479,11 +479,33 @@ function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged }: {
   const dependsOn = delivery.depends_on_delivery_id
     ? stageDeliveries.find(d => d.id === delivery.depends_on_delivery_id)
     : null
+  const isBlocked = delivery.predecessor_state === 'pending'
 
   return (
     <tr style={{ borderTop: '1px solid var(--border)' }}>
       <td style={{ ...cell(), paddingLeft: 36 }}>
-        <InlineText value={delivery.title} canEdit={canEdit} onSave={v => patch('title', v)} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <InlineText value={delivery.title} canEdit={canEdit} onSave={v => patch('title', v)} />
+          {isBlocked && dependsOn && (
+            <span
+              title={`Aguardando: ${dependsOn.title}`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '2px 6px',
+                borderRadius: 4,
+                background: 'var(--warning-bg)',
+                color: 'var(--warning)',
+                fontSize: 11,
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Lock size={10} /> Aguardando: {dependsOn.title}
+            </span>
+          )}
+        </div>
       </td>
       <td style={cell()}>
         <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
