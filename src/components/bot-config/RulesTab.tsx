@@ -4,9 +4,11 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
-  Bell, Plus, Pencil, Trash2, FlaskConical, CheckCircle2, XCircle, Eye,
+  Bell, Plus, Pencil, Trash2, FlaskConical, CheckCircle2, XCircle, Eye, Send,
 } from 'lucide-react'
-import { deleteRule, listRules, testRule, updateRule } from '@/lib/bot-config'
+import {
+  deleteRule, dispatchTestRule, listRules, testRule, updateRule,
+} from '@/lib/bot-config'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BotRule, RuleChannel, RuleSeverity, RuleTargetType } from '@/types/bot'
 import { RuleEditorModal } from './RuleEditorModal'
@@ -69,7 +71,7 @@ export function RulesTab() {
     }
   }
 
-  const runTest = async (rule: BotRule) => {
+  const runPreview = async (rule: BotRule) => {
     try {
       const res = await testRule(rule.id)
       const d = res.data
@@ -77,7 +79,29 @@ export function RulesTab() {
       const more = d.recipients.length > 5 ? ` +${d.recipients.length - 5}` : ''
       const matchEmoji = d.severity_match ? '✅' : '⚠️'
       toast.success(
-        `${matchEmoji} ${d.severity_match ? 'Casaria' : 'NÃO casaria com o último feed'}\n${d.recipients.length} destinatário(s): ${recList}${more}`,
+        `${matchEmoji} ${d.severity_match ? 'Casaria com o último feed' : 'NÃO casaria com o último feed'}\n${d.recipients.length} destinatário(s): ${recList}${more}`,
+        { duration: 7000 },
+      )
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
+  const runDispatch = async (rule: BotRule) => {
+    const target = rule.target_label ?? rule.target_value ?? rule.target_type
+    if (!confirm(
+      `Disparar mensagem teste pela regra "${rule.name}"?\n\n` +
+      `Vai postar uma mensagem REAL [TESTE] no canal "${rule.channel}" → "${target}".\n` +
+      `Use o último feed como conteúdo.`,
+    )) return
+    try {
+      const res = await dispatchTestRule(rule.id)
+      const d = res.data
+      const where = d.group
+        ? `grupo "${d.group.title}"`
+        : `${d.recipients_count} inbox(es) individual(is)`
+      toast.success(
+        `✅ Disparado · ${d.delivered} entrega(s) no canal "${d.channel}"\nDestino: ${where}`,
         { duration: 7000 },
       )
     } catch (e) {
@@ -174,12 +198,21 @@ export function RulesTab() {
               </button>
               <button
                 type="button"
-                onClick={() => runTest(r)}
-                title="Testar com último feed (toast)"
-                aria-label="Testar regra"
-                className="text-[11px] text-violet-300 hover:bg-violet-500/10 px-2 py-1 rounded inline-flex items-center gap-1"
+                onClick={() => runPreview(r)}
+                title="Pré-visualizar (não envia)"
+                aria-label="Pré-visualizar regra"
+                className="text-[11px] text-violet-700 dark:text-violet-300 hover:bg-violet-500/10 px-2 py-1 rounded inline-flex items-center gap-1"
               >
-                <FlaskConical size={11}/> Testar
+                <FlaskConical size={11}/> Preview
+              </button>
+              <button
+                type="button"
+                onClick={() => runDispatch(r)}
+                title="Disparar mensagem teste REAL"
+                aria-label="Disparar teste real"
+                className="text-[11px] text-amber-700 dark:text-amber-300 hover:bg-amber-500/10 px-2 py-1 rounded inline-flex items-center gap-1"
+              >
+                <Send size={11}/> Disparar
               </button>
               <button
                 type="button"

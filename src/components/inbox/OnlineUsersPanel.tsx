@@ -28,9 +28,9 @@ export function OnlineUsersPanel({ onStartDirect }: Props) {
 
   if (online.length === 0 && away.length === 0) {
     return (
-      <div className="border-b border-zinc-800/60 px-3 py-3">
-        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-zinc-500">
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-zinc-600" />
+      <div className="border-b border-[var(--brand-border)]/60 px-3 py-3">
+        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-[var(--text-light)]">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-zinc-600" />
           Ninguém online agora
         </div>
       </div>
@@ -38,8 +38,8 @@ export function OnlineUsersPanel({ onStartDirect }: Props) {
   }
 
   return (
-    <div className="border-b border-zinc-800/60 px-3 py-3">
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-zinc-500 mb-2">
+    <div className="border-b border-[var(--brand-border)]/60 px-3 py-3">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-[var(--text-light)] mb-2">
         <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
         Online agora · {online.length}{away.length > 0 ? ` (+ ${away.length} away)` : ''}
       </div>
@@ -52,10 +52,10 @@ export function OnlineUsersPanel({ onStartDirect }: Props) {
               title={`${u.name} (${u.presence.status}) — iniciar DM`}
               className="relative group"
             >
-              <div className="w-9 h-9 rounded-md bg-zinc-800 text-zinc-300 flex items-center justify-center text-[10px] font-semibold ring-1 ring-zinc-700 group-hover:ring-emerald-500/50 transition-all">
+              <div className="w-9 h-9 rounded-md bg-[var(--surface-hover)] text-[var(--text)] flex items-center justify-center text-[10px] font-semibold ring-1 ring-[var(--brand-border)] group-hover:ring-emerald-500/50 transition-all">
                 {initials(u.name)}
               </div>
-              <PresenceDot status={u.presence.status} className="absolute -bottom-0.5 -right-0.5 border-2 border-zinc-950" />
+              <PresenceDot status={u.presence.status} className="absolute -bottom-0.5 -right-0.5 border-2 border-[var(--surface)]" />
             </button>
           </li>
         ))}

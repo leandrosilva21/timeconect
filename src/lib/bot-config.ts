@@ -28,4 +28,5 @@ export const createRule      = (payload: Partial<BotRule>): Promise<{ data: BotR
 export const updateRule      = (id: number, payload: Partial<BotRule>): Promise<{ data: BotRule }> => api.put(`/bot/rules/${id}`, payload)
 export const deleteRule      = (id: number): Promise<{ deleted: boolean }> => api.delete(`/bot/rules/${id}`)
 export const testRule        = (id: number, feedId?: number): Promise<{ data: RuleTestPreview }> => api.post(`/bot/rules/${id}/test`, feedId ? { feed_id: feedId } : {})
+export const dispatchTestRule = (id: number): Promise<{ data: { rule: BotRule; delivered: number; channel: string; group: { id: number; title: string|null } | null; recipients_count: number } }> => api.post(`/bot/rules/${id}/dispatch-test`, {})
 export const listChatUsersForRule = (): Promise<{ data: ChatUser[] }> => api.get('/conversations/users')
