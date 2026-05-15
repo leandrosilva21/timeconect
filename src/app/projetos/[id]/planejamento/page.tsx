@@ -23,7 +23,7 @@ export default function PlanejamentoPage() {
   const canEdit = user?.type !== 'consultor' && user?.type !== 'cliente'
   const [highlightUserId, setHighlightUserId] = useState<number | null>(null)
 
-  const { isOperational, project, stages, projectWindow, loading, error, refetch } = useProjectSchedule(projectId)
+  const { isOperational, project, stages, projectWindow, holidays, loading, error, refetch } = useProjectSchedule(projectId)
 
   if (loading) return <div style={{ color: 'var(--text-muted)' }}>Carregando cronograma…</div>
   if (error) return <div style={{ color: 'var(--danger)' }}>{error}</div>
@@ -109,6 +109,7 @@ export default function PlanejamentoPage() {
           coordinators={project?.coordinators ?? []}
           canEdit={canEdit}
           onChanged={refetch}
+          holidays={holidays}
         />
 
         <ProjectScheduleGantt
