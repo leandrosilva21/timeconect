@@ -370,8 +370,9 @@ function SidebarInner({ user }: { user: User }) {
         .filter(([code]) => clienteContractCodes.has(code))
         .map(([, item]) => item)
       const nav: NavEntry[] = [
-        { type: 'item', label: 'Home',                 href: '/portal-cliente',      icon: Building2 },
-        { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline',  icon: LayoutGrid },
+        { type: 'item', label: 'Home',                 href: '/portal-cliente',              icon: Building2 },
+        { type: 'item', label: 'Minhas atividades',    href: '/portal-cliente/atividades',   icon: Layers },
+        { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline',          icon: LayoutGrid },
       ]
       if (dashItems.length > 0) {
         nav.push({ type: 'group', label: 'Contratos', icon: FileText, items: dashItems })
