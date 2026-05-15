@@ -397,17 +397,15 @@ function SidebarInner({ user }: { user: User }) {
         { type: 'item', label: 'Início',     href: '/dashboard',  icon: Home },
         ...(IS_DEV1 ? [{ type: 'item' as const, label: 'Meus Cards', href: '/meus-cards', icon: Inbox }] : []),
       ]
-      if (ep.includes('gestao_projetos.view') || ep.includes('gestao_projetos.update'))
-        baseNav.push({ type: 'item', label: 'Gestão de Projetos', href: '/gestao-projetos', icon: Layers })
 
-      // Itens extras concedidos por grupos de permissão
-      const hasAnyUserPerm = ['users.view_all','users.create','users.update','users.reset_password'].some(p => ep.includes(p))
+      // Consultor NUNCA vê Gestão de Projetos nem Usuários, mesmo com extra_permissions.
+      // Essas rotinas pertencem a coordenação/administração — escopo do consultor é executar
+      // atividade, apontar horas, validar apontamentos quando autorizado.
+
       if (ep.includes('timesheets.approve') || ep.includes('hours.view_all'))
         baseNav.push({ type: 'item', label: 'Apontamentos', href: '/timesheets', icon: Clock })
       if (ep.includes('approvals.view') || ep.includes('approvals.manage'))
         baseNav.push({ type: 'item', label: 'Aprovações', href: '/approvals', icon: CheckSquare })
-      if (hasAnyUserPerm)
-        baseNav.push({ type: 'item', label: 'Usuários', href: '/users', icon: Users })
       if (ep.includes('settings.view'))
         baseNav.push({ type: 'item', label: 'Configurações', href: '/settings', icon: Settings })
 
