@@ -51,6 +51,9 @@ export function DeliverySidePanel({ delivery, projectId, onClose, onUpdated, onD
   const [priority, setPriority] = useState<DeliveryPriority>(delivery.priority)
   const [status, setStatus] = useState<DeliveryStatus>(delivery.status)
   const [due, setDue] = useState(delivery.due_date ?? '')
+  const [clientInvolved, setClientInvolved] = useState<boolean>(delivery.client_involved ?? false)
+  const [clientUserId, setClientUserId] = useState<string>(delivery.client_user_id ? String(delivery.client_user_id) : '')
+  const [clientEmail, setClientEmail] = useState<string>(delivery.client_email ?? '')
   const [saving, setSaving] = useState(false)
   const [timelineKey, setTimelineKey] = useState(0)
   const [aporteOpen, setAporteOpen] = useState(false)
@@ -62,6 +65,9 @@ export function DeliverySidePanel({ delivery, projectId, onClose, onUpdated, onD
     setPriority(delivery.priority)
     setStatus(delivery.status)
     setDue(delivery.due_date ?? '')
+    setClientInvolved(delivery.client_involved ?? false)
+    setClientUserId(delivery.client_user_id ? String(delivery.client_user_id) : '')
+    setClientEmail(delivery.client_email ?? '')
     setTab('detalhes')
   }, [delivery.id])
 
@@ -81,6 +87,9 @@ export function DeliverySidePanel({ delivery, projectId, onClose, onUpdated, onD
         priority,
         status,
         due_date: due || null,
+        client_involved: clientInvolved,
+        client_user_id: clientInvolved && clientUserId ? Number(clientUserId) : null,
+        client_email:   clientInvolved && clientEmail.trim() ? clientEmail.trim() : null,
       })
       onUpdated(updated)
       setTimelineKey(k => k + 1)
@@ -287,6 +296,15 @@ export function DeliverySidePanel({ delivery, projectId, onClose, onUpdated, onD
                 </Field>
               </div>
 
+              <ClientInvolvementSection
+                involved={clientInvolved}
+                userId={clientUserId}
+                email={clientEmail}
+                onChangeInvolved={setClientInvolved}
+                onChangeUserId={setClientUserId}
+                onChangeEmail={setClientEmail}
+              />
+
               <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
                 <button
                   type="button"
@@ -369,5 +387,108 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       </span>
       {children}
     </label>
+  )
+}
+
+interface ClientUserOption {
+  id: number
+  name: string
+  email?: string | null
+}
+
+function ClientInvolvementSection({
+  involved, userId, email, onChangeInvolved, onChangeUserId, onChangeEmail,
+}: {
+  involved: boolean
+  userId: string
+  email: string
+  onChangeInvolved: (v: boolean) => void
+  onChangeUserId: (v: string) => void
+  onChangeEmail: (v: string) => void
+}) {
+  const [clients, setClients] = useState<ClientUserOption[]>([])
+  const [search, setSearch] = useState('')
+  const [loadingList, setLoadingList] = useState(false)
+
+  useEffect(() => {
+    if (!involved) return
+    setLoadingList(true)
+    api.get<{ data?: ClientUserOption[]; items?: ClientUserOption[] } | ClientUserOption[]>(
+      `/users?type=cliente&minimal=true&search=${encodeURIComponent(search)}`,
+    )
+      .then(res => {
+        const list = Array.isArray(res) ? res : (res.items ?? res.data ?? [])
+        setClients(list ?? [])
+      })
+      .catch(() => setClients([]))
+      .finally(() => setLoadingList(false))
+  }, [involved, search])
+
+  return (
+    <div
+      style={{
+        marginTop: 16,
+        padding: 12,
+        border: '1px solid var(--border)',
+        borderRadius: 6,
+        background: involved ? 'var(--primary-soft)' : 'var(--surface)',
+      }}
+    >
+      <label style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        fontSize: 13, color: 'var(--text)', fontWeight: 500, cursor: 'pointer',
+      }}>
+        <input
+          type="checkbox"
+          checked={involved}
+          onChange={e => onChangeInvolved(e.target.checked)}
+        />
+        Envolver cliente
+      </label>
+
+      {involved && (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Field label="Cliente cadastrado (opcional)">
+            <input
+              type="text"
+              className="ds-input"
+              placeholder="Buscar cliente..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ width: '100%' }}
+            />
+            <select
+              className="ds-input"
+              value={userId}
+              onChange={e => { onChangeUserId(e.target.value); if (e.target.value) onChangeEmail('') }}
+              style={{ width: '100%', marginTop: 6 }}
+              disabled={loadingList}
+            >
+              <option value="">— Selecionar cliente —</option>
+              {clients.map(c => (
+                <option key={c.id} value={c.id}>{c.name}{c.email ? ` (${c.email})` : ''}</option>
+              ))}
+            </select>
+          </Field>
+
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>ou</div>
+
+          <Field label="E-mail externo (sem login)">
+            <input
+              type="email"
+              className="ds-input"
+              placeholder="cliente@empresa.com"
+              value={email}
+              onChange={e => { onChangeEmail(e.target.value); if (e.target.value) onChangeUserId('') }}
+              style={{ width: '100%' }}
+            />
+          </Field>
+
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            Cliente cadastrado terá acesso pontual à atividade. E-mail externo recebe apenas notificações.
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

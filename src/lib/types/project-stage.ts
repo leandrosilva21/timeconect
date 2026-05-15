@@ -80,6 +80,13 @@ export interface StageDelivery {
   dependency_type?: 'FS' | null
   /** Estado do predecessor: 'none' = sem dependência, 'pending' = predecessor não-done, 'done' = pronto. */
   predecessor_state?: 'none' | 'pending' | 'done'
+  /** Envolvimento opcional do cliente (toggle). */
+  client_involved?: boolean
+  /** Cliente cadastrado envolvido — acesso pontual à atividade. */
+  client_user_id?: number | null
+  client?: UserMini | null
+  /** E-mail de cliente externo (sem login) — só recebe notificações. */
+  client_email?: string | null
   effort_minutes_sum?: number | null
   created_at: string
   updated_at: string
