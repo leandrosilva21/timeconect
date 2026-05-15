@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { X } from 'lucide-react'
@@ -67,13 +67,20 @@ export function RuleEditorModal({ rule, onClose }: Props) {
     enabled: form.target_type === 'user',
   })
 
-  useEffect(() => {
-    // Limpar target_value quando troca o target_type
-    setForm(f => ({ ...f, target_value: null }))
-  }, [form.target_type])
-
   const set = <K extends keyof BotRule>(k: K, v: BotRule[K] | null) => {
     setForm(f => ({ ...f, [k]: v }))
+  }
+
+  /**
+   * Trocar target_type: limpa target_value SE muda de tipo, para evitar
+   * id de user/grupo "órfão" quando o admin mudou o tipo. Não dispara no
+   * mount/edição (preserva o valor que veio do servidor).
+   */
+  const changeTargetType = (newType: RuleTargetType) => {
+    setForm(f => f.target_type === newType
+      ? f
+      : { ...f, target_type: newType, target_value: null }
+    )
   }
 
   const submit = async () => {
@@ -189,7 +196,7 @@ export function RuleEditorModal({ rule, onClose }: Props) {
             <Field label="Tipo de destino">
               <select
                 value={form.target_type ?? 'all_admins'}
-                onChange={e => set('target_type', e.target.value as RuleTargetType)}
+                onChange={e => changeTargetType(e.target.value as RuleTargetType)}
                 className={inputCls}
               >
                 {(opts?.target_types ?? []).map(t => (

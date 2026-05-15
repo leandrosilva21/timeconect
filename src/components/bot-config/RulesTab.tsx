@@ -4,12 +4,13 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
-  Bell, Plus, Pencil, Trash2, FlaskConical, CheckCircle2, XCircle,
+  Bell, Plus, Pencil, Trash2, FlaskConical, CheckCircle2, XCircle, Eye,
 } from 'lucide-react'
 import { deleteRule, listRules, testRule, updateRule } from '@/lib/bot-config'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BotRule, RuleChannel, RuleSeverity, RuleTargetType } from '@/types/bot'
 import { RuleEditorModal } from './RuleEditorModal'
+import { RuleViewerModal } from './RuleViewerModal'
 
 const SEV_COLOR: Record<RuleSeverity, string> = {
   info:     'bg-blue-500/15 text-blue-300 border-blue-500/30',
@@ -42,6 +43,7 @@ export function RulesTab() {
 
   const [editing, setEditing] = useState<BotRule | null | undefined>(undefined)
   // undefined = fechado; null = criar; objeto = editar
+  const [viewing, setViewing] = useState<BotRule | null>(null)
 
   if (isLoading) return <Skeleton className="h-40 bg-zinc-800" />
   const items = data?.data ?? []
@@ -163,8 +165,18 @@ export function RulesTab() {
             <div className="flex items-center gap-1">
               <button
                 type="button"
+                onClick={() => setViewing(r)}
+                title="Visualizar detalhes"
+                aria-label="Visualizar regra"
+                className="text-[11px] text-zinc-300 hover:bg-zinc-800 px-2 py-1 rounded inline-flex items-center gap-1"
+              >
+                <Eye size={11}/> Ver
+              </button>
+              <button
+                type="button"
                 onClick={() => runTest(r)}
-                title="Testar com último feed"
+                title="Testar com último feed (toast)"
+                aria-label="Testar regra"
                 className="text-[11px] text-violet-300 hover:bg-violet-500/10 px-2 py-1 rounded inline-flex items-center gap-1"
               >
                 <FlaskConical size={11}/> Testar
@@ -173,6 +185,7 @@ export function RulesTab() {
                 type="button"
                 onClick={() => setEditing(r)}
                 title="Editar"
+                aria-label="Editar regra"
                 className="text-[11px] text-zinc-300 hover:bg-zinc-800 px-2 py-1 rounded inline-flex items-center gap-1"
               >
                 <Pencil size={11}/> Editar
@@ -181,6 +194,7 @@ export function RulesTab() {
                 type="button"
                 onClick={() => remove(r)}
                 title="Excluir"
+                aria-label="Excluir regra"
                 className="text-[11px] text-red-300 hover:bg-red-500/10 px-2 py-1 rounded inline-flex items-center gap-1"
               >
                 <Trash2 size={11}/>
@@ -192,6 +206,17 @@ export function RulesTab() {
 
       {editing !== undefined && (
         <RuleEditorModal rule={editing} onClose={() => setEditing(undefined)} />
+      )}
+
+      {viewing && (
+        <RuleViewerModal
+          rule={viewing}
+          onClose={() => setViewing(null)}
+          onEdit={() => {
+            setEditing(viewing)
+            setViewing(null)
+          }}
+        />
       )}
     </div>
   )
