@@ -22,6 +22,8 @@ export interface ConversationSummary {
   type: ConversationTypeValue
   title: string
   customer?: { id: number; name: string } | null
+  other_user?: { id: number; name: string; profile_photo?: string | null } | null
+  participants_count?: number
   last_message?: {
     id: number
     type: MessageTypeValue
@@ -32,6 +34,30 @@ export interface ConversationSummary {
   unread_count: number
   unread_by_severity: SeverityBreakdown
   last_message_at: string | null
+}
+
+export interface ChatUser {
+  id: number
+  name: string
+  email: string
+  profile_photo?: string | null
+  presence: {
+    status: PresenceStatusValue
+    last_seen_at?: string | null
+  }
+}
+
+export interface ConversationDetail {
+  id: number
+  type: ConversationTypeValue
+  title: string | null
+  created_by: number | null
+  last_message_at: string | null
+  participants: Array<{
+    user_id: number
+    role: 'member' | 'admin'
+    user: { id: number; name: string; profile_photo?: string | null } | null
+  }>
 }
 
 export interface InboxMessage {

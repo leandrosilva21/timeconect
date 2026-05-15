@@ -1,5 +1,7 @@
 import { api } from './api'
 import type {
+  ChatUser,
+  ConversationDetail,
   ConversationSummary,
   InboxMessage,
   NotificationStatusValue,
@@ -48,4 +50,27 @@ export function presenceHeartbeat(status?: PresenceStatusValue): Promise<Presenc
 export function listPresence(userIds?: number[]): Promise<{ data: PresenceEntry[] }> {
   const q = userIds && userIds.length ? `?user_ids=${userIds.join(',')}` : ''
   return api.get(`/presence${q}`)
+}
+
+// --- Chat humano ---
+
+export function listChatUsers(q?: string): Promise<{ data: ChatUser[] }> {
+  const qs = q && q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''
+  return api.get(`/conversations/users${qs}`)
+}
+
+export function createDirectConversation(userId: number): Promise<{ data: ConversationDetail }> {
+  return api.post('/conversations', { type: 'direct', user_id: userId })
+}
+
+export function createGroupConversation(name: string, participantIds: number[]): Promise<{ data: ConversationDetail }> {
+  return api.post('/conversations', { type: 'group', name, participant_ids: participantIds })
+}
+
+export function addParticipant(conversationId: number, userId: number): Promise<{ data: ConversationDetail }> {
+  return api.post(`/conversations/${conversationId}/participants`, { user_id: userId })
+}
+
+export function removeParticipant(conversationId: number, userId: number): Promise<{ removed: boolean }> {
+  return api.delete(`/conversations/${conversationId}/participants/${userId}`)
 }

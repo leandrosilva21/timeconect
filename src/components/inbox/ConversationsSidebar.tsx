@@ -1,21 +1,22 @@
 'use client'
 
-import { Bot, Inbox as InboxIcon, Users } from 'lucide-react'
+import { Bot, MessageSquarePlus, Users, User as UserIcon } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import type { ConversationSummary } from '@/types/inbox'
+import type { ConversationSummary, PresenceStatusValue } from '@/types/inbox'
+import { PresenceDot } from './PresenceDot'
 
 interface ConversationsSidebarProps {
   conversations: ConversationSummary[]
   selectedId: number | null
   onSelect: (id: number) => void
+  onNew: () => void
+  presenceByUser?: Map<number, PresenceStatusValue>
   loading?: boolean
 }
 
-const TYPE_ICON = {
-  bot:    Bot,
-  group:  Users,
-  direct: InboxIcon,
+function initials(name: string): string {
+  return name.split(' ').filter(Boolean).slice(0, 2).map(s => s[0]?.toUpperCase()).join('') || '?'
 }
 
 function SeverityPills({ s }: { s: ConversationSummary['unread_by_severity'] }) {
@@ -34,85 +35,167 @@ function SeverityPills({ s }: { s: ConversationSummary['unread_by_severity'] }) 
   )
 }
 
-export function ConversationsSidebar({
-  conversations, selectedId, onSelect, loading,
-}: ConversationsSidebarProps) {
+function ConversationRow({
+  conv, selected, onClick, presence,
+}: {
+  conv: ConversationSummary
+  selected: boolean
+  onClick: () => void
+  presence?: PresenceStatusValue
+}) {
+  const isBot = conv.type === 'bot'
+  const isGroup = conv.type === 'group'
+  const isDirect = conv.type === 'direct'
+
+  const relative = conv.last_message_at
+    ? formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: false, locale: ptBR })
+    : null
+
+  const otherName = conv.other_user?.name ?? conv.title
+  const previewIsBot = conv.last_message?.type === 'alert' || conv.last_message?.type === 'ai_insight' || conv.last_message?.type === 'bot'
+
   return (
-    <aside className="w-80 shrink-0 border-r border-zinc-800 bg-zinc-950/40 overflow-y-auto">
-      <div className="p-3 border-b border-zinc-800">
-        <div className="flex items-center gap-2 text-zinc-300 text-sm font-medium">
-          <InboxIcon size={16} /> Operational Inbox
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        'w-full text-left flex items-start gap-3 px-3 py-3 border-l-2 transition-colors',
+        selected ? 'bg-zinc-900 border-l-emerald-500' : 'border-l-transparent hover:bg-zinc-900/50',
+      ].join(' ')}
+    >
+      <div className="relative shrink-0">
+        <div className={[
+          'w-9 h-9 rounded-md flex items-center justify-center ring-1 text-[11px] font-semibold',
+          isBot
+            ? 'bg-gradient-to-br from-emerald-500/30 to-emerald-700/20 text-emerald-300 ring-emerald-500/40'
+            : isGroup
+              ? 'bg-violet-500/15 text-violet-300 ring-violet-500/30'
+              : 'bg-zinc-800 text-zinc-300 ring-zinc-700',
+        ].join(' ')}>
+          {isBot ? <Bot size={16} /> : isGroup ? <Users size={15} /> : initials(otherName)}
         </div>
+        {isDirect && presence && (
+          <PresenceDot status={presence} className="absolute -bottom-0.5 -right-0.5 border-2 border-zinc-950" />
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className={[
+              'text-sm font-semibold truncate',
+              isBot ? 'text-emerald-300' : 'text-zinc-200',
+            ].join(' ')}>
+              {otherName}
+            </span>
+            {isBot && (
+              <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/15 px-1.5 py-0.5 rounded">
+                BOT
+              </span>
+            )}
+            {isGroup && (
+              <span className="text-[9px] text-zinc-500 ml-1">
+                {conv.participants_count ?? '?'}
+              </span>
+            )}
+          </div>
+          {relative && (
+            <span className="text-[10px] text-zinc-500 whitespace-nowrap shrink-0">{relative}</span>
+          )}
+        </div>
+
+        {isBot ? (
+          <p className="mt-0.5 text-[10px] text-zinc-500 uppercase tracking-wider">Entidade Operacional</p>
+        ) : conv.last_message ? (
+          <p className={[
+            'mt-0.5 text-[11px] truncate',
+            previewIsBot ? 'text-emerald-400/80' : 'text-zinc-400',
+          ].join(' ')}>
+            {previewIsBot && <span className="font-medium">BOT: </span>}
+            {conv.last_message.preview}
+          </p>
+        ) : (
+          <p className="mt-0.5 text-[11px] text-zinc-600 italic">Sem mensagens ainda</p>
+        )}
+
+        {isBot && <SeverityPills s={conv.unread_by_severity} />}
+        {!isBot && conv.unread_count > 0 && (
+          <span className="mt-1.5 inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+            {conv.unread_count} nova(s)
+          </span>
+        )}
+      </div>
+    </button>
+  )
+}
+
+export function ConversationsSidebar({
+  conversations, selectedId, onSelect, onNew, presenceByUser, loading,
+}: ConversationsSidebarProps) {
+  const bots    = conversations.filter(c => c.type === 'bot')
+  const direct  = conversations.filter(c => c.type === 'direct')
+  const groups  = conversations.filter(c => c.type === 'group')
+
+  return (
+    <aside className="w-80 shrink-0 border-r border-zinc-800 bg-zinc-950/40 overflow-y-auto flex flex-col">
+      <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
+        <span className="text-zinc-300 text-sm font-medium">Conversas</span>
+        <button
+          type="button"
+          onClick={onNew}
+          title="Nova conversa"
+          className="inline-flex items-center gap-1 text-[11px] text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-1 rounded"
+        >
+          <MessageSquarePlus size={12} /> Nova
+        </button>
       </div>
 
       {loading && conversations.length === 0 ? (
         <div className="p-4 text-xs text-zinc-500">Carregando…</div>
-      ) : conversations.length === 0 ? (
-        <div className="p-4 text-xs text-zinc-500">Nenhuma conversa ainda.</div>
       ) : (
-        <ul className="py-1">
-          {conversations.map(c => {
-            const Icon = TYPE_ICON[c.type]
-            const isSelected = selectedId === c.id
-            const isBot = c.type === 'bot'
-            const relative = c.last_message_at
-              ? formatDistanceToNow(new Date(c.last_message_at), { addSuffix: false, locale: ptBR })
-              : null
+        <>
+          {bots.length > 0 && (
+            <Section title="BOT">
+              {bots.map(c => (
+                <ConversationRow key={c.id} conv={c} selected={selectedId === c.id} onClick={() => onSelect(c.id)} />
+              ))}
+            </Section>
+          )}
 
-            return (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(c.id)}
-                  className={[
-                    'w-full text-left flex items-start gap-3 px-3 py-3 border-l-2 transition-colors',
-                    isSelected
-                      ? 'bg-zinc-900 border-l-emerald-500'
-                      : 'border-l-transparent hover:bg-zinc-900/50',
-                  ].join(' ')}
-                >
-                  <div className={[
-                    'mt-0.5 w-9 h-9 rounded-md flex items-center justify-center shrink-0 ring-1',
-                    isBot
-                      ? 'bg-gradient-to-br from-emerald-500/30 to-emerald-700/20 text-emerald-300 ring-emerald-500/40'
-                      : 'bg-zinc-800 text-zinc-400 ring-zinc-700',
-                  ].join(' ')}>
-                    <Icon size={16} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className={[
-                          'text-sm font-semibold truncate',
-                          isBot ? 'text-emerald-300' : 'text-zinc-200',
-                        ].join(' ')}>
-                          {c.title}
-                        </span>
-                        {isBot && (
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/15 px-1.5 py-0.5 rounded">
-                            BOT
-                          </span>
-                        )}
-                      </div>
-                      {relative && (
-                        <span className="text-[10px] text-zinc-500 whitespace-nowrap shrink-0">{relative}</span>
-                      )}
-                    </div>
+          <Section title="Direct" empty="Nenhuma conversa direta">
+            {direct.map(c => (
+              <ConversationRow
+                key={c.id}
+                conv={c}
+                selected={selectedId === c.id}
+                onClick={() => onSelect(c.id)}
+                presence={c.other_user ? presenceByUser?.get(c.other_user.id) : undefined}
+              />
+            ))}
+          </Section>
 
-                    {isBot ? (
-                      <p className="mt-0.5 text-[10px] text-zinc-500 uppercase tracking-wider">Entidade Operacional</p>
-                    ) : c.customer ? (
-                      <p className="mt-0.5 text-[10px] text-zinc-500">{c.customer.name}</p>
-                    ) : null}
-
-                    <SeverityPills s={c.unread_by_severity} />
-                  </div>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
+          <Section title="Grupos" empty="Nenhum grupo">
+            {groups.map(c => (
+              <ConversationRow key={c.id} conv={c} selected={selectedId === c.id} onClick={() => onSelect(c.id)} />
+            ))}
+          </Section>
+        </>
       )}
     </aside>
+  )
+}
+
+function Section({ title, children, empty }: { title: string; children: React.ReactNode; empty?: string }) {
+  const arr = Array.isArray(children) ? children : [children]
+  const hasItems = arr.filter(Boolean).length > 0
+  return (
+    <div className="border-b border-zinc-800/60">
+      <div className="px-3 pt-3 pb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-zinc-500">
+        <UserIcon size={10} /> {title}
+      </div>
+      {hasItems ? <ul className="pb-1">{children}</ul> : empty ? (
+        <p className="px-3 pb-3 text-[11px] text-zinc-600 italic">{empty}</p>
+      ) : null}
+    </div>
   )
 }
