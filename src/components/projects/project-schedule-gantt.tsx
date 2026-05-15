@@ -11,6 +11,8 @@ interface Props {
   projectWindow: ProjectWindow | null
   canEdit?: boolean
   onChanged?: () => void
+  /** Quando setado, atividades desse consultor ganham border destacada */
+  highlightUserId?: number | null
 }
 
 type DragMode = 'move' | 'resize-start' | 'resize-end'
@@ -68,7 +70,7 @@ function toIso(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
-export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, onChanged }: Props) {
+export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, onChanged, highlightUserId = null }: Props) {
   const [zoom, setZoom] = useState<Zoom>('biweek')
   const [drag, setDrag] = useState<DragState | null>(null)
   const dragRef = useRef<DragState | null>(null)
@@ -318,6 +320,8 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
                   canEdit={canEdit}
                   drag={drag && drag.kind === 'activity' && drag.id === row.activity.id ? drag : null}
                   onDragStart={(mode, start, end, mouseX) => startDrag('activity', row.activity.id, mode, start, end, mouseX)}
+                  highlighted={highlightUserId !== null && row.activity.responsible_user_id === highlightUserId}
+                  dimmed={highlightUserId !== null && row.activity.responsible_user_id !== highlightUserId}
                 />
               )
             })}
@@ -429,7 +433,7 @@ function StageBar({ stage, rowIdx, windowStart, dayWidth, canEdit, drag, onDragS
   )
 }
 
-function ActivityBar({ activity, rowIdx, windowStart, dayWidth, canEdit, drag, onDragStart }: {
+function ActivityBar({ activity, rowIdx, windowStart, dayWidth, canEdit, drag, onDragStart, highlighted, dimmed }: {
   activity: StageDelivery
   rowIdx: number
   windowStart: Date
@@ -437,6 +441,8 @@ function ActivityBar({ activity, rowIdx, windowStart, dayWidth, canEdit, drag, o
   canEdit: boolean
   drag: DragState | null
   onDragStart: (mode: DragMode, start: Date, end: Date, mouseX: number) => void
+  highlighted: boolean
+  dimmed: boolean
 }) {
   const plannedStart = parseDate(activity.planned_start_at)
   const plannedEnd   = parseDate(activity.due_date)
@@ -505,9 +511,11 @@ function ActivityBar({ activity, rowIdx, windowStart, dayWidth, canEdit, drag, o
           paddingLeft: 4, paddingRight: 4,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           lineHeight: '12px',
-          opacity: drag ? 0.6 : 0.85,
+          opacity: drag ? 0.6 : dimmed ? 0.25 : 0.85,
           cursor: canDrag ? (drag ? 'grabbing' : 'grab') : 'default',
           userSelect: 'none',
+          outline: highlighted ? '2px solid var(--primary)' : 'none',
+          outlineOffset: highlighted ? 1 : 0,
         }}
         onMouseDown={canDrag ? e => { e.preventDefault(); onDragStart('move', plannedStart!, plannedEnd!, e.clientX) } : undefined}
       >
