@@ -183,13 +183,18 @@ export default function RelatorioApontamentosPage() {
   )
 
   // Padrão Vedamotors: NNNN-NNNNNN (ex: 0526-000007).
-  // Fora do padrão = "Sem ticket". (rev2)
-  const VEDAMOTORS_PATTERN = /^\d{4}-\d{6}$/
+  // Extrai o primeiro match em qualquer parte do subject — aceita:
+  //   "0326-000136"
+  //   "0326-000136 - Parametrização..."
+  //   "0326-000136Parametrização..." (sem espaço)
+  //   "Texto antes 0326-000136 texto depois"
+  // Sem match = "Sem ticket". (rev3)
+  const VEDAMOTORS_PATTERN = /\d{4}-\d{6}/
 
   function vedaTitleValue(t: RawTimesheet): string {
     const original = (t.ticket_subject ?? '').trim()
-    if (VEDAMOTORS_PATTERN.test(original)) return original
-    return 'Sem ticket'
+    const match = original.match(VEDAMOTORS_PATTERN)
+    return match ? match[0] : 'Sem ticket'
   }
 
   const toggleStatus = (s: StatusKey) => {
