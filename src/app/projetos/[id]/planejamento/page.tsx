@@ -5,6 +5,7 @@ import { Info } from 'lucide-react'
 import { useProjectSchedule } from '@/hooks/use-project-schedule'
 import { useAuth } from '@/hooks/use-auth'
 import { ProjectScheduleTable } from '@/components/projects/project-schedule-table'
+import { ProjectScheduleGantt } from '@/components/projects/project-schedule-gantt'
 
 /**
  * Cronograma operacional do projeto (ADR 0009).
@@ -98,12 +99,19 @@ export default function PlanejamentoPage() {
         </span>
       </div>
 
-      <ProjectScheduleTable
-        projectId={projectId}
-        stages={stages}
-        canEdit={canEdit}
-        onChanged={refetch}
-      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <ProjectScheduleTable
+          projectId={projectId}
+          stages={stages}
+          canEdit={canEdit}
+          onChanged={refetch}
+        />
+
+        <ProjectScheduleGantt
+          stages={stages}
+          projectWindow={projectWindow}
+        />
+      </div>
     </div>
   )
 }
