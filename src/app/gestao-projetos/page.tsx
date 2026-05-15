@@ -1284,6 +1284,14 @@ function ProjectEditByIdModal({ projectId, onClose, onSaved }: { projectId: numb
 export default function GestaoProjetosPage() {
   const router = useRouter()
   const { user } = useAuth()
+
+  // Consultor não acessa esta rotina, nem com extra_permissions — redireciona.
+  useEffect(() => {
+    if (user?.type === 'consultor') {
+      router.replace('/meu-painel')
+    }
+  }, [user?.type, router])
+
   const isAdmin = user?.type === 'admin'
   const isCoordenador = user?.type === 'coordenador'
   const isCliente = user?.type === 'cliente'
