@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Plus, Trash2, Calendar, Lock } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
@@ -36,12 +36,22 @@ interface NewStageDraft {
   hours_planned: string
 }
 
+interface ExtraAllocationDraft {
+  user_id: number
+  user_name: string
+  planned_hours: string
+}
+
 interface NewActivityDraft {
   title: string
   responsible_user_id: string
   planned_start_at: string
   due_date: string
   hours_planned: string
+  client_involved: boolean
+  client_user_id: string
+  client_email: string
+  extra_allocations: ExtraAllocationDraft[]
 }
 
 const emptyStageDraft = (defaultResp: number | null): NewStageDraft => ({
@@ -58,6 +68,10 @@ const emptyActivityDraft = (defaultResp: number | null): NewActivityDraft => ({
   planned_start_at: '',
   due_date: '',
   hours_planned: '',
+  client_involved: false,
+  client_user_id: '',
+  client_email: '',
+  extra_allocations: [],
 })
 
 export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit, onChanged, holidays }: Props) {
@@ -143,7 +157,29 @@ export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit,
       }
       if (due) body.due_date = due
 
-      await api.post(`/stages/${stageId}/deliveries`, body)
+      // Envolvimento do cliente
+      if (activityDraft.client_involved) {
+        body.client_involved = true
+        if (activityDraft.client_user_id) body.client_user_id = Number(activityDraft.client_user_id)
+        if (activityDraft.client_email.trim()) body.client_email = activityDraft.client_email.trim()
+      }
+
+      const created = await api.post<{ id: number }>(`/stages/${stageId}/deliveries`, body)
+
+      // Alocações adicionais (consultores extras além do responsável principal)
+      if (created?.id && activityDraft.extra_allocations.length > 0) {
+        await Promise.all(
+          activityDraft.extra_allocations
+            .filter(a => Number(a.planned_hours) >= 0.5)
+            .map(a =>
+              api.post(`/activities/${created.id}/allocations`, {
+                user_id: a.user_id,
+                planned_hours: Number(a.planned_hours),
+              }).catch(() => null) // não bloqueia o sucesso da criação principal
+            )
+        )
+      }
+
       setCreatingActivityIn(null)
       setActivityDraft(emptyActivityDraft(defaultCoordId))
       onChanged()
@@ -484,6 +520,12 @@ function StageRows(props: StageRowProps) {
                   <button onClick={onCancelCreateActivity} className="ds-btn-ghost" style={{ fontSize: 12, padding: '6px 12px' }}>Cancelar</button>
                 </div>
               </div>
+
+              <ActivityExtraSections
+                draft={activityDraft}
+                setDraft={setActivityDraft}
+                coordinators={coordinators}
+              />
             </td>
           </tr>
         ) : (
@@ -800,5 +842,235 @@ function InlineDependencySelect({ value, options, canEdit, onSave }: {
         <option key={o.id} value={o.id}>{o.title}</option>
       ))}
     </select>
+  )
+}
+
+interface ConsultantOption {
+  id: number
+  name: string
+  email?: string | null
+}
+
+function ActivityExtraSections({ draft, setDraft, coordinators }: {
+  draft: NewActivityDraft
+  setDraft: (next: NewActivityDraft | ((d: NewActivityDraft) => NewActivityDraft)) => void
+  coordinators: ProjectCoordinator[]
+}) {
+  const [clientOptions, setClientOptions] = useState<ConsultantOption[]>([])
+  const [clientSearch, setClientSearch] = useState('')
+  const [allocSearch, setAllocSearch] = useState('')
+  const [allocResults, setAllocResults] = useState<ConsultantOption[]>([])
+  const [allocHours, setAllocHours] = useState('8')
+
+  // Busca clientes cadastrados quando "Envolver cliente" é marcado
+  useEffect(() => {
+    if (!draft.client_involved) return
+    const t = setTimeout(() => {
+      api.get<{ items?: ConsultantOption[]; data?: ConsultantOption[] } | ConsultantOption[]>(
+        `/users?type=cliente&minimal=true&search=${encodeURIComponent(clientSearch)}`,
+      )
+        .then(res => {
+          const list = Array.isArray(res) ? res : (res.items ?? res.data ?? [])
+          setClientOptions(list ?? [])
+        })
+        .catch(() => setClientOptions([]))
+    }, 200)
+    return () => clearTimeout(t)
+  }, [draft.client_involved, clientSearch])
+
+  // Busca consultores para alocação extra
+  async function searchAllocUsers(q: string) {
+    if (!q.trim()) { setAllocResults([]); return }
+    try {
+      const data = await api.get<{ items?: ConsultantOption[]; data?: ConsultantOption[] }>(
+        `/users?minimal=true&search=${encodeURIComponent(q)}&pageSize=8`,
+      )
+      const items = (data.items ?? data.data ?? []).filter(u =>
+        !draft.extra_allocations.some(a => a.user_id === u.id)
+        && (!draft.responsible_user_id || Number(draft.responsible_user_id) !== u.id)
+      )
+      setAllocResults(items)
+    } catch { setAllocResults([]) }
+  }
+
+  function addExtraAllocation(u: ConsultantOption) {
+    const n = Number(allocHours)
+    if (!Number.isFinite(n) || n < 0.5) return
+    setDraft(d => ({
+      ...d,
+      extra_allocations: [...d.extra_allocations, { user_id: u.id, user_name: u.name, planned_hours: String(n) }],
+    }))
+    setAllocSearch('')
+    setAllocResults([])
+  }
+
+  function removeExtraAllocation(userId: number) {
+    setDraft(d => ({
+      ...d,
+      extra_allocations: d.extra_allocations.filter(a => a.user_id !== userId),
+    }))
+  }
+
+  return (
+    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
+      {/* Toggle envolver cliente */}
+      <div>
+        <label style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+          color: 'var(--text)', fontWeight: 500,
+        }}>
+          <input
+            type="checkbox"
+            checked={draft.client_involved}
+            onChange={e => setDraft(d => ({ ...d, client_involved: e.target.checked }))}
+          />
+          Envolver cliente
+        </label>
+
+        {draft.client_involved && (
+          <div style={{
+            marginTop: 6, marginLeft: 22, padding: 10,
+            background: 'var(--primary-soft)',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap',
+          }}>
+            <FieldLabeled label="Cliente cadastrado">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: 240 }}>
+                <input
+                  type="text"
+                  className="ds-input"
+                  placeholder="Buscar cliente…"
+                  value={clientSearch}
+                  onChange={e => setClientSearch(e.target.value)}
+                  style={{ fontSize: 12, padding: '4px 8px' }}
+                />
+                <select
+                  className="ds-input"
+                  value={draft.client_user_id}
+                  onChange={e => setDraft(d => ({
+                    ...d,
+                    client_user_id: e.target.value,
+                    client_email: e.target.value ? '' : d.client_email,
+                  }))}
+                  style={{ fontSize: 12, padding: '4px 8px' }}
+                >
+                  <option value="">— Selecionar —</option>
+                  {clientOptions.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}{c.email ? ` (${c.email})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </FieldLabeled>
+            <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>ou</span>
+            <FieldLabeled label="E-mail externo">
+              <input
+                type="email"
+                className="ds-input"
+                placeholder="cliente@empresa.com"
+                value={draft.client_email}
+                onChange={e => setDraft(d => ({
+                  ...d,
+                  client_email: e.target.value,
+                  client_user_id: e.target.value ? '' : d.client_user_id,
+                }))}
+                style={{ fontSize: 12, padding: '4px 8px', width: 220 }}
+              />
+            </FieldLabeled>
+          </div>
+        )}
+      </div>
+
+      {/* Alocações adicionais */}
+      <div>
+        <div style={{ color: 'var(--text-muted)', fontWeight: 500, marginBottom: 4 }}>
+          Alocar mais consultores <span style={{ fontWeight: 400, color: 'var(--text-light)' }}>(opcional — equipe da atividade)</span>
+        </div>
+
+        {draft.extra_allocations.length > 0 && (
+          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 6px 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {draft.extra_allocations.map(a => (
+              <li key={a.user_id} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '4px 8px', background: 'var(--surface)', borderRadius: 4,
+                border: '1px solid var(--border)', fontSize: 12,
+              }}>
+                <span style={{ flex: 1 }}>{a.user_name}</span>
+                <input
+                  type="number"
+                  min={0.5}
+                  step="0.5"
+                  className="ds-input"
+                  value={a.planned_hours}
+                  onChange={e => setDraft(d => ({
+                    ...d,
+                    extra_allocations: d.extra_allocations.map(x =>
+                      x.user_id === a.user_id ? { ...x, planned_hours: e.target.value } : x
+                    ),
+                  }))}
+                  style={{ fontSize: 12, padding: '2px 6px', width: 70 }}
+                />
+                <span style={{ color: 'var(--text-muted)' }}>h</span>
+                <button
+                  type="button"
+                  onClick={() => removeExtraAllocation(a.user_id)}
+                  aria-label="Remover"
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-muted)', padding: 2, fontSize: 14, lineHeight: 1,
+                  }}
+                >×</button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', position: 'relative' }}>
+          <input
+            type="text"
+            className="ds-input"
+            placeholder="Buscar consultor por nome…"
+            value={allocSearch}
+            onChange={e => { setAllocSearch(e.target.value); searchAllocUsers(e.target.value) }}
+            style={{ fontSize: 12, padding: '4px 8px', flex: 1, maxWidth: 280 }}
+          />
+          <input
+            type="number"
+            min={0.5}
+            step="0.5"
+            className="ds-input"
+            value={allocHours}
+            onChange={e => setAllocHours(e.target.value)}
+            title="Horas planejadas"
+            style={{ fontSize: 12, padding: '4px 8px', width: 70 }}
+          />
+          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>h</span>
+          {allocResults.length > 0 && (
+            <ul style={{
+              listStyle: 'none', margin: 0, padding: 0,
+              position: 'absolute', top: '100%', left: 0, marginTop: 4,
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 6, minWidth: 280, maxHeight: 180, overflowY: 'auto',
+              zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            }}>
+              {allocResults.map(u => (
+                <li
+                  key={u.id}
+                  onClick={() => addExtraAllocation(u)}
+                  style={{
+                    padding: '6px 10px', fontSize: 12, cursor: 'pointer',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  {u.name}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
