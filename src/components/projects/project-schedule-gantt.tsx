@@ -401,6 +401,8 @@ function StageBar({ stage, rowIdx, windowStart, dayWidth, canEdit, drag, onDragS
 }) {
   const start = parseDate(stage.stage_start_at)
   const end   = parseDate(stage.expected_end_date)
+  const actualStart = parseDate(stage.actual_start_at)
+  const actualEnd   = parseDate(stage.actual_end_at)
   if (!start || !end) return null
 
   // Aplica delta do drag em curso (otimista)
@@ -414,9 +416,33 @@ function StageBar({ stage, rowIdx, windowStart, dayWidth, canEdit, drag, onDragS
   const leftPx  = daysBetween(windowStart, drawStart) * dayWidth
   const widthPx = Math.max(dayWidth, (daysBetween(drawStart, drawEnd) + 1) * dayWidth)
 
+  // Bar fantasma planejado quando real diverge (rollup das atividades)
+  const showGhost = actualStart && actualEnd && (
+    daysBetween(start, actualStart) !== 0 || daysBetween(end, actualEnd) !== 0
+  )
+
   return (
+    <>
+    {showGhost && (
+      <div
+        title={`Planejado · ${start.toLocaleDateString('pt-BR')} → ${end.toLocaleDateString('pt-BR')}`}
+        style={{
+          position: 'absolute',
+          top: rowIdx * ROW_HEIGHT + 6,
+          left: daysBetween(windowStart, start) * dayWidth,
+          width: Math.max(dayWidth, (daysBetween(start, end) + 1) * dayWidth),
+          height: 16,
+          background: 'transparent',
+          border: '1px dashed var(--text-muted)',
+          borderRadius: 4,
+          opacity: 0.45,
+          pointerEvents: 'none',
+        }}
+      />
+    )}
     <div
-      title={`${stage.name} · ${drawStart.toLocaleDateString('pt-BR')} → ${drawEnd.toLocaleDateString('pt-BR')}`}
+      title={`${stage.name} · ${drawStart.toLocaleDateString('pt-BR')} → ${drawEnd.toLocaleDateString('pt-BR')}` +
+        (actualStart && actualEnd ? ` · Real: ${actualStart.toLocaleDateString('pt-BR')} → ${actualEnd.toLocaleDateString('pt-BR')}` : '')}
       style={{
         position: 'absolute',
         top: rowIdx * ROW_HEIGHT + 6,
@@ -442,6 +468,7 @@ function StageBar({ stage, rowIdx, windowStart, dayWidth, canEdit, drag, onDragS
       {stage.name}
       {canEdit && <ResizeHandle side="end" onDragStart={(mouseX) => onDragStart('resize-end', start, end, mouseX)} />}
     </div>
+    </>
   )
 }
 
