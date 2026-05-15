@@ -416,11 +416,10 @@ function SidebarInner({ user }: { user: User }) {
           { type: 'item', label: 'Painel do Parceiro', href: '/partner-dashboard', icon: Handshake },
         ] as NavEntry[]
       }
-      // Parceiro simples: mesma sidebar flat do consultor (Meu Painel + Apontamentos + Despesas)
+      // Parceiro simples: apenas Meu Painel — apontamentos e despesas já são abas
+      // internas do próprio dashboard (Total Geral / Apontamentos / Despesas / Indicadores).
       return [
-        { type: 'item', label: 'Meu Painel',   href: '/meu-painel', icon: LayoutDashboard },
-        { type: 'item', label: 'Apontamentos', href: '/timesheets', icon: Clock },
-        { type: 'item', label: 'Despesas',     href: '/expenses',   icon: Receipt },
+        { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard },
       ] as NavEntry[]
     }
     return NAV
