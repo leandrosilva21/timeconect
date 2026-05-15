@@ -394,7 +394,6 @@ function SidebarInner({ user }: { user: User }) {
     if (isConsultor) {
       const baseNav: NavEntry[] = [
         { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard },
-        { type: 'item', label: 'Início',     href: '/dashboard',  icon: Home },
         ...(IS_DEV1 ? [{ type: 'item' as const, label: 'Meus Cards', href: '/meus-cards', icon: Inbox }] : []),
       ]
 
@@ -417,19 +416,11 @@ function SidebarInner({ user }: { user: User }) {
           { type: 'item', label: 'Painel do Parceiro', href: '/partner-dashboard', icon: Handshake },
         ] as NavEntry[]
       }
-      // Parceiro simples: meu painel + apontamentos + despesas
+      // Parceiro simples: mesma sidebar flat do consultor (Meu Painel + Apontamentos + Despesas)
       return [
-        { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard },
-        { type: 'item', label: 'Início',     href: '/dashboard',  icon: Home },
-        {
-          type: 'group',
-          label: 'Apontamentos & Despesas',
-          icon: Clock,
-          items: [
-            { label: 'Apontamentos', href: '/timesheets', icon: Clock },
-            { label: 'Despesas',     href: '/expenses',   icon: Receipt },
-          ],
-        },
+        { type: 'item', label: 'Meu Painel',   href: '/meu-painel', icon: LayoutDashboard },
+        { type: 'item', label: 'Apontamentos', href: '/timesheets', icon: Clock },
+        { type: 'item', label: 'Despesas',     href: '/expenses',   icon: Receipt },
       ] as NavEntry[]
     }
     return NAV
