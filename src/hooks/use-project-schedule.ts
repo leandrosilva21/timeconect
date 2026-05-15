@@ -12,6 +12,12 @@ export interface ProjectWindow {
   end: string | null
 }
 
+export interface ProjectCoordinator {
+  id: number
+  name: string
+  email: string | null
+}
+
 export interface ScheduleResponse {
   is_operational: boolean
   project_window: ProjectWindow | null
@@ -21,6 +27,7 @@ export interface ScheduleResponse {
     sold_hours: number
     start_date: string | null
     expected_end_date: string | null
+    coordinators?: ProjectCoordinator[]
   } | null
   stages: ScheduleStage[]
 }

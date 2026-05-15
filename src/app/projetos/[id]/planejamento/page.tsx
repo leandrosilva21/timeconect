@@ -106,6 +106,7 @@ export default function PlanejamentoPage() {
         <ProjectScheduleTable
           projectId={projectId}
           stages={stages}
+          coordinators={project?.coordinators ?? []}
           canEdit={canEdit}
           onChanged={refetch}
         />
