@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { X, Clock, BarChart2, Download } from 'lucide-react'
 import { api } from '@/lib/api'
+import { previewText } from '@/lib/sanitize'
 import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
 
@@ -116,7 +117,7 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
         'Data': fmtDate(t.date),
         'Colaborador': t.user?.name ?? '—',
         'Horas': parseEffortToDecimal(t.effort_hours, t.effort_minutes),
-        'Observação': t.observation ?? '',
+        'Observação': previewText(t.observation),
         'Status': t.status_display,
       }))
       rows.push({ 'Data': '', 'Colaborador': 'TOTAL', 'Horas': totalHours, 'Observação': '', 'Status': '' })
@@ -253,7 +254,7 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
                             <td className="px-3 py-2.5 tabular-nums whitespace-nowrap" style={{ color: 'var(--brand-muted)' }}>{fmtDate(ts.date)}</td>
                             <td className="px-3 py-2.5" style={{ color: 'var(--brand-text)' }}>{ts.user?.name ?? '—'}</td>
                             <td className="px-3 py-2.5 tabular-nums font-semibold" style={{ color: '#00F5FF' }}>{fmtHours(ts.effort_hours, ts.effort_minutes)}</td>
-                            <td className="px-3 py-2.5 max-w-[200px] truncate" style={{ color: 'var(--brand-muted)' }}>{ts.observation ?? '—'}</td>
+                            <td className="px-3 py-2.5 max-w-[200px] truncate" style={{ color: 'var(--brand-muted)' }} title={previewText(ts.observation)}>{ts.observation ? previewText(ts.observation) : '—'}</td>
                             <td className="px-3 py-2.5">
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap" style={{ background: `${c}18`, color: c }}>
                                 {ts.status_display}

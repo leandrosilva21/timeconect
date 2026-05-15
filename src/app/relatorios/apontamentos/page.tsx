@@ -13,6 +13,7 @@ import { MultiSelect } from '@/components/ui/multi-select'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { api } from '@/lib/api'
+import { previewText } from '@/lib/sanitize'
 import { toast } from 'sonner'
 import { FileText, FileSpreadsheet, Search, Eye, Printer, X } from 'lucide-react'
 import {
@@ -264,7 +265,7 @@ export default function RelatorioApontamentosPage() {
       consultant:     t.user?.name ?? '',
       ticket:         t.ticket ?? '',
       title:          isVedamotors ? vedaTitleValue(t) : (t.ticket_subject ?? ''),
-      description:    t.observation ?? '',
+      description:    previewText(t.observation),
       start_time:     fmtTimeHM(t.start_time),
       end_time:       fmtTimeHM(t.end_time),
       effort_hours:   t.effort_hours ?? minutesToHHMM(t.effort_minutes ?? 0),
@@ -620,7 +621,7 @@ export default function RelatorioApontamentosPage() {
                           <tr style={{ background: bg, borderBottom: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
                             <td colSpan={9} className="px-3 pt-1 pb-3 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
                               <span className="font-semibold text-gray-500 mr-1">Descrição:</span>
-                              {t.observation ?? '—'}
+                              {t.observation ? previewText(t.observation) : '—'}
                             </td>
                           </tr>
                         </Fragment>
@@ -754,10 +755,10 @@ export default function RelatorioApontamentosPage() {
                   <Td>{t.ticket_subject ?? ''}</Td>
                   <Td className="max-w-[24rem]">
                     <span
-                      title={t.observation ?? ''}
+                      title={previewText(t.observation)}
                       className="block overflow-hidden text-ellipsis whitespace-nowrap cursor-help"
                     >
-                      {t.observation ?? ''}
+                      {previewText(t.observation)}
                     </span>
                   </Td>
                   <Td className="text-center">{fmtTimeHM(t.start_time)}</Td>

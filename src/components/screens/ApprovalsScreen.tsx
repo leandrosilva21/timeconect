@@ -16,6 +16,7 @@ import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { TimesheetViewModal } from '@/components/ui/timesheet-view-modal'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { api, ApiError, toRelativePath } from '@/lib/api'
+import { previewText } from '@/lib/sanitize'
 import { exportTimesheetsToExcel } from '@/lib/exportTimesheets'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
@@ -1187,8 +1188,8 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
                 <td className="px-3 py-2.5 text-zinc-500 hidden lg:table-cell truncate max-w-[160px]">{ts.ticket_subject ?? '—'}</td>
                 <td className="px-3 py-2.5 hidden lg:table-cell max-w-[200px]">
                   {ts.observation ? (
-                    <span title={ts.observation} className="block truncate text-zinc-400 cursor-default">
-                      {ts.observation}
+                    <span title={previewText(ts.observation)} className="block truncate text-zinc-400 cursor-default">
+                      {previewText(ts.observation)}
                     </span>
                   ) : <span className="text-zinc-600">—</span>}
                 </td>
