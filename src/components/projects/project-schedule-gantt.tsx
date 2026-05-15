@@ -1,12 +1,28 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { api, ApiError } from '@/lib/api'
+import { toast } from 'sonner'
 import type { ScheduleStage, ProjectWindow } from '@/hooks/use-project-schedule'
 import type { StageDelivery, DeliveryStatus } from '@/lib/types/project-stage'
 
 interface Props {
   stages: ScheduleStage[]
   projectWindow: ProjectWindow | null
+  canEdit?: boolean
+  onChanged?: () => void
+}
+
+type DragMode = 'move' | 'resize-start' | 'resize-end'
+
+interface DragState {
+  kind: 'stage' | 'activity'
+  id: number
+  mode: DragMode
+  startX: number
+  startDate: Date
+  endDate: Date
+  deltaDays: number // current delta during drag (snapped to days)
 }
 
 type Zoom = 'week' | 'biweek' | 'month'
@@ -44,8 +60,19 @@ function addDays(d: Date, n: number): Date {
   return r
 }
 
-export function ProjectScheduleGantt({ stages, projectWindow }: Props) {
+function toIso(d: Date): string {
+  // YYYY-MM-DD em UTC pra evitar shift por timezone
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, onChanged }: Props) {
   const [zoom, setZoom] = useState<Zoom>('biweek')
+  const [drag, setDrag] = useState<DragState | null>(null)
+  const dragRef = useRef<DragState | null>(null)
+  dragRef.current = drag
 
   // Janela do Gantt: usa projectWindow + padding de 7 dias antes/depois pra dar respiro
   const window = useMemo(() => {
@@ -105,6 +132,63 @@ export function ProjectScheduleGantt({ stages, projectWindow }: Props) {
   const today = new Date()
   const todayOffset = daysBetween(window.start, today)
   const todayVisible = todayOffset >= 0 && todayOffset <= totalDays
+
+  // ─── Drag temporal ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!drag) return
+
+    function onMove(e: MouseEvent) {
+      const cur = dragRef.current
+      if (!cur) return
+      const dx = e.clientX - cur.startX
+      const deltaDays = Math.round(dx / dayWidth)
+      if (deltaDays !== cur.deltaDays) {
+        setDrag({ ...cur, deltaDays })
+      }
+    }
+
+    async function onUp(_e: MouseEvent) {
+      const cur = dragRef.current
+      setDrag(null)
+      if (!cur) return
+      if (cur.deltaDays === 0) return
+
+      try {
+        if (cur.kind === 'stage') {
+          const newStart = cur.mode !== 'resize-end' ? addDays(cur.startDate, cur.deltaDays) : cur.startDate
+          const newEnd   = cur.mode !== 'resize-start' ? addDays(cur.endDate, cur.deltaDays) : cur.endDate
+          await api.patch(`/stages/${cur.id}`, {
+            stage_start_at:    toIso(newStart),
+            expected_end_date: toIso(newEnd),
+          })
+        } else {
+          const newStart = cur.mode !== 'resize-end' ? addDays(cur.startDate, cur.deltaDays) : cur.startDate
+          const newEnd   = cur.mode !== 'resize-start' ? addDays(cur.endDate, cur.deltaDays) : cur.endDate
+          await api.patch(`/deliveries/${cur.id}`, {
+            planned_start_at: toIso(newStart),
+            due_date:         toIso(newEnd),
+          })
+        }
+        onChanged?.()
+      } catch (e) {
+        toast.error(e instanceof ApiError ? e.message : 'Erro ao salvar movimentação')
+        onChanged?.() // refetch reverte visualmente
+      }
+    }
+
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag !== null, dayWidth])
+
+  function startDrag(kind: 'stage' | 'activity', id: number, mode: DragMode, startDate: Date, endDate: Date, mouseX: number) {
+    if (!canEdit) return
+    setDrag({ kind, id, mode, startX: mouseX, startDate, endDate, deltaDays: 0 })
+  }
 
   return (
     <div className="ds-card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -211,7 +295,18 @@ export function ProjectScheduleGantt({ stages, projectWindow }: Props) {
             {/* Bars */}
             {rows.map((row, rowIdx) => {
               if (row.kind === 'stage') {
-                return <StageBar key={`s-${row.stage.id}`} stage={row.stage} rowIdx={rowIdx} windowStart={window.start} dayWidth={dayWidth} />
+                return (
+                  <StageBar
+                    key={`s-${row.stage.id}`}
+                    stage={row.stage}
+                    rowIdx={rowIdx}
+                    windowStart={window.start}
+                    dayWidth={dayWidth}
+                    canEdit={canEdit}
+                    drag={drag && drag.kind === 'stage' && drag.id === row.stage.id ? drag : null}
+                    onDragStart={(mode, start, end, mouseX) => startDrag('stage', row.stage.id, mode, start, end, mouseX)}
+                  />
+                )
               }
               return (
                 <ActivityBar
@@ -220,6 +315,9 @@ export function ProjectScheduleGantt({ stages, projectWindow }: Props) {
                   rowIdx={rowIdx}
                   windowStart={window.start}
                   dayWidth={dayWidth}
+                  canEdit={canEdit}
+                  drag={drag && drag.kind === 'activity' && drag.id === row.activity.id ? drag : null}
+                  onDragStart={(mode, start, end, mouseX) => startDrag('activity', row.activity.id, mode, start, end, mouseX)}
                 />
               )
             })}
@@ -276,22 +374,33 @@ export function ProjectScheduleGantt({ stages, projectWindow }: Props) {
   )
 }
 
-function StageBar({ stage, rowIdx, windowStart, dayWidth }: {
+function StageBar({ stage, rowIdx, windowStart, dayWidth, canEdit, drag, onDragStart }: {
   stage: ScheduleStage
   rowIdx: number
   windowStart: Date
   dayWidth: number
+  canEdit: boolean
+  drag: DragState | null
+  onDragStart: (mode: DragMode, start: Date, end: Date, mouseX: number) => void
 }) {
   const start = parseDate(stage.stage_start_at)
   const end   = parseDate(stage.expected_end_date)
   if (!start || !end) return null
 
-  const leftPx  = daysBetween(windowStart, start) * dayWidth
-  const widthPx = Math.max(dayWidth, (daysBetween(start, end) + 1) * dayWidth)
+  // Aplica delta do drag em curso (otimista)
+  let drawStart = start
+  let drawEnd   = end
+  if (drag) {
+    if (drag.mode !== 'resize-end') drawStart = addDays(start, drag.deltaDays)
+    if (drag.mode !== 'resize-start') drawEnd  = addDays(end, drag.deltaDays)
+  }
+
+  const leftPx  = daysBetween(windowStart, drawStart) * dayWidth
+  const widthPx = Math.max(dayWidth, (daysBetween(drawStart, drawEnd) + 1) * dayWidth)
 
   return (
     <div
-      title={`${stage.name} · ${start.toLocaleDateString('pt-BR')} → ${end.toLocaleDateString('pt-BR')}`}
+      title={`${stage.name} · ${drawStart.toLocaleDateString('pt-BR')} → ${drawEnd.toLocaleDateString('pt-BR')}`}
       style={{
         position: 'absolute',
         top: rowIdx * ROW_HEIGHT + 6,
@@ -307,18 +416,27 @@ function StageBar({ stage, rowIdx, windowStart, dayWidth }: {
         paddingLeft: 6, paddingRight: 6,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         lineHeight: '14px',
+        cursor: canEdit ? (drag ? 'grabbing' : 'grab') : 'default',
+        opacity: drag ? 0.7 : 1,
+        userSelect: 'none',
       }}
+      onMouseDown={canEdit ? e => { e.preventDefault(); onDragStart('move', start, end, e.clientX) } : undefined}
     >
+      {canEdit && <ResizeHandle side="start" onDragStart={(mouseX) => onDragStart('resize-start', start, end, mouseX)} />}
       {stage.name}
+      {canEdit && <ResizeHandle side="end" onDragStart={(mouseX) => onDragStart('resize-end', start, end, mouseX)} />}
     </div>
   )
 }
 
-function ActivityBar({ activity, rowIdx, windowStart, dayWidth }: {
+function ActivityBar({ activity, rowIdx, windowStart, dayWidth, canEdit, drag, onDragStart }: {
   activity: StageDelivery
   rowIdx: number
   windowStart: Date
   dayWidth: number
+  canEdit: boolean
+  drag: DragState | null
+  onDragStart: (mode: DragMode, start: Date, end: Date, mouseX: number) => void
 }) {
   const plannedStart = parseDate(activity.planned_start_at)
   const plannedEnd   = parseDate(activity.due_date)
@@ -336,12 +454,18 @@ function ActivityBar({ activity, rowIdx, windowStart, dayWidth }: {
   )
 
   // Bar principal (real se completed, senão planned)
-  const mainStart = actualStart && actualEnd ? actualStart : plannedStart
-  const mainEnd   = actualStart && actualEnd ? actualEnd : plannedEnd
+  // Drag opera sobre o planejado (planned_start_at + due_date)
+  let mainStart = actualStart && actualEnd ? actualStart : plannedStart
+  let mainEnd   = actualStart && actualEnd ? actualEnd : plannedEnd
+  if (drag && plannedStart && plannedEnd) {
+    if (drag.mode !== 'resize-end') mainStart = addDays(plannedStart, drag.deltaDays)
+    if (drag.mode !== 'resize-start') mainEnd  = addDays(plannedEnd, drag.deltaDays)
+  }
   if (!mainStart || !mainEnd) return null
 
   const mainLeftPx  = daysBetween(windowStart, mainStart) * dayWidth
   const mainWidthPx = Math.max(dayWidth, (daysBetween(mainStart, mainEnd) + 1) * dayWidth)
+  const canDrag = canEdit && hasPlanned
 
   return (
     <>
@@ -381,11 +505,39 @@ function ActivityBar({ activity, rowIdx, windowStart, dayWidth }: {
           paddingLeft: 4, paddingRight: 4,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           lineHeight: '12px',
-          opacity: 0.85,
+          opacity: drag ? 0.6 : 0.85,
+          cursor: canDrag ? (drag ? 'grabbing' : 'grab') : 'default',
+          userSelect: 'none',
         }}
+        onMouseDown={canDrag ? e => { e.preventDefault(); onDragStart('move', plannedStart!, plannedEnd!, e.clientX) } : undefined}
       >
+        {canDrag && <ResizeHandle side="start" onDragStart={(mouseX) => onDragStart('resize-start', plannedStart!, plannedEnd!, mouseX)} />}
         {mainWidthPx > 60 ? activity.title : ''}
+        {canDrag && <ResizeHandle side="end" onDragStart={(mouseX) => onDragStart('resize-end', plannedStart!, plannedEnd!, mouseX)} />}
       </div>
     </>
+  )
+}
+
+function ResizeHandle({ side, onDragStart }: {
+  side: 'start' | 'end'
+  onDragStart: (mouseX: number) => void
+}) {
+  return (
+    <div
+      onMouseDown={e => {
+        e.preventDefault()
+        e.stopPropagation()
+        onDragStart(e.clientX)
+      }}
+      style={{
+        position: 'absolute',
+        top: 0, bottom: 0,
+        [side === 'start' ? 'left' : 'right']: -3,
+        width: 6,
+        cursor: 'ew-resize',
+        zIndex: 2,
+      }}
+    />
   )
 }
