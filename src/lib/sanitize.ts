@@ -22,15 +22,23 @@ export function sanitizeHtml(input: string | null | undefined): string {
 
 /**
  * Versão texto plano de um HTML — usada em previews (kanban, listas, tooltips)
- * onde renderizar tags HTML quebraria o layout. Decoda entidades e colapsa
- * espaços/newlines.
+ * onde renderizar tags HTML quebraria o layout. Preserva quebras de linha
+ * entre parágrafos, listas, headers e tabelas pra manter legibilidade.
+ *
+ * Em containers com `truncate` ou `line-clamp-N` o CSS limita visualmente.
+ * Em containers com `whitespace-pre-line`/`pre-wrap`, as quebras aparecem.
  */
 export function previewText(input: string | null | undefined): string {
   if (!input) return ''
-  // Substitui block tags por espaço pra evitar palavras grudadas
-  const withSpaces = String(input).replace(/<\/?(?:p|br|div|li|tr|td|th|h[1-6]|hr)\b[^>]*>/gi, ' ')
+  // Block tags viram \n; td/th vira tab pra separar colunas no mesmo "linha"
+  const withBreaks = String(input)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|li|h[1-6])>/gi, '\n')
+    .replace(/<\/tr>/gi, '\n')
+    .replace(/<hr\s*\/?>/gi, '\n')
+    .replace(/<\/(?:td|th)>/gi, '\t')
   // Remove o resto das tags
-  const stripped = withSpaces.replace(/<[^>]*>/g, '')
+  const stripped = withBreaks.replace(/<[^>]*>/g, '')
   // Decoda entidades comuns
   const decoded = stripped
     .replace(/&nbsp;/g, ' ')
@@ -39,5 +47,12 @@ export function previewText(input: string | null | undefined): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-  return decoded.replace(/\s+/g, ' ').trim()
+  // Colapsa espaços/tabs dentro de cada linha, mas preserva \n. Remove
+  // linhas em branco consecutivas (mantém só 1).
+  return decoded
+    .split('\n')
+    .map(line => line.replace(/[ \t]+/g, ' ').trim())
+    .filter((line, idx, arr) => line !== '' || (idx > 0 && arr[idx - 1] !== ''))
+    .join('\n')
+    .trim()
 }
