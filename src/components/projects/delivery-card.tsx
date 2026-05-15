@@ -1,5 +1,6 @@
 'use client'
 
+import { Lock } from 'lucide-react'
 import type { StageDelivery } from '@/lib/types/project-stage'
 
 interface Props {
@@ -41,6 +42,7 @@ export function DeliveryCard({ delivery, onClick, isDragging }: Props) {
     : undefined
   const overdue = delivery.due_date && new Date(delivery.due_date) < new Date() && delivery.status !== 'done'
   const due = formatDue(delivery.due_date)
+  const isBlocked = delivery.predecessor_state === 'pending' && delivery.status === 'backlog'
 
   return (
     <button
@@ -85,6 +87,25 @@ export function DeliveryCard({ delivery, onClick, isDragging }: Props) {
           }}>
             {delivery.title}
           </div>
+          {isBlocked && (
+            <div
+              title="Aguardando conclusão do predecessor"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                marginTop: 4,
+                padding: '2px 6px',
+                borderRadius: 4,
+                background: 'var(--warning-bg)',
+                color: 'var(--warning)',
+                fontSize: 10,
+                fontWeight: 500,
+              }}
+            >
+              <Lock size={9} /> Aguardando predecessor
+            </div>
+          )}
         </div>
       </div>
 

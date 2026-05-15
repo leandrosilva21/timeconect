@@ -21,6 +21,8 @@ export interface ProjectCoordinator {
 export interface ScheduleResponse {
   is_operational: boolean
   project_window: ProjectWindow | null
+  /** Feriados ativos dentro da janela do cronograma (YYYY-MM-DD). ADR 0009 appendix. */
+  holidays?: string[]
   project: {
     id: number
     name: string
@@ -40,6 +42,7 @@ export function useProjectSchedule(projectId: number | null | undefined) {
     projectWindow: data?.project_window ?? null,
     project: data?.project ?? null,
     stages: data?.stages ?? [],
+    holidays: data?.holidays ?? [],
     loading,
     error,
     refetch,

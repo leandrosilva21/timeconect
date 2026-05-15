@@ -112,6 +112,13 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
     return map
   }, [rows])
 
+  // delivery_id → title (para tooltip de predecessor pending)
+  const activityTitleById = useMemo(() => {
+    const map = new Map<number, string>()
+    rows.forEach(r => { if (r.kind === 'activity') map.set(r.activity.id, r.activity.title) })
+    return map
+  }, [rows])
+
   // Header columns (month labels + day grid)
   const months = useMemo(() => {
     const result: { label: string; offsetPx: number }[] = []
@@ -322,6 +329,11 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
                   onDragStart={(mode, start, end, mouseX) => startDrag('activity', row.activity.id, mode, start, end, mouseX)}
                   highlighted={highlightUserId !== null && row.activity.responsible_user_id === highlightUserId}
                   dimmed={highlightUserId !== null && row.activity.responsible_user_id !== highlightUserId}
+                  predecessorTitle={
+                    row.activity.predecessor_state === 'pending' && row.activity.depends_on_delivery_id
+                      ? activityTitleById.get(row.activity.depends_on_delivery_id) ?? null
+                      : null
+                  }
                 />
               )
             })}
@@ -433,7 +445,7 @@ function StageBar({ stage, rowIdx, windowStart, dayWidth, canEdit, drag, onDragS
   )
 }
 
-function ActivityBar({ activity, rowIdx, windowStart, dayWidth, canEdit, drag, onDragStart, highlighted, dimmed }: {
+function ActivityBar({ activity, rowIdx, windowStart, dayWidth, canEdit, drag, onDragStart, highlighted, dimmed, predecessorTitle }: {
   activity: StageDelivery
   rowIdx: number
   windowStart: Date
@@ -443,6 +455,7 @@ function ActivityBar({ activity, rowIdx, windowStart, dayWidth, canEdit, drag, o
   onDragStart: (mode: DragMode, start: Date, end: Date, mouseX: number) => void
   highlighted: boolean
   dimmed: boolean
+  predecessorTitle: string | null
 }) {
   const plannedStart = parseDate(activity.planned_start_at)
   const plannedEnd   = parseDate(activity.due_date)
@@ -496,7 +509,8 @@ function ActivityBar({ activity, rowIdx, windowStart, dayWidth, canEdit, drag, o
           `${activity.title} · ${mainStart.toLocaleDateString('pt-BR')} → ${mainEnd.toLocaleDateString('pt-BR')}` +
           ` · ${activity.hours_planned}h` +
           (activity.responsible?.name ? ` · ${activity.responsible.name}` : '') +
-          (hasActual ? ' (real)' : ' (planejado)')
+          (hasActual ? ' (real)' : ' (planejado)') +
+          (predecessorTitle ? `\n🔒 Aguardando: ${predecessorTitle}` : '')
         }
         style={{
           position: 'absolute',
@@ -514,8 +528,10 @@ function ActivityBar({ activity, rowIdx, windowStart, dayWidth, canEdit, drag, o
           opacity: drag ? 0.6 : dimmed ? 0.25 : 0.85,
           cursor: canDrag ? (drag ? 'grabbing' : 'grab') : 'default',
           userSelect: 'none',
-          outline: highlighted ? '2px solid var(--primary)' : 'none',
-          outlineOffset: highlighted ? 1 : 0,
+          outline: predecessorTitle
+            ? '2px dashed var(--warning)'
+            : highlighted ? '2px solid var(--primary)' : 'none',
+          outlineOffset: (predecessorTitle || highlighted) ? 1 : 0,
         }}
         onMouseDown={canDrag ? e => { e.preventDefault(); onDragStart('move', plannedStart!, plannedEnd!, e.clientX) } : undefined}
       >
