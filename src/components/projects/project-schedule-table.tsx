@@ -1,15 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Trash2, Calendar } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
-import type { ScheduleStage } from '@/hooks/use-project-schedule'
+import type { ScheduleStage, ProjectCoordinator } from '@/hooks/use-project-schedule'
 import type { StageDelivery } from '@/lib/types/project-stage'
 
 interface Props {
   projectId: number
   stages: ScheduleStage[]
+  coordinators: ProjectCoordinator[]
   canEdit: boolean
   onChanged: () => void
 }
@@ -24,24 +25,76 @@ function formatHours(v: number): string {
   return v >= 10 ? `${Math.round(v)}h` : `${v.toFixed(1)}h`
 }
 
-export function ProjectScheduleTable({ projectId, stages, canEdit, onChanged }: Props) {
+interface NewStageDraft {
+  name: string
+  responsible_user_id: string
+  stage_start_at: string
+  expected_end_date: string
+  hours_planned: string
+}
+
+interface NewActivityDraft {
+  title: string
+  responsible_user_id: string
+  planned_start_at: string
+  due_date: string
+  hours_planned: string
+}
+
+const emptyStageDraft = (defaultResp: number | null): NewStageDraft => ({
+  name: '',
+  responsible_user_id: defaultResp ? String(defaultResp) : '',
+  stage_start_at: '',
+  expected_end_date: '',
+  hours_planned: '',
+})
+
+const emptyActivityDraft = (defaultResp: number | null): NewActivityDraft => ({
+  title: '',
+  responsible_user_id: defaultResp ? String(defaultResp) : '',
+  planned_start_at: '',
+  due_date: '',
+  hours_planned: '',
+})
+
+export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit, onChanged }: Props) {
+  const defaultCoordId = coordinators[0]?.id ?? null
+
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({})
   const [creatingStage, setCreatingStage] = useState(false)
-  const [newStageName, setNewStageName] = useState('')
+  const [stageDraft, setStageDraft] = useState<NewStageDraft>(emptyStageDraft(defaultCoordId))
   const [creatingActivityIn, setCreatingActivityIn] = useState<number | null>(null)
-  const [newActivityTitle, setNewActivityTitle] = useState('')
+  const [activityDraft, setActivityDraft] = useState<NewActivityDraft>(emptyActivityDraft(defaultCoordId))
 
   function toggleCollapse(stageId: number) {
     setCollapsed(c => ({ ...c, [stageId]: !c[stageId] }))
   }
 
+  function openCreateStage() {
+    setStageDraft(emptyStageDraft(defaultCoordId))
+    setCreatingStage(true)
+  }
+
+  function openCreateActivity(stageId: number, stageResp: number | null) {
+    setActivityDraft(emptyActivityDraft(stageResp ?? defaultCoordId))
+    setCreatingActivityIn(stageId)
+  }
+
   async function createStage() {
-    const name = newStageName.trim()
-    if (!name) return
+    const name = stageDraft.name.trim()
+    if (!name) {
+      toast.error('Informe o nome da etapa')
+      return
+    }
     try {
-      await api.post(`/projects/${projectId}/stages`, { name })
-      setNewStageName('')
+      const body: Record<string, unknown> = { name }
+      if (stageDraft.responsible_user_id) body.responsible_user_id = Number(stageDraft.responsible_user_id)
+      if (stageDraft.stage_start_at)      body.stage_start_at = stageDraft.stage_start_at
+      if (stageDraft.expected_end_date)   body.expected_end_date = stageDraft.expected_end_date
+      if (stageDraft.hours_planned)       body.hours_planned = Number(stageDraft.hours_planned)
+      await api.post(`/projects/${projectId}/stages`, body)
       setCreatingStage(false)
+      setStageDraft(emptyStageDraft(defaultCoordId))
       onChanged()
       toast.success('Etapa criada')
     } catch (e) {
@@ -50,12 +103,20 @@ export function ProjectScheduleTable({ projectId, stages, canEdit, onChanged }: 
   }
 
   async function createActivity(stageId: number) {
-    const title = newActivityTitle.trim()
-    if (!title) return
+    const title = activityDraft.title.trim()
+    if (!title) {
+      toast.error('Informe o título da atividade')
+      return
+    }
     try {
-      await api.post(`/stages/${stageId}/deliveries`, { title })
-      setNewActivityTitle('')
+      const body: Record<string, unknown> = { title }
+      if (activityDraft.responsible_user_id) body.responsible_user_id = Number(activityDraft.responsible_user_id)
+      if (activityDraft.planned_start_at)    body.planned_start_at = activityDraft.planned_start_at
+      if (activityDraft.due_date)            body.due_date = activityDraft.due_date
+      if (activityDraft.hours_planned)       body.hours_planned = Number(activityDraft.hours_planned)
+      await api.post(`/stages/${stageId}/deliveries`, body)
       setCreatingActivityIn(null)
+      setActivityDraft(emptyActivityDraft(defaultCoordId))
       onChanged()
       toast.success('Atividade criada')
     } catch (e) {
@@ -85,15 +146,17 @@ export function ProjectScheduleTable({ projectId, stages, canEdit, onChanged }: 
                 key={stage.id}
                 projectId={projectId}
                 stage={stage}
+                stages={stages}
+                coordinators={coordinators}
                 collapsed={isCollapsed}
                 onToggle={() => toggleCollapse(stage.id)}
                 canEdit={canEdit}
                 onChanged={onChanged}
                 creatingActivity={creatingActivityIn === stage.id}
-                newActivityTitle={newActivityTitle}
-                setNewActivityTitle={setNewActivityTitle}
-                onStartCreateActivity={() => { setCreatingActivityIn(stage.id); setNewActivityTitle('') }}
-                onCancelCreateActivity={() => { setCreatingActivityIn(null); setNewActivityTitle('') }}
+                activityDraft={activityDraft}
+                setActivityDraft={setActivityDraft}
+                onStartCreateActivity={() => openCreateActivity(stage.id, stage.responsible_user_id)}
+                onCancelCreateActivity={() => { setCreatingActivityIn(null); setActivityDraft(emptyActivityDraft(defaultCoordId)) }}
                 onConfirmCreateActivity={() => createActivity(stage.id)}
               />
             )
@@ -102,28 +165,74 @@ export function ProjectScheduleTable({ projectId, stages, canEdit, onChanged }: 
           {canEdit && (
             creatingStage ? (
               <tr style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-hover)' }}>
-                <td colSpan={7} style={{ padding: '8px 12px' }}>
-                  <input
-                    autoFocus
-                    className="ds-input"
-                    value={newStageName}
-                    onChange={e => setNewStageName(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') createStage()
-                      if (e.key === 'Escape') { setCreatingStage(false); setNewStageName('') }
-                    }}
-                    placeholder="Nome da nova etapa…"
-                    maxLength={100}
-                    style={{ width: 280, fontSize: 13, padding: '4px 8px' }}
-                  />
-                  <button onClick={createStage} className="ds-btn-primary" style={{ marginLeft: 6, fontSize: 12, padding: '4px 10px' }}>Criar</button>
-                  <button onClick={() => { setCreatingStage(false); setNewStageName('') }} className="ds-btn-ghost" style={{ marginLeft: 4, fontSize: 12, padding: '4px 10px' }}>Cancelar</button>
+                <td colSpan={7} style={{ padding: '10px 12px' }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <FieldLabeled label="Nome">
+                      <input
+                        autoFocus
+                        className="ds-input"
+                        value={stageDraft.name}
+                        onChange={e => setStageDraft(d => ({ ...d, name: e.target.value }))}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') createStage()
+                          if (e.key === 'Escape') setCreatingStage(false)
+                        }}
+                        placeholder="Ex: Fiscal, Compras…"
+                        maxLength={100}
+                        style={{ width: 200, fontSize: 13, padding: '4px 8px' }}
+                      />
+                    </FieldLabeled>
+                    <FieldLabeled label="Responsável">
+                      <select
+                        className="ds-input"
+                        value={stageDraft.responsible_user_id}
+                        onChange={e => setStageDraft(d => ({ ...d, responsible_user_id: e.target.value }))}
+                        style={{ width: 180, fontSize: 13, padding: '4px 8px' }}
+                      >
+                        <option value="">—</option>
+                        {coordinators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </FieldLabeled>
+                    <FieldLabeled label="Início">
+                      <input
+                        type="date"
+                        className="ds-input"
+                        value={stageDraft.stage_start_at}
+                        onChange={e => setStageDraft(d => ({ ...d, stage_start_at: e.target.value }))}
+                        style={{ width: 130, fontSize: 13, padding: '4px 8px' }}
+                      />
+                    </FieldLabeled>
+                    <FieldLabeled label="Fim">
+                      <input
+                        type="date"
+                        className="ds-input"
+                        value={stageDraft.expected_end_date}
+                        onChange={e => setStageDraft(d => ({ ...d, expected_end_date: e.target.value }))}
+                        style={{ width: 130, fontSize: 13, padding: '4px 8px' }}
+                      />
+                    </FieldLabeled>
+                    <FieldLabeled label="Horas">
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.5"
+                        className="ds-input"
+                        value={stageDraft.hours_planned}
+                        onChange={e => setStageDraft(d => ({ ...d, hours_planned: e.target.value }))}
+                        style={{ width: 80, fontSize: 13, padding: '4px 8px' }}
+                      />
+                    </FieldLabeled>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button onClick={createStage} className="ds-btn-primary" style={{ fontSize: 12, padding: '6px 12px' }}>Criar</button>
+                      <button onClick={() => setCreatingStage(false)} className="ds-btn-ghost" style={{ fontSize: 12, padding: '6px 12px' }}>Cancelar</button>
+                    </div>
+                  </div>
                 </td>
               </tr>
             ) : (
               <tr style={{ borderTop: '1px solid var(--border)' }}>
                 <td colSpan={7} style={{ padding: '8px 12px' }}>
-                  <button onClick={() => setCreatingStage(true)} style={addBtnStyle()}>
+                  <button onClick={openCreateStage} style={addBtnStyle()}>
                     <Plus size={12} /> Nova etapa
                   </button>
                 </td>
@@ -155,23 +264,39 @@ function addBtnStyle(): React.CSSProperties {
   }
 }
 
+function FieldLabeled({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <span style={{
+        fontSize: 9, color: 'var(--text-muted)',
+        textTransform: 'uppercase', letterSpacing: '.04em',
+      }}>
+        {label}
+      </span>
+      {children}
+    </label>
+  )
+}
+
 interface StageRowProps {
   projectId: number
   stage: ScheduleStage
+  stages: ScheduleStage[]
+  coordinators: ProjectCoordinator[]
   collapsed: boolean
   onToggle: () => void
   canEdit: boolean
   onChanged: () => void
   creatingActivity: boolean
-  newActivityTitle: string
-  setNewActivityTitle: (v: string) => void
+  activityDraft: NewActivityDraft
+  setActivityDraft: (next: NewActivityDraft | ((d: NewActivityDraft) => NewActivityDraft)) => void
   onStartCreateActivity: () => void
   onCancelCreateActivity: () => void
   onConfirmCreateActivity: () => void
 }
 
 function StageRows(props: StageRowProps) {
-  const { stage, collapsed, onToggle, canEdit, onChanged, creatingActivity, newActivityTitle, setNewActivityTitle, onStartCreateActivity, onCancelCreateActivity, onConfirmCreateActivity } = props
+  const { stage, coordinators, collapsed, onToggle, canEdit, onChanged, creatingActivity, activityDraft, setActivityDraft, onStartCreateActivity, onCancelCreateActivity, onConfirmCreateActivity } = props
 
   const allDeliveries = stage.deliveries ?? []
 
@@ -218,10 +343,10 @@ function StageRows(props: StageRowProps) {
           </span>
         </td>
         <td style={cell()}>
-          <InlineDate value={stage.stage_start_at ?? null} canEdit={canEdit} onSave={v => patchStage('stage_start_at', v)} />
+          <InlineDate value={stage.stage_start_at ?? null} canEdit={canEdit} onSave={v => patchStage('stage_start_at', v)} placeholder="Definir início" />
         </td>
         <td style={cell()}>
-          <InlineDate value={stage.expected_end_date ?? null} canEdit={canEdit} onSave={v => patchStage('expected_end_date', v)} />
+          <InlineDate value={stage.expected_end_date ?? null} canEdit={canEdit} onSave={v => patchStage('expected_end_date', v)} placeholder="Definir fim" />
         </td>
         <td style={cell()}>
           <span style={{ color: 'var(--text-muted)', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
@@ -247,22 +372,68 @@ function StageRows(props: StageRowProps) {
       {!collapsed && canEdit && (
         creatingActivity ? (
           <tr style={{ background: 'var(--surface-hover)' }}>
-            <td colSpan={7} style={{ padding: '6px 12px 6px 36px' }}>
-              <input
-                autoFocus
-                className="ds-input"
-                value={newActivityTitle}
-                onChange={e => setNewActivityTitle(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') onConfirmCreateActivity()
-                  if (e.key === 'Escape') onCancelCreateActivity()
-                }}
-                placeholder="Título da atividade…"
-                maxLength={200}
-                style={{ width: 280, fontSize: 13, padding: '4px 8px' }}
-              />
-              <button onClick={onConfirmCreateActivity} className="ds-btn-primary" style={{ marginLeft: 6, fontSize: 12, padding: '4px 10px' }}>Criar</button>
-              <button onClick={onCancelCreateActivity} className="ds-btn-ghost" style={{ marginLeft: 4, fontSize: 12, padding: '4px 10px' }}>Cancelar</button>
+            <td colSpan={7} style={{ padding: '10px 12px 10px 36px' }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <FieldLabeled label="Título">
+                  <input
+                    autoFocus
+                    className="ds-input"
+                    value={activityDraft.title}
+                    onChange={e => setActivityDraft(d => ({ ...d, title: e.target.value }))}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') onConfirmCreateActivity()
+                      if (e.key === 'Escape') onCancelCreateActivity()
+                    }}
+                    placeholder="Ex: SPED Fiscal…"
+                    maxLength={200}
+                    style={{ width: 220, fontSize: 13, padding: '4px 8px' }}
+                  />
+                </FieldLabeled>
+                <FieldLabeled label="Responsável">
+                  <select
+                    className="ds-input"
+                    value={activityDraft.responsible_user_id}
+                    onChange={e => setActivityDraft(d => ({ ...d, responsible_user_id: e.target.value }))}
+                    style={{ width: 180, fontSize: 13, padding: '4px 8px' }}
+                  >
+                    <option value="">—</option>
+                    {coordinators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </FieldLabeled>
+                <FieldLabeled label="Início">
+                  <input
+                    type="date"
+                    className="ds-input"
+                    value={activityDraft.planned_start_at}
+                    onChange={e => setActivityDraft(d => ({ ...d, planned_start_at: e.target.value }))}
+                    style={{ width: 130, fontSize: 13, padding: '4px 8px' }}
+                  />
+                </FieldLabeled>
+                <FieldLabeled label="Fim">
+                  <input
+                    type="date"
+                    className="ds-input"
+                    value={activityDraft.due_date}
+                    onChange={e => setActivityDraft(d => ({ ...d, due_date: e.target.value }))}
+                    style={{ width: 130, fontSize: 13, padding: '4px 8px' }}
+                  />
+                </FieldLabeled>
+                <FieldLabeled label="Horas">
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    className="ds-input"
+                    value={activityDraft.hours_planned}
+                    onChange={e => setActivityDraft(d => ({ ...d, hours_planned: e.target.value }))}
+                    style={{ width: 80, fontSize: 13, padding: '4px 8px' }}
+                  />
+                </FieldLabeled>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button onClick={onConfirmCreateActivity} className="ds-btn-primary" style={{ fontSize: 12, padding: '6px 12px' }}>Criar</button>
+                  <button onClick={onCancelCreateActivity} className="ds-btn-ghost" style={{ fontSize: 12, padding: '6px 12px' }}>Cancelar</button>
+                </div>
+              </div>
             </td>
           </tr>
         ) : (
@@ -320,10 +491,10 @@ function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged }: {
         </span>
       </td>
       <td style={cell()}>
-        <InlineDate value={delivery.planned_start_at ?? null} canEdit={canEdit} onSave={v => patch('planned_start_at', v)} />
+        <InlineDate value={delivery.planned_start_at ?? null} canEdit={canEdit} onSave={v => patch('planned_start_at', v)} placeholder="Definir início" />
       </td>
       <td style={cell()}>
-        <InlineDate value={delivery.due_date ?? null} canEdit={canEdit} onSave={v => patch('due_date', v)} />
+        <InlineDate value={delivery.due_date ?? null} canEdit={canEdit} onSave={v => patch('due_date', v)} placeholder="Definir fim" />
       </td>
       <td style={cell()}>
         <InlineNumber value={num(delivery.hours_planned)} canEdit={canEdit} onSave={v => patch('hours_planned', v)} />
@@ -390,10 +561,11 @@ function InlineText({ value, canEdit, onSave, bold }: {
   )
 }
 
-function InlineDate({ value, canEdit, onSave }: {
+function InlineDate({ value, canEdit, onSave, placeholder = 'Definir' }: {
   value: string | null
   canEdit: boolean
   onSave: (v: string | null) => void
+  placeholder?: string
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value ? value.slice(0, 10) : '')
@@ -404,11 +576,18 @@ function InlineDate({ value, canEdit, onSave }: {
         onClick={() => { if (canEdit) { setDraft(value ? value.slice(0, 10) : ''); setEditing(true) } }}
         style={{
           cursor: canEdit ? 'pointer' : 'default',
-          fontSize: 12, color: value ? 'var(--text)' : 'var(--text-light)',
+          fontSize: 12,
+          color: value ? 'var(--text)' : (canEdit ? 'var(--primary)' : 'var(--text-light)'),
           fontVariantNumeric: 'tabular-nums',
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          fontStyle: value ? 'normal' : 'italic',
         }}
       >
-        {value ? new Date(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'}
+        {value ? (
+          new Date(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+        ) : (
+          canEdit ? (<><Calendar size={11} /> {placeholder}</>) : <>—</>
+        )}
       </span>
     )
   }
