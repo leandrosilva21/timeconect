@@ -16,6 +16,7 @@ import {
 import { ConfirmDeleteModal } from '@/components/ui/confirm-delete-modal'
 import { RowMenu } from '@/components/ui/row-menu'
 import { useAuth } from '@/hooks/use-auth'
+import { useRouter } from 'next/navigation'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -331,6 +332,15 @@ const EMPTY_FORM = {
 
 export default function UsersPage() {
   const { user: authUser } = useAuth()
+  const router = useRouter()
+
+  // Consultor não acessa esta rotina, nem com extra_permissions — redireciona.
+  useEffect(() => {
+    if (authUser?.type === 'consultor') {
+      router.replace('/meu-painel')
+    }
+  }, [authUser?.type, router])
+
   const isAdmin      = authUser?.type === 'admin'
   const ep: string[] = (authUser as any)?.permissions ?? authUser?.extra_permissions ?? []
   const canCreate    = isAdmin || ep.includes('users.create')
