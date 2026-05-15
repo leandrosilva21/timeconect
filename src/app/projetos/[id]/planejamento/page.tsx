@@ -110,6 +110,8 @@ export default function PlanejamentoPage() {
         <ProjectScheduleGantt
           stages={stages}
           projectWindow={projectWindow}
+          canEdit={canEdit}
+          onChanged={refetch}
         />
       </div>
     </div>
