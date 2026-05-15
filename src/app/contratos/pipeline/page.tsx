@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ProjectStagesSidePanel } from '@/components/projects/project-stages-side-panel'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
+import { previewText } from '@/lib/sanitize'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
@@ -2467,7 +2468,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
                                   </div>
                                 </div>
                                 {ts.observation && (
-                                  <p className="text-xs leading-relaxed line-clamp-2" style={{ color: 'var(--brand-muted)' }}>{ts.observation}</p>
+                                  <p className="text-xs leading-relaxed line-clamp-2" style={{ color: 'var(--brand-muted)' }}>{previewText(ts.observation)}</p>
                                 )}
                               </div>
                             </div>

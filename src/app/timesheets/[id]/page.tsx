@@ -229,7 +229,20 @@ export default function TimesheetDetailPage() {
                   </span>
                 </div>
                 <div
-                  className="px-6 py-4 text-sm leading-relaxed [&_img]:max-w-full [&_img]:rounded-lg [&_img]:mt-2"
+                  className="
+                    px-6 py-4 text-sm leading-relaxed
+                    [&_img]:max-w-full [&_img]:rounded-lg [&_img]:mt-2
+                    [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse
+                    [&_th]:border [&_th]:border-[var(--brand-border)] [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-semibold [&_th]:bg-[var(--brand-bg)]
+                    [&_td]:border [&_td]:border-[var(--brand-border)] [&_td]:px-2 [&_td]:py-1.5 [&_td]:align-top
+                    [&_h1]:text-base [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1.5
+                    [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5
+                    [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1
+                    [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:mt-2 [&_h4]:mb-1
+                    [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5
+                    [&_a]:underline [&_a]:text-[var(--brand-primary)]
+                    [&_hr]:my-3 [&_hr]:border-[var(--brand-border)]
+                  "
                   style={{ color: 'var(--brand-muted)' }}
                   dangerouslySetInnerHTML={{ __html: sanitizeHtml(ts.observation) }}
                 />

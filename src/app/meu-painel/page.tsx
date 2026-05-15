@@ -3,6 +3,7 @@
 import { AppLayout } from '@/components/layout/app-layout'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { api, ApiError, toRelativePath } from '@/lib/api'
+import { previewText } from '@/lib/sanitize'
 import { formatBRL } from '@/lib/format'
 import { exportTimesheetsToExcel } from '@/lib/exportTimesheets'
 import { useAuth } from '@/hooks/use-auth'
@@ -2626,8 +2627,8 @@ export default function MeuPainelPage() {
                         {(ts as any).project?.service_type?.name ?? <span className="text-zinc-700">—</span>}
                       </td>
                       <td className="px-4 py-3.5 text-zinc-500 hidden lg:table-cell max-w-[180px] truncate"
-                        title={ts.observation}>
-                        {ts.observation ?? <span className="text-zinc-700">—</span>}
+                        title={previewText(ts.observation)}>
+                        {ts.observation ? previewText(ts.observation) : <span className="text-zinc-700">—</span>}
                       </td>
                       <td className="px-4 py-3.5">
                         <StatusBadge status={ts.status} display={ts.status_display} reason={ts.rejection_reason} />

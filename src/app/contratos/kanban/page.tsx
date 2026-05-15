@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
+import { previewText } from '@/lib/sanitize'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
@@ -641,7 +642,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                                 <span className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>{ts.user?.name ?? '—'}</span>
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${sColor}18`, color: sColor }}>{ts.status_display}</span>
                               </div>
-                              {ts.observation && <p className="text-xs line-clamp-2" style={{ color: 'var(--brand-muted)' }}>{ts.observation}</p>}
+                              {ts.observation && <p className="text-xs line-clamp-2" style={{ color: 'var(--brand-muted)' }}>{previewText(ts.observation)}</p>}
                             </div>
                             <div className="text-right shrink-0">
                               <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{fmtDate(ts.date)}</p>
