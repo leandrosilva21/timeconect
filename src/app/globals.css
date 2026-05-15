@@ -906,3 +906,13 @@ html:not(.dark) [class*="bg-zinc-900/"],
 html:not(.dark) [class*="bg-zinc-800/"] { background-color: var(--surface-hover); }
 html:not(.dark) [class*="border-zinc-800/"],
 html:not(.dark) [class*="border-zinc-700/"] { border-color: var(--border); }
+
+/* Sidebar — logo ERPServ no rodapé: roxo no light, branco no dark */
+html:not(.dark) .sidebar-erpserv-logo {
+  filter: brightness(0) saturate(100%) invert(28%) sepia(86%) saturate(2756%) hue-rotate(238deg) brightness(91%) contrast(95%);
+  opacity: 0.9;
+}
+html.dark .sidebar-erpserv-logo {
+  filter: grayscale(1) invert(1) brightness(10);
+  opacity: 0.4;
+}

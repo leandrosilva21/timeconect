@@ -9,7 +9,7 @@ export interface TimesheetLog {
   changed_by: { id: number; name: string } | null
   source: 'manual' | 'movidesk_sync' | 'system' | string
   action: 'updated' | 'deleted' | 'restored' | string
-  changes: Record<string, { old: unknown; new: unknown }>
+  changes: Record<string, { old: unknown; new: unknown; old_label?: string | null; new_label?: string | null }>
   created_at: string
   timesheet?: {
     id: number
@@ -62,11 +62,29 @@ function fmtDateTime(iso: string): string {
   } catch { return iso }
 }
 
+// Formata valores brutos do log de forma amigável.
+// Datetime "2026-05-11 14:48:48" → "11/05/2026 14:48"
+// Data "2026-05-11" → "11/05/2026"
+// Hora "14:48:48" → "14:48"
 function fmtValue(value: unknown): string {
   if (value === null || value === undefined) return '∅'
   if (typeof value === 'boolean') return value ? 'sim' : 'não'
   if (typeof value === 'object') return JSON.stringify(value)
-  return String(value)
+  const s = String(value)
+
+  // datetime ISO-like: YYYY-MM-DD HH:MM[:SS] (com ou sem T no meio)
+  const dt = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/)
+  if (dt) return `${dt[3]}/${dt[2]}/${dt[1]} ${dt[4]}:${dt[5]}`
+
+  // data isolada: YYYY-MM-DD
+  const d = s.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (d) return `${d[3]}/${d[2]}/${d[1]}`
+
+  // hora isolada com segundos: HH:MM:SS
+  const t = s.match(/^(\d{2}):(\d{2}):\d{2}$/)
+  if (t) return `${t[1]}:${t[2]}`
+
+  return s
 }
 
 function fieldLabel(field: string): string {
@@ -160,21 +178,27 @@ export function TimesheetLogsList({ logs, loading, empty = 'Nenhum log encontrad
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(log.changes).map(([field, diff]) => (
-                      <tr key={field} style={{ borderTop: '1px solid var(--brand-border)' }}>
-                        <td className="px-3 py-2 font-medium" style={{ color: 'var(--brand-text)' }}>{fieldLabel(field)}</td>
-                        <td className="px-3 py-2" style={{ color: 'var(--brand-muted)' }}>
-                          <code className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(239,68,68,0.08)' }}>
-                            {fmtValue(diff.old)}
-                          </code>
-                        </td>
-                        <td className="px-3 py-2" style={{ color: 'var(--brand-muted)' }}>
-                          <code className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(16,185,129,0.08)' }}>
-                            {fmtValue(diff.new)}
-                          </code>
-                        </td>
-                      </tr>
-                    ))}
+                    {Object.entries(log.changes).map(([field, diff]) => {
+                      // Se o backend resolveu label (campos FK como project/customer/user),
+                      // mostra o nome humano em vez do ID cru.
+                      const oldDisplay = diff.old_label ?? fmtValue(diff.old)
+                      const newDisplay = diff.new_label ?? fmtValue(diff.new)
+                      return (
+                        <tr key={field} style={{ borderTop: '1px solid var(--brand-border)' }}>
+                          <td className="px-3 py-2 font-medium" style={{ color: 'var(--brand-text)' }}>{fieldLabel(field)}</td>
+                          <td className="px-3 py-2" style={{ color: 'var(--brand-muted)' }}>
+                            <code className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(239,68,68,0.08)' }}>
+                              {oldDisplay}
+                            </code>
+                          </td>
+                          <td className="px-3 py-2" style={{ color: 'var(--brand-muted)' }}>
+                            <code className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(16,185,129,0.08)' }}>
+                              {newDisplay}
+                            </code>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

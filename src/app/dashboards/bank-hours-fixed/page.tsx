@@ -2,11 +2,13 @@
 
 import { formatBRL } from '@/lib/format'
 import { AppLayout } from '@/components/layout/app-layout'
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
-import { BarChart2, Clock, TrendingUp, TrendingDown, AlertCircle, DollarSign, ChevronDown } from 'lucide-react'
+import { BarChart2, Clock, TrendingUp, TrendingDown, AlertCircle, DollarSign, ChevronDown, ArrowUp, MousePointerClick, Download, MoreVertical, Calendar, User as UserIcon, Building2, Folder, Paperclip, FileText, X as CloseIcon, Eye } from 'lucide-react'
+import * as XLSX from 'xlsx'
+import DashboardIndicators from '@/components/dashboard/DashboardIndicators'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { SearchSelect } from '@/components/ui/search-select'
@@ -26,6 +28,8 @@ interface SummaryData {
   projects_month_consumed_hours?: number
   maintenance_consumed_hours?: number
   maintenance_month_consumed_hours?: number
+  architecture_consumed_hours?: number
+  architecture_month_consumed_hours?: number
   month_consumed_hours: number
   hours_balance: number
   exceeded_hours: number
@@ -33,6 +37,7 @@ interface SummaryData {
   hourly_rate: number | null
   contributed_hours_history?: ContributionItem[]
   has_support?: boolean
+  has_architecture?: boolean
 }
 
 interface ContributionItem {
@@ -59,6 +64,7 @@ interface ProjectItem {
   consumed_hours: number
   hours_balance: number
   start_date: string | null
+  is_auster_frozen?: boolean
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -161,29 +167,35 @@ function MetricCard({
 
 // ─── Breakdown Card ───────────────────────────────────────────────────────────
 
-function ConsumedBreakdownCard({ total, projetos, sustentacao }: { total: number; projetos?: number; sustentacao?: number }) {
+function ConsumedBreakdownCard({ total, projetos, sustentacao, arquitetura }: { total: number; projetos?: number; sustentacao?: number; arquitetura?: number }) {
+  const showArq = arquitetura !== undefined && arquitetura > 0
   return (
-    <div className="rounded-2xl p-5 flex flex-col gap-3" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-      <div className="flex items-center gap-2">
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(0,245,255,0.08)' }}>
+    <div className="rounded-2xl p-5 flex flex-col gap-3 min-w-0 overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(0,245,255,0.08)' }}>
           <Clock size={13} color="#00F5FF" />
         </div>
-        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Consumo Acumulado</span>
+        <span className="text-xs font-semibold uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Consumo Acumulado</span>
       </div>
       <div className="flex items-end gap-1.5">
         <span className="text-4xl font-extrabold tracking-tight" style={{ color: '#00F5FF', lineHeight: 1 }}>{fmtH(total)}</span>
         <span className="text-base font-medium mb-0.5" style={{ color: 'var(--brand-muted)' }}>h</span>
       </div>
-      {(projetos !== undefined || sustentacao !== undefined) && (
-        <div className="flex gap-3 pt-1 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-          <div>
-            <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Projetos</p>
-            <p className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{fmtH(projetos ?? 0)}h</p>
+      {(projetos !== undefined || sustentacao !== undefined || showArq) && (
+        <div className="flex flex-col gap-1.5 pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+          <div className="flex items-baseline justify-between gap-2 min-w-0">
+            <span className="text-[10px] uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Projetos</span>
+            <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{fmtH(projetos ?? 0)}h</span>
           </div>
-          <div className="w-px" style={{ background: 'var(--brand-border)' }} />
-          <div>
-            <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Sustentação</p>
-            <p className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{fmtH(sustentacao ?? 0)}h</p>
+          {showArq && (
+            <div className="flex items-baseline justify-between gap-2 min-w-0">
+              <span className="text-[10px] uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Arquitetura</span>
+              <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{fmtH(arquitetura ?? 0)}h</span>
+            </div>
+          )}
+          <div className="flex items-baseline justify-between gap-2 min-w-0">
+            <span className="text-[10px] uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Sustentação</span>
+            <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{fmtH(sustentacao ?? 0)}h</span>
           </div>
         </div>
       )}
@@ -256,7 +268,161 @@ export default function BankHoursFixedPage() {
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [loadingMaint,    setLoadingMaint]    = useState(false)
 
-  const [activeTab, setActiveTab] = useState<'total' | 'projects' | 'maintenance'>('total')
+  const [activeTab, setActiveTab] = useState<'total' | 'projects' | 'architecture' | 'maintenance' | 'expenses' | 'indicators'>('total')
+  const isAusterContext = (selectedCustomer === 220) || (!selectedCustomer && user?.customer_id === 220)
+
+  // Projeto "leaf": um único projeto selecionado, sem sub-projetos de Arquitetura/Sustentação.
+  // Apontamentos vão direto no Total Geral; abas e cards monetários ficam ocultos.
+  const isLeafProject = !!selectedProject && summary != null
+    && !(summary.has_architecture) && !(summary.has_support)
+
+  useEffect(() => {
+    if (isLeafProject && activeTab === 'projects') setActiveTab('total')
+  }, [isLeafProject, activeTab])
+
+  // ─── Indicadores do Suporte ────────────────────────────────────────────────
+  // Usa o componente compartilhado DashboardIndicators (mesmo padrão do On Demand)
+  const [indicatorParams, setIndicatorParams] = useState<URLSearchParams>(new URLSearchParams())
+  useEffect(() => {
+    const p = new URLSearchParams()
+    if (selectedCustomer) p.set('customer_id', String(selectedCustomer))
+    else if (user?.customer_id) p.set('customer_id', String(user.customer_id))
+    if (selectedExecutive) p.set('executive_id', String(selectedExecutive))
+    if (selectedProject) p.set('project_id', String(selectedProject))
+    const now2 = new Date()
+    const _m = refMonth ?? (dateTo ? Number(dateTo.split('-')[1]) : now2.getMonth() + 1)
+    const _y = refYear  ?? (dateTo ? Number(dateTo.split('-')[0]) : now2.getFullYear())
+    p.set('month', String(_m)); p.set('year', String(_y))
+    setIndicatorParams(p)
+  }, [selectedCustomer, selectedExecutive, selectedProject, refMonth, refYear, dateTo, user?.customer_id])
+
+  const [inlineRows, setInlineRows] = useState<any[]>([])
+  const [inlineLoading, setInlineLoading] = useState(false)
+  const [ticketSummary, setTicketSummary] = useState<Array<{ticket: string; title: string|null; requester: string|null; period_minutes: number; lifetime_minutes: number}>>([])
+  const [ticketSummaryLoading, setTicketSummaryLoading] = useState(false)
+  useEffect(() => {
+    // carrega lista inline conforme aba selecionada
+    const isTimesheets = activeTab === 'maintenance' || activeTab === 'architecture'
+    const isExpenses   = activeTab === 'expenses'
+    const isLeafTotal  = isLeafProject && activeTab === 'total'
+    if (!isTimesheets && !isExpenses && !isLeafTotal) { setInlineRows([]); setTicketSummary([]); return }
+
+    setInlineLoading(true)
+    const qs = new URLSearchParams()
+    if (selectedCustomer) qs.set('customer_id', String(selectedCustomer))
+    else if (user?.customer_id) qs.set('customer_id', String(user.customer_id))
+    if (selectedProject) qs.set('project_id', String(selectedProject))
+    let effFrom = dateFrom
+    let effTo   = dateTo
+    if ((!effFrom || !effTo) && refMonth && refYear) {
+      const mm = String(refMonth).padStart(2, '0')
+      const lastDay = new Date(refYear, refMonth, 0).getDate()
+      effFrom = `${refYear}-${mm}-01`
+      effTo   = `${refYear}-${mm}-${String(lastDay).padStart(2, '0')}`
+    }
+    if (effFrom) qs.set('date_from', effFrom)
+    if (effTo)   qs.set('date_to',   effTo)
+    const path = isLeafTotal
+      ? `/dashboards/bank-hours-fixed/project-timesheets?${qs}`
+      : isTimesheets
+        ? `/dashboards/bank-hours-fixed/category-timesheets?${qs}&category=${activeTab === 'architecture' ? 'architecture' : 'maintenance'}`
+        : `/dashboards/bank-hours-fixed/expenses?${qs}`
+    api.get<{ data: any[] }>(path)
+      .then(r => setInlineRows(r.data ?? []))
+      .catch(() => setInlineRows([]))
+      .finally(() => setInlineLoading(false))
+
+    // Agrupamento por ticket — apenas em Sustentação
+    if (activeTab === 'maintenance') {
+      setTicketSummaryLoading(true)
+      api.get<{ tickets: any[] }>(`/dashboards/bank-hours-fixed/category-ticket-summary?${qs}&category=maintenance`)
+        .then(r => setTicketSummary(r.tickets ?? []))
+        .catch(() => setTicketSummary([]))
+        .finally(() => setTicketSummaryLoading(false))
+    } else {
+      setTicketSummary([])
+    }
+  }, [activeTab, selectedCustomer, selectedProject, dateFrom, dateTo, refMonth, refYear, isLeafProject, user?.customer_id])
+
+  // Modais da aba Projetos: Ver Apontamentos + Detalhe
+  const [projectTSModal, setProjectTSModal] = useState<{ projectId: number; projectName: string; isClosed?: boolean } | null>(null)
+  const [projectTSRows, setProjectTSRows] = useState<any[]>([])
+  const [projectTSLoading, setProjectTSLoading] = useState(false)
+  const [projectTSDetail, setProjectTSDetail] = useState<any | null>(null)
+  const [inlineDetail, setInlineDetail] = useState<any | null>(null)
+  useEffect(() => {
+    if (!projectTSModal) { setProjectTSRows([]); return }
+    if (projectTSModal.isClosed) { setProjectTSRows([]); setProjectTSLoading(false); return }
+    setProjectTSLoading(true)
+    const qs = new URLSearchParams()
+    qs.set('project_id', String(projectTSModal.projectId))
+    if (selectedCustomer) qs.set('customer_id', String(selectedCustomer))
+    else if (user?.customer_id) qs.set('customer_id', String(user.customer_id))
+    let effFrom = dateFrom
+    let effTo   = dateTo
+    if ((!effFrom || !effTo) && refMonth && refYear) {
+      const mm = String(refMonth).padStart(2, '0')
+      const lastDay = new Date(refYear, refMonth, 0).getDate()
+      effFrom = `${refYear}-${mm}-01`
+      effTo   = `${refYear}-${mm}-${String(lastDay).padStart(2, '0')}`
+    }
+    if (effFrom) qs.set('date_from', effFrom)
+    if (effTo)   qs.set('date_to',   effTo)
+    api.get<{ data: any[] }>(`/dashboards/bank-hours-fixed/project-timesheets?${qs}`)
+      .then(r => setProjectTSRows(r.data ?? []))
+      .catch(() => setProjectTSRows([]))
+      .finally(() => setProjectTSLoading(false))
+  }, [projectTSModal, selectedCustomer, dateFrom, dateTo, refMonth, refYear, user?.customer_id])
+
+  function exportInlineToXLSX() {
+    if (inlineRows.length === 0) return
+    const isExpenses = activeTab === 'expenses'
+    const isLeafTotal = isLeafProject && activeTab === 'total'
+    const sheetName = isExpenses
+      ? 'Despesas'
+      : isLeafTotal
+        ? 'Apontamentos'
+        : (activeTab === 'architecture' ? 'Arquitetura' : 'Sustentação')
+    const data = isExpenses
+      ? inlineRows.map(r => ({
+          Data: r.date ? r.date.split('-').reverse().join('/') : '',
+          Colaborador: r.user?.name ?? '',
+          Valor: Number(r.amount) || 0,
+        }))
+      : isLeafTotal
+        ? inlineRows.map(r => ({
+            Data: r.date ? r.date.split('-').reverse().join('/') : '',
+            Consultor: r.user?.name ?? '',
+            Descrição: r.description ?? '',
+            Início: r.start_time ?? '',
+            Fim: r.end_time ?? '',
+            'Esforço (h)': Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
+          }))
+      : activeTab === 'maintenance'
+        ? inlineRows.map(r => ({
+            Data: r.date ? r.date.split('-').reverse().join('/') : '',
+            Solicitante: r.requester ?? '',
+            Consultor: r.user?.name ?? '',
+            Ticket: r.ticket ?? '',
+            'Titulo do ticket': r.ticket_subject ?? '',
+            Descrição: r.description ?? '',
+            Início: r.start_time ?? '',
+            Fim: r.end_time ?? '',
+            'Esforço (h)': Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
+            'Data do Serviço': r.date ? r.date.split('-').reverse().join('/') : '',
+          }))
+        : inlineRows.map(r => ({
+            Data: r.date ? r.date.split('-').reverse().join('/') : '',
+            Consultor: r.user?.name ?? '',
+            Descrição: r.description ?? '',
+            'Esforço (h)': Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
+          }))
+    const ws = XLSX.utils.json_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, sheetName)
+    const stamp = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `${sheetName.toLowerCase()}_${stamp}.xlsx`)
+  }
 
   // Customers
   useEffect(() => {
@@ -274,8 +440,9 @@ export default function BankHoursFixedPage() {
     api.get<any>(`/projects?${params}`).then(r => setProjects(Array.isArray(r?.items) ? r.items : [])).catch(() => {})
   }, [user, selectedCustomer, isCliente])
 
-  // Admins precisam selecionar projeto ou cliente; não-admins veem sempre
-  const hasFilters = !isAdmin || !!selectedProject || !!selectedCustomer
+  // Cliente sempre precisa selecionar projeto (mostrar agregado sem projeto não faz sentido pro cliente).
+  // Admin pode ver agregado por cliente OU por projeto.
+  const hasFilters = isAdmin ? (!!selectedProject || !!selectedCustomer) : !!selectedProject
 
   // Build base params
   const baseParams = useCallback(() => {
@@ -352,17 +519,15 @@ export default function BankHoursFixedPage() {
           <table className="w-full text-sm" style={{ background: 'var(--brand-surface)' }}>
             <thead className="sticky top-0 z-10" style={{ borderBottom: '1px solid var(--brand-border)', background: 'rgba(255,255,255,0.02)' }}>
               <tr>
-                {['Código','Projeto','Status','Tipo','Horas Vendidas','Consumo','Saldo','Início'].map(col => (
-                  <th key={col} className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wider ${['Saldo','Horas Vendidas','Consumo'].includes(col) ? 'text-right' : 'text-left'}`} style={{ color: 'var(--brand-subtle)' }}>{col}</th>
+                {['Código','Projeto','Status','Tipo','Horas Vendidas','Início',''].map(col => (
+                  <th key={col} className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wider ${['Horas Vendidas'].includes(col) ? 'text-right' : 'text-left'}`} style={{ color: 'var(--brand-subtle)' }}>{col}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {items.length === 0 ? (
-                <tr><td colSpan={8} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
-              ) : items.map((p, idx) => {
-                const balance = p.hours_balance ?? 0
-                const consumed = p.consumed_hours ?? 0
+                <tr><td colSpan={7} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
+              ) : items.map((p) => {
                 const contributions = p.total_contributions_hours || p.hour_contribution || 0
                 return (
                   <tr
@@ -375,7 +540,18 @@ export default function BankHoursFixedPage() {
                     <td className="px-5 py-3.5">
                       <span className="font-mono text-xs px-2 py-1 rounded-md" style={{ background: 'var(--brand-border)', color: 'var(--brand-subtle)' }}>{p.code}</span>
                     </td>
-                    <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--brand-text)' }}>{p.name}</td>
+                    <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--brand-text)' }}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{p.name}</span>
+                        {p.is_auster_frozen && (
+                          <span
+                            className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md font-semibold whitespace-nowrap"
+                            style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+                            title="Projeto histórico — não consome do contrato atual"
+                          >Histórico</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-5 py-3.5">
                       <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{p.status_display}</span>
                     </td>
@@ -383,13 +559,14 @@ export default function BankHoursFixedPage() {
                     <td className="px-5 py-3.5 text-right font-medium" style={{ color: 'var(--brand-text)' }}>
                       {p.sold_hours !== null ? (contributions > 0 ? `${p.sold_hours} (+${contributions})` : String(p.sold_hours)) : '—'}
                     </td>
-                    <td className="px-5 py-3.5 text-right font-bold" style={{ color: '#00F5FF' }}>
-                      {fmtH(consumed)}h
-                    </td>
-                    <td className="px-5 py-3.5 text-right font-bold" style={{ color: balance >= 0 ? '#10B981' : '#EF4444' }}>
-                      {fmtH(balance)}h
-                    </td>
                     <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--brand-muted)' }}>{p.start_date ? fmtDate(p.start_date) : '—'}</td>
+                    <td className="px-3 py-3.5 text-right">
+                      <ProjectActionsMenu onViewTimesheets={() => setProjectTSModal({
+                        projectId: p.id,
+                        projectName: p.name,
+                        isClosed: String(p.contract_type_display ?? '').toLowerCase() === 'fechado',
+                      })} />
+                    </td>
                   </tr>
                 )
               })}
@@ -477,16 +654,38 @@ export default function BankHoursFixedPage() {
           </div>
         </div>
 
-        {/* Empty */}
+        {/* Empty — chama atenção pra selecionar o projeto */}
         {!hasFilters && (
-          <div className="rounded-2xl p-16 text-center" style={{ border: '1px dashed var(--brand-border)' }}>
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(0,245,255,0.06)' }}>
-              <BarChart2 size={22} color="#00F5FF" />
+          <div
+            className="rounded-2xl p-12 text-center relative overflow-hidden"
+            style={{
+              background: 'linear-gradient(135deg, rgba(0,245,255,0.06) 0%, rgba(0,245,255,0.02) 100%)',
+              border: '2px dashed var(--primary)',
+            }}
+          >
+            <div
+              className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 animate-pulse"
+              style={{
+                background: 'var(--primary)',
+                color: 'var(--primary-fg)',
+                boxShadow: '0 0 0 8px rgba(0,245,255,0.10), 0 0 0 16px rgba(0,245,255,0.05)',
+              }}
+            >
+              <MousePointerClick size={36} />
             </div>
-            <p className="font-semibold text-sm mb-1" style={{ color: 'var(--brand-text)' }}>Nenhum projeto selecionado</p>
-            <p className="text-sm" style={{ color: 'var(--brand-muted)' }}>
-              {isAdmin ? 'Selecione um cliente e um projeto para visualizar os dados.' : 'Selecione um projeto para visualizar os dados.'}
+            <p className="font-bold text-2xl mb-2" style={{ color: 'var(--text)' }}>
+              Selecione um projeto
             </p>
+            <p className="text-base mb-6" style={{ color: 'var(--text-muted)' }}>
+              {isAdmin
+                ? 'Escolha um cliente e um projeto acima para visualizar os dados do banco de horas.'
+                : 'Use o seletor acima para escolher o projeto que deseja visualizar.'}
+            </p>
+            <div className="flex items-center justify-center gap-2 text-sm font-medium" style={{ color: 'var(--primary)' }}>
+              <ArrowUp size={18} className="animate-bounce" />
+              <span>Use o filtro de Projeto no topo da página</span>
+              <ArrowUp size={18} className="animate-bounce" />
+            </div>
           </div>
         )}
 
@@ -495,10 +694,19 @@ export default function BankHoursFixedPage() {
             {/* Tabs */}
             <div className="flex gap-1 p-1 rounded-2xl w-fit" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
               <Tab label="Total Geral"  active={activeTab === 'total'}       onClick={() => setActiveTab('total')} />
-              <Tab label="Projetos"     active={activeTab === 'projects'}    onClick={() => setActiveTab('projects')} />
+              {!isLeafProject && (
+                <Tab label="Projetos"     active={activeTab === 'projects'}    onClick={() => setActiveTab('projects')} />
+              )}
+              {summary?.has_architecture && (
+                <Tab label="Arquitetura" active={activeTab === 'architecture'} onClick={() => setActiveTab('architecture')} />
+              )}
               {(summary?.has_support ?? true) && (
                 <Tab label="Sustentação" active={activeTab === 'maintenance'} onClick={() => setActiveTab('maintenance')} />
               )}
+              {!isAusterContext && (
+                <Tab label="Indicadores do Suporte" active={activeTab === 'indicators'} onClick={() => setActiveTab('indicators')} />
+              )}
+              <Tab label="Despesas" active={activeTab === 'expenses'} onClick={() => setActiveTab('expenses')} />
             </div>
 
             {/* ── TOTAL GERAL ── */}
@@ -514,11 +722,16 @@ export default function BankHoursFixedPage() {
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                       <MetricCard label="Horas Contratadas" value={fmtH(summary.contracted_hours)} icon={BarChart2} />
                       <MetricCard label="Aporte de Horas"   value={fmtH(summary.contributed_hours)} icon={TrendingUp} />
-                      <ConsumedBreakdownCard
-                        total={summary.consumed_hours}
-                        projetos={summary.projects_consumed_hours}
-                        sustentacao={summary.maintenance_consumed_hours}
-                      />
+                      {isLeafProject ? (
+                        <MetricCard label="Consumo Acumulado" value={fmtH(summary.consumed_hours)} icon={Clock} accent="primary" />
+                      ) : (
+                        <ConsumedBreakdownCard
+                          total={summary.consumed_hours}
+                          projetos={summary.projects_consumed_hours}
+                          sustentacao={summary.maintenance_consumed_hours}
+                          arquitetura={summary.architecture_consumed_hours}
+                        />
+                      )}
                       <MetricCard
                         label="Consumo do Mês"
                         value={fmtH(summary.month_consumed_hours)}
@@ -533,23 +746,33 @@ export default function BankHoursFixedPage() {
                       />
                     </div>
 
-                    {/* Row 2: 3 highlight cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <MetricCard
-                        label="Horas Excedentes"
-                        value={fmtH(summary.exceeded_hours)}
-                        icon={AlertCircle}
-                        accent={summary.exceeded_hours > 0 ? 'danger' : 'default'}
-                      />
-                      <MetricCard label="Valor Hora"   value={fmtBRL(summary.hourly_rate)}   unit="" icon={DollarSign} />
-                      <MetricCard
-                        label="Valor a Pagar"
-                        value={fmtBRL(summary.amount_to_pay)}
-                        unit=""
-                        icon={DollarSign}
-                        accent={(summary.amount_to_pay ?? 0) > 0 ? 'danger' : 'default'}
-                      />
-                    </div>
+                    {/* Row 2: 3 highlight cards (oculto em modo leaf) */}
+                    {!isLeafProject && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <MetricCard
+                          label="Horas Excedentes"
+                          value={fmtH(summary.exceeded_hours)}
+                          icon={AlertCircle}
+                          accent={summary.exceeded_hours > 0 ? 'danger' : 'default'}
+                        />
+                        <MetricCard label="Valor Hora"   value={fmtBRL(summary.hourly_rate)}   unit="" icon={DollarSign} />
+                        <MetricCard
+                          label="Valor a Pagar"
+                          value={fmtBRL(summary.amount_to_pay)}
+                          unit=""
+                          icon={DollarSign}
+                          accent={(summary.amount_to_pay ?? 0) > 0 ? 'danger' : 'default'}
+                        />
+                      </div>
+                    )}
+
+                    {/* Apontamentos (modo leaf) */}
+                    {isLeafProject && (
+                      <>
+                        <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
+                        <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="leaf" onRowClick={setInlineDetail} />
+                      </>
+                    )}
 
                     {/* Histórico de Aporte */}
                     {(summary.contributed_hours_history?.length ?? 0) > 0 && (
@@ -611,28 +834,561 @@ export default function BankHoursFixedPage() {
               </div>
             )}
 
+            {/* ── ARQUITETURA ── */}
+            {activeTab === 'architecture' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <MetricCard label="Consumo Acumulado" value={fmtH(summary?.architecture_consumed_hours ?? 0)} icon={Clock} accent="primary" />
+                  <MetricCard label="Consumo do Mês"    value={fmtH(summary?.architecture_month_consumed_hours ?? 0)} icon={Clock} />
+                </div>
+                <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
+                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="architecture" onRowClick={setInlineDetail} />
+              </div>
+            )}
+
             {/* ── SUSTENTAÇÃO ── */}
             {activeTab === 'maintenance' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <MetricCard
-                    label="Consumo Acumulado"
-                    value={fmtH(summary?.maintenance_consumed_hours ?? 0)}
-                    icon={Clock}
-                    accent="primary"
-                  />
-                  <MetricCard
-                    label="Consumo do Mês"
-                    value={fmtH(summary?.maintenance_month_consumed_hours ?? summary?.month_consumed_hours ?? 0)}
-                    icon={Clock}
-                  />
+                  <MetricCard label="Consumo Acumulado" value={fmtH(summary?.maintenance_consumed_hours ?? 0)} icon={Clock} accent="primary" />
+                  <MetricCard label="Consumo do Mês"    value={fmtH(summary?.maintenance_month_consumed_hours ?? summary?.month_consumed_hours ?? 0)} icon={Clock} />
                 </div>
-                <ProjectsTable items={maintList} loading={loadingMaint} />
+                <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
+                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="maintenance" onRowClick={setInlineDetail} />
+                <InlineTicketSummaryTable rows={ticketSummary} loading={ticketSummaryLoading} />
               </div>
             )}
+
+            {/* ── INDICADORES DO SUPORTE ── */}
+            {activeTab === 'indicators' && !isAusterContext && (
+              <DashboardIndicators
+                basePath="/dashboards/bank-hours-fixed/indicators"
+                params={indicatorParams}
+                disabled={!hasFilters}
+              />
+            )}
+
+            {/* ── DESPESAS ── */}
+            {activeTab === 'expenses' && (() => {
+              const totalAmount = inlineRows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+              const toPay = inlineRows
+                .filter(r => !['rejected','rejeitado','pago','paid'].includes(String(r.status ?? '').toLowerCase()))
+                .reduce((s, r) => s + (Number(r.amount) || 0), 0)
+              const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+              return (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <MetricCard label="Quantidade"    value={String(inlineRows.length)} icon={DollarSign} />
+                    <MetricCard label="Valor Total"   value={fmtBRL(totalAmount)} icon={DollarSign} />
+                    <MetricCard label="Valor a Pagar" value={fmtBRL(toPay)} icon={DollarSign} accent="primary" />
+                  </div>
+                  <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
+                  <InlineExpensesTable rows={inlineRows} loading={inlineLoading} />
+                </div>
+              )
+            })()}
           </div>
         )}
       </div>
+
+      {/* ─ Modal A: Lista de Apontamentos do Projeto ─ */}
+      {projectTSModal && (
+        <div
+          className="fixed inset-0 z-[80] flex items-start justify-center p-4 overflow-y-auto"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+          onClick={() => setProjectTSModal(null)}
+        >
+          <div onClick={e => e.stopPropagation()} className="w-full max-w-6xl mt-8 rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <h3 className="text-base font-semibold" style={{ color: 'var(--text)' }}>Apontamentos — {projectTSModal.projectName}</h3>
+                {!projectTSModal.isClosed && (
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{projectTSRows.length} registros</p>
+                )}
+              </div>
+              <button onClick={() => setProjectTSModal(null)} className="p-1.5 rounded-md hover:opacity-70" style={{ color: 'var(--text-muted)' }}><CloseIcon size={18} /></button>
+            </div>
+            <div className="overflow-x-auto max-h-[70vh]">
+              {projectTSModal.isClosed ? (
+                <div className="py-16 px-8 text-center">
+                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-full mb-4" style={{ background: 'rgba(245,158,11,0.10)', color: '#F59E0B' }}>
+                    <AlertCircle size={24} />
+                  </div>
+                  <p className="text-base font-semibold mb-2" style={{ color: 'var(--text)' }}>Projeto Fechado</p>
+                  <p className="text-sm max-w-md mx-auto" style={{ color: 'var(--text-muted)' }}>
+                    Projetos do tipo <strong>Fechado</strong> não controlam apontamentos — o valor vendido é comprometido no ato da criação.
+                  </p>
+                </div>
+              ) : projectTSLoading ? (
+                <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
+              ) : projectTSRows.length === 0 ? (
+                <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem apontamentos no período.</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Data</th>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Solicitante</th>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Consultor</th>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Ticket</th>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Título do ticket</th>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Descrição</th>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Início</th>
+                      <th className="text-left px-3 py-2 text-xs uppercase tracking-wide">Fim</th>
+                      <th className="text-right px-3 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Esforço (h)</th>
+                      <th className="px-3 py-2 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projectTSRows.map(r => (
+                      <tr key={r.id} className="cursor-pointer" style={{ borderBottom: '1px solid var(--border)' }} onClick={() => setProjectTSDetail(r)}>
+                        <td className="px-3 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                        <td className="px-3 py-2">{r.requester ?? '—'}</td>
+                        <td className="px-3 py-2">{r.user?.name ?? '—'}</td>
+                        <td className="px-3 py-2">{r.ticket ? <span className="font-mono text-xs">{r.ticket}</span> : '—'}</td>
+                        <td className="px-3 py-2" style={{ color: 'var(--text-muted)' }}>{r.ticket_subject ?? '—'}</td>
+                        <td className="px-3 py-2 max-w-xs truncate" style={{ color: 'var(--text-muted)' }} title={r.description ?? ''}>{r.description ?? '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{r.start_time ?? '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{r.end_time ?? '—'}</td>
+                        <td className="px-3 py-2 text-right font-mono">{((r.effort_minutes ?? 0) / 60).toFixed(2)}</td>
+                        <td className="px-3 py-2"><Eye size={14} style={{ color: 'var(--text-muted)' }} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─ Modal B: Detalhe do Apontamento (aba Projetos) ─ */}
+      {projectTSDetail && (
+        <TimesheetDetailModal ts={projectTSDetail} onClose={() => setProjectTSDetail(null)} />
+      )}
+
+      {/* ─ Modal: Detalhe do Apontamento (abas Sustentação/Arquitetura) ─ */}
+      {inlineDetail && (
+        <TimesheetDetailModal ts={inlineDetail} onClose={() => setInlineDetail(null)} />
+      )}
+
     </AppLayout>
+  )
+}
+
+// ─── ProjectActionsMenu (3 pontinhos) ───────────────────────────────────────
+
+function ProjectActionsMenu({ onViewTimesheets }: { onViewTimesheets: () => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        className="p-1.5 rounded-md hover:bg-white/5"
+        style={{ color: 'var(--text-muted)' }}
+        title="Ações"
+      >
+        <MoreVertical size={16} />
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 mt-1 z-50 rounded-lg overflow-hidden min-w-[180px]"
+          style={{ background: 'var(--brand-surface)', border: '1px solid var(--border)', boxShadow: 'var(--brand-card-shadow-md)' }}
+        >
+          <button
+            onClick={() => { setOpen(false); onViewTimesheets() }}
+            className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/5"
+            style={{ color: 'var(--text)' }}
+          >
+            <Eye size={14} /> Ver Apontamentos
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── TimesheetDetailModal ───────────────────────────────────────────────────
+
+function TimesheetDetailModal({ ts, onClose }: { ts: any; onClose: () => void }) {
+  const fmtDateBR = (iso: string | null) => iso ? iso.split('-').reverse().join('/') : '—'
+  const period = (ts.start_time && ts.end_time)
+    ? `${ts.start_time} – ${ts.end_time}`
+    : null
+  const hours = ((ts.effort_minutes ?? 0) / 60)
+  const hoursDisplay = `${Math.floor(hours)}:${String(Math.round((hours - Math.floor(hours)) * 60)).padStart(2, '0')}`
+  return (
+    <div className="fixed inset-0 z-[90] flex items-start justify-center p-4 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.75)' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="w-full max-w-2xl mt-8 rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+        <div className="px-6 py-5 flex items-start justify-between gap-4" style={{ borderBottom: '1px solid var(--border)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(0,245,255,0.10)' }}>
+              <Clock size={20} style={{ color: 'var(--primary)' }} />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>Detalhe do Apontamento</h3>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>#{ts.id} · {fmtDateBR(ts.date)}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-md hover:opacity-70" style={{ color: 'var(--text-muted)' }}><CloseIcon size={18} /></button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {period && (
+            <div className="rounded-xl p-4" style={{ background: 'rgba(0,245,255,0.05)', border: '1px solid rgba(0,245,255,0.2)' }}>
+              <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Período</p>
+              <p className="text-2xl font-bold" style={{ color: 'var(--primary)' }}>
+                {period} <span className="text-base font-normal" style={{ color: 'var(--text-muted)' }}>({hoursDisplay})</span>
+              </p>
+            </div>
+          )}
+
+          <div className="rounded-xl divide-y" style={{ background: 'var(--brand-surface)', border: '1px solid var(--border)' }}>
+            <DetailRow icon={<Calendar size={14} />} label="Data" value={fmtDateBR(ts.date)} />
+            <DetailRow icon={<UserIcon size={14} />} label="Colaborador" value={ts.user?.name ?? '—'} />
+            <DetailRow icon={<Building2 size={14} />} label="Cliente" value={ts.customer ?? '—'} />
+            <DetailRow icon={<Folder size={14} />} label="Projeto" value={
+              <div className="flex items-center gap-2 flex-wrap">
+                <span>{ts.project?.name ?? '—'}</span>
+                {ts.project?.contract_type && (
+                  <span className="text-xs px-2 py-0.5 rounded-md" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>{ts.project.contract_type}</span>
+                )}
+              </div>
+            } />
+            <DetailRow icon={<Paperclip size={14} />} label="Anexo" value={ts.attachment_path ? <a href={ts.attachment_path} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)' }}>Ver anexo</a> : 'Sem anexo'} />
+            {ts.ticket && (
+              <DetailRow icon={<FileText size={14} />} label="Ticket" value={
+                <a href={`https://erpserv.movidesk.com/Ticket/Edit/${ts.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs" style={{ color: 'var(--primary)' }}>#{ts.ticket}{ts.ticket_subject ? ` · ${ts.ticket_subject}` : ''}</a>
+              } />
+            )}
+          </div>
+
+          {ts.description && (
+            <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)', border: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <FileText size={14} style={{ color: 'var(--primary)' }} />
+                <span className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--text-muted)' }}>Observação</span>
+              </div>
+              <p className="text-sm" style={{ color: 'var(--text)' }}>{ts.description}</p>
+            </div>
+          )}
+
+          <div className="flex justify-end pt-2">
+            <button onClick={onClose} className="px-5 py-2 rounded-lg text-sm font-medium" style={{ background: 'var(--surface-hover)', color: 'var(--text)', border: '1px solid var(--border)' }}>Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3">
+      <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>{icon}</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{label}</p>
+        <div className="text-sm font-medium" style={{ color: 'var(--text)' }}>{value}</div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Inline tables (visual no mesmo padrão de /timesheets) ──────────────────
+
+const URGENCY_COLORS = {
+  'Urgente': '#DC2626',  // vermelho forte
+  'Alta':    '#F97316',  // laranja
+  'Média':   '#F59E0B',  // âmbar / amarelo
+  'Baixa':   '#10B981',  // verde
+}
+
+function IndicatorCard({
+  title, rows, labelKey, valueKey, valueFmt, emptyMessage = 'Sem dados no período.', badgeKey, badgeFmt, colorKey, onRowClick,
+}: {
+  title: string
+  rows: any[]
+  labelKey: (r: any) => string
+  valueKey: (r: any) => number
+  valueFmt: (v: number) => string
+  emptyMessage?: string
+  badgeKey?: (r: any) => number
+  badgeFmt?: (n: number) => string
+  colorKey?: (r: any) => string
+  onRowClick?: (r: any) => void
+}) {
+  const max = Math.max(1, ...rows.map(valueKey))
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="px-5 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{title}</h3>
+      </div>
+      <div className="p-5">
+        {rows.length === 0 ? (
+          <p className="text-sm text-center py-6" style={{ color: 'var(--text-muted)' }}>{emptyMessage}</p>
+        ) : (
+          <div className="space-y-2">
+            {rows.slice(0, 15).map((r, idx) => {
+              const v = valueKey(r)
+              const pct = (v / max) * 100
+              const badgeVal = badgeKey ? badgeKey(r) : null
+              const clickable = !!onRowClick
+              return (
+                <div
+                  key={idx}
+                  className={`flex items-center gap-3 rounded-md px-1 py-0.5 transition-colors ${clickable ? 'cursor-pointer hover:bg-white/[0.03]' : ''}`}
+                  onClick={clickable ? () => onRowClick!(r) : undefined}
+                >
+                  <div className="w-6 text-right text-xs font-mono shrink-0" style={{ color: 'var(--text-muted)' }}>{idx + 1}</div>
+                  <div className="w-48 shrink-0 text-sm truncate" style={{ color: 'var(--text)' }} title={labelKey(r)}>{labelKey(r)}</div>
+                  <div className="flex-1 relative h-6 rounded overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
+                    <div className="absolute inset-y-0 left-0 rounded" style={{ width: `${pct}%`, background: colorKey ? colorKey(r) : 'var(--primary)' }} />
+                  </div>
+                  <div className="w-24 text-right text-sm font-semibold shrink-0 whitespace-nowrap tabular-nums" style={{ color: 'var(--text)' }}>
+                    {valueFmt(v)}
+                  </div>
+                  {badgeVal !== null && badgeFmt && (
+                    <div
+                      className="text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap"
+                      style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+                    >
+                      {badgeFmt(badgeVal)}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowClick }: { rows: any[]; loading: boolean; variant?: 'maintenance' | 'architecture' | 'leaf'; onRowClick?: (r: any) => void }) {
+  const isArch = variant === 'architecture'
+  const isLeaf = variant === 'leaf'
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Apontamentos do período</h3>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{rows.length} registros</span>
+      </div>
+      <div className="overflow-x-auto">
+        {loading ? (
+          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
+        ) : rows.length === 0 ? (
+          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem apontamentos no período selecionado.</div>
+        ) : isArch ? (
+          // Arquitetura — tabela enxuta (Data, Consultor, Descrição, Horas)
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Data</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Consultor</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Descrição</th>
+                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Horas</th>
+                <th className="px-2 py-2 w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id} className={onRowClick ? 'cursor-pointer' : ''} onClick={onRowClick ? () => onRowClick(r) : undefined} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td className="px-4 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                  <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
+                  <td className="px-4 py-2 max-w-2xl truncate" style={{ color: 'var(--text-muted)' }} title={r.description ?? '—'}>{r.description ?? '—'}</td>
+                  <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
+                  {onRowClick && <td className="px-2 py-2"><Eye size={14} style={{ color: 'var(--text-muted)' }} /></td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : isLeaf ? (
+          // Leaf — sem Solicitante / Ticket / Título do Ticket
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Data</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Consultor</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Descrição</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Início</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Fim</th>
+                <th className="text-right px-3 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Esforço (h)</th>
+                <th className="px-2 py-2 w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id} className={onRowClick ? 'cursor-pointer' : ''} onClick={onRowClick ? () => onRowClick(r) : undefined} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td className="px-3 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                  <td className="px-3 py-2">{r.user?.name ?? '—'}</td>
+                  <td className="px-3 py-2 max-w-xl truncate" style={{ color: 'var(--text-muted)' }} title={r.description ?? '—'}>{r.description ?? '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{r.start_time ?? '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{r.end_time ?? '—'}</td>
+                  <td className="px-3 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}</td>
+                  {onRowClick && <td className="px-2 py-2"><Eye size={14} style={{ color: 'var(--text-muted)' }} /></td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          // Sustentação — colunas no padrão do Excel
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Data</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Solicitante</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Consultor</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Ticket</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Título do ticket</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Descrição</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Início</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Fim</th>
+                <th className="text-right px-3 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Esforço (h)</th>
+                <th className="px-2 py-2 w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => {
+                const desc = r.description ?? '—'
+                return (
+                  <tr key={r.id} className={onRowClick ? 'cursor-pointer' : ''} onClick={onRowClick ? () => onRowClick(r) : undefined} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td className="px-3 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                    <td className="px-3 py-2">{r.requester ?? '—'}</td>
+                    <td className="px-3 py-2">{r.user?.name ?? '—'}</td>
+                    <td className="px-3 py-2">
+                      {r.ticket
+                        ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }} onClick={e => e.stopPropagation()}>#{r.ticket}</a>
+                        : <span style={{ color: 'var(--text-light)' }}>—</span>}
+                    </td>
+                    <td className="px-3 py-2 max-w-xs truncate" style={{ color: 'var(--text-muted)' }} title={r.ticket_subject ?? '—'}>{r.ticket_subject ?? '—'}</td>
+                    <td className="px-3 py-2 max-w-sm truncate" style={{ color: 'var(--text-muted)' }} title={desc}>{desc}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{r.start_time ?? '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{r.end_time ?? '—'}</td>
+                    <td className="px-3 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}</td>
+                    {onRowClick && <td className="px-2 py-2"><Eye size={14} style={{ color: 'var(--text-muted)' }} /></td>}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loading: boolean }) {
+  const fmtH = (mins: number) => {
+    const h = Math.floor(mins / 60)
+    const m = Math.abs(mins % 60)
+    return `${h}:${String(m).padStart(2, '0')}`
+  }
+  if (!loading && rows.length === 0) return null
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Apuração por Ticket</h3>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{rows.length} tickets</span>
+      </div>
+      <div className="overflow-x-auto">
+        {loading ? (
+          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Ticket</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Título</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Solicitante</th>
+                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Total no período</th>
+                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Total histórico</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(tk => (
+                <tr key={tk.ticket} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td className="px-4 py-2">
+                    <a href={`https://erpserv.movidesk.com/Ticket/Edit/${tk.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }}>#{tk.ticket}</a>
+                  </td>
+                  <td className="px-4 py-2" style={{ color: 'var(--text)' }}>{tk.title ?? '—'}</td>
+                  <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{tk.requester ?? '—'}</td>
+                  <td className="px-4 py-2 text-right font-mono">{fmtH(tk.period_minutes)}</td>
+                  <td className="px-4 py-2 text-right font-mono" style={{ color: 'var(--text-muted)' }}>{fmtH(tk.lifetime_minutes)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ borderTop: '1px solid var(--border)', fontWeight: 600 }}>
+                <td colSpan={3} className="px-4 py-2 text-right">Totais ({rows.length} {rows.length === 1 ? 'ticket' : 'tickets'})</td>
+                <td className="px-4 py-2 text-right font-mono">{fmtH(rows.reduce((s, r) => s + (r.period_minutes || 0), 0))}</td>
+                <td className="px-4 py-2 text-right font-mono">{fmtH(rows.reduce((s, r) => s + (r.lifetime_minutes || 0), 0))}</td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ExportButton({ onClick, disabled }: { onClick: () => void; disabled: boolean }) {
+  return (
+    <div className="flex justify-end">
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40"
+        style={{ background: 'var(--surface-hover)', color: 'var(--text)', border: '1px solid var(--border)' }}
+      >
+        <Download size={14} />
+        Exportar Excel
+      </button>
+    </div>
+  )
+}
+
+function InlineExpensesTable({ rows, loading }: { rows: any[]; loading: boolean }) {
+  const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Despesas do período</h3>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{rows.length} registros</span>
+      </div>
+      <div className="overflow-x-auto">
+        {loading ? (
+          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
+        ) : rows.length === 0 ? (
+          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem despesas no período selecionado.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Data</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Colaborador</th>
+                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td className="px-4 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                  <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
+                  <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{fmtBRL(Number(r.amount) || 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
   )
 }

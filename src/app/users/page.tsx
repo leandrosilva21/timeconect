@@ -1,7 +1,7 @@
 'use client'
 
 import { AppLayout } from '@/components/layout/app-layout'
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { api, ApiError } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -33,6 +33,7 @@ interface UserItem {
   coordinator_type?: 'projetos' | 'sustentacao' | null
   guaranteed_hours?: number | null
   customer_id?: number | null
+  customer?: { id: number; name: string } | null
   partner_id?: number | null
   partner?: { id: number; name: string } | null
   is_executive?: boolean
@@ -129,6 +130,101 @@ function FieldSelect({ label, value, onChange, options, placeholder }: {
         {placeholder && <option value="">{placeholder}</option>}
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
+    </div>
+  )
+}
+
+// FieldSearchSelect — versão com busca por texto. Usar quando a lista
+// tem 20+ opções (ex: empresas). Lista nativa fica impraticável.
+function FieldSearchSelect({ label, value, onChange, options, placeholder }: {
+  label: string
+  value: string | number
+  onChange: (v: string) => void
+  options: { value: string | number; label: string }[]
+  placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const selected = options.find(o => String(o.value) === String(value))
+  const filtered = options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()))
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+
+  useEffect(() => {
+    if (open) { setQuery(''); setTimeout(() => inputRef.current?.focus(), 50) }
+  }, [open])
+
+  return (
+    <div>
+      <Label className="text-xs text-zinc-400">{label}</Label>
+      <div ref={ref} className="relative mt-1">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="w-full flex items-center justify-between gap-2 px-3 h-9 rounded-md text-xs outline-none text-left"
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            color: selected ? 'var(--text)' : 'var(--text-light)',
+          }}
+        >
+          <span className="truncate">{selected ? selected.label : (placeholder ?? 'Selecione...')}</span>
+          <ChevronDown size={12} style={{ color: 'var(--text-muted)' }} />
+        </button>
+        {open && (
+          <div
+            className="absolute top-full mt-1 left-0 z-[200] w-full min-w-56 rounded-xl overflow-hidden"
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              boxShadow: 'var(--brand-card-shadow-md)',
+            }}
+          >
+            <div className="p-2 border-b flex items-center gap-2" style={{ borderColor: 'var(--border)' }}>
+              <Search size={12} style={{ color: 'var(--text-muted)' }} />
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Buscar..."
+                className="w-full bg-transparent text-xs outline-none"
+                style={{ color: 'var(--text)' }}
+              />
+            </div>
+            <div className="max-h-60 overflow-y-auto">
+              {filtered.length === 0
+                ? <p className="px-3 py-2 text-xs" style={{ color: 'var(--text-light)' }}>Nenhum resultado</p>
+                : filtered.map(o => {
+                    const isSelected = String(o.value) === String(value)
+                    return (
+                      <button key={o.value} type="button"
+                        onClick={() => { onChange(String(o.value)); setOpen(false) }}
+                        className="w-full text-left px-3 py-2 text-xs transition-colors"
+                        style={{
+                          color: isSelected ? 'var(--primary)' : 'var(--text)',
+                          background: isSelected ? 'var(--primary-soft)' : 'transparent',
+                          fontWeight: isSelected ? 600 : 400,
+                        }}
+                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--surface-hover)' }}
+                        onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
+                      >
+                        {o.label}
+                      </button>
+                    )
+                  })
+              }
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -252,13 +348,14 @@ export default function UsersPage() {
   const { filters: flt, set: setFilter } = usePersistedFilters(
     'users',
     authUser?.id,
-    { search: '', filterEnabled: '', filterRole: '', filterPartner: '', sort: 'name', sortDir: 'asc' as 'asc' | 'desc', page: 1 },
+    { search: '', filterEnabled: '', filterRole: '', filterPartner: '', filterCustomer: '', sort: 'name', sortDir: 'asc' as 'asc' | 'desc', page: 1 },
   )
-  const { search, filterEnabled, filterRole, filterPartner, sort, sortDir, page } = flt
-  const setSearch        = (v: string) => setFilter('search', v)
-  const setFilterEnabled = (v: string) => setFilter('filterEnabled', v)
-  const setFilterRole    = (v: string) => { setFilter({ filterRole: v, filterPartner: '', page: 1 } as any) }
-  const setFilterPartner = (v: string) => setFilter('filterPartner', v)
+  const { search, filterEnabled, filterRole, filterPartner, filterCustomer, sort, sortDir, page } = flt
+  const setSearch         = (v: string) => setFilter('search', v)
+  const setFilterEnabled  = (v: string) => setFilter('filterEnabled', v)
+  const setFilterRole     = (v: string) => { setFilter({ filterRole: v, filterPartner: '', filterCustomer: '', page: 1 } as any) }
+  const setFilterPartner  = (v: string) => setFilter('filterPartner', v)
+  const setFilterCustomer = (v: string) => setFilter('filterCustomer', v)
   const setSort = (field: string) => {
     if (sort === field) {
       setFilter('sortDir', (sortDir === 'asc' ? 'desc' : 'asc') as any)
@@ -310,8 +407,9 @@ export default function UsersPage() {
       const p = new URLSearchParams({ page: String(page), pageSize: '100' })
       if (search)        p.set('search', search)
       if (filterEnabled) p.set('enabled', filterEnabled)
-      if (filterRole)    p.set('role', filterRole)
-      if (filterPartner) p.set('partner_id', filterPartner)
+      if (filterRole)     p.set('role', filterRole)
+      if (filterPartner)  p.set('partner_id', filterPartner)
+      if (filterCustomer) p.set('customer_id', filterCustomer)
       p.set('order', sortDir === 'desc' ? `-${sort}` : sort)
       const r = await api.get<{ items?: UserItem[]; data?: UserItem[]; hasNext?: boolean; meta?: { last_page: number } }>(`/users?${p}`)
       const list = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
@@ -320,7 +418,7 @@ export default function UsersPage() {
       setHasNext(!!(r?.hasNext || (r?.meta && page < r.meta.last_page)))
     } catch { toast.error('Erro ao carregar usuários') }
     finally   { setLoading(false) }
-  }, [page, search, filterEnabled, filterRole, filterPartner, sort, sortDir])
+  }, [page, search, filterEnabled, filterRole, filterPartner, filterCustomer, sort, sortDir])
 
   useEffect(() => { load() }, [load])
 
@@ -388,7 +486,8 @@ export default function UsersPage() {
       }
       if (form.profiles.includes('coordenador')) {
         payload.coordinator_type  = form.coordinator_type || null
-        payload.extra_permissions = form.extra_permissions
+        // extra_permissions agora é gerenciado via Grupos de Permissões — sempre limpa aqui
+        payload.extra_permissions = []
       }
       if (form.profiles.includes('consultor') || form.profiles.includes('parceiro_adm')) {
         payload.can_timesheet_sustentacao = form.can_timesheet_sustentacao
@@ -601,6 +700,15 @@ export default function UsersPage() {
             {partners.map(p => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
           </select>
         )}
+        {filterRole === 'cliente' && customers.length > 0 && (
+          <select
+            value={filterCustomer}
+            onChange={e => { setFilterCustomer(e.target.value); setPage(1) }}
+            className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-md h-8 px-2">
+            <option value="">Todos os clientes</option>
+            {customers.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+          </select>
+        )}
         {canCreate && (
         <Button onClick={openCreate} className="bg-blue-600 hover:bg-blue-500 text-white h-8 text-xs gap-1.5">
           <Plus size={13} /> Novo
@@ -686,6 +794,9 @@ export default function UsersPage() {
                   Empresa<SortIcon active={sort === 'partner_name'} dir={sortDir as 'asc' | 'desc'} />
                 </th>
               )}
+              {filterRole === 'cliente' && (
+                <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Cliente</th>
+              )}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Perfil</th>
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Sustentação</th>
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Status</th>
@@ -693,7 +804,7 @@ export default function UsersPage() {
           </thead>
           <tbody>
             {loading ? <TableSkeleton /> : users.length === 0 ? (
-              <tr><td colSpan={canResetPwd ? 7 : 6} className="px-3 py-8 text-center text-zinc-500">Nenhum usuário encontrado</td></tr>
+              <tr><td colSpan={(canResetPwd ? 7 : 6) + ((filterRole === 'parceiro_admin' || filterRole === 'cliente') ? 1 : 0)} className="px-3 py-8 text-center text-zinc-500">Nenhum usuário encontrado</td></tr>
             ) : users.map(user => (
               <tr key={user.id} className={`border-b border-zinc-800 hover:bg-zinc-800/40 transition-colors ${selectedIds.has(user.id) ? 'bg-cyan-500/5' : ''}`}>
                 {canResetPwd && (
@@ -723,6 +834,13 @@ export default function UsersPage() {
                       : <span className="text-xs text-zinc-600">—</span>}
                   </td>
                 )}
+                {filterRole === 'cliente' && (
+                  <td className="px-3 py-2.5 hidden sm:table-cell">
+                    {user.customer?.name
+                      ? <span className="text-xs font-medium text-zinc-200">{user.customer.name}</span>
+                      : <span className="text-xs text-zinc-600">—</span>}
+                  </td>
+                )}
                 <td className="px-3 py-2.5 hidden sm:table-cell">
                   <div className="flex flex-wrap gap-1 items-center">
                     {user.type && (
@@ -735,7 +853,9 @@ export default function UsersPage() {
                         Parceiro ADM
                       </Badge>
                     )}
-                    {user.consultant_type && (
+                    {/* consultant_type só faz sentido pra consultor/parceiro_admin —
+                        evita "Banco de Horas" aparecer para cliente/admin/etc por dado stale. */}
+                    {user.consultant_type && (user.type === 'consultor' || user.type === 'parceiro_admin') && (
                       <span className="text-[10px] text-zinc-500">
                         {CONSULTANT_OPTIONS.find(o => o.value === user.consultant_type)?.label ?? user.consultant_type}
                       </span>
@@ -966,9 +1086,9 @@ export default function UsersPage() {
                   </div>
                 )}
 
-                {/* ── Cliente: seleciona empresa ── */}
+                {/* ── Cliente: seleciona empresa (com busca por texto) ── */}
                 {isCliente && (
-                  <FieldSelect
+                  <FieldSearchSelect
                     label="Empresa *"
                     value={form.customer_id}
                     onChange={v => setForm(f => ({ ...f, customer_id: v === '' ? '' : Number(v) }))}
@@ -1028,44 +1148,8 @@ export default function UsersPage() {
                   </div>
                 )}
 
-                {/* ── Coordenador: permissões adicionais ── */}
-                {isCoordenador && (
-                  <div>
-                    <Label className="text-xs text-zinc-400 mb-1 block">Permissões Adicionais</Label>
-                    <div className="space-y-1.5 rounded-lg border border-zinc-700 bg-zinc-800/50 p-3">
-                      {COORDINATOR_PERMISSIONS.map(perm => {
-                        const active = form.extra_permissions.includes(perm.key)
-                        return (
-                          <button
-                            key={perm.key}
-                            type="button"
-                            onClick={() => setForm(f => ({
-                              ...f,
-                              extra_permissions: active
-                                ? f.extra_permissions.filter(p => p !== perm.key)
-                                : [...f.extra_permissions, perm.key],
-                            }))}
-                            className={`w-full flex items-start gap-2.5 px-2.5 py-2 rounded-md text-xs text-left transition-colors ${
-                              active
-                                ? 'bg-blue-600/15 border border-blue-500/30'
-                                : 'hover:bg-zinc-700/50 border border-transparent'
-                            }`}
-                          >
-                            <span className={`mt-0.5 w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center ${
-                              active ? 'border-blue-400 bg-blue-500 text-white' : 'border-zinc-600'
-                            }`}>
-                              {active && <Check size={9} />}
-                            </span>
-                            <div>
-                              <p className={`font-medium leading-tight ${active ? 'text-blue-300' : 'text-zinc-300'}`}>{perm.label}</p>
-                              <p className="text-[10px] text-zinc-500 mt-0.5">{perm.desc}</p>
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
+                {/* Permissões adicionais agora vivem em Grupos de Permissões (Settings → Grupos).
+                    Removida a seção inline pra evitar conflito com permissões herdadas de grupo. */}
 
                 {/* ── Parceiro: seleciona empresa + define se é ADM ── */}
                 {isParceiroAdm && (

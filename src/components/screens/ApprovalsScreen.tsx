@@ -1,6 +1,5 @@
 'use client'
 
-import { AppLayout } from '@/components/layout/app-layout'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -554,7 +553,12 @@ function ExpApproveModal({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function ApprovalsPage() {
+export interface ApprovalsScreenProps {
+  scope?: 'sustentacao'
+  embedded?: boolean
+}
+
+export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) {
   const { user } = useAuth()
   const isCoordenador = user?.type === 'coordenador'
 
@@ -673,12 +677,13 @@ export default function ApprovalsPage() {
       const p = new URLSearchParams(filterParams)
       p.set('page', String(tsPage)); p.set('per_page', '100')
       if (tsStatus) p.set('status', tsStatus)
+      if (scope)    p.set('scope', scope)
       const r = await api.get<any>(`/approvals/timesheets?${p}`)
       setTsItems(Array.isArray(r?.data) ? r.data : [])
       setTsPag(r?.pagination ?? null)
     } catch { toast.error('Erro ao carregar apontamentos') }
     finally { setTsLoading(false) }
-  }, [tsPage, filterParams, tsStatus])
+  }, [tsPage, filterParams, tsStatus, scope])
 
   const loadExp = useCallback(async () => {
     setExpLoading(true)
@@ -686,12 +691,13 @@ export default function ApprovalsPage() {
       const p = new URLSearchParams(filterParams)
       p.set('page', String(expPage)); p.set('per_page', '100')
       if (expStatus) p.set('status', expStatus)
+      if (scope)     p.set('scope', scope)
       const r = await api.get<any>(`/approvals/expenses?${p}`)
       setExpItems(Array.isArray(r?.data) ? r.data : [])
       setExpPag(r?.pagination ?? null)
     } catch { toast.error('Erro ao carregar despesas') }
     finally { setExpLoading(false) }
-  }, [expPage, filterParams, expStatus])
+  }, [expPage, filterParams, expStatus, scope])
 
   useEffect(() => { loadTs() },  [loadTs])
   useEffect(() => { loadExp() }, [loadExp])
@@ -873,7 +879,7 @@ export default function ApprovalsPage() {
   }
 
   return (
-    <AppLayout title="Aprovações">
+    <div>
 
       {/* ── Tabs ── */}
       <div className="flex items-center gap-2 mb-5">
@@ -1374,6 +1380,6 @@ export default function ApprovalsPage() {
           </div>
         </div>
       )}
-    </AppLayout>
+    </div>
   )
 }

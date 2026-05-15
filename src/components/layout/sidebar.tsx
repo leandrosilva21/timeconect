@@ -85,26 +85,10 @@ const NAV_COORDINATOR: NavEntry[] = [
   },
 ]
 
-const NAV_CLIENTE: NavEntry[] = [
-  { type: 'item', label: 'Visão Executiva', href: '/portal-cliente', icon: Building2 },
-  { type: 'item', label: 'Apontamentos',  href: '/timesheets',     icon: Clock },
-  { type: 'item', label: 'Despesas',      href: '/expenses',       icon: Receipt },
-  {
-    type: 'group',
-    label: 'Dashboards',
-    icon: BarChart2,
-    items: [
-      { label: 'Banco de Horas Fixo',    href: '/dashboards/bank-hours-fixed',   icon: BarChart2 },
-      { label: 'Banco de Horas Mensais', href: '/dashboards/bank-hours-monthly', icon: CalendarClock },
-      { label: 'On Demand',              href: '/dashboards/on-demand',           icon: Zap },
-      { label: 'Fechado',                href: '/dashboards/fechado',             icon: CheckSquare },
-    ],
-  },
-]
 
 const NAV: NavEntry[] = [
-  { type: 'item', label: 'Início',                href: '/dashboard',       icon: Home },
   { type: 'item', label: 'Meu Painel',            href: '/meu-painel',      icon: LayoutDashboard },
+  { type: 'item', label: 'Início',                href: '/dashboard',       icon: Home },
   { type: 'item', label: 'Meus Cards',            href: '/meus-cards',      icon: Inbox },
   { type: 'item', label: 'Capacidade',            href: '/capacidade',      icon: Users },
   {
@@ -140,7 +124,7 @@ const NAV: NavEntry[] = [
   },
   {
     type: 'group',
-    label: 'Dashboards',
+    label: 'Visão do Cliente',
     icon: BarChart2,
     items: [
       { label: 'Banco de Horas Fixo',    href: '/dashboards/bank-hours-fixed',   icon: BarChart2 },
@@ -217,16 +201,7 @@ function SidebarInner({ user }: { user: User }) {
   const pathname     = usePathname()
   const searchParams = useSearchParams()
   const [collapsed,   setCollapsed]   = useState(false)
-  const [openGroups,  setOpenGroups]  = useState<string[]>(() => {
-    // Abre automaticamente apenas o grupo que contém a rota atual
-    const active: string[] = []
-    for (const entry of NAV) {
-      if (entry.type === 'group' && entry.items.some(i => pathname === i.href.split('?')[0] || pathname.startsWith(i.href.split('?')[0] + '/'))) {
-        active.push(entry.label)
-      }
-    }
-    return active
-  })
+  const [openGroups,  setOpenGroups]  = useState<string[]>([])
 
   const isConsultor        = user?.type === 'consultor'
   const isCoordenador      = user?.type === 'coordenador'
@@ -235,17 +210,40 @@ function SidebarInner({ user }: { user: User }) {
   const isParceiroGestor   = isParceiroAdmin && !!user?.is_executive
   const isAdministrativo   = user?.type === 'administrativo'
   // permissions = lista resolvida pelo backend (base + extra + grupos); fallback para extra_permissions
-  const ep: string[] = (user as any)?.permissions ?? user?.extra_permissions ?? []
+  // Estabilizada com useMemo pra não causar re-render do visibleNav em cada ciclo
+  const ep: string[] = useMemo(
+    () => (user as any)?.permissions ?? user?.extra_permissions ?? [],
+    [(user as any)?.permissions, user?.extra_permissions]
+  )
 
   // Para clientes: carrega os códigos de tipo de contrato dos seus projetos
-  const [clienteContractCodes, setClienteContractCodes] = useState<Set<string>>(new Set())
+  // PRINCIPAIS (sem parent_project_id). Filhos herdam o item do menu via parent
+  // — não deveriam expor entrada extra no menu.
+  // Cacheado em sessionStorage pra evitar flicker do grupo "Contratos" ao trocar de rota.
+  const cacheKey = isCliente && user?.customer_id ? `minutor:contract_codes:${user.customer_id}` : null
+  const [clienteContractCodes, setClienteContractCodes] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined' || !cacheKey) return new Set()
+    try {
+      const raw = window.sessionStorage.getItem(cacheKey)
+      if (raw) return new Set(JSON.parse(raw) as string[])
+    } catch { /* ignore */ }
+    return new Set()
+  })
   useEffect(() => {
     if (!isCliente || !user?.customer_id) return
     api.get<any>(`/projects?customer_id=${user.customer_id}&pageSize=200`)
       .then(r => {
         const items: any[] = Array.isArray(r?.items) ? r.items : []
-        const codes = new Set(items.map(p => p.contract_type?.code).filter(Boolean) as string[])
+        const codes = new Set(
+          items
+            .filter(p => !p.parent_project_id)            // só projetos principais
+            .map(p => p.contract_type?.code)
+            .filter(Boolean) as string[]
+        )
         setClienteContractCodes(codes)
+        if (cacheKey) {
+          try { window.sessionStorage.setItem(cacheKey, JSON.stringify(Array.from(codes))) } catch { /* ignore */ }
+        }
       })
       .catch(() => {})
   }, [isCliente, user?.customer_id])
@@ -266,9 +264,15 @@ function SidebarInner({ user }: { user: User }) {
             { label: 'Demandas e Projetos', href: '/contratos/pipeline', icon: LayoutGrid },
           ],
         })
+      } else if (ep.includes('gestao_projetos.view') || ep.includes('gestao_projetos.update')) {
+        // Permissão via grupo libera o item independente do coordinator_type
+        nav.splice(1, 0, { type: 'item', label: 'Gestão de Projetos', href: '/gestao-projetos', icon: Layers })
       }
 
-      // Portal de Sustentação + Meu Painel — somente para coordenadores do tipo "sustentacao"
+      // Meu Painel — primeiro item para TODOS os coordenadores
+      nav.unshift({ type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard })
+
+      // Portal de Sustentação — somente para coordenadores do tipo "sustentacao"
       if (user?.coordinator_type === 'sustentacao') {
         nav.splice(1, 0, {
           type: 'group',
@@ -278,7 +282,6 @@ function SidebarInner({ user }: { user: User }) {
             { label: 'Portal', href: '/sustentacao', icon: Headphones, exactMatch: true },
           ],
         })
-        nav.splice(1, 0, { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard })
       }
 
 
@@ -286,12 +289,19 @@ function SidebarInner({ user }: { user: User }) {
       const hasProjectsAction = ['projects.create','projects.update','projects.delete','projects.view_financial'].some(p => ep.includes(p))
       const hasAnyUserPerm = ['users.view_all','users.create','users.update','users.reset_password'].some(p => ep.includes(p))
 
-      // Cadastros — monta apenas os subitens concedidos
+      // Cadastros — monta apenas os subitens concedidos.
+      // Pra clientes: além de 'customers.manage' (pacote completo), permissões
+      // granulares (create/update/delete) também liberam o menu — concedidas
+      // via PermissionGroup ou extra_permissions.
+      // Clientes: qualquer permissão de customers libera o item (view sozinho basta).
+      // Contatos de Clientes: mais restritivo — exige nível de edição/gerência.
+      const hasCustomersView = ['customers.view', 'customers.create', 'customers.update', 'customers.delete', 'customers.manage'].some(p => ep.includes(p))
+      const hasCustomersEdit = ['customers.create', 'customers.update', 'customers.delete', 'customers.manage'].some(p => ep.includes(p))
       const cadastrosItems: { label: string; href: string; icon: typeof Users }[] = []
       if (has('contracts.manage'))          cadastrosItems.push({ label: 'Tipos de Contrato',     href: '/cadastros?tab=contracts',          icon: FileType })
       if (has('services.manage'))           cadastrosItems.push({ label: 'Tipos de Serviço',      href: '/cadastros?tab=services',           icon: Wrench })
-      if (has('customers.manage'))          cadastrosItems.push({ label: 'Clientes',              href: '/clientes',                         icon: Users })
-      if (has('customers.manage'))          cadastrosItems.push({ label: 'Contatos de Clientes',  href: '/cadastros?tab=customer_contacts',   icon: Contact })
+      if (hasCustomersView)                 cadastrosItems.push({ label: 'Clientes',              href: '/clientes',                         icon: Users })
+      if (hasCustomersEdit)                 cadastrosItems.push({ label: 'Contatos de Clientes',  href: '/cadastros?tab=customer_contacts',   icon: Contact })
       if (has('executives.manage'))         cadastrosItems.push({ label: 'Executivos',            href: '/cadastros?tab=executives',         icon: Star })
       if (has('groups.manage'))             cadastrosItems.push({ label: 'Grupos de Consultor',   href: '/cadastros?tab=groups',             icon: UserCheck })
       if (has('holidays.manage'))           cadastrosItems.push({ label: 'Feriados',              href: '/cadastros?tab=holidays',           icon: CalendarDays })
@@ -311,7 +321,7 @@ function SidebarInner({ user }: { user: User }) {
       return nav
     }
     if (isAdministrativo) {
-      return [
+      const nav: NavEntry[] = [
         { type: 'item', label: 'Início', href: '/dashboard', icon: Home },
         {
           type: 'group',
@@ -341,7 +351,12 @@ function SidebarInner({ user }: { user: User }) {
           ],
         },
         { type: 'item', label: 'Usuários',     href: '/users',    icon: Users },
-      ] as NavEntry[]
+      ]
+      // Gestão de Projetos — libera via permissão de grupo (mesmo padrão de outros perfis)
+      if (ep.includes('gestao_projetos.view') || ep.includes('gestao_projetos.update')) {
+        nav.splice(3, 0, { type: 'item', label: 'Gestão de Projetos', href: '/gestao-projetos', icon: Layers })
+      }
+      return nav
     }
     if (isCliente) {
       // Filtra dashboards pelos tipos de contrato que o cliente realmente possui
@@ -355,27 +370,22 @@ function SidebarInner({ user }: { user: User }) {
         .filter(([code]) => clienteContractCodes.has(code))
         .map(([, item]) => item)
       const nav: NavEntry[] = [
-        { type: 'item', label: 'Visão Executiva',     href: '/portal-cliente',      icon: Building2 },
+        { type: 'item', label: 'Home',                 href: '/portal-cliente',      icon: Building2 },
         { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline',  icon: LayoutGrid },
-        {
-          type: 'group',
-          label: 'Apontamentos & Despesas',
-          icon: Clock,
-          items: [
-            { label: 'Apontamentos', href: '/timesheets', icon: Clock },
-            { label: 'Despesas',     href: '/expenses',   icon: Receipt },
-          ],
-        },
       ]
       if (dashItems.length > 0) {
-        nav.push({ type: 'group', label: 'Dashboards', icon: BarChart2, items: dashItems })
+        nav.push({ type: 'group', label: 'Contratos', icon: FileText, items: dashItems })
+      }
+      // Indicadores da própria empresa (atualmente só Auster)
+      if (user?.customer_id === 220) {
+        nav.push({ type: 'item', label: 'Indicadores', href: '/indicadores/auster', icon: BarChart2 })
       }
       return nav
     }
     if (isConsultor) {
       const baseNav: NavEntry[] = [
-        { type: 'item', label: 'Início',     href: '/dashboard',  icon: Home },
         { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard },
+        { type: 'item', label: 'Início',     href: '/dashboard',  icon: Home },
         { type: 'item', label: 'Meus Cards', href: '/meus-cards', icon: Inbox },
       ]
       if (ep.includes('gestao_projetos.view') || ep.includes('gestao_projetos.update'))
@@ -402,8 +412,8 @@ function SidebarInner({ user }: { user: User }) {
       }
       // Parceiro simples: meu painel + apontamentos + despesas
       return [
-        { type: 'item', label: 'Início',     href: '/dashboard',  icon: Home },
         { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard },
+        { type: 'item', label: 'Início',     href: '/dashboard',  icon: Home },
         {
           type: 'group',
           label: 'Apontamentos & Despesas',
@@ -417,6 +427,25 @@ function SidebarInner({ user }: { user: User }) {
     }
     return NAV
   }, [isCoordenador, isConsultor, isCliente, isParceiroAdmin, isParceiroGestor, isAdministrativo, clienteContractCodes, ep])
+
+  // Auto-abre o grupo que contém a rota atual, sem fechar os já abertos manualmente.
+  // Roda quando muda pathname OU visibleNav (cliente/coord etc com sidebar dinâmico).
+  useEffect(() => {
+    const auto: string[] = []
+    for (const entry of visibleNav) {
+      if (entry.type === 'group' && entry.items.some(i => {
+        const base = i.href.split('?')[0]
+        return pathname === base || pathname.startsWith(base + '/')
+      })) {
+        auto.push(entry.label)
+      }
+    }
+    if (auto.length === 0) return
+    setOpenGroups(prev => {
+      const merged = new Set([...prev, ...auto])
+      return merged.size === prev.length ? prev : Array.from(merged)
+    })
+  }, [pathname, visibleNav])
 
   // First two letters of name for avatar
   const initials = user?.name
@@ -600,8 +629,7 @@ function SidebarInner({ user }: { user: User }) {
             alt="ERPServ"
             width={90}
             height={36}
-            className="object-contain opacity-40"
-            style={{ filter: 'grayscale(1) invert(1) brightness(10)' }}
+            className="object-contain sidebar-erpserv-logo"
           />
         </div>
       )}

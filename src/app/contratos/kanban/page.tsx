@@ -57,6 +57,7 @@ interface ProjectCard {
   sustentacao_column?: string | null
   coordinator_ids?: number[]
   coordinators?: string[]
+  kanban_coordinator_override_id?: number | null
   executivo_conta_name?: string
   contract_type?: string
   service_type?: string
@@ -869,6 +870,8 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
 }
 
 function ProjectInlineEditModal({ project, onClose, onSaved }: { project: ProjectFull; onClose: () => void; onSaved: () => void }) {
+  const { user: authUser } = useAuth()
+  const isAdmin = authUser?.type === 'admin'
   const d = project as any
   const [form, setForm] = useState<ProjectEditForm>({
     name:                            d.name ?? '',
@@ -900,7 +903,8 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     coordinator_ids:                 (d.coordinators ?? d.approvers ?? []).map((c: any) => c.id),
     consultant_ids:                  (d.consultants ?? []).map((c: any) => c.id),
     consultant_group_ids:            (d.consultant_groups ?? []).map((g: any) => g.id),
-  })
+    kanban_coordinator_override_id:  d.kanban_coordinator_override_id ? String(d.kanban_coordinator_override_id) : '',
+  } as any)
   const [saving, setSaving] = useState(false)
   const [optServiceTypes,   setOptServiceTypes]   = useState<{id:number;name:string}[]>([])
   const [optContractTypes,  setOptContractTypes]  = useState<{id:number;name:string}[]>([])
@@ -918,7 +922,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       api.get<any>('/contract-types?pageSize=100'),
       api.get<any>('/users?type=coordenador&coordinator_type=projetos&pageSize=200'),
       api.get<any>('/users?type=admin&pageSize=200'),
-      api.get<any>('/users?type=consultor&pageSize=200'),
+      api.get<any>('/users?type=consultor,parceiro_admin&pageSize=200'),
       api.get<any>('/consultant-groups?pageSize=100&active=1'),
     ]).then(([st, ct, coords, admins, consults, grps]) => {
       if (st.status === 'fulfilled')       setOptServiceTypes(items(st.value))
@@ -976,6 +980,11 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       if (form.initial_cost !== '')           payload.initial_cost                  = Number(form.initial_cost)
       if (form.max_expense_per_consultant !== '') payload.max_expense_per_consultant = Number(form.max_expense_per_consultant)
       if (form.timesheet_retroactive_limit_days !== '') payload.timesheet_retroactive_limit_days = Number(form.timesheet_retroactive_limit_days)
+      // Override de coordenador (admin only, sustentação only — backend valida)
+      const overrideVal = (form as any).kanban_coordinator_override_id
+      if (overrideVal !== undefined) {
+        payload.kanban_coordinator_override_id = overrideVal === '' ? null : Number(overrideVal)
+      }
       await api.put(`/projects/${project.id}`, payload)
       toast.success('Projeto atualizado')
       onSaved()
@@ -1064,6 +1073,30 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 <div><label style={lStyle}>Prazo para Lançamento (dias)</label><input type="number" value={form.timesheet_retroactive_limit_days} onChange={setF('timesheet_retroactive_limit_days')} style={iStyle} placeholder="Padrão global" min="0" max="365" /></div>
               </div>
               <Toggle2 checked={form.allow_negative_balance} onChange={v => setForm(p => ({ ...p, allow_negative_balance: v }))} label="Permitir saldo negativo de horas" />
+
+              {/* Override de Coordenador (sustentação) — só admin */}
+              {(() => {
+                const stName = (optServiceTypes.find(s => s.id === Number(form.service_type_id))?.name ?? '').toLowerCase()
+                const isSustentacao = stName.includes('sustenta')
+                if (!isAdmin || !isSustentacao) return null
+                return (
+                  <div className="rounded-xl p-3 mt-2" style={{ background: 'rgba(0,245,255,0.05)', border: '1px solid rgba(0,245,255,0.2)' }}>
+                    <label style={lStyle} className="block mb-1">Gerenciado por outro coordenador</label>
+                    <p className="text-[10px] mb-2" style={{ color: 'var(--brand-subtle)' }}>
+                      Ao selecionar um coordenador, o card sai da fila de sustentação e migra pra fila dele.
+                      O projeto também some das abas Apontamentos/Despesas/Aprovações do Portal de Sustentação.
+                    </p>
+                    <select
+                      value={(form as any).kanban_coordinator_override_id ?? ''}
+                      onChange={e => setForm(p => ({ ...(p as any), kanban_coordinator_override_id: e.target.value }))}
+                      style={iStyle}
+                    >
+                      <option value="">— Nenhum (segue fluxo padrão de sustentação) —</option>
+                      {optCoordinators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                )
+              })()}
             </div>
 
             <div className="flex flex-col">
@@ -1196,7 +1229,7 @@ function ProjectTeamModal({ projectId, projectName, onClose, onSaved }: { projec
   useEffect(() => {
     Promise.all([
       api.get<any>(`/projects/${projectId}`),
-      api.get<any>('/users?type=consultor&pageSize=200'),
+      api.get<any>('/users?type=consultor,parceiro_admin&pageSize=200'),
       api.get<any>('/consultant-groups?pageSize=100&active=1'),
     ]).then(([proj, usrs, grps]) => {
       setAllConsultants(usrs?.items ?? usrs?.data ?? [])
@@ -1935,15 +1968,20 @@ function KanbanContent() {
       .sort((a, b) => (a.kanban_order ?? 0) - (b.kanban_order ?? 0))
   }
 
-  // Active project cards per coordinator column
+  // Active project cards per coordinator column.
+  // Override (kanban_coordinator_override_id) tem precedência: se setado, o card
+  // vai SÓ pra coluna do override, ignorando coordinator_ids da relação M2M.
   const activeProjectsInCoordCol = (coordId: number): ProjectCard[] =>
-    projectCards.filter(p =>
-      isActiveProject(p) &&
-      (p.coordinator_ids ?? []).includes(coordId) &&
-      matchFilter(p.customer_name, p.project_name) &&
-      matchExecutivoKanban(p.executivo_conta_name) &&
-      matchProjectKanban(p.project_name)
-    )
+    projectCards.filter(p => {
+      if (!isActiveProject(p)) return false
+      const effective = p.kanban_coordinator_override_id != null
+        ? [p.kanban_coordinator_override_id]
+        : (p.coordinator_ids ?? [])
+      if (!effective.includes(coordId)) return false
+      return matchFilter(p.customer_name, p.project_name)
+        && matchExecutivoKanban(p.executivo_conta_name)
+        && matchProjectKanban(p.project_name)
+    })
 
   // Project cards in status columns
   const projectsInStatusCol = (colId: string): ProjectCard[] => {

@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
 import {
   Search, Users, X, Check, TrendingUp, Clock,
-  BarChart2, Building2, User, ChevronDown, ChevronRight, Plus,
+  BarChart2, Building2, User, ChevronDown, ChevronRight, Plus, Pencil, Trash2,
 } from 'lucide-react'
 import { PageHeader, Table, Thead, Th, Tbody, Tr, Td, Button, SkeletonTable, EmptyState } from '@/components/ds'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
@@ -122,6 +122,58 @@ export default function InvestimentoComercialPage() {
   const [newProjectCategoria, setNewProjectCategoria] = useState<'Sustentação' | 'Projeto' | 'Suporte' | 'Comercial'>('Projeto')
   const [creatingProject,     setCreatingProject]     = useState(false)
 
+  // Modal de edição de projeto interno
+  type EditableCategoria = '' | 'Sustentação' | 'Projeto' | 'Suporte' | 'Comercial'
+  const [editProject,     setEditProject]     = useState<ICProject | null>(null)
+  const [editName,        setEditName]        = useState('')
+  const [editCategoria,   setEditCategoria]   = useState<EditableCategoria>('')
+  const [savingEdit,      setSavingEdit]      = useState(false)
+  const [deletingEdit,    setDeletingEdit]    = useState(false)
+  const openEditModal = (p: ICProject) => {
+    setEditProject(p)
+    setEditName(p.name ?? '')
+    setEditCategoria(((p.categoria_interna ?? '') as EditableCategoria))
+  }
+  const closeEditModal = () => { setEditProject(null); setEditName(''); setEditCategoria('') }
+  const handleSaveEdit = async () => {
+    if (!editProject) return
+    const name = editName.trim()
+    if (name.length < 2) { toast.error('Informe um nome válido (mín. 2 caracteres)'); return }
+    setSavingEdit(true)
+    try {
+      const payload: { name: string; categoria_interna: string | null } = {
+        name,
+        categoria_interna: editCategoria === '' ? null : editCategoria,
+      }
+      await api.patch(`/projects/${editProject.id}`, payload)
+      setProjects(prev => prev.map(p => p.id === editProject.id
+        ? { ...p, name, categoria_interna: payload.categoria_interna }
+        : p))
+      toast.success('Projeto atualizado')
+      closeEditModal()
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Erro ao atualizar projeto')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+  const handleDeleteEdit = async () => {
+    if (!editProject) return
+    const ok = window.confirm(`Excluir o projeto "${editProject.name}" (${editProject.code})?\n\nA exclusão é bloqueada se houver apontamentos vinculados.`)
+    if (!ok) return
+    setDeletingEdit(true)
+    try {
+      await api.delete(`/projects/${editProject.id}`)
+      setProjects(prev => prev.filter(p => p.id !== editProject.id))
+      toast.success('Projeto excluído')
+      closeEditModal()
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Erro ao excluir projeto')
+    } finally {
+      setDeletingEdit(false)
+    }
+  }
+
   // Árvore: clientes expandidos
   const [expandedCustomers, setExpandedCustomers] = useState<Set<number>>(new Set())
   // Filtro de categoria
@@ -146,7 +198,7 @@ export default function InvestimentoComercialPage() {
 
   const reloadProjects = async () => {
     try {
-      const projRes = await api.get<any>('/projects?only_investimento_comercial=true&pageSize=500&gestao=true&with_team=true')
+      const projRes = await api.get<any>('/projects?only_investimento_comercial=true&pageSize=2000&gestao=true&with_team=true')
       const rawProjects: any[] = projRes?.items ?? projRes?.data ?? []
       setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, categoria_interna: p.categoria_interna ?? null, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
     } catch {
@@ -157,7 +209,7 @@ export default function InvestimentoComercialPage() {
   useEffect(() => {
     let cancelled = false
     Promise.all([
-      api.get<any>('/projects?only_investimento_comercial=true&pageSize=500&gestao=true&with_team=true'),
+      api.get<any>('/projects?only_investimento_comercial=true&pageSize=2000&gestao=true&with_team=true'),
       api.get<any>('/users?exclude_type=cliente&pageSize=500'),
       api.get<any>('/consultant-groups?pageSize=200&with_users=true'),
     ]).then(([projRes, usersRes, groupsRes]) => {
@@ -176,6 +228,13 @@ export default function InvestimentoComercialPage() {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
+
+  // Auto-expandir o cliente ERPSERV ao carregar (é o destaque da página)
+  useEffect(() => {
+    const erpserv = projects.find(p => (p.customer?.name ?? '').toUpperCase().includes('ERPSERV'))?.customer
+    if (!erpserv) return
+    setExpandedCustomers(prev => prev.has(erpserv.id) ? prev : new Set(prev).add(erpserv.id))
+  }, [projects])
 
   const handleCreateProject = async () => {
     const name = newProjectName.trim()
@@ -276,7 +335,15 @@ export default function InvestimentoComercialPage() {
       if (!groups.has(key)) groups.set(key, { customer: p.customer, projects: [] })
       groups.get(key)!.projects.push(p)
     }
-    const groupList = [...groups.values()].sort((a, b) => a.customer.name.localeCompare(b.customer.name))
+    const isErpserv = (name: string) => name.toUpperCase().includes('ERPSERV')
+    const groupList = [...groups.values()].sort((a, b) => {
+      const aErp = isErpserv(a.customer.name)
+      const bErp = isErpserv(b.customer.name)
+      if (aErp && !bErp) return -1
+      if (!aErp && bErp) return 1
+      return a.customer.name.localeCompare(b.customer.name)
+    })
+    const firstNonErpservId = groupList.find(g => !isErpserv(g.customer.name))?.customer.id
 
     return (
       <Table>
@@ -292,17 +359,36 @@ export default function InvestimentoComercialPage() {
             const expanded = expandedCustomers.has(customer.id)
             const totalHoursCustomer = projects.reduce((s, p) => s + (hoursMap[p.id] ?? 0), 0)
             const totalConsultorIds = new Set(projects.flatMap(p => p.consultants.map(c => c.id)))
+            const erpservRow = isErpserv(customer.name)
+            const showDivider = customer.id === firstNonErpservId
             return (
               <Fragment key={customer.id}>
+                {showDivider && (
+                  <Tr baseBackground="transparent">
+                    <Td colSpan={5}>
+                      <div className="flex items-center gap-2 py-1">
+                        <div className="flex-1 h-px" style={{ background: 'var(--brand-border)' }} />
+                        <span className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--brand-subtle)' }}>Clientes</span>
+                        <div className="flex-1 h-px" style={{ background: 'var(--brand-border)' }} />
+                      </div>
+                    </Td>
+                  </Tr>
+                )}
                 {/* Linha do cliente (pai) */}
-                <Tr>
+                <Tr baseBackground={erpservRow ? 'rgba(0,245,255,0.04)' : undefined}>
                   <Td>
                     <button onClick={() => toggleCustomerExpand(customer.id)}
                       className="flex items-center gap-2 text-left w-full hover:opacity-80 transition-opacity">
                       {expanded
                         ? <ChevronDown size={14} style={{ color: 'var(--brand-muted)' }} />
                         : <ChevronRight size={14} style={{ color: 'var(--brand-muted)' }} />}
-                      <span className="font-medium text-sm" style={{ color: 'var(--brand-text)' }}>{customer.name}</span>
+                      <span className="font-medium text-sm" style={{ color: erpservRow ? '#00F5FF' : 'var(--brand-text)' }}>{customer.name}</span>
+                      {erpservRow && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded uppercase tracking-widest font-bold"
+                          style={{ background: 'rgba(0,245,255,0.12)', color: '#00F5FF', border: '1px solid rgba(0,245,255,0.25)' }}>
+                          Casa
+                        </span>
+                      )}
                       <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>{projects.length}</span>
                     </button>
                   </Td>
@@ -354,7 +440,16 @@ export default function InvestimentoComercialPage() {
                           : <span className="text-sm font-semibold tabular-nums" style={{ color: hours > 0 ? '#00F5FF' : 'var(--brand-subtle)' }}>{fmtHours(hours)}</span>
                         }
                       </Td>
-                      <Td><Button size="sm" variant="ghost" onClick={() => openModal(project)}><Users size={13} className="mr-1" /> Alocação</Button></Td>
+                      <Td>
+                        <div className="flex items-center gap-1 justify-end">
+                          <Button size="sm" variant="ghost" onClick={() => openEditModal(project)} aria-label="Editar projeto">
+                            <Pencil size={13} className="mr-1" /> Editar
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => openModal(project)}>
+                            <Users size={13} className="mr-1" /> Alocação
+                          </Button>
+                        </div>
+                      </Td>
                     </Tr>
                   )
                 })}
@@ -676,6 +771,65 @@ export default function InvestimentoComercialPage() {
               <Button variant="primary" onClick={handleCreateProject} disabled={creatingProject || newProjectName.trim().length < 2}>
                 {creatingProject ? 'Criando...' : 'Criar Projeto'}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Editar Projeto Interno */}
+      {editProject && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}
+          onClick={() => !savingEdit && closeEditModal()}>
+          <div className="flex flex-col rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+              <h2 className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>Editar Projeto Interno</h2>
+              <button onClick={() => !savingEdit && closeEditModal()} className="p-1.5 rounded-lg hover:bg-white/5">
+                <X size={16} style={{ color: 'var(--brand-muted)' }} />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>
+                Cliente: <span className="font-semibold" style={{ color: 'var(--brand-text)' }}>{editProject.customer?.name ?? '—'}</span>
+                {' · '}<span className="font-mono">{editProject.code}</span>
+              </p>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--brand-muted)' }}>
+                  Nome do Projeto <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input type="text" autoFocus value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !savingEdit) handleSaveEdit() }}
+                  className="w-full px-3 h-9 rounded-xl text-sm outline-none" style={inputStyle} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--brand-muted)' }}>Categoria</label>
+                <select value={editCategoria}
+                  onChange={e => setEditCategoria(e.target.value as EditableCategoria)}
+                  className="w-full px-3 h-9 rounded-xl text-sm outline-none" style={inputStyle}>
+                  <option value="">— Sem categoria —</option>
+                  <option value="Sustentação">Sustentação</option>
+                  <option value="Projeto">Projeto</option>
+                  <option value="Suporte">Suporte</option>
+                  <option value="Comercial">Comercial</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-6 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+              <button
+                type="button"
+                onClick={handleDeleteEdit}
+                disabled={savingEdit || deletingEdit}
+                className="inline-flex items-center gap-1.5 px-3 h-9 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50"
+                style={{ background: 'rgba(239,68,68,0.10)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)' }}>
+                <Trash2 size={13} /> {deletingEdit ? 'Excluindo...' : 'Excluir'}
+              </button>
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" onClick={closeEditModal} disabled={savingEdit || deletingEdit}>Cancelar</Button>
+                <Button variant="primary" onClick={handleSaveEdit} disabled={savingEdit || deletingEdit || editName.trim().length < 2}>
+                  {savingEdit ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

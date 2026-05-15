@@ -80,6 +80,7 @@ export interface Timesheet {
   effort_hours: string
   observation?: string
   ticket?: string
+  ticket_total_minutes?: number | null
   ticket_subject?: string
   ticket_solicitante?: { name?: string; email?: string; organization?: string } | null
   status: 'pending' | 'approved' | 'rejected' | 'conflicted' | 'adjustment_requested' | 'internal' | 'released'

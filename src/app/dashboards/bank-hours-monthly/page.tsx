@@ -7,6 +7,10 @@ import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
 import DashboardIndicators from '@/components/dashboard/DashboardIndicators'
+import {
+  useMaintenanceInline, exportMaintenanceToXLSX,
+  ExportButton, InlineTimesheetsTable, InlineTicketSummaryTable, InlineExpensesTable, TimesheetDetailModal,
+} from '@/components/dashboard/MaintenanceInline'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { SearchSelect } from '@/components/ui/search-select'
@@ -108,16 +112,15 @@ function ProjectsTable({ items, loading }: { items: ProjectItem[]; loading: bool
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10" style={{ borderBottom: '1px solid var(--brand-border)', background: 'rgba(255,255,255,0.02)' }}>
               <tr>
-                {['Código','Projeto','Status','Tipo','Horas Vendidas','Saldo','Início'].map(col => (
-                  <th key={col} className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wider ${col === 'Saldo' || col === 'Horas Vendidas' ? 'text-right' : 'text-left'}`} style={{ color: 'var(--brand-subtle)' }}>{col}</th>
+                {['Código','Projeto','Status','Tipo','Horas Vendidas','Início'].map(col => (
+                  <th key={col} className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wider ${col === 'Horas Vendidas' ? 'text-right' : 'text-left'}`} style={{ color: 'var(--brand-subtle)' }}>{col}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {items.length === 0
-                ? <tr><td colSpan={7} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
+                ? <tr><td colSpan={6} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
                 : items.map(p => {
-                  const balance = p.hours_balance ?? 0
                   const contributions = p.total_contributions_hours || p.hour_contribution || 0
                   return (
                     <tr key={p.id} className="transition-colors" style={{ borderBottom: '1px solid var(--brand-border)' }}
@@ -135,7 +138,6 @@ function ProjectsTable({ items, loading }: { items: ProjectItem[]; loading: bool
                       <td className="px-5 py-3.5 text-right font-medium" style={{ color: 'var(--brand-text)' }}>
                         {p.sold_hours !== null ? (contributions > 0 ? `${p.sold_hours} (+${contributions})` : String(p.sold_hours)) : '—'}
                       </td>
-                      <td className="px-5 py-3.5 text-right font-bold" style={{ color: balance >= 0 ? '#10B981' : '#EF4444' }}>{fmtH(balance)}</td>
                       <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--brand-muted)' }}>{p.start_date ? fmtDate(p.start_date) : '—'}</td>
                     </tr>
                   )
@@ -180,7 +182,19 @@ export default function BankHoursMonthlyPage() {
   const [loadingSummary,  setLoadingSummary]  = useState(false)
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [loadingMaint,    setLoadingMaint]    = useState(false)
-  const [activeTab, setActiveTab] = useState<'total' | 'projects' | 'maintenance' | 'indicators'>('total')
+  const [activeTab, setActiveTab] = useState<'total' | 'projects' | 'maintenance' | 'expenses' | 'indicators'>('total')
+
+  // Componentes embarcados (Sustentação completa + Despesas)
+  const mxKind: 'maintenance' | 'expenses' = activeTab === 'expenses' ? 'expenses' : 'maintenance'
+  const { rows: mxRows, loading: mxLoading, ticketSummary: mxTicketSummary, ticketLoading: mxTicketLoading } = useMaintenanceInline({
+    enabled: activeTab === 'maintenance' || activeTab === 'expenses',
+    kind: mxKind,
+    customerId: selectedCustomer || user?.customer_id,
+    projectId: selectedProject || null,
+    dateFrom,
+    dateTo,
+  })
+  const [mxDetail, setMxDetail] = useState<any | null>(null)
   const [indicatorParams, setIndicatorParams] = useState<URLSearchParams>(new URLSearchParams())
 
   useEffect(() => {
@@ -369,6 +383,7 @@ export default function BankHoursMonthlyPage() {
               {(summary?.has_support ?? true) && (
                 <Tab label="Sustentação" active={activeTab === 'maintenance'} onClick={() => setActiveTab('maintenance')} />
               )}
+              <Tab label="Despesas"     active={activeTab === 'expenses'}    onClick={() => setActiveTab('expenses')} />
               <Tab label="Indicadores"  active={activeTab === 'indicators'}  onClick={() => setActiveTab('indicators')} />
             </div>
 
@@ -529,9 +544,31 @@ export default function BankHoursMonthlyPage() {
                     <StatCard label="Consumo do Mês"    value={fmtH(summary.maintenance_month_consumed_hours ?? 0)} />
                   </div>
                 )}
-                <ProjectsTable items={maintList} loading={loadingMaint} />
+                <ExportButton onClick={() => exportMaintenanceToXLSX('maintenance', mxRows)} disabled={mxRows.length === 0} />
+                <InlineTimesheetsTable rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} />
+                <InlineTicketSummaryTable rows={mxTicketSummary} loading={mxTicketLoading} />
               </div>
             )}
+
+            {/* ── DESPESAS ── */}
+            {activeTab === 'expenses' && (() => {
+              const totalAmount = mxRows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+              const toPay = mxRows
+                .filter(r => !['rejected','rejeitado','pago','paid'].includes(String(r.status ?? '').toLowerCase()))
+                .reduce((s, r) => s + (Number(r.amount) || 0), 0)
+              const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+              return (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <StatCard label="Quantidade"    value={String(mxRows.length)} />
+                    <StatCard label="Valor Total"   value={fmtBRL(totalAmount)} />
+                    <StatCard label="Valor a Pagar" value={fmtBRL(toPay)} accent="primary" />
+                  </div>
+                  <ExportButton onClick={() => exportMaintenanceToXLSX('expenses', mxRows)} disabled={mxRows.length === 0} />
+                  <InlineExpensesTable rows={mxRows} loading={mxLoading} />
+                </div>
+              )
+            })()}
 
             {/* ── INDICADORES ── */}
             {activeTab === 'indicators' && (
@@ -544,6 +581,7 @@ export default function BankHoursMonthlyPage() {
           </div>
         )}
       </div>
+      {mxDetail && <TimesheetDetailModal ts={mxDetail} onClose={() => setMxDetail(null)} />}
     </AppLayout>
   )
 }

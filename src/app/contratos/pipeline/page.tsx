@@ -868,6 +868,7 @@ function ContractDetailModal({ card, onClose, onGenerate, coordinators, canGener
     }
   }, [tab, card.id, logsLoaded])
 
+  const isCliente = userRole === 'cliente'
   const tabStyle = (t: string) => tab === t
     ? { background: 'rgba(234,179,8,0.12)', color: '#eab308', border: '1px solid rgba(234,179,8,0.3)' }
     : { color: 'var(--brand-subtle)', border: '1px solid transparent' }
@@ -896,7 +897,7 @@ function ContractDetailModal({ card, onClose, onGenerate, coordinators, canGener
               <ExternalLink size={11} /> Detalhes
             </button>
             <button onClick={() => setTab('chat')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all" style={tabStyle('chat')}>
-              <MessageSquare size={11} /> Chat
+              <MessageSquare size={11} /> {isCliente ? 'Histórico de Mensagens' : 'Chat'}
             </button>
             <button onClick={() => setTab('log')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all" style={tabStyle('log')}>
               <Clock size={11} /> Histórico
@@ -909,7 +910,7 @@ function ContractDetailModal({ card, onClose, onGenerate, coordinators, canGener
           </div>
         ) : tab === 'chat' ? (
           <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-            <ContractMessages contractId={card.id} userRole={userRole} />
+            <ContractMessages contractId={card.id} userRole={userRole} readOnly={isCliente} />
           </div>
         ) : (
         <>
@@ -1043,10 +1044,11 @@ function ProjectDetailModal({ card, onClose, userRole, initialTab }: { card: Pro
     } catch { toast.error('Erro ao abrir arquivo') }
   }
 
+  const isCliente = userRole === 'cliente'
   const tabs = [
     { id: 'details', label: 'Detalhes', icon: <ExternalLink size={11} /> },
     ...(hasReq ? [{ id: 'req', label: 'Requisição', icon: <Layers size={11} /> }] : []),
-    { id: 'chat', label: 'Chat', icon: <MessageSquare size={11} /> },
+    { id: 'chat', label: isCliente ? 'Histórico de Mensagens' : 'Chat', icon: <MessageSquare size={11} /> },
     { id: 'log', label: 'Histórico', icon: <Clock size={11} /> },
   ] as const
 
@@ -1252,7 +1254,7 @@ function ProjectDetailModal({ card, onClose, userRole, initialTab }: { card: Pro
           </>
         ) : (
           <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-            <ProjectMessages projectId={card.id} userRole={userRole} />
+            <ProjectMessages projectId={card.id} userRole={userRole} readOnly={isCliente} />
           </div>
         )}
       </div>
@@ -3070,7 +3072,7 @@ function ProjectTeamModal({ projectId, projectName, onClose, onSaved }: { projec
   useEffect(() => {
     Promise.all([
       api.get<any>(`/projects/${projectId}`),
-      api.get<any>('/users?type=consultor&pageSize=200'),
+      api.get<any>('/users?type=consultor,parceiro_admin&pageSize=200'),
       api.get<any>('/consultant-groups?pageSize=100&active=1'),
     ]).then(([proj, usrs, grps]) => {
       setAllConsultants(usrs?.items ?? usrs?.data ?? [])
@@ -3423,12 +3425,12 @@ function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () 
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2 mb-0.5">
-                      <span className="text-xs font-semibold" style={{ color: '#FAFAFA' }}>{msg.author?.name ?? 'Usuário'}</span>
+                      <span className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>{msg.author?.name ?? 'Usuário'}</span>
                       <span className="text-[10px]" style={{ color: 'var(--brand-muted)' }}>
                         {new Date(msg.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                    <p className="text-sm leading-relaxed break-words" style={{ color: '#D4D4D8' }}>{msg.message}</p>
+                    <p className="text-sm leading-relaxed break-words" style={{ color: 'var(--brand-text)' }}>{msg.message}</p>
                     {msg.attachments && msg.attachments.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-1.5">
                         {msg.attachments.map(att => (
@@ -3488,7 +3490,7 @@ function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () 
                     {filteredMentions.map(u => (
                       <button key={u.id} onClick={() => insertMention(u)}
                         className="w-full text-left px-3 py-2 text-sm hover:opacity-80 transition-opacity"
-                        style={{ color: '#FAFAFA' }}>
+                        style={{ color: 'var(--brand-text)' }}>
                         <span className="text-[#a78bfa] font-semibold">@</span>{u.name}
                       </button>
                     ))}
@@ -3506,7 +3508,7 @@ function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () 
                     placeholder="Escreva um comentário... Use @ para mencionar"
                     rows={2}
                     className="flex-1 resize-none rounded-lg px-3 py-2 text-sm outline-none"
-                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(139,92,246,0.25)', color: '#FAFAFA' }}
+                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(139,92,246,0.25)', color: 'var(--brand-text)' }}
                   />
                   <div className="flex flex-col gap-1 shrink-0">
                     <button onClick={() => fileInputRef.current?.click()}
@@ -4425,15 +4427,15 @@ function KanbanContent() {
                         <th className="text-left px-4 py-3 text-zinc-400 font-medium">Tipo Serviço</th>
                         <th className="text-left px-4 py-3 text-zinc-400 font-medium">Fase</th>
                         <th className="text-center px-4 py-3 text-zinc-400 font-medium">Horas</th>
-                        <th className="text-center px-4 py-3 text-zinc-400 font-medium">HS Consumidas</th>
-                        <th className="text-center px-4 py-3 text-zinc-400 font-medium">Saldo</th>
+                        {!isCliente && <th className="text-center px-4 py-3 text-zinc-400 font-medium">HS Consumidas</th>}
+                        {!isCliente && <th className="text-center px-4 py-3 text-zinc-400 font-medium">Saldo</th>}
                         <th className="text-center px-4 py-3 text-zinc-400 font-medium">Status</th>
                         {!isCliente && <th className="px-4 py-3" />}
                       </tr>
                     </thead>
                     <tbody>
                       {allProjects.length === 0 && (
-                        <tr><td colSpan={isCliente ? 7 : 8} className="px-4 py-8 text-center text-zinc-600 text-xs">Nenhum projeto.</td></tr>
+                        <tr><td colSpan={isCliente ? 5 : 8} className="px-4 py-8 text-center text-zinc-600 text-xs">Nenhum projeto.</td></tr>
                       )}
                       {allProjects.map(p => {
                         const isClosed  = p.status === 'finished' || p.status === 'cancelled'
@@ -4450,13 +4452,17 @@ function KanbanContent() {
                             <td className="px-4 py-3 text-zinc-400 text-xs">{p.service_type ?? '—'}</td>
                             <td className="px-4 py-3 text-zinc-400 text-xs">{PROJECT_COLS.find(c => c.id === PROJECT_STATUS_TO_COL[p.status])?.label ?? 'Projeto'}</td>
                             <td className="px-4 py-3 text-center text-zinc-300">{p.sold_hours != null ? `${p.sold_hours}h` : '—'}</td>
-                            <td className="px-4 py-3 text-center text-zinc-300">
-                              {hideHours ? '—' : p.consumed_hours != null ? `${p.consumed_hours.toFixed(1)}h` : '—'}
-                            </td>
-                            <td className="px-4 py-3 text-center"
-                              style={{ color: !hideHours && (p.general_hours_balance ?? 0) < 0 ? '#ef4444' : 'rgb(212 212 216)' }}>
-                              {hideHours ? '—' : p.general_hours_balance != null ? `${p.general_hours_balance.toFixed(1)}h` : '—'}
-                            </td>
+                            {!isCliente && (
+                              <td className="px-4 py-3 text-center text-zinc-300">
+                                {hideHours ? '—' : p.consumed_hours != null ? `${p.consumed_hours.toFixed(1)}h` : '—'}
+                              </td>
+                            )}
+                            {!isCliente && (
+                              <td className="px-4 py-3 text-center"
+                                style={{ color: !hideHours && (p.general_hours_balance ?? 0) < 0 ? '#ef4444' : 'rgb(212 212 216)' }}>
+                                {hideHours ? '—' : p.general_hours_balance != null ? `${p.general_hours_balance.toFixed(1)}h` : '—'}
+                              </td>
+                            )}
                             <td className="px-4 py-3 text-center">
                               {(() => { const b = STATUS_BADGE[p.status] ?? { label: p.status, color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' }; return (
                                 <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: b.bg, color: b.color }}>{b.label}</span>
