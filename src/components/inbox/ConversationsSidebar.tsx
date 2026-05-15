@@ -5,12 +5,14 @@ import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { ConversationSummary, PresenceStatusValue } from '@/types/inbox'
 import { PresenceDot } from './PresenceDot'
+import { OnlineUsersPanel } from './OnlineUsersPanel'
 
 interface ConversationsSidebarProps {
   conversations: ConversationSummary[]
   selectedId: number | null
   onSelect: (id: number) => void
   onNew: () => void
+  onStartDirect: (userId: number) => void
   presenceByUser?: Map<number, PresenceStatusValue>
   loading?: boolean
 }
@@ -130,7 +132,7 @@ function ConversationRow({
 }
 
 export function ConversationsSidebar({
-  conversations, selectedId, onSelect, onNew, presenceByUser, loading,
+  conversations, selectedId, onSelect, onNew, onStartDirect, presenceByUser, loading,
 }: ConversationsSidebarProps) {
   const bots    = conversations.filter(c => c.type === 'bot')
   const direct  = conversations.filter(c => c.type === 'direct')
@@ -149,6 +151,8 @@ export function ConversationsSidebar({
           <MessageSquarePlus size={12} /> Nova
         </button>
       </div>
+
+      <OnlineUsersPanel onStartDirect={onStartDirect} />
 
       {loading && conversations.length === 0 ? (
         <div className="p-4 text-xs text-zinc-500">Carregando…</div>

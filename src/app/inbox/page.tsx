@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { AppLayout } from '@/components/layout/app-layout'
 import { useAuth } from '@/hooks/use-auth'
 import {
-  listConversations, listPresence, presenceHeartbeat, unreadSummary,
+  createDirectConversation, listConversations, listPresence,
+  presenceHeartbeat, unreadSummary,
 } from '@/lib/inbox'
 import { ConversationsSidebar } from '@/components/inbox/ConversationsSidebar'
 import { InboxHeader } from '@/components/inbox/InboxHeader'
@@ -16,8 +18,19 @@ import type { PresenceStatusValue } from '@/types/inbox'
 
 export default function InboxPage() {
   const { user } = useAuth()
+  const qc = useQueryClient()
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [newOpen, setNewOpen] = useState(false)
+
+  const startDirectWithUser = async (userId: number) => {
+    try {
+      const res = await createDirectConversation(userId)
+      await qc.refetchQueries({ queryKey: ['inbox-conversations'] })
+      setSelectedId(res.data.id)
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
 
   const { data: convData, isLoading } = useQuery({
     queryKey: ['inbox-conversations'],
@@ -78,6 +91,7 @@ export default function InboxPage() {
           selectedId={selectedId}
           onSelect={setSelectedId}
           onNew={() => setNewOpen(true)}
+          onStartDirect={startDirectWithUser}
           presenceByUser={presenceByUser}
           loading={isLoading}
         />

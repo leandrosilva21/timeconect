@@ -52,6 +52,7 @@ export function NewConversationModal({ onClose, onCreated }: Props) {
   const submit = async () => {
     setBusy(true)
     try {
+      let newId: number
       if (mode === 'direct') {
         const target = [...selected][0]
         if (!target) {
@@ -59,9 +60,7 @@ export function NewConversationModal({ onClose, onCreated }: Props) {
           return
         }
         const res = await createDirectConversation(target)
-        await qc.invalidateQueries({ queryKey: ['inbox-conversations'] })
-        onCreated(res.data.id)
-        onClose()
+        newId = res.data.id
       } else {
         if (!groupName.trim()) {
           toast.error('Dê um nome ao grupo')
@@ -72,10 +71,14 @@ export function NewConversationModal({ onClose, onCreated }: Props) {
           return
         }
         const res = await createGroupConversation(groupName.trim(), [...selected])
-        await qc.invalidateQueries({ queryKey: ['inbox-conversations'] })
-        onCreated(res.data.id)
-        onClose()
+        newId = res.data.id
       }
+
+      // Força refetch e ESPERA terminar antes de selecionar — evita race onde
+      // selectedId aponta para conv ainda ausente no cache (composer não renderiza)
+      await qc.refetchQueries({ queryKey: ['inbox-conversations'] })
+      onCreated(newId)
+      onClose()
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
