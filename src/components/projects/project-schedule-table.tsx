@@ -556,7 +556,7 @@ function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDepende
   return (
     <tr style={{ borderTop: '1px solid var(--border)' }}>
       <td style={{ ...cell(), paddingLeft: 36 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <InlineText value={delivery.title} canEdit={canEdit} onSave={v => patch('title', v)} />
           {isBlocked && dependsOn && (
             <span
@@ -575,6 +575,25 @@ function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDepende
               }}
             >
               <Lock size={10} /> Aguardando: {dependsOn.title}
+            </span>
+          )}
+          {hasDependents && (
+            <span
+              title="Editar datas/horas desta atividade abrirá modal de recálculo da cadeia FS"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '2px 6px',
+                borderRadius: 4,
+                background: 'var(--primary-soft)',
+                color: 'var(--primary)',
+                fontSize: 10,
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              ⚠ Impacta dependentes
             </span>
           )}
         </div>
