@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Plus, Trash2, Calendar, Lock } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import type { ScheduleStage, ProjectCoordinator } from '@/hooks/use-project-schedule'
 import type { StageDelivery } from '@/lib/types/project-stage'
+import { BusinessCalendar } from '@/lib/business-calendar'
+import { RecalcDependentsModal } from './recalc-dependents-modal'
 
 interface Props {
   projectId: number
@@ -13,6 +15,7 @@ interface Props {
   coordinators: ProjectCoordinator[]
   canEdit: boolean
   onChanged: () => void
+  holidays?: string[]
 }
 
 function num(v: unknown): number {
@@ -57,14 +60,28 @@ const emptyActivityDraft = (defaultResp: number | null): NewActivityDraft => ({
   hours_planned: '',
 })
 
-export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit, onChanged }: Props) {
+export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit, onChanged, holidays }: Props) {
   const defaultCoordId = coordinators[0]?.id ?? null
+
+  const calendar = useMemo(() => new BusinessCalendar(holidays ?? []), [holidays])
+
+  // Set de delivery_ids que têm dependentes — usado pra abrir modal após edit
+  const idsWithDependents = useMemo(() => {
+    const set = new Set<number>()
+    for (const st of stages) {
+      for (const d of st.deliveries ?? []) {
+        if (d.depends_on_delivery_id) set.add(d.depends_on_delivery_id)
+      }
+    }
+    return set
+  }, [stages])
 
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({})
   const [creatingStage, setCreatingStage] = useState(false)
   const [stageDraft, setStageDraft] = useState<NewStageDraft>(emptyStageDraft(defaultCoordId))
   const [creatingActivityIn, setCreatingActivityIn] = useState<number | null>(null)
   const [activityDraft, setActivityDraft] = useState<NewActivityDraft>(emptyActivityDraft(defaultCoordId))
+  const [recalcFor, setRecalcFor] = useState<number | null>(null)
 
   function toggleCollapse(stageId: number) {
     setCollapsed(c => ({ ...c, [stageId]: !c[stageId] }))
@@ -112,8 +129,20 @@ export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit,
       const body: Record<string, unknown> = { title }
       if (activityDraft.responsible_user_id) body.responsible_user_id = Number(activityDraft.responsible_user_id)
       if (activityDraft.planned_start_at)    body.planned_start_at = activityDraft.planned_start_at
-      if (activityDraft.due_date)            body.due_date = activityDraft.due_date
       if (activityDraft.hours_planned)       body.hours_planned = Number(activityDraft.hours_planned)
+
+      // Sugestão automática de fim quando start+horas preenchidos mas fim vazio
+      let due = activityDraft.due_date
+      if (!due && activityDraft.planned_start_at && activityDraft.hours_planned) {
+        const suggested = calendar.suggestedEndISO(
+          activityDraft.planned_start_at,
+          Number(activityDraft.hours_planned),
+          8,
+        )
+        if (suggested) due = suggested
+      }
+      if (due) body.due_date = due
+
       await api.post(`/stages/${stageId}/deliveries`, body)
       setCreatingActivityIn(null)
       setActivityDraft(emptyActivityDraft(defaultCoordId))
@@ -158,6 +187,9 @@ export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit,
                 onStartCreateActivity={() => openCreateActivity(stage.id, stage.responsible_user_id)}
                 onCancelCreateActivity={() => { setCreatingActivityIn(null); setActivityDraft(emptyActivityDraft(defaultCoordId)) }}
                 onConfirmCreateActivity={() => createActivity(stage.id)}
+                idsWithDependents={idsWithDependents}
+                onMaybeRecalc={setRecalcFor}
+                calendar={calendar}
               />
             )
           })}
@@ -241,6 +273,12 @@ export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit,
           )}
         </tbody>
       </table>
+
+      <RecalcDependentsModal
+        deliveryId={recalcFor}
+        onClose={() => setRecalcFor(null)}
+        onApplied={onChanged}
+      />
     </div>
   )
 }
@@ -293,10 +331,13 @@ interface StageRowProps {
   onStartCreateActivity: () => void
   onCancelCreateActivity: () => void
   onConfirmCreateActivity: () => void
+  idsWithDependents: Set<number>
+  onMaybeRecalc: (deliveryId: number) => void
+  calendar: BusinessCalendar
 }
 
 function StageRows(props: StageRowProps) {
-  const { stage, coordinators, collapsed, onToggle, canEdit, onChanged, creatingActivity, activityDraft, setActivityDraft, onStartCreateActivity, onCancelCreateActivity, onConfirmCreateActivity } = props
+  const { stage, coordinators, collapsed, onToggle, canEdit, onChanged, creatingActivity, activityDraft, setActivityDraft, onStartCreateActivity, onCancelCreateActivity, onConfirmCreateActivity, idsWithDependents, onMaybeRecalc, calendar } = props
 
   const allDeliveries = stage.deliveries ?? []
 
@@ -365,7 +406,16 @@ function StageRows(props: StageRowProps) {
 
       {/* Atividades indentadas */}
       {!collapsed && allDeliveries.map(d => (
-        <ActivityRow key={d.id} delivery={d} stageDeliveries={allDeliveries} canEdit={canEdit} onChanged={onChanged} />
+        <ActivityRow
+          key={d.id}
+          delivery={d}
+          stageDeliveries={allDeliveries}
+          canEdit={canEdit}
+          onChanged={onChanged}
+          hasDependents={idsWithDependents.has(d.id)}
+          onMaybeRecalc={onMaybeRecalc}
+          calendar={calendar}
+        />
       ))}
 
       {/* Linha de criação */}
@@ -450,16 +500,38 @@ function StageRows(props: StageRowProps) {
   )
 }
 
-function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged }: {
+function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDependents, onMaybeRecalc, calendar }: {
   delivery: StageDelivery
   stageDeliveries: StageDelivery[]
   canEdit: boolean
   onChanged: () => void
+  hasDependents: boolean
+  onMaybeRecalc: (id: number) => void
+  calendar: BusinessCalendar
 }) {
+  const datesAffectingFields = ['planned_start_at', 'due_date', 'hours_planned']
+
   async function patch(field: string, value: unknown) {
     try {
-      await api.patch(`/deliveries/${delivery.id}`, { [field]: value })
+      const body: Record<string, unknown> = { [field]: value }
+
+      // Sugestão automática de fim: se editou start ou horas e atividade
+      // não tem due_date setado, calcular client-side via business calendar.
+      if (!delivery.due_date && field === 'planned_start_at' && value && delivery.hours_planned) {
+        const suggested = calendar.suggestedEndISO(String(value), Number(delivery.hours_planned), 8)
+        if (suggested) body.due_date = suggested
+      }
+      if (!delivery.due_date && field === 'hours_planned' && delivery.planned_start_at && value) {
+        const suggested = calendar.suggestedEndISO(delivery.planned_start_at, Number(value), 8)
+        if (suggested) body.due_date = suggested
+      }
+
+      await api.patch(`/deliveries/${delivery.id}`, body)
       onChanged()
+
+      if (hasDependents && datesAffectingFields.includes(field)) {
+        onMaybeRecalc(delivery.id)
+      }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Erro ao salvar')
     }
