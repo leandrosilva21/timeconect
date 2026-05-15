@@ -147,7 +147,13 @@ export default function DashboardPage() {
   const isConsultor      = user?.type === 'consultor' || user?.type === 'parceiro_admin'
 
   useEffect(() => {
-    if (user && user.type === 'coordenador') router.replace('/timesheets')
+    if (!user) return
+    // Cada perfil tem sua "home" — /dashboard só tem branches pra admin,
+    // administrativo, consultor e parceiro_admin (consultor). Outros caem
+    // numa página em branco, então redireciona pra sua respectiva home.
+    if (user.type === 'coordenador')                        router.replace('/timesheets')
+    else if (user.type === 'cliente')                       router.replace('/portal-cliente')
+    else if (user.type === 'parceiro_admin' && (user as any).is_executive) router.replace('/partner-dashboard')
   }, [user, router])
 
   // ── Load admin data ──

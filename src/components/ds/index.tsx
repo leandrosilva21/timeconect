@@ -148,7 +148,7 @@ export function Tr({ children, onClick, className, baseBackground }: TrProps) {
 }
 
 export function Td({
-  children, right, muted, mono, className, style,
+  children, right, muted, mono, className, style, colSpan,
 }: {
   children?: React.ReactNode
   right?: boolean
@@ -156,9 +156,11 @@ export function Td({
   mono?: boolean
   className?: string
   style?: React.CSSProperties
+  colSpan?: number
 }) {
   return (
     <td
+      colSpan={colSpan}
       className={cn('px-5 py-3.5', right && 'text-right', mono && 'font-mono text-xs', className)}
       style={{ color: muted ? 'var(--brand-muted)' : 'var(--brand-text)', ...style }}
     >
