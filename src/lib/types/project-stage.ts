@@ -68,6 +68,11 @@ export interface StageDelivery {
   due_date: string | null
   order_index: number
   completed_at: string | null
+  /** ADR 0009 — datas planejadas/reais separadas */
+  planned_start_at?: string | null
+  actual_start_at?: string | null
+  /** ADR 0009 — dependência leve (1 atividade depende de no máximo 1 outra) */
+  depends_on_delivery_id?: number | null
   effort_minutes_sum?: number | null
   created_at: string
   updated_at: string
