@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Bot } from 'lucide-react'
+import { Bell, Bot, Cog, Settings2, Sparkles, Zap } from 'lucide-react'
 import { AppLayout } from '@/components/layout/app-layout'
 import { GeneralTab } from '@/components/bot-config/GeneralTab'
 import { ProvidersTab } from '@/components/bot-config/ProvidersTab'
@@ -11,57 +11,68 @@ import { RulesTab } from '@/components/bot-config/RulesTab'
 
 type TabKey = 'general' | 'providers' | 'agents' | 'skills' | 'rules'
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: 'general',   label: 'Geral' },
-  { key: 'providers', label: 'Providers IA' },
-  { key: 'agents',    label: 'Agents' },
-  { key: 'skills',    label: 'Skills' },
-  { key: 'rules',     label: 'Notificações' },
+const TABS: { key: TabKey; label: string; icon: typeof Bot; description: string }[] = [
+  { key: 'general',   label: 'Geral',         icon: Cog,        description: 'Provedor padrão, modelo, temperatura, frequência de execução e janela anti-ruído.' },
+  { key: 'providers', label: 'Providers IA',  icon: Settings2,  description: 'Provedores de IA conectados (Anthropic, OpenAI, etc) — endpoints, chaves e status.' },
+  { key: 'agents',    label: 'Agents',        icon: Sparkles,   description: 'Agentes especializados (Account, Support, Growth…) com prompts, cooldown e limites diários.' },
+  { key: 'skills',    label: 'Skills',        icon: Zap,        description: 'Regras determinísticas (Rule Engine) que classificam eventos antes da IA rodar.' },
+  { key: 'rules',     label: 'Notificações',  icon: Bell,       description: 'Para QUEM e por QUAL canal cada evento é entregue. Skill/severity → grupo/inbox/email.' },
 ]
 
 export default function BotMinutorConfigPage() {
   const [tab, setTab] = useState<TabKey>('general')
+  const active = TABS.find(t => t.key === tab)!
 
   return (
     <AppLayout>
       <div className="max-w-5xl mx-auto p-6">
         <header className="mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-md bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30 flex items-center justify-center">
               <Bot size={18} />
             </div>
             <div>
               <h1 className="text-xl font-semibold text-zinc-100">BOT Minutor</h1>
               <p className="text-xs text-zinc-500 mt-0.5">
-                Configurações de provedores IA, agents, skills e regras de notificação.
+                Entidade operacional mestre — alertas, diagnósticos IA, agents e regras de roteamento.
               </p>
             </div>
           </div>
         </header>
 
-        <nav className="flex gap-1 border-b border-zinc-800 mb-5">
-          {TABS.map(t => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
-              className={[
-                'px-4 py-2 text-sm font-medium transition-colors border-b-2',
-                tab === t.key
-                  ? 'text-emerald-300 border-emerald-500'
-                  : 'text-zinc-400 border-transparent hover:text-zinc-200',
-              ].join(' ')}
-            >
-              {t.label}
-            </button>
-          ))}
+        <nav className="flex gap-1 border-b border-zinc-800 mb-2" role="tablist">
+          {TABS.map(t => {
+            const Icon = t.icon
+            const selected = tab === t.key
+            return (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => setTab(t.key)}
+                className={[
+                  'inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2',
+                  selected
+                    ? 'text-emerald-300 border-emerald-500'
+                    : 'text-zinc-400 border-transparent hover:text-zinc-200',
+                ].join(' ')}
+              >
+                <Icon size={13} /> {t.label}
+              </button>
+            )
+          })}
         </nav>
 
-        {tab === 'general'   && <GeneralTab />}
-        {tab === 'providers' && <ProvidersTab />}
-        {tab === 'agents'    && <AgentsTab />}
-        {tab === 'skills'    && <SkillsTab />}
-        {tab === 'rules'     && <RulesTab />}
+        <p className="text-[11px] text-zinc-500 mb-5 px-1">{active.description}</p>
+
+        <div className="space-y-1">
+          {tab === 'general'   && <GeneralTab />}
+          {tab === 'providers' && <ProvidersTab />}
+          {tab === 'agents'    && <AgentsTab />}
+          {tab === 'skills'    && <SkillsTab />}
+          {tab === 'rules'     && <RulesTab />}
+        </div>
       </div>
     </AppLayout>
   )

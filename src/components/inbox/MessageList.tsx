@@ -73,11 +73,15 @@ export function MessageList({ conversation, currentUserId }: Props) {
 
   if (!conversation) {
     return (
-      <div className="flex-1 flex items-center justify-center text-zinc-600">
-        <div className="text-center">
-          <MessageSquare size={36} className="mx-auto mb-3 text-zinc-700" />
-          <p className="text-sm">Selecione uma conversa</p>
-          <p className="text-xs mt-1 text-zinc-700">Ou crie uma nova no botão acima.</p>
+      <div className="flex-1 flex items-center justify-center text-zinc-500 p-8">
+        <div className="text-center max-w-sm">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-emerald-500/15 to-emerald-700/5 ring-1 ring-emerald-500/20 flex items-center justify-center">
+            <MessageSquare size={28} className="text-emerald-400/70" />
+          </div>
+          <h3 className="text-sm font-semibold text-zinc-200 mb-1">Nenhuma conversa aberta</h3>
+          <p className="text-xs text-zinc-500 leading-relaxed">
+            Escolha uma conversa na lista à esquerda, ou clique em <strong className="text-emerald-300">Nova conversa</strong> pra começar a falar com alguém ou criar um grupo.
+          </p>
         </div>
       </div>
     )
@@ -138,9 +142,11 @@ export function MessageList({ conversation, currentUserId }: Props) {
                 </>
               ) : (
                 <>
-                  <MessageSquare size={36} className="mx-auto mb-3 text-zinc-700" />
-                  <p className="text-sm">Sem mensagens ainda.</p>
-                  <p className="text-xs mt-1 text-zinc-700">Diga oi.</p>
+                  <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-zinc-900 ring-1 ring-zinc-800 flex items-center justify-center">
+                    <MessageSquare size={22} className="text-zinc-600" />
+                  </div>
+                  <p className="text-sm text-zinc-300 font-medium">Sem mensagens ainda</p>
+                  <p className="text-xs mt-1 text-zinc-500">Diga oi pra começar a conversa.</p>
                 </>
               )}
             </div>
@@ -149,13 +155,24 @@ export function MessageList({ conversation, currentUserId }: Props) {
           items.map(m => <MessageItem key={m.id} message={m} />)
         ) : (
           <>
-            {[...items].reverse().map(m => (
-              <ChatMessageItem
-                key={m.id}
-                message={m}
-                isOwn={!!currentUserId && m.sender?.id === currentUserId}
-              />
-            ))}
+            {(() => {
+              const asc = [...items].reverse()
+              return asc.map((m, i) => {
+                const prev = i > 0 ? asc[i - 1] : null
+                const sameSender = prev?.sender?.id === m.sender?.id && prev?.type.value === m.type.value
+                const closeInTime = prev
+                  ? new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() < 2 * 60_000
+                  : false
+                return (
+                  <ChatMessageItem
+                    key={m.id}
+                    message={m}
+                    isOwn={!!currentUserId && m.sender?.id === currentUserId}
+                    compact={!!prev && sameSender && closeInTime}
+                  />
+                )
+              })
+            })()}
             <div ref={bottomRef} />
           </>
         )}

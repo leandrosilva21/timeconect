@@ -1,6 +1,7 @@
 'use client'
 
-import { Bot, MessageSquarePlus, Users, User as UserIcon } from 'lucide-react'
+import { Bot, MessageSquarePlus, Search, Users, User as UserIcon } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { ConversationSummary, PresenceStatusValue } from '@/types/inbox'
@@ -107,7 +108,7 @@ function ConversationRow({
         </div>
 
         {isBot ? (
-          <p className="mt-0.5 text-[10px] text-zinc-500 uppercase tracking-wider">Entidade Operacional</p>
+          <p className="mt-0.5 text-[10px] text-zinc-500">Alertas e insights operacionais</p>
         ) : conv.last_message ? (
           <p className={[
             'mt-0.5 text-[11px] truncate',
@@ -134,28 +135,59 @@ function ConversationRow({
 export function ConversationsSidebar({
   conversations, selectedId, onSelect, onNew, onStartDirect, presenceByUser, loading,
 }: ConversationsSidebarProps) {
-  const bots    = conversations.filter(c => c.type === 'bot')
-  const direct  = conversations.filter(c => c.type === 'direct')
-  const groups  = conversations.filter(c => c.type === 'group')
+  const [query, setQuery] = useState('')
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return conversations
+    return conversations.filter(c => {
+      const inTitle = c.title?.toLowerCase().includes(q)
+      const inOther = c.other_user?.name?.toLowerCase().includes(q)
+      const inLast  = c.last_message?.preview?.toLowerCase().includes(q)
+      return inTitle || inOther || inLast
+    })
+  }, [conversations, query])
+
+  const bots    = filtered.filter(c => c.type === 'bot')
+  const direct  = filtered.filter(c => c.type === 'direct')
+  const groups  = filtered.filter(c => c.type === 'group')
+
+  const hasAny = bots.length + direct.length + groups.length > 0
 
   return (
     <aside className="w-80 shrink-0 border-r border-zinc-800 bg-zinc-950/40 overflow-y-auto flex flex-col">
-      <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
-        <span className="text-zinc-300 text-sm font-medium">Conversas</span>
+      <div className="p-3 border-b border-zinc-800 space-y-2.5">
+        <div className="flex items-center justify-between">
+          <span className="text-zinc-200 text-sm font-semibold">Conversas</span>
+          <span className="text-[10px] text-zinc-600">{conversations.length}</span>
+        </div>
         <button
           type="button"
           onClick={onNew}
-          title="Nova conversa"
-          className="inline-flex items-center gap-1 text-[11px] text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-1 rounded"
+          aria-label="Iniciar nova conversa"
+          className="w-full inline-flex items-center justify-center gap-1.5 text-xs text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-3 py-1.5 rounded transition-colors"
         >
-          <MessageSquarePlus size={12} /> Nova
+          <MessageSquarePlus size={13} /> Nova conversa ou grupo
         </button>
+        <div className="relative">
+          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar conversa..."
+            aria-label="Buscar conversa"
+            className="w-full bg-zinc-900 border border-zinc-800 rounded pl-7 pr-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/50"
+          />
+        </div>
       </div>
 
       <OnlineUsersPanel onStartDirect={onStartDirect} />
 
       {loading && conversations.length === 0 ? (
         <div className="p-4 text-xs text-zinc-500">Carregando…</div>
+      ) : query && !hasAny ? (
+        <div className="p-4 text-xs text-zinc-500 italic">Nada encontrado para "{query}"</div>
       ) : (
         <>
           {bots.length > 0 && (
@@ -166,7 +198,7 @@ export function ConversationsSidebar({
             </Section>
           )}
 
-          <Section title="Direct" empty="Nenhuma conversa direta">
+          <Section title="Direct" empty={!query ? 'Nenhuma conversa direta' : undefined}>
             {direct.map(c => (
               <ConversationRow
                 key={c.id}
@@ -180,8 +212,8 @@ export function ConversationsSidebar({
 
           <Section
             title="Grupos"
-            empty="Nenhum grupo ainda."
-            emptyAction={{ label: 'Criar grupo', onClick: onNew }}
+            empty={!query ? 'Nenhum grupo ainda.' : undefined}
+            emptyAction={!query ? { label: 'Criar grupo', onClick: onNew } : undefined}
           >
             {groups.map(c => (
               <ConversationRow key={c.id} conv={c} selected={selectedId === c.id} onClick={() => onSelect(c.id)} />

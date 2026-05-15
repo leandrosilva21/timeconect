@@ -96,7 +96,7 @@ export default function InboxPage() {
           loading={isLoading}
         />
         <div className="flex-1 flex flex-col">
-          <InboxHeader conversation={selectedConv} />
+          <InboxHeader conversation={selectedConv} presenceByUser={presenceByUser} />
           {isBot && <SeveritySummary bySeverity={summaryBreakdown} />}
           <MessageList conversation={selectedConv} currentUserId={user?.id ?? null} />
         </div>
