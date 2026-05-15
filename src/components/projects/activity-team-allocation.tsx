@@ -152,6 +152,32 @@ export function ActivityTeamAllocation({ deliveryId, canEdit = true }: Props) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
                       <HealthDot level={a.health} />
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.user?.name ?? '—'}</span>
+                      {a.is_primary && (
+                        <span
+                          title="Owner principal da atividade"
+                          style={{
+                            display: 'inline-flex', alignItems: 'center',
+                            fontSize: 9, fontWeight: 600,
+                            padding: '1px 6px', borderRadius: 4,
+                            background: 'var(--primary-soft)', color: 'var(--primary)',
+                            textTransform: 'uppercase', letterSpacing: 0.3,
+                            flexShrink: 0,
+                          }}
+                        >
+                          Principal
+                        </span>
+                      )}
+                      {(a.allocation_start_at || a.allocation_end_at) && (
+                        <span
+                          title="Janela parcial de alocação"
+                          style={{
+                            fontSize: 10, color: 'var(--text-muted)',
+                            whiteSpace: 'nowrap', flexShrink: 0,
+                          }}
+                        >
+                          {fmtDate(a.allocation_start_at)} → {fmtDate(a.allocation_end_at)}
+                        </span>
+                      )}
                       {a.user_id && capacityByUserId[a.user_id]?.overload && (
                         <span
                           title={capacityByUserId[a.user_id].overload_reasons.join(' · ') || 'Sobrecarregado'}
@@ -225,6 +251,9 @@ function AddActivityAllocationForm({ deliveryId, existing, onClose, onAdded }: A
   const [results, setResults] = useState<ConsultantOption[]>([])
   const [selected, setSelected] = useState<ConsultantOption | null>(null)
   const [hours, setHours] = useState('8')
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState('')
+  const [isPrimary, setIsPrimary] = useState(false)
   const [saving, setSaving] = useState(false)
 
   async function searchUsers(q: string) {
@@ -245,7 +274,13 @@ function AddActivityAllocationForm({ deliveryId, existing, onClose, onAdded }: A
     if (!Number.isFinite(n) || n < 0.5) { toast.error('Mínimo 0,5h'); return }
     setSaving(true)
     try {
-      await api.post(`/activities/${deliveryId}/allocations`, { user_id: selected.id, planned_hours: n })
+      await api.post(`/activities/${deliveryId}/allocations`, {
+        user_id: selected.id,
+        planned_hours: n,
+        allocation_start_at: start || null,
+        allocation_end_at: end || null,
+        is_primary: isPrimary,
+      })
       toast.success('Consultor alocado')
       onAdded()
     } catch (e) {
@@ -289,6 +324,20 @@ function AddActivityAllocationForm({ deliveryId, existing, onClose, onAdded }: A
           <input type="number" min={0.5} step="0.5" className="ds-input" value={hours} onChange={e => setHours(e.target.value)}
             style={{ width: '100%', marginTop: 4, fontSize: 12 }} />
         </div>
+        <div style={{ width: 130 }}>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Início (opcional)</label>
+          <input type="date" className="ds-input" value={start} onChange={e => setStart(e.target.value)}
+            style={{ width: '100%', marginTop: 4, fontSize: 12 }} />
+        </div>
+        <div style={{ width: 130 }}>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Fim (opcional)</label>
+          <input type="date" className="ds-input" value={end} onChange={e => setEnd(e.target.value)}
+            style={{ width: '100%', marginTop: 4, fontSize: 12 }} />
+        </div>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={isPrimary} onChange={e => setIsPrimary(e.target.checked)} />
+          Principal
+        </label>
         <button type="submit" className="ds-btn-primary" disabled={saving || !selected}
           style={{ fontSize: 12, padding: '6px 12px' }}>
           {saving ? 'Salvando…' : 'Alocar'}
@@ -297,4 +346,11 @@ function AddActivityAllocationForm({ deliveryId, existing, onClose, onAdded }: A
       </div>
     </form>
   )
+}
+
+function fmtDate(iso?: string | null): string {
+  if (!iso) return '?'
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  if (!m) return iso
+  return `${m[3]}/${m[2]}`
 }
