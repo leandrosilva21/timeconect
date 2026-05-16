@@ -350,9 +350,6 @@ export default function RelatorioApontamentosPage() {
             word-break: break-word !important;
             padding: 4px 6px !important;
           }
-          /* Exceção: célula de Descrição preserva quebras de linha (\n) geradas pelo
-             previewText(). Sem este override o `white-space: normal` acima colapsava
-             tudo num parágrafo único na impressão. */
           .print-clone table td.description-cell {
             white-space: pre-wrap !important;
           }
