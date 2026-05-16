@@ -1,7 +1,10 @@
 import DOMPurify from 'isomorphic-dompurify'
 
+// Imagens removidas: URLs assinadas do S3 do Movidesk expiram em ~24h e ficam
+// como placeholder quebrado "Carregando imagem...". Até existir mirror local,
+// o texto vai sem imagens.
 const ALLOWED_TAGS = [
-  'a', 'b', 'br', 'em', 'i', 'img', 'li', 'ol', 'p', 'pre',
+  'a', 'b', 'br', 'em', 'i', 'li', 'ol', 'p', 'pre',
   'span', 'strong', 'u', 'ul', 'blockquote', 'code', 'div',
   // Movidesk envia tabelas e headers em htmlDescription (ver MovideskService::buildObservation)
   'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'caption',
