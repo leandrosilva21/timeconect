@@ -350,6 +350,12 @@ export default function RelatorioApontamentosPage() {
             word-break: break-word !important;
             padding: 4px 6px !important;
           }
+          /* Exceção: célula de Descrição preserva quebras de linha (\n) geradas pelo
+             previewText(). Sem este override o `white-space: normal` acima colapsava
+             tudo num parágrafo único na impressão. */
+          .print-clone table td.description-cell {
+            white-space: pre-wrap !important;
+          }
           .print-clone table tr {
             page-break-inside: avoid;
           }
@@ -624,7 +630,7 @@ export default function RelatorioApontamentosPage() {
                             <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtDateBR(t.date)}</td>
                           </tr>
                           <tr style={{ background: bg, borderBottom: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                            <td colSpan={9} className="px-3 pt-1 pb-3 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
+                            <td colSpan={9} className="description-cell px-3 pt-1 pb-3 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
                               <span className="font-semibold text-gray-500 mr-1">Descrição:</span>
                               {t.observation ? previewText(t.observation) : '—'}
                             </td>
