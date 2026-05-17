@@ -2,6 +2,7 @@
 
 import { Paperclip } from 'lucide-react'
 import { useStageActivity } from '@/hooks/use-stage-activity'
+import { useActivityFeed } from '@/hooks/use-activity-feed'
 import { secureUrl } from '@/lib/api'
 import type { StageActivityEvent, StageActivityType } from '@/lib/types/stage-activity'
 
@@ -46,7 +47,7 @@ function describe(ev: StageActivityEvent): string {
       return `moveu "${title}" de ${from} para ${to}`
     }
     case 'delivery_created':
-      return `criou entrega "${p.title ?? ''}"`
+      return `criou atividade "${p.title ?? ''}"`
     case 'delivery_completed':
       return `concluiu "${p.title ?? ''}"`
     case 'aporte_created': {
@@ -68,12 +69,21 @@ function describe(ev: StageActivityEvent): string {
 }
 
 interface Props {
-  stageId: number
+  stageId?: number
+  /** Quando setado, ignora stageId e busca timeline da atividade (delivery_id=X) */
+  deliveryId?: number
+  /** Permite forçar refetch via key bump no parent */
+  refreshKey?: number
   limit?: number
 }
 
-export function StageActivityTimeline({ stageId, limit = 50 }: Props) {
-  const { items, loading, error } = useStageActivity(stageId, limit)
+export function StageActivityTimeline({ stageId, deliveryId, refreshKey, limit = 50 }: Props) {
+  // refreshKey é incluído apenas pra forçar re-render do parent quando ele troca;
+  // o re-fetch real vem via key bump no caller (já é como o stage-operational-block usa).
+  void refreshKey
+  const stageQuery    = useStageActivity(deliveryId ? null : (stageId ?? null), limit)
+  const activityQuery = useActivityFeed(deliveryId ?? null, limit)
+  const { items, loading, error } = deliveryId ? activityQuery : stageQuery
 
   if (loading) return <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Carregando atividade…</div>
   if (error) return <div style={{ color: 'var(--danger)', fontSize: 12 }}>{error}</div>

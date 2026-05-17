@@ -410,8 +410,9 @@ function SidebarInner({ user }: { user: User }) {
         .filter(([code]) => clienteContractCodes.has(code))
         .map(([, item]) => item)
       const nav: NavEntry[] = [
-        { type: 'item', label: 'Home',                 href: '/portal-cliente',      icon: Building2 },
-        { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline',  icon: LayoutGrid },
+        { type: 'item', label: 'Home',                 href: '/portal-cliente',              icon: Building2 },
+        { type: 'item', label: 'Minhas atividades',    href: '/portal-cliente/atividades',   icon: Layers },
+        { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline',          icon: LayoutGrid },
       ]
       if (dashItems.length > 0) {
         nav.push({ type: 'group', label: 'Contratos', icon: FileText, items: dashItems })
@@ -425,6 +426,7 @@ function SidebarInner({ user }: { user: User }) {
     if (isConsultor) {
       const baseNav: NavEntry[] = [
         { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard },
+        { type: 'item', label: 'Início',     href: '/dashboard',  icon: Home },
         ...(IS_DEV1 ? [{ type: 'item' as const, label: 'Meus Cards', href: '/meus-cards', icon: Inbox }] : []),
       ]
 

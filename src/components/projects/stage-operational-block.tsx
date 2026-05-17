@@ -1,16 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronRight, Pencil, Trash2, PlusCircle } from 'lucide-react'
+import { ChevronDown, ChevronRight, Pencil, Trash2 } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import { computeStageHealth } from '@/lib/utils/stage-health'
 import { HealthDots } from './health-dots'
-import { StageTeamAllocation } from './stage-team-allocation'
 import { StageKanbanBoard } from './stage-kanban-board'
-import { StageAporteDialog } from './stage-aporte-dialog'
 import { StageActivityTimeline } from './stage-activity-timeline'
-import { StageCommentComposer } from './stage-comment-composer'
 import { useStageDeliveries } from '@/hooks/use-stage-deliveries'
 import type { ProjectStage, StageDerivedStatus } from '@/lib/types/project-stage'
 
@@ -71,7 +68,6 @@ export function StageOperationalBlock({
   const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState(stage.name)
   const [savingName, setSavingName] = useState(false)
-  const [aporteOpen, setAporteOpen] = useState(false)
   const { deliveries, loading, error, refetch } = useStageDeliveries(expanded ? stage.id : null)
 
   const health = computeStageHealth({ stage })
@@ -97,7 +93,7 @@ export function StageOperationalBlock({
   }
 
   async function handleDelete() {
-    if (!confirm(`Excluir a etapa "${stage.name}"?\n\nEsta ação remove todas as entregas e alocações desta etapa.`)) return
+    if (!confirm(`Excluir a etapa "${stage.name}"?\n\nEsta ação remove todas as atividades e alocações desta etapa.`)) return
     try {
       await api.delete(`/stages/${stage.id}`)
       onChanged()
@@ -163,7 +159,7 @@ export function StageOperationalBlock({
             )}
             {stage.derived_status && (
               <span
-                title="Status derivado das entregas"
+                title="Status derivado das atividades"
                 style={{
                   fontSize: 10, fontWeight: 600,
                   padding: '2px 8px',
@@ -182,20 +178,6 @@ export function StageOperationalBlock({
             <HealthDots health={health} />
             {canEdit && (
               <>
-                <button
-                  type="button"
-                  onClick={() => setAporteOpen(true)}
-                  aria-label="Aportar horas"
-                  title="Aportar horas (com justificativa)"
-                  style={{
-                    background: 'transparent', border: 'none', cursor: 'pointer',
-                    color: 'var(--text-muted)', padding: 2,
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    fontSize: 11,
-                  }}
-                >
-                  <PlusCircle size={12} /> Aportar
-                </button>
                 <button
                   type="button"
                   onClick={() => setEditingName(true)}
@@ -228,7 +210,7 @@ export function StageOperationalBlock({
           }}>
             {planned > 0 && <span>{formatHours(planned)} planejadas</span>}
             {totalDeliveries > 0 && (
-              <span>{doneDeliveries}/{totalDeliveries} entregas · {pctDeliveries}%</span>
+              <span>{doneDeliveries}/{totalDeliveries} atividades · {pctDeliveries}%</span>
             )}
             {stage.responsible?.name && <span>Resp: {stage.responsible.name}</span>}
           </div>
@@ -247,16 +229,6 @@ export function StageOperationalBlock({
         </div>
       </header>
 
-      {aporteOpen && (
-        <StageAporteDialog
-          stageId={stage.id}
-          stageName={stage.name}
-          projectId={projectId}
-          onClose={() => setAporteOpen(false)}
-          onCreated={onChanged}
-        />
-      )}
-
       {/* Conteúdo expandido: alocação + kanban */}
       {expanded && (
         <div style={{ padding: 16 }}>
@@ -270,37 +242,36 @@ export function StageOperationalBlock({
 
           <StageDatesEditor stage={stage} canEdit={canEdit} onSaved={onChanged} />
 
-          <div style={{ marginBottom: 16 }}>
-            <StageTeamAllocation stageId={stage.id} projectId={projectId} canEdit={canEdit} />
-          </div>
-
           <div style={{
             fontSize: 11, color: 'var(--text-muted)',
             textTransform: 'uppercase', letterSpacing: '.04em',
             marginBottom: 8,
           }}>
-            Entregas
+            Atividades
           </div>
 
           {error && <div style={{ color: 'var(--danger)', marginBottom: 8 }}>{error}</div>}
           {loading ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Carregando entregas…</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Carregando atividades…</div>
           ) : (
-            <StageKanbanBoard stageId={stage.id} deliveries={deliveries} onChanged={refetch} canEdit={canEdit} />
+            <StageKanbanBoard stageId={stage.id} projectId={projectId} deliveries={deliveries} onChanged={refetch} canEdit={canEdit} />
           )}
 
           <div style={{ marginTop: 20 }}>
             <div style={{
-              fontSize: 11, color: 'var(--text-muted)',
-              textTransform: 'uppercase', letterSpacing: '.04em',
+              display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
               marginBottom: 8,
             }}>
-              Atividade
+              <div style={{
+                fontSize: 11, color: 'var(--text-muted)',
+                textTransform: 'uppercase', letterSpacing: '.04em',
+              }}>
+                Timeline agregada da etapa
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-light)' }}>
+                Comentários e anexos agora moram na atividade · abra a atividade pra conversar
+              </div>
             </div>
-            <StageCommentComposer
-              stageId={stage.id}
-              onCreated={() => setActivityKey(k => k + 1)}
-            />
             <StageActivityTimeline key={activityKey} stageId={stage.id} />
           </div>
         </div>

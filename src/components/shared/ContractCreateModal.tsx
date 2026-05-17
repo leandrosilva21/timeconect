@@ -76,12 +76,11 @@ const isSustentacaoName = (name: string) => {
 }
 
 // Regra de combinação Tipo de Serviço × Tipo de Contrato:
-// - Projeto     → permite: BH Fixo, BH Mensal, Fechado, On Demand (proíbe: SaaS, Cloud)
-// - Sustentação → permite: BH Fixo, BH Mensal, On Demand, Cloud   (proíbe: Fechado, SaaS)
-// - Bizify      → permite: BH Fixo, Fechado, On Demand, SaaS      (proíbe: BH Mensal, Cloud)
+// - Projeto     → permite: BH Fixo, BH Mensal, Fechado          (proíbe: On Demand, SaaS, Cloud)
+// - Sustentação → permite: BH Fixo, BH Mensal, On Demand, Cloud (proíbe: Fechado, SaaS)
+// - Bizify      → permite: BH Fixo, Fechado, On Demand, SaaS    (proíbe: BH Mensal, Cloud)
 // Subprojeto (filho) → adicionalmente proíbe BH Mensal, SaaS e Cloud (mensalidade
-// fica no projeto pai; filho herda regra de cobrança). Filho On Demand consome
-// do pai via apontamentos (horas_contratadas=0, valor cobrado por hora apontada).
+// fica no projeto pai; filho herda regra de cobrança).
 // O contract_type atualmente selecionado é sempre mantido visível (caso de edição
 // de contrato pré-existente que viole a nova regra).
 const allowedForService = (
@@ -99,7 +98,7 @@ const allowedForService = (
     if (String(ct.id) === String(selectedContractTypeId ?? '')) return true
     const n = String(ct.name ?? '').toLowerCase()
     if (isSubproject && (n.includes('banco de horas mensal') || n.includes('saas') || n === 'cloud')) return false
-    if (isProjeto && (n.includes('saas') || n === 'cloud')) return false
+    if (isProjeto && (n.includes('on demand') || n.includes('saas') || n === 'cloud')) return false
     if (isSustenta && (n.includes('fechado') || n.includes('saas'))) return false
     if (isBizify && (n.includes('banco de horas mensal') || n === 'cloud')) return false
     return true

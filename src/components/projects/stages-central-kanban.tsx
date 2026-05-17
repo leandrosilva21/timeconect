@@ -108,6 +108,10 @@ function StageMacroCard({ stage, projectId, executive }: { stage: ProjectStage; 
   const planned = n(stage.hours_planned)
   const totalDeliv = stage.deliveries_count ?? 0
   const doneDeliv = stage.deliveries_done_count ?? 0
+  const inProgressDeliv = stage.deliveries_in_progress_count ?? 0
+  const waitingDeliv = stage.deliveries_waiting_client_count ?? 0
+  const reviewDeliv = stage.deliveries_review_count ?? 0
+  const backlogDeliv = stage.deliveries_backlog_count ?? 0
   const pct = totalDeliv > 0 ? Math.round((doneDeliv / totalDeliv) * 100) : 0
 
   return (
@@ -194,11 +198,31 @@ function StageMacroCard({ stage, projectId, executive }: { stage: ProjectStage; 
               <span style={{ marginLeft: 'auto' }}>{pct}%</span>
             ) : (
               <>
-                <span>{doneDeliv}/{totalDeliv} entregas</span>
+                <span>{doneDeliv}/{totalDeliv} atividades</span>
                 <span>{pct}%</span>
               </>
             )}
           </div>
+
+          {!executive && (
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', gap: 8,
+              fontSize: 10, color: 'var(--text-light)', marginTop: 4,
+            }}>
+              {inProgressDeliv > 0 && (
+                <span><strong style={{ color: 'var(--primary)' }}>{inProgressDeliv}</strong> em execução</span>
+              )}
+              {reviewDeliv > 0 && (
+                <span><strong style={{ color: 'var(--warning)' }}>{reviewDeliv}</strong> homologação</span>
+              )}
+              {waitingDeliv > 0 && (
+                <span><strong style={{ color: 'var(--danger)' }}>{waitingDeliv}</strong> aguardando cliente</span>
+              )}
+              {backlogDeliv > 0 && (
+                <span><strong style={{ color: 'var(--text-muted)' }}>{backlogDeliv}</strong> backlog</span>
+              )}
+            </div>
+          )}
         </div>
       )}
 

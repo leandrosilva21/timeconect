@@ -34,11 +34,15 @@ export interface ProjectStage {
   order_index: number
   expected_end_date: string | null
   stage_start_at?: string | null
+  /** ADR 0009 appendix — datas reais da etapa (rollup das atividades) */
+  actual_start_at?: string | null
+  actual_end_at?: string | null
   deliveries_count?: number
   deliveries_done_count?: number
   deliveries_in_progress_count?: number
   deliveries_waiting_client_count?: number
   deliveries_review_count?: number
+  deliveries_backlog_count?: number
   deliveries_hours_planned_sum?: string | number | null
   progress_pct?: number
   derived_status?: StageDerivedStatus
@@ -67,6 +71,22 @@ export interface StageDelivery {
   due_date: string | null
   order_index: number
   completed_at: string | null
+  /** ADR 0009 — datas planejadas/reais separadas */
+  planned_start_at?: string | null
+  actual_start_at?: string | null
+  /** ADR 0009 — dependência leve (1 atividade depende de no máximo 1 outra) */
+  depends_on_delivery_id?: number | null
+  /** Tipo da dependência. Hoje apenas 'FS' (Finish-to-Start). ADR 0009 appendix. */
+  dependency_type?: 'FS' | null
+  /** Estado do predecessor: 'none' = sem dependência, 'pending' = predecessor não-done, 'done' = pronto. */
+  predecessor_state?: 'none' | 'pending' | 'done'
+  /** Envolvimento opcional do cliente (toggle). */
+  client_involved?: boolean
+  /** Cliente cadastrado envolvido — acesso pontual à atividade. */
+  client_user_id?: number | null
+  client?: UserMini | null
+  /** E-mail de cliente externo (sem login) — só recebe notificações. */
+  client_email?: string | null
   effort_minutes_sum?: number | null
   created_at: string
   updated_at: string

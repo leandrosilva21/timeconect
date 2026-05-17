@@ -4,13 +4,12 @@ import { useState } from 'react'
 import { Plus, Pencil, Trash2, Users } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
-import { useStageAllocations } from '@/hooks/use-stage-allocations'
+import { useActivityAllocations } from '@/hooks/use-activity-allocations'
 import { useUserCapacityIndex } from '@/hooks/use-user-capacity'
 import type { AllocationHealth, StageAllocationItem } from '@/lib/types/stage-allocation'
 
 interface Props {
-  stageId: number
-  projectId: number
+  deliveryId: number
   canEdit?: boolean
 }
 
@@ -50,8 +49,8 @@ function HealthDot({ level }: { level: AllocationHealth }) {
   )
 }
 
-export function StageTeamAllocation({ stageId, projectId, canEdit = true }: Props) {
-  const { items, totals, loading, error, refetch } = useStageAllocations(stageId)
+export function ActivityTeamAllocation({ deliveryId, canEdit = true }: Props) {
+  const { items, totals, loading, error, refetch } = useActivityAllocations(deliveryId)
   const { byUserId: capacityByUserId } = useUserCapacityIndex()
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<number | null>(null)
@@ -76,7 +75,7 @@ export function StageTeamAllocation({ stageId, projectId, canEdit = true }: Prop
   async function handleDelete(a: StageAllocationItem) {
     const hasActual = (a.actual_hours ?? 0) > 0
     const msg = hasActual
-      ? `${a.user?.name ?? 'Consultor'} possui ${formatHours(a.actual_hours)} apontadas nesta etapa.\n\nExcluir a alocação:\n- NÃO removerá os apontamentos (histórico preservado).\n- removerá apenas o planejamento operacional.\n\nDeseja continuar?`
+      ? `${a.user?.name ?? 'Consultor'} possui ${formatHours(a.actual_hours)} apontadas nesta atividade.\n\nExcluir a alocação:\n- NÃO removerá os apontamentos (histórico preservado).\n- removerá apenas o planejamento operacional.\n\nDeseja continuar?`
       : `Remover alocação de ${a.user?.name ?? 'Consultor'}?`
     if (!confirm(msg)) return
     try {
@@ -91,7 +90,7 @@ export function StageTeamAllocation({ stageId, projectId, canEdit = true }: Prop
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
-          <Users size={11} /> Equipe Alocada
+          <Users size={11} /> Equipe alocada
           <span style={{ opacity: .6 }}>· {items.length}</span>
           {totals.overrun_count > 0 && (
             <span style={{ marginLeft: 6, padding: '1px 6px', fontSize: 10, fontWeight: 600, background: 'var(--danger-bg)', color: 'var(--danger)', borderRadius: 999 }}>
@@ -108,7 +107,7 @@ export function StageTeamAllocation({ stageId, projectId, canEdit = true }: Prop
       </div>
 
       {(totals.planned_hours > 0 || totals.actual_hours > 0) && (
-        <div style={{ padding: '10px 12px', marginBottom: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, display: 'flex', gap: 16, fontSize: 12 }}>
+        <div style={{ padding: '8px 10px', marginBottom: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, display: 'flex', gap: 12, fontSize: 11, flexWrap: 'wrap' }}>
           <span style={{ color: 'var(--text-muted)' }}>
             <strong style={{ color: 'var(--text)' }}>{formatHours(totals.planned_hours)}</strong> planejadas
           </span>
@@ -125,9 +124,8 @@ export function StageTeamAllocation({ stageId, projectId, canEdit = true }: Prop
       )}
 
       {adding && (
-        <AddAllocationForm
-          projectId={projectId}
-          stageId={stageId}
+        <AddActivityAllocationForm
+          deliveryId={deliveryId}
           existing={items.map(i => i.user_id)}
           onClose={() => setAdding(false)}
           onAdded={() => { setAdding(false); refetch() }}
@@ -135,11 +133,11 @@ export function StageTeamAllocation({ stageId, projectId, canEdit = true }: Prop
       )}
 
       {items.length === 0 && !adding ? (
-        <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, border: '1px dashed var(--border)', borderRadius: 8 }}>
+        <div style={{ padding: '16px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12, border: '1px dashed var(--border)', borderRadius: 6 }}>
           Sem consultores alocados. Clique em <strong>Adicionar</strong> pra começar.
         </div>
       ) : (
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {items.map(a => {
             const planned = Number(a.planned_hours) || 0
             const actual = Number(a.actual_hours) || 0
@@ -148,12 +146,38 @@ export function StageTeamAllocation({ stageId, projectId, canEdit = true }: Prop
             const isEditing = editing === a.id
 
             return (
-              <li key={a.id} className="ds-card" style={{ padding: 12 }}>
+              <li key={a.id} className="ds-card" style={{ padding: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
                       <HealthDot level={a.health} />
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.user?.name ?? '—'}</span>
+                      {a.is_primary && (
+                        <span
+                          title="Owner principal da atividade"
+                          style={{
+                            display: 'inline-flex', alignItems: 'center',
+                            fontSize: 9, fontWeight: 600,
+                            padding: '1px 6px', borderRadius: 4,
+                            background: 'var(--primary-soft)', color: 'var(--primary)',
+                            textTransform: 'uppercase', letterSpacing: 0.3,
+                            flexShrink: 0,
+                          }}
+                        >
+                          Principal
+                        </span>
+                      )}
+                      {(a.allocation_start_at || a.allocation_end_at) && (
+                        <span
+                          title="Janela parcial de alocação"
+                          style={{
+                            fontSize: 10, color: 'var(--text-muted)',
+                            whiteSpace: 'nowrap', flexShrink: 0,
+                          }}
+                        >
+                          {fmtDate(a.allocation_start_at)} → {fmtDate(a.allocation_end_at)}
+                        </span>
+                      )}
                       {a.user_id && capacityByUserId[a.user_id]?.overload && (
                         <span
                           title={capacityByUserId[a.user_id].overload_reasons.join(' · ') || 'Sobrecarregado'}
@@ -171,7 +195,7 @@ export function StageTeamAllocation({ stageId, projectId, canEdit = true }: Prop
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 12, color: a.health === 'estourado' ? 'var(--danger)' : 'var(--text-muted)', marginTop: 4, fontWeight: a.health === 'estourado' ? 500 : 400 }}>
+                    <div style={{ fontSize: 11, color: a.health === 'estourado' ? 'var(--danger)' : 'var(--text-muted)', marginTop: 3, fontWeight: a.health === 'estourado' ? 500 : 400 }}>
                       {a.health === 'estourado'
                         ? `Estourado · ${formatHours(actual)} / ${formatHours(planned)}`
                         : `${formatHours(actual)} / ${formatHours(planned)} · ${formatHours(remaining)} restantes`}
@@ -190,7 +214,7 @@ export function StageTeamAllocation({ stageId, projectId, canEdit = true }: Prop
                     </div>
                   )}
                 </div>
-                <div style={{ marginTop: 8, height: 4, width: '100%', background: 'var(--surface-hover)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ marginTop: 6, height: 3, width: '100%', background: 'var(--surface-hover)', borderRadius: 2, overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: HEALTH_COLOR[a.health], transition: 'width .2s ease' }} />
                 </div>
                 {isEditing && (
@@ -216,18 +240,20 @@ export function StageTeamAllocation({ stageId, projectId, canEdit = true }: Prop
 }
 
 interface AddProps {
-  projectId: number
-  stageId: number
+  deliveryId: number
   existing: number[]
   onClose: () => void
   onAdded: () => void
 }
 
-function AddAllocationForm({ projectId, stageId, existing, onClose, onAdded }: AddProps) {
+function AddActivityAllocationForm({ deliveryId, existing, onClose, onAdded }: AddProps) {
   const [search, setSearch] = useState('')
   const [results, setResults] = useState<ConsultantOption[]>([])
   const [selected, setSelected] = useState<ConsultantOption | null>(null)
   const [hours, setHours] = useState('8')
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState('')
+  const [isPrimary, setIsPrimary] = useState(false)
   const [saving, setSaving] = useState(false)
 
   async function searchUsers(q: string) {
@@ -248,7 +274,13 @@ function AddAllocationForm({ projectId, stageId, existing, onClose, onAdded }: A
     if (!Number.isFinite(n) || n < 0.5) { toast.error('Mínimo 0,5h'); return }
     setSaving(true)
     try {
-      await api.post(`/stages/${stageId}/allocations`, { user_id: selected.id, planned_hours: n })
+      await api.post(`/activities/${deliveryId}/allocations`, {
+        user_id: selected.id,
+        planned_hours: n,
+        allocation_start_at: start || null,
+        allocation_end_at: end || null,
+        is_primary: isPrimary,
+      })
       toast.success('Consultor alocado')
       onAdded()
     } catch (e) {
@@ -257,28 +289,28 @@ function AddAllocationForm({ projectId, stageId, existing, onClose, onAdded }: A
   }
 
   return (
-    <form onSubmit={handleSubmit} className="ds-card ds-card-pad" style={{ marginBottom: 12, padding: 12 }}>
+    <form onSubmit={handleSubmit} className="ds-card ds-card-pad" style={{ marginBottom: 10, padding: 10 }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-          <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Consultor</label>
+        <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Consultor</label>
           {selected ? (
-            <div style={{ marginTop: 4, padding: '6px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
+            <div style={{ marginTop: 4, padding: '6px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
               <span>{selected.name}</span>
               <button type="button" onClick={() => { setSelected(null); setSearch(''); setResults([]) }}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 16 }}>×</button>
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14 }}>×</button>
             </div>
           ) : (
             <>
               <input autoFocus className="ds-input" value={search}
                 onChange={e => { setSearch(e.target.value); searchUsers(e.target.value) }}
                 placeholder="Buscar por nome ou email…"
-                style={{ width: '100%', marginTop: 4 }}
+                style={{ width: '100%', marginTop: 4, fontSize: 12 }}
               />
               {results.length > 0 && (
                 <ul style={{ listStyle: 'none', margin: '4px 0 0', padding: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, maxHeight: 180, overflowY: 'auto' }}>
                   {results.map(u => (
                     <li key={u.id} onClick={() => { setSelected(u); setSearch(''); setResults([]) }}
-                      style={{ padding: '6px 10px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--border)' }}>
+                      style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid var(--border)' }}>
                       {u.name}
                     </li>
                   ))}
@@ -287,17 +319,38 @@ function AddAllocationForm({ projectId, stageId, existing, onClose, onAdded }: A
             </>
           )}
         </div>
-        <div style={{ width: 100 }}>
-          <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Horas previstas</label>
+        <div style={{ width: 80 }}>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Horas</label>
           <input type="number" min={0.5} step="0.5" className="ds-input" value={hours} onChange={e => setHours(e.target.value)}
-            style={{ width: '100%', marginTop: 4 }} />
+            style={{ width: '100%', marginTop: 4, fontSize: 12 }} />
         </div>
+        <div style={{ width: 130 }}>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Início (opcional)</label>
+          <input type="date" className="ds-input" value={start} onChange={e => setStart(e.target.value)}
+            style={{ width: '100%', marginTop: 4, fontSize: 12 }} />
+        </div>
+        <div style={{ width: 130 }}>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Fim (opcional)</label>
+          <input type="date" className="ds-input" value={end} onChange={e => setEnd(e.target.value)}
+            style={{ width: '100%', marginTop: 4, fontSize: 12 }} />
+        </div>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={isPrimary} onChange={e => setIsPrimary(e.target.checked)} />
+          Principal
+        </label>
         <button type="submit" className="ds-btn-primary" disabled={saving || !selected}
-          style={{ fontSize: 13, padding: '6px 14px' }}>
+          style={{ fontSize: 12, padding: '6px 12px' }}>
           {saving ? 'Salvando…' : 'Alocar'}
         </button>
-        <button type="button" className="ds-btn-ghost" onClick={onClose} style={{ fontSize: 13, padding: '6px 14px' }}>Cancelar</button>
+        <button type="button" className="ds-btn-ghost" onClick={onClose} style={{ fontSize: 12, padding: '6px 12px' }}>Cancelar</button>
       </div>
     </form>
   )
+}
+
+function fmtDate(iso?: string | null): string {
+  if (!iso) return '?'
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  if (!m) return iso
+  return `${m[3]}/${m[2]}`
 }

@@ -115,7 +115,7 @@ export function ProjectStagesSidePanel({
             <div style={{ fontSize: 13, color: 'var(--text)', display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span><strong>{total}</strong> etapa{total !== 1 ? 's' : ''}</span>
               <span><strong>{formatHours(planned)}</strong> planejadas</span>
-              <span><strong>{doneDeliv}/{totalDeliv}</strong> entregas concluídas{totalDeliv > 0 ? ` · ${pct}%` : ''}</span>
+              <span><strong>{doneDeliv}/{totalDeliv}</strong> atividades concluídas{totalDeliv > 0 ? ` · ${pct}%` : ''}</span>
             </div>
           </div>
 

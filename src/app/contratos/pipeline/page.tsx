@@ -3918,11 +3918,16 @@ function KanbanContent() {
   const linkedContractIds = new Set(requestCards.map(r => r.linked_contract_id).filter(Boolean))
 
   // IDs de contratos kanban-born que ainda não chegaram à coluna de coordenador (alocado)
-  // Projetos vinculados a esses contratos não devem aparecer no pipeline
+  // Projetos vinculados a esses contratos não devem aparecer no pipeline.
+  // EXCEÇÃO: se o contrato já tem `project_id`, o projeto foi criado (via
+  // "Selecionar Equipe" do menu, por ex) e deve aparecer mesmo que o
+  // kanban_status do contrato ainda esteja noutra coluna. project_id é
+  // a fonte de verdade de "projeto existe / está alocado".
   const kanbanBornNotAllocatedIds = new Set(
     [...demandCards, ...transitionCards]
       .filter(c => !linkedContractIds.has(c.id))
       .filter(c => c.kanban_status !== 'alocado')
+      .filter(c => !c.project_id)
       .map(c => c.id)
   )
 

@@ -3,8 +3,8 @@
 import { AppLayout } from '@/components/layout/app-layout'
 import { ArrowLeft, Save, AlertTriangle, X } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useState, useEffect, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/use-auth'
@@ -34,10 +34,27 @@ function parseHHMM(s: string): number | null {
   return parts[0] * 60 + parts[1]
 }
 
+// Next.js 16 exige Suspense quando há useSearchParams em client component
+// na prerender estática. A page outer só envolve o form interno.
 export default function NewTimesheetPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewTimesheetForm />
+    </Suspense>
+  )
+}
+
+function NewTimesheetForm() {
   const { user } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const isAdmin = user?.type === 'admin'
+
+  // Atalho via query params (Pilar E do refactor): vem do side panel da atividade
+  // /timesheets/new?project_id=X&stage_delivery_id=Y
+  const initialProjectId = searchParams.get('project_id') ?? ''
+  const initialDeliveryId = searchParams.get('stage_delivery_id') ?? ''
+  const initialStageId = searchParams.get('stage_id') ?? ''
 
   const [useTotal,   setUseTotal]   = useState(false)
   const [timeDriver, setTimeDriver] = useState<'end' | 'total'>('end')
@@ -46,6 +63,8 @@ export default function NewTimesheetPage() {
     user_id: '',
     customer_id: '',
     project_id: '',
+    stage_delivery_id: initialDeliveryId,
+    stage_id: initialStageId,
     date: new Date().toISOString().split('T')[0],
     start_time: '',
     total_hours: '',
@@ -54,6 +73,24 @@ export default function NewTimesheetPage() {
     observation: '',
     is_billable_only: false,
   })
+
+  // Quando vem com project_id na URL, busca o projeto pra preencher customer_id + project_id
+  useEffect(() => {
+    if (!initialProjectId) return
+    let cancelled = false
+    api.get<{ id: number; customer?: { id: number } | null; customer_id?: number | null }>(`/projects/${initialProjectId}`)
+      .then(p => {
+        if (cancelled) return
+        const cid = p.customer?.id ?? p.customer_id ?? null
+        if (cid) {
+          setForm(f => ({ ...f, customer_id: String(cid), project_id: String(p.id) }))
+        } else {
+          setForm(f => ({ ...f, project_id: String(p.id) }))
+        }
+      })
+      .catch(() => { /* ignora */ })
+    return () => { cancelled = true }
+  }, [initialProjectId])
   const [saving, setSaving] = useState(false)
   const [conflictData, setConflictData] = useState<{ date: string; start_time?: string; end_time?: string; customer_name?: string; project_name?: string } | null>(null)
   const [users,     setUsers]     = useState<SelectOption[]>([])
@@ -148,6 +185,8 @@ export default function NewTimesheetPage() {
         ticket:      form.ticket || null,
         observation: form.observation || null,
       }
+      if (form.stage_delivery_id) body.stage_delivery_id = Number(form.stage_delivery_id)
+      else if (form.stage_id)     body.stage_id          = Number(form.stage_id)
       if (isAdmin && form.user_id) body.user_id = Number(form.user_id)
       if (isAdmin && form.user_id && form.user_id !== String(user?.id) && form.is_billable_only) {
         body.is_billable_only = true
@@ -188,7 +227,7 @@ export default function NewTimesheetPage() {
               <Label className="text-xs mb-1 block" style={{ color: 'var(--brand-muted)' }}>Usuário</Label>
               <SearchSelect
                 value={form.user_id}
-                onChange={v => setForm(f => ({ ...f, user_id: v, customer_id: '', project_id: '', is_billable_only: false }))}
+                onChange={v => setForm(f => ({ ...f, user_id: v, customer_id: '', project_id: '', stage_id: '', stage_delivery_id: '', is_billable_only: false }))}
                 options={users} placeholder="Selecione o usuário..." />
             </div>
           )}
@@ -198,14 +237,14 @@ export default function NewTimesheetPage() {
             <Label className="text-xs mb-1 block" style={{ color: 'var(--brand-muted)' }}>Cliente</Label>
             <SearchSelect
               value={form.customer_id}
-              onChange={v => setForm(f => ({ ...f, customer_id: v, project_id: '' }))}
+              onChange={v => setForm(f => ({ ...f, customer_id: v, project_id: '', stage_id: '', stage_delivery_id: '' }))}
               options={customers} placeholder="Todos os clientes" />
           </div>
 
           {/* Projeto */}
           <div>
             <Label className="text-xs mb-1 block" style={{ color: 'var(--brand-muted)' }}>Projeto *</Label>
-            <SearchSelect value={form.project_id} onChange={v => set('project_id', v)}
+            <SearchSelect value={form.project_id} onChange={v => setForm(f => ({ ...f, project_id: v, stage_id: '', stage_delivery_id: '' }))}
               options={projects}
               placeholder={form.customer_id ? 'Selecione o projeto...' : 'Selecione o cliente primeiro'} />
           </div>

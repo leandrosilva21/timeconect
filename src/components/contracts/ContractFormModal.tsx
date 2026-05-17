@@ -94,7 +94,7 @@ const allowedForService = (
     if (String(ct.id) === String(selectedContractTypeId ?? '')) return true
     const n = String(ct.name ?? '').toLowerCase()
     if (isSubproject && (n.includes('banco de horas mensal') || n.includes('saas') || n === 'cloud')) return false
-    if (isProjeto && (n.includes('saas') || n === 'cloud')) return false
+    if (isProjeto && (n.includes('on demand') || n.includes('saas') || n === 'cloud')) return false
     if (isSustenta && (n.includes('fechado') || n.includes('saas'))) return false
     if (isBizify && (n.includes('banco de horas mensal') || n === 'cloud')) return false
     return true

@@ -11,6 +11,7 @@ import { DeliverySidePanel } from './delivery-side-panel'
 
 interface Props {
   stageId: number
+  projectId: number
   deliveries: StageDelivery[]
   onChanged: () => void
   canEdit?: boolean
@@ -24,7 +25,7 @@ const COLUMNS: { status: DeliveryStatus; label: string }[] = [
   { status: 'done', label: 'Concluído' },
 ]
 
-export function StageKanbanBoard({ stageId, deliveries, onChanged, canEdit = true }: Props) {
+export function StageKanbanBoard({ stageId, projectId, deliveries, onChanged, canEdit = true }: Props) {
   const [local, setLocal] = useState<StageDelivery[]>(deliveries)
   const [selected, setSelected] = useState<StageDelivery | null>(null)
   const [creatingIn, setCreatingIn] = useState<DeliveryStatus | null>(null)
@@ -52,6 +53,16 @@ export function StageKanbanBoard({ stageId, deliveries, onChanged, canEdit = tru
     if (!moved) return
 
     const newStatus = destination.droppableId as DeliveryStatus
+
+    // Bloqueio operacional FS: predecessor pending impede sair de backlog (ADR 0009 appendix)
+    if (moved.status === 'backlog' && newStatus !== 'backlog'
+        && moved.predecessor_state === 'pending'
+        && moved.depends_on_delivery_id) {
+      const pred = local.find(d => d.id === moved.depends_on_delivery_id)
+      const predTitle = pred?.title ?? 'predecessor'
+      toast.error(`Conclua a atividade '${predTitle}' antes de iniciar esta.`)
+      return
+    }
 
     // Otimismo: atualiza local imediatamente
     const next = local.filter(d => d.id !== movedId)
@@ -82,7 +93,7 @@ export function StageKanbanBoard({ stageId, deliveries, onChanged, canEdit = tru
       setNewTitle('')
       setCreatingIn(null)
       onChanged()
-      toast.success('Entrega criada')
+      toast.success('Atividade criada')
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Erro ao criar')
     }
@@ -131,7 +142,7 @@ export function StageKanbanBoard({ stageId, deliveries, onChanged, canEdit = tru
                         <button
                           type="button"
                           onClick={() => { setCreatingIn(col.status); setNewTitle('') }}
-                          aria-label={`Nova entrega em ${col.label}`}
+                          aria-label={`Nova atividade em ${col.label}`}
                           style={{
                             background: 'transparent', border: 'none', cursor: 'pointer',
                             color: 'var(--text-muted)', padding: 2,
@@ -154,7 +165,7 @@ export function StageKanbanBoard({ stageId, deliveries, onChanged, canEdit = tru
                           onChange={e => setNewTitle(e.target.value)}
                           onBlur={() => { if (!newTitle.trim()) setCreatingIn(null) }}
                           onKeyDown={e => { if (e.key === 'Escape') setCreatingIn(null) }}
-                          placeholder="Título da entrega…"
+                          placeholder="Título da atividade…"
                           maxLength={200}
                           style={{ width: '100%', fontSize: 13, padding: '6px 8px' }}
                         />
@@ -193,6 +204,7 @@ export function StageKanbanBoard({ stageId, deliveries, onChanged, canEdit = tru
       {selected && (
         <DeliverySidePanel
           delivery={selected}
+          projectId={projectId}
           onClose={() => setSelected(null)}
           onUpdated={(updated) => {
             setLocal(prev => prev.map(d => d.id === updated.id ? updated : d))
