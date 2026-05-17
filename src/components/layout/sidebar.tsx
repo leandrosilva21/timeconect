@@ -62,11 +62,18 @@ type NavItem = {
   matchPaths?: string[]
   exactMatch?: boolean
 }
+type NavLink = { label: string; href: string; icon: LucideIcon; exactMatch?: boolean }
+type NavSubGroup = {
+  kind: 'subgroup'
+  label: string
+  icon: LucideIcon
+  items: NavLink[]
+}
 type NavGroup = {
   type: 'group'
   label: string
   icon: LucideIcon
-  items: { label: string; href: string; icon: LucideIcon; exactMatch?: boolean }[]
+  items: (NavLink | NavSubGroup)[]
 }
 type NavEntry = NavItem | NavGroup
 
@@ -108,7 +115,6 @@ const NAV: NavEntry[] = [
       { label: 'Kanban Contratos',         href: '/contratos/kanban',         icon: LayoutGrid },
       { label: 'Demandas e Projetos',      href: '/contratos/pipeline',       icon: Layers },
       { label: 'Investimento Interno',      href: '/investimento-comercial',   icon: TrendingUp },
-      { label: 'Visão Executiva',          href: '/portal-cliente',           icon: Building2 },
     ],
   },
   {
@@ -132,13 +138,38 @@ const NAV: NavEntry[] = [
   },
   {
     type: 'group',
-    label: 'Visão do Cliente',
+    label: 'Visão Externa',
     icon: BarChart2,
     items: [
-      { label: 'Banco de Horas Fixo',    href: '/dashboards/bank-hours-fixed',   icon: BarChart2 },
-      { label: 'Banco de Horas Mensais', href: '/dashboards/bank-hours-monthly', icon: CalendarClock },
-      { label: 'On Demand',              href: '/dashboards/on-demand',           icon: Zap },
-      { label: 'Fechado',                href: '/dashboards/fechado',             icon: CheckSquare },
+      {
+        kind: 'subgroup',
+        label: 'Cliente',
+        icon: Building2,
+        items: [
+          { label: 'Home do Cliente',        href: '/portal-cliente',                icon: Building2 },
+          { label: 'Banco de Horas Fixo',    href: '/dashboards/bank-hours-fixed',   icon: BarChart2 },
+          { label: 'Banco de Horas Mensais', href: '/dashboards/bank-hours-monthly', icon: CalendarClock },
+          { label: 'On Demand',              href: '/dashboards/on-demand',           icon: Zap },
+          { label: 'Fechado',                href: '/dashboards/fechado',             icon: CheckSquare },
+        ],
+      },
+      {
+        kind: 'subgroup',
+        label: 'Consultor',
+        icon: UserCheck,
+        items: [
+          { label: 'Meu Painel',     href: '/meu-painel',  icon: UserCheck },
+        ],
+      },
+      {
+        kind: 'subgroup',
+        label: 'Parceiro',
+        icon: Handshake,
+        items: [
+          { label: 'Painel do Parceiro',  href: '/partner-dashboard',   icon: Handshake },
+          { label: 'Fechamento Parceiro', href: '/fechamento/parceiro', icon: DollarSign },
+        ],
+      },
     ],
   },
   {
@@ -425,16 +456,27 @@ function SidebarInner({ user }: { user: User }) {
     return NAV
   }, [isCoordenador, isConsultor, isCliente, isParceiroAdmin, isParceiroGestor, isAdministrativo, clienteContractCodes, ep])
 
-  // Auto-abre o grupo que contém a rota atual, sem fechar os já abertos manualmente.
-  // Roda quando muda pathname OU visibleNav (cliente/coord etc com sidebar dinâmico).
+  // Auto-abre o grupo (e o sub-grupo aninhado, se houver) que contém a rota atual,
+  // sem fechar os já abertos manualmente.
   useEffect(() => {
     const auto: string[] = []
+    const matchHref = (href: string) => {
+      const base = href.split('?')[0]
+      return pathname === base || pathname.startsWith(base + '/')
+    }
     for (const entry of visibleNav) {
-      if (entry.type === 'group' && entry.items.some(i => {
-        const base = i.href.split('?')[0]
-        return pathname === base || pathname.startsWith(base + '/')
-      })) {
-        auto.push(entry.label)
+      if (entry.type !== 'group') continue
+      for (const i of entry.items) {
+        if ('href' in i) {
+          if (matchHref(i.href)) { auto.push(entry.label); break }
+        } else {
+          // sub-grupo: abre o pai e o sub-grupo se algum leaf casar
+          if (i.items.some(leaf => matchHref(leaf.href))) {
+            auto.push(entry.label)
+            auto.push(`${entry.label}/${i.label}`)
+            break
+          }
+        }
       }
     }
     if (auto.length === 0) return
@@ -465,7 +507,11 @@ function SidebarInner({ user }: { user: User }) {
     }
     return true
   }
-  const groupActive = (g: NavGroup) => g.items.some(i => isActive(i.href, undefined, i.exactMatch))
+  const isNavLink = (x: NavLink | NavSubGroup): x is NavLink => (x as any).href !== undefined
+  const subGroupActive = (sg: NavSubGroup) => sg.items.some(i => isActive(i.href, undefined, i.exactMatch))
+  const groupActive = (g: NavGroup) => g.items.some(i =>
+    isNavLink(i) ? isActive(i.href, undefined, i.exactMatch) : subGroupActive(i)
+  )
 
   return (
     <aside
@@ -552,10 +598,14 @@ function SidebarInner({ user }: { user: User }) {
           const active = groupActive(group)
           const open   = openGroups.includes(group.label)
 
+          // Lista plana de links (descendo recursivamente em subgrupos) — usada no modo collapsed.
+          const flatLinks = (entries: (NavLink | NavSubGroup)[]): NavLink[] =>
+            entries.flatMap(e => isNavLink(e) ? [e] : e.items)
+
           if (collapsed) {
             return (
               <div key={group.label} className="space-y-0.5">
-                {group.items.map(sub => {
+                {flatLinks(group.items).map(sub => {
                   const SubIcon = sub.icon
                   const subActive = isActive(sub.href, undefined, sub.exactMatch)
                   const subItem = (
@@ -595,6 +645,48 @@ function SidebarInner({ user }: { user: User }) {
               {open && (
                 <div className="ml-3 mt-0.5 space-y-0.5 border-l pl-2" style={{ borderColor: 'var(--brand-border)' }}>
                   {group.items.map(sub => {
+                    // Sub-grupo aninhado
+                    if (!isNavLink(sub)) {
+                      const subgroupKey = `${group.label}/${sub.label}`
+                      const SubGroupIcon = sub.icon
+                      const sgOpen = openGroups.includes(subgroupKey)
+                      const sgActive = subGroupActive(sub)
+                      return (
+                        <div key={sub.label}>
+                          <button
+                            onClick={() => toggleGroup(subgroupKey)}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium sidebar-item"
+                            style={sgActive ? { color: 'var(--text)' } : undefined}
+                          >
+                            <SubGroupIcon size={14} className="shrink-0" />
+                            <span className="flex-1 text-left">{sub.label}</span>
+                            <ChevronDown size={11} className={cn('transition-transform duration-200', sgOpen && 'rotate-180')} />
+                          </button>
+                          {sgOpen && (
+                            <div className="ml-3 mt-0.5 space-y-0.5 border-l pl-2" style={{ borderColor: 'var(--brand-border)' }}>
+                              {sub.items.map(leaf => {
+                                const LeafIcon = leaf.icon
+                                const leafActive = isActive(leaf.href, undefined, leaf.exactMatch)
+                                return (
+                                  <Link
+                                    key={leaf.href}
+                                    href={leaf.href}
+                                    className={cn(
+                                      'flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium sidebar-item',
+                                      leafActive && 'sidebar-item-active'
+                                    )}
+                                  >
+                                    <LeafIcon size={13} className="shrink-0" />
+                                    <span>{leaf.label}</span>
+                                  </Link>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    }
+                    // Link folha tradicional
                     const SubIcon = sub.icon
                     const subActive = isActive(sub.href, undefined, sub.exactMatch)
                     return (

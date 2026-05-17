@@ -24,18 +24,14 @@ export function PageHeader({ icon: Icon, title, subtitle, actions }: PageHeaderP
         {Icon && (
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-            style={{ background: 'rgba(0,245,255,0.08)' }}
+            style={{ background: 'var(--primary-soft)' }}
           >
-            <Icon size={16} color="var(--brand-primary)" />
+            <Icon size={16} color="var(--primary)" />
           </div>
         )}
         <div>
-          <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--brand-text)' }}>
-            {title}
-          </h1>
-          {subtitle && (
-            <p className="text-sm mt-0.5" style={{ color: 'var(--brand-muted)' }}>{subtitle}</p>
-          )}
+          <h1 className="ds-text-h1">{title}</h1>
+          {subtitle && <p className="ds-text-body-sm mt-1" style={{ color: 'var(--text-muted)' }}>{subtitle}</p>}
         </div>
       </div>
       {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}

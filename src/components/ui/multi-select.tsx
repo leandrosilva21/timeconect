@@ -77,7 +77,7 @@ export function MultiSelect({
   return (
     <div className="flex flex-col gap-1.5">
       {label && (
-        <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>
+        <label className="text-[11px] font-medium uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
           {label}
         </label>
       )}
@@ -86,58 +86,62 @@ export function MultiSelect({
         type="button"
         onClick={openDropdown}
         disabled={disabled}
-        className={`flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl text-sm outline-none text-left disabled:opacity-50 disabled:cursor-not-allowed ${fullWidth ? 'w-full' : wide ? 'min-w-52' : 'min-w-36'}`}
+        className={`flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg text-xs font-medium outline-none text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${fullWidth ? 'w-full' : wide ? 'min-w-52' : 'min-w-36'}`}
         style={{
-          background: 'var(--brand-bg)',
-          border: `1px solid ${value.length > 0 ? 'var(--brand-primary)' : 'var(--brand-border)'}`,
-          color: value.length > 0 ? 'var(--brand-text)' : 'var(--brand-subtle)',
+          background: 'var(--surface)',
+          border: `1px solid ${value.length > 0 ? 'var(--primary)' : 'var(--border)'}`,
+          color: value.length > 0 ? 'var(--text)' : 'var(--text-muted)',
         }}
       >
-        <span className="truncate text-sm">{triggerLabel}</span>
-        <ChevronDown size={13} style={{ color: 'var(--brand-subtle)', flexShrink: 0 }} />
+        <span className="truncate">{triggerLabel}</span>
+        <ChevronDown size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
       </button>
 
       {open && pos && (
         <div
           ref={ref}
-          className="rounded-xl shadow-2xl overflow-hidden"
+          className="rounded-xl overflow-hidden"
           style={{
             position: 'fixed', top: pos.top, left: pos.left, width: pos.width,
-            zIndex: 9999, background: 'var(--brand-surface)', border: '1px solid var(--brand-border)',
+            zIndex: 9999, background: 'var(--surface)', border: '1px solid var(--border)',
+            boxShadow: 'var(--shadow-lg)',
           }}
         >
-          <div className="p-2 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+          <div className="p-2 border-b" style={{ borderColor: 'var(--border)' }}>
             <div className="relative">
-              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--brand-subtle)' }} />
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
               <input
                 ref={inputRef}
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Buscar..."
-                className="w-full pl-7 pr-3 py-1.5 rounded-lg text-xs outline-none"
-                style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
+                className="w-full pl-7 pr-3 py-1.5 rounded-lg text-xs outline-none ds-input"
               />
             </div>
           </div>
           {value.length > 0 && (
             <button type="button" onClick={() => onChange([])}
-              className="w-full text-left px-3 py-1.5 text-xs font-semibold hover:bg-white/5 transition-colors"
-              style={{ color: 'var(--brand-primary)', borderBottom: '1px solid var(--brand-border)' }}>
+              className="w-full text-left px-3 py-1.5 text-xs font-semibold transition-colors"
+              style={{ color: 'var(--primary)', borderBottom: '1px solid var(--border)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
               Limpar seleção
             </button>
           )}
           <div className="max-h-52 overflow-y-auto">
             {filtered.length === 0
-              ? <p className="px-3 py-2 text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhum resultado</p>
+              ? <p className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>Nenhum resultado</p>
               : filtered.map(o => {
                   const checked = value.includes(String(o.id))
                   return (
                     <button key={o.id} type="button" onClick={() => toggle(String(o.id))}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-white/5 transition-colors flex items-center gap-2"
-                      style={{ color: checked ? 'var(--brand-primary)' : 'var(--brand-text)' }}>
+                      className="w-full text-left px-3 py-2 text-xs transition-colors flex items-center gap-2"
+                      style={{ color: checked ? 'var(--primary)' : 'var(--text)', fontWeight: checked ? 500 : 400 }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
                       <span className="w-3.5 h-3.5 rounded flex-shrink-0 flex items-center justify-center border"
-                        style={{ borderColor: checked ? 'var(--brand-primary)' : 'rgba(255,255,255,0.2)', background: checked ? 'var(--brand-primary)' : 'transparent' }}>
-                        {checked && <Check size={9} color="#0A0A0B" strokeWidth={3} />}
+                        style={{ borderColor: checked ? 'var(--primary)' : 'var(--border-strong)', background: checked ? 'var(--primary)' : 'var(--surface)' }}>
+                        {checked && <Check size={9} color="var(--primary-fg)" strokeWidth={3} />}
                       </span>
                       {o.name}
                     </button>
