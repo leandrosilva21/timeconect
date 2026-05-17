@@ -27,9 +27,10 @@ interface DragState {
   deltaDays: number // current delta during drag (snapped to days)
 }
 
-type Zoom = 'week' | 'biweek' | 'month'
+type Zoom = 'day' | 'week' | 'biweek' | 'month'
 
 const ZOOM_PX: Record<Zoom, number> = {
+  day: 42,     // 1 day = 42px (dia útil legível, 1 atividade curta cabe nome)
   week: 22,    // 1 day = 22px
   biweek: 12,  // 1 day = 12px
   month: 6,    // 1 day = 6px
@@ -237,17 +238,20 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
   }
 
   return (
-    <div className="ds-card" style={{ padding: 0, overflow: 'hidden' }}>
-      {/* Toolbar */}
+    <div className="ds-card" style={{ padding: 0, overflow: 'visible' }}>
+      {/* Toolbar — sticky no topo da viewport */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '8px 12px',
         borderBottom: '1px solid var(--border)',
         background: 'var(--surface-hover)',
         fontSize: 12,
+        position: 'sticky',
+        top: 0,
+        zIndex: 5,
       }}>
         <span style={{ color: 'var(--text-muted)' }}>
-          Linha do tempo · {totalDays} dias · zoom {zoom === 'week' ? 'semana' : zoom === 'biweek' ? '2 semanas' : 'mês'}
+          Linha do tempo · {totalDays} dias · zoom {zoom === 'day' ? 'dia' : zoom === 'week' ? 'semana' : zoom === 'biweek' ? '2 semanas' : 'mês'}
         </span>
         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
           <button
@@ -275,7 +279,7 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
           >
             Expandir tudo
           </button>
-          {(['week', 'biweek', 'month'] as Zoom[]).map(z => (
+          {(['day', 'week', 'biweek', 'month'] as Zoom[]).map(z => (
             <button
               key={z}
               type="button"
@@ -290,7 +294,7 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
                 fontWeight: zoom === z ? 600 : 400,
               }}
             >
-              {z === 'week' ? 'Semana' : z === 'biweek' ? '2 sem' : 'Mês'}
+              {z === 'day' ? 'Dia' : z === 'week' ? 'Semana' : z === 'biweek' ? '2 sem' : 'Mês'}
             </button>
           ))}
         </div>
@@ -313,6 +317,9 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
             padding: '0 12px',
             fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
             textTransform: 'uppercase', letterSpacing: '.04em',
+            position: 'sticky',
+            top: 33, // altura aproximada da toolbar (8+8 padding + ~17 conteúdo)
+            zIndex: 4,
           }}>
             Etapa / Atividade
           </div>
@@ -373,13 +380,13 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
         {/* Canvas scrollable */}
         <div style={{ overflowX: 'auto', position: 'relative', flex: 1 }}>
         <div style={{ width: widthPx, position: 'relative' }}>
-          {/* Header: months */}
+          {/* Header: months — sticky no topo (mesma posição do header sidebar) */}
           <div style={{
             height: HEADER_HEIGHT,
             borderBottom: '1px solid var(--border)',
             background: 'var(--surface-sunken)',
             position: 'sticky',
-            top: 0, zIndex: 2,
+            top: 33, zIndex: 4,
             overflow: 'hidden',
           }}>
             {months.map((m, i) => (
