@@ -80,6 +80,14 @@ export interface StageDelivery {
   dependency_type?: 'FS' | null
   /** Estado do predecessor: 'none' = sem dependência, 'pending' = predecessor não-done, 'done' = pronto. */
   predecessor_state?: 'none' | 'pending' | 'done'
+  /** Predecessor enriquecido pelo /schedule (id + title) — evita lookup local. */
+  predecessor?: { id: number; title: string } | null
+  /** Títulos das atividades impactadas downstream (FS, BFS depth ≤ 10) — pra tooltip "Impacta N". */
+  impacted_titles?: string[]
+  /** Duração em dias úteis (BusinessCalendarService::businessDaysBetween). */
+  duration_business_days?: number | null
+  /** True se está no caminho crítico (longest path por horas planejadas). */
+  is_critical?: boolean
   /** Envolvimento opcional do cliente (toggle). */
   client_involved?: boolean
   /** Cliente cadastrado envolvido — acesso pontual à atividade. */

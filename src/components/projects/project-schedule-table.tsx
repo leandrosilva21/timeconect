@@ -10,6 +10,7 @@ import { BusinessCalendar } from '@/lib/business-calendar'
 import { RecalcDependentsModal } from './recalc-dependents-modal'
 import { ResponsibleChip } from './responsible-chip'
 import { useUserCapacityIndex } from '@/hooks/use-user-capacity'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 
 interface Props {
   projectId: number
@@ -200,6 +201,7 @@ export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit,
             <th style={th()}>Responsável</th>
             <th style={th(110)}>Início</th>
             <th style={th(110)}>Fim</th>
+            <th style={th(80)}>Dias úteis</th>
             <th style={th(80)}>Horas</th>
             <th style={th(160)}>Depende de</th>
             <th style={th(60)}></th>
@@ -235,7 +237,7 @@ export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit,
           {canEdit && (
             creatingStage ? (
               <tr style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-hover)' }}>
-                <td colSpan={7} style={{ padding: '10px 12px' }}>
+                <td colSpan={8} style={{ padding: '10px 12px' }}>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                     <FieldLabeled label="Nome">
                       <input
@@ -301,7 +303,7 @@ export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit,
               </tr>
             ) : (
               <tr style={{ borderTop: '1px solid var(--border)' }}>
-                <td colSpan={7} style={{ padding: '8px 12px' }}>
+                <td colSpan={8} style={{ padding: '8px 12px' }}>
                   <button onClick={openCreateStage} style={addBtnStyle()}>
                     <Plus size={12} /> Nova etapa
                   </button>
@@ -431,6 +433,15 @@ function StageRows(props: StageRowProps) {
           <InlineDate value={stage.expected_end_date ?? null} canEdit={canEdit} onSave={v => patchStage('expected_end_date', v)} placeholder="Definir fim" />
         </td>
         <td style={cell()}>
+          {stage.stage_start_at && stage.expected_end_date ? (
+            <span style={{ color: 'var(--text-muted)', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+              {calendar.businessDaysBetween(stage.stage_start_at, stage.expected_end_date)} d.ú.
+            </span>
+          ) : (
+            <span style={{ color: 'var(--text-light)' }}>—</span>
+          )}
+        </td>
+        <td style={cell()}>
           <span style={{ color: 'var(--text-muted)', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
             {formatHours(num(stage.deliveries_hours_planned_sum))}
           </span>
@@ -463,7 +474,7 @@ function StageRows(props: StageRowProps) {
       {!collapsed && canEdit && (
         creatingActivity ? (
           <tr style={{ background: 'var(--surface-hover)' }}>
-            <td colSpan={7} style={{ padding: '10px 12px 10px 36px' }}>
+            <td colSpan={8} style={{ padding: '10px 12px 10px 36px' }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 <FieldLabeled label="Título">
                   <input
@@ -535,7 +546,7 @@ function StageRows(props: StageRowProps) {
           </tr>
         ) : (
           <tr>
-            <td colSpan={7} style={{ padding: '4px 12px 4px 36px' }}>
+            <td colSpan={8} style={{ padding: '4px 12px 4px 36px' }}>
               <button onClick={onStartCreateActivity} style={addBtnStyle()}>
                 <Plus size={12} /> Nova atividade
               </button>
@@ -597,19 +608,28 @@ function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDepende
     }
   }
 
-  const dependsOn = delivery.depends_on_delivery_id
-    ? stageDeliveries.find(d => d.id === delivery.depends_on_delivery_id)
-    : null
+  // Prefer enriched payload do /schedule; fallback lookup local.
+  const predecessorRef = delivery.predecessor
+    ?? (delivery.depends_on_delivery_id
+        ? stageDeliveries.find(d => d.id === delivery.depends_on_delivery_id) ?? null
+        : null)
   const isBlocked = delivery.predecessor_state === 'pending'
+  const impactedTitles = delivery.impacted_titles ?? []
 
   return (
     <tr style={{ borderTop: '1px solid var(--border)' }}>
       <td style={{ ...cell(), paddingLeft: 36 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <InlineText value={delivery.title} canEdit={canEdit} onSave={v => patch('title', v)} />
-          {isBlocked && dependsOn && (
+          {delivery.is_critical && (
             <span
-              title={`Bloqueada por: ${dependsOn.title}`}
+              title="Atividade no caminho crítico (maior soma de horas no DAG FS)"
+              style={{ fontSize: 12, lineHeight: 1 }}
+            >🔥</span>
+          )}
+          <InlineText value={delivery.title} canEdit={canEdit} onSave={v => patch('title', v)} />
+          {isBlocked && predecessorRef && (
+            <span
+              title={`Bloqueada por: ${predecessorRef.title}`}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -626,27 +646,11 @@ function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDepende
                 textOverflow: 'ellipsis',
               }}
             >
-              <Lock size={10} /> Bloqueada por: <strong>{dependsOn.title}</strong>
+              <Lock size={10} /> Bloqueada por: <strong>{predecessorRef.title}</strong>
             </span>
           )}
           {hasDependents && (
-            <span
-              title="Editar datas/horas desta atividade abrirá modal de recálculo da cadeia FS"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '2px 6px',
-                borderRadius: 4,
-                background: 'var(--primary-soft)',
-                color: 'var(--primary)',
-                fontSize: 10,
-                fontWeight: 500,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              ⚠ Impacta dependentes
-            </span>
+            <ImpactPopover titles={impactedTitles} />
           )}
         </div>
       </td>
@@ -658,6 +662,15 @@ function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDepende
       </td>
       <td style={cell()}>
         <InlineDate value={delivery.due_date ?? null} canEdit={canEdit} onSave={v => patch('due_date', v)} placeholder="Definir fim" />
+      </td>
+      <td style={cell()}>
+        {typeof delivery.duration_business_days === 'number' ? (
+          <span style={{ color: 'var(--text-muted)', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+            {delivery.duration_business_days} d.ú.
+          </span>
+        ) : (
+          <span style={{ color: 'var(--text-light)' }}>—</span>
+        )}
       </td>
       <td style={cell()}>
         <InlineNumber value={num(delivery.hours_planned)} canEdit={canEdit} onSave={v => patch('hours_planned', v)} />
@@ -1080,5 +1093,50 @@ function ActivityExtraSections({ draft, setDraft, coordinators }: {
         </div>
       </div>
     </div>
+  )
+}
+
+function ImpactPopover({ titles }: { titles: string[] }) {
+  const count = titles.length
+  if (count === 0) return null
+  const limit = 5
+  const shown = titles.slice(0, limit)
+  const rest = count - shown.length
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '2px 6px', borderRadius: 4,
+              background: 'var(--primary-soft)', color: 'var(--primary)',
+              fontSize: 10, fontWeight: 500, whiteSpace: 'nowrap',
+              border: 'none', cursor: 'pointer',
+            }}
+          />
+        }
+      >
+        ⚠ Impacta {count}
+      </PopoverTrigger>
+      <PopoverContent side="top" align="start" style={{ width: 260, padding: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+          Impactará na cadeia
+        </div>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, color: 'var(--text)' }}>
+          {shown.map((t, i) => (
+            <li key={i} style={{ padding: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              · {t}
+            </li>
+          ))}
+          {rest > 0 && (
+            <li style={{ padding: '2px 0', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              e mais {rest}…
+            </li>
+          )}
+        </ul>
+      </PopoverContent>
+    </Popover>
   )
 }

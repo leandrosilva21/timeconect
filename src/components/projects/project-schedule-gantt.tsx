@@ -90,18 +90,46 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
   const totalDays = Math.max(1, daysBetween(window.start, window.end) + 1)
   const widthPx = totalDays * dayWidth
 
-  // Flatten rows (stage row + activity rows) para o layout vertical
-  type Row = { kind: 'stage'; stage: ScheduleStage } | { kind: 'activity'; activity: StageDelivery; stageId: number }
+  // Collapse/expand por etapa (persistido em sessionStorage por projeto)
+  const collapseKey = `cronograma:gantt-collapsed:${stages[0]?.project_id ?? 'unknown'}`
+  const [collapsed, setCollapsed] = useState<Record<number, boolean>>({})
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = window.sessionStorage.getItem(collapseKey)
+      if (raw) setCollapsed(JSON.parse(raw))
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collapseKey])
+  function toggleStage(stageId: number) {
+    setCollapsed(c => {
+      const next = { ...c, [stageId]: !c[stageId] }
+      try { window.sessionStorage.setItem(collapseKey, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+  function setAllCollapsed(value: boolean) {
+    const next = stages.reduce<Record<number, boolean>>((acc, s) => { acc[s.id] = value; return acc }, {})
+    setCollapsed(next)
+    try { window.sessionStorage.setItem(collapseKey, JSON.stringify(next)) } catch {}
+  }
+
+  // Flatten rows (stage row + activity rows) para o layout vertical, respeitando collapse
+  type Row = { kind: 'stage'; stage: ScheduleStage; hiddenChildrenCount: number } | { kind: 'activity'; activity: StageDelivery; stageId: number }
   const rows: Row[] = useMemo(() => {
     const out: Row[] = []
     for (const s of stages) {
-      out.push({ kind: 'stage', stage: s })
-      for (const d of s.deliveries ?? []) {
-        out.push({ kind: 'activity', activity: d, stageId: s.id })
+      const childs = s.deliveries ?? []
+      const isCollapsed = !!collapsed[s.id]
+      out.push({ kind: 'stage', stage: s, hiddenChildrenCount: isCollapsed ? childs.length : 0 })
+      if (!isCollapsed) {
+        for (const d of childs) {
+          out.push({ kind: 'activity', activity: d, stageId: s.id })
+        }
       }
     }
     return out
-  }, [stages])
+  }, [stages, collapsed])
 
   // Build dependency lookup for arrow rendering
   const activityRowIndex = useMemo(() => {
@@ -141,6 +169,15 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
   const today = new Date()
   const todayOffset = daysBetween(window.start, today)
   const todayVisible = todayOffset >= 0 && todayOffset <= totalDays
+
+  // Alinha o background-image (pattern de fim de semana) ao calendário real:
+  // pattern = 5 dias transparente + 2 dias surface-hover, repetindo a cada 7 dias.
+  // Quero que esses 2 dias caiam em sábado/domingo reais. getDay(): 0=dom,1=seg,...,6=sab.
+  const weekendOffsetPx = useMemo(() => {
+    const startDOW = window.start.getDay()
+    const daysToSat = (6 - startDOW + 7) % 7
+    return (daysToSat - 5) * dayWidth
+  }, [window.start, dayWidth])
 
   // ─── Drag temporal ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -210,9 +247,34 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
         fontSize: 12,
       }}>
         <span style={{ color: 'var(--text-muted)' }}>
-          Gantt · {totalDays} dias · zoom {zoom === 'week' ? 'semana' : zoom === 'biweek' ? '2 semanas' : 'mês'}
+          Linha do tempo · {totalDays} dias · zoom {zoom === 'week' ? 'semana' : zoom === 'biweek' ? '2 semanas' : 'mês'}
         </span>
-        <div style={{ display: 'inline-flex', gap: 4 }}>
+        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => setAllCollapsed(true)}
+            title="Recolher todas as etapas"
+            style={{
+              padding: '3px 8px', fontSize: 11,
+              background: 'transparent', color: 'var(--text-muted)',
+              border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer',
+            }}
+          >
+            Recolher tudo
+          </button>
+          <button
+            type="button"
+            onClick={() => setAllCollapsed(false)}
+            title="Expandir todas as etapas"
+            style={{
+              padding: '3px 8px', fontSize: 11,
+              background: 'transparent', color: 'var(--text-muted)',
+              border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer',
+              marginRight: 8,
+            }}
+          >
+            Expandir tudo
+          </button>
           {(['week', 'biweek', 'month'] as Zoom[]).map(z => (
             <button
               key={z}
@@ -234,14 +296,88 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
         </div>
       </div>
 
-      {/* Gantt body */}
-      <div style={{ overflowX: 'auto', position: 'relative' }}>
+      {/* Gantt body — sidebar fixa + canvas scrollable */}
+      <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+        {/* Sidebar fixa com nome de etapa + chevron de collapse */}
+        <aside style={{
+          width: 220, flexShrink: 0,
+          borderRight: '1px solid var(--border)',
+          background: 'var(--surface)',
+        }}>
+          {/* Header alinhado com months */}
+          <div style={{
+            height: HEADER_HEIGHT,
+            borderBottom: '1px solid var(--border)',
+            background: 'var(--surface-sunken)',
+            display: 'flex', alignItems: 'center',
+            padding: '0 12px',
+            fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+            textTransform: 'uppercase', letterSpacing: '.04em',
+          }}>
+            Etapa / Atividade
+          </div>
+          {/* Row labels */}
+          {rows.map((r, i) => {
+            if (r.kind === 'stage') {
+              const isCollapsed = !!collapsed[r.stage.id]
+              return (
+                <button
+                  key={`label-${i}`}
+                  type="button"
+                  onClick={() => toggleStage(r.stage.id)}
+                  title={isCollapsed ? `Expandir (${r.hiddenChildrenCount} atividades ocultas)` : 'Recolher'}
+                  style={{
+                    height: ROW_HEIGHT,
+                    width: '100%',
+                    padding: '0 8px 0 10px',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: 'transparent',
+                    border: 'none',
+                    borderTop: '1px solid var(--border)',
+                    cursor: 'pointer',
+                    fontSize: 12, fontWeight: 700, color: 'var(--text)',
+                    textAlign: 'left',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <span style={{ width: 12, color: 'var(--text-muted)' }}>
+                    {isCollapsed ? '▸' : '▾'}
+                  </span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                    {r.stage.name}
+                  </span>
+                  {isCollapsed && r.hiddenChildrenCount > 0 && (
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>
+                      ({r.hiddenChildrenCount})
+                    </span>
+                  )}
+                </button>
+              )
+            }
+            return (
+              <div key={`label-${i}`} style={{
+                height: ROW_HEIGHT,
+                padding: '0 8px 0 28px',
+                display: 'flex', alignItems: 'center',
+                borderTop: '1px solid var(--border)',
+                fontSize: 11, color: 'var(--text-muted)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {r.activity.is_critical && <span style={{ marginRight: 4 }}>🔥</span>}
+                {r.activity.title}
+              </div>
+            )
+          })}
+        </aside>
+
+        {/* Canvas scrollable */}
+        <div style={{ overflowX: 'auto', position: 'relative', flex: 1 }}>
         <div style={{ width: widthPx, position: 'relative' }}>
           {/* Header: months */}
           <div style={{
             height: HEADER_HEIGHT,
             borderBottom: '1px solid var(--border)',
-            background: 'var(--bg)',
+            background: 'var(--surface-sunken)',
             position: 'sticky',
             top: 0, zIndex: 2,
             overflow: 'hidden',
@@ -251,30 +387,61 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
                 position: 'absolute',
                 left: m.offsetPx,
                 top: 8,
-                fontSize: 11, fontWeight: 600,
-                color: 'var(--text-muted)',
+                fontSize: 11, fontWeight: 700,
+                color: 'var(--text)',
                 textTransform: 'uppercase', letterSpacing: '.04em',
                 paddingLeft: 4,
               }}>
                 {m.label}
               </div>
             ))}
-            {/* Vertical grid lines per week */}
-            {Array.from({ length: Math.ceil(totalDays / 7) }).map((_, i) => (
-              <div key={`gl-${i}`} style={{
+            {/* Boundary lines of months */}
+            {months.map((m, i) => (
+              <div key={`mh-${i}`} style={{
                 position: 'absolute',
-                left: i * 7 * dayWidth,
+                left: m.offsetPx,
                 top: 0, bottom: 0,
                 width: 1,
-                background: 'var(--border)',
-                opacity: 0.5,
+                background: 'var(--border-strong, var(--border))',
+                opacity: 0.7,
               }} />
             ))}
+            {/* Today label sticky no header */}
+            {todayVisible && (
+              <div style={{
+                position: 'absolute',
+                left: todayOffset * dayWidth - 18,
+                top: HEADER_HEIGHT - 16,
+                width: 36,
+                fontSize: 9, fontWeight: 700,
+                color: 'var(--primary-fg)',
+                background: 'var(--danger)',
+                textAlign: 'center',
+                borderRadius: 3,
+                padding: '1px 0',
+                pointerEvents: 'none',
+                zIndex: 3,
+              }}>
+                HOJE
+              </div>
+            )}
           </div>
 
           {/* Rows */}
-          <div style={{ position: 'relative', minHeight: rows.length * ROW_HEIGHT }}>
-            {/* Vertical grid lines per week (body) */}
+          <div style={{
+            position: 'relative',
+            minHeight: rows.length * ROW_HEIGHT,
+            // Banding fim de semana via repeating gradient (perf-friendly):
+            // 5 dias úteis transparente + 2 dias sábado/domingo bg surface-hover.
+            backgroundImage: `repeating-linear-gradient(to right,
+              transparent 0,
+              transparent ${5 * dayWidth}px,
+              var(--surface-hover) ${5 * dayWidth}px,
+              var(--surface-hover) ${7 * dayWidth}px)`,
+            backgroundSize: `${7 * dayWidth}px 100%`,
+            backgroundPositionX: `${weekendOffsetPx}px`,
+          }}>
+            {/* Linhas de SEMANA (claras) */}
             {Array.from({ length: Math.ceil(totalDays / 7) }).map((_, i) => (
               <div key={`gv-${i}`} style={{
                 position: 'absolute',
@@ -282,7 +449,19 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
                 top: 0, bottom: 0,
                 width: 1,
                 background: 'var(--border)',
-                opacity: 0.3,
+                opacity: 0.25,
+                pointerEvents: 'none',
+              }} />
+            ))}
+            {/* Linhas de MÊS (fortes) */}
+            {months.map((m, i) => (
+              <div key={`mb-${i}`} style={{
+                position: 'absolute',
+                left: m.offsetPx,
+                top: 0, bottom: 0,
+                width: 1,
+                background: 'var(--border-strong, var(--border))',
+                opacity: 0.6,
                 pointerEvents: 'none',
               }} />
             ))}
@@ -295,7 +474,8 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
                 top: 0, bottom: 0,
                 width: 2,
                 background: 'var(--danger)',
-                opacity: 0.7,
+                opacity: 0.9,
+                boxShadow: '0 0 4px var(--danger)',
                 pointerEvents: 'none',
                 zIndex: 1,
               }} title="Hoje" />
@@ -386,6 +566,7 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
           </div>
         </div>
       </div>
+      </div>
     </div>
   )
 }
@@ -445,22 +626,23 @@ function StageBar({ stage, rowIdx, windowStart, dayWidth, canEdit, drag, onDragS
         (actualStart && actualEnd ? ` · Real: ${actualStart.toLocaleDateString('pt-BR')} → ${actualEnd.toLocaleDateString('pt-BR')}` : '')}
       style={{
         position: 'absolute',
-        top: rowIdx * ROW_HEIGHT + 6,
+        top: rowIdx * ROW_HEIGHT + 3,
         left: leftPx,
         width: widthPx,
-        height: 16,
-        background: 'var(--primary-soft)',
-        border: '1px solid var(--primary)',
-        borderRadius: 4,
+        height: 22,
+        background: 'var(--primary)',
+        border: '1px solid var(--primary-hover)',
+        borderRadius: 5,
         fontSize: 11,
-        color: 'var(--primary)',
-        fontWeight: 600,
-        paddingLeft: 6, paddingRight: 6,
+        color: 'var(--primary-fg)',
+        fontWeight: 700,
+        paddingLeft: 8, paddingRight: 8,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        lineHeight: '14px',
+        lineHeight: '20px',
         cursor: canEdit ? (drag ? 'grabbing' : 'grab') : 'default',
         opacity: drag ? 0.7 : 1,
         userSelect: 'none',
+        boxShadow: 'var(--shadow-xs)',
       }}
       onMouseDown={canEdit ? e => { e.preventDefault(); onDragStart('move', start, end, e.clientX) } : undefined}
     >
@@ -533,28 +715,30 @@ function ActivityBar({ activity, rowIdx, windowStart, dayWidth, canEdit, drag, o
       {/* Bar real ou planejada */}
       <div
         title={
-          `${activity.title} · ${mainStart.toLocaleDateString('pt-BR')} → ${mainEnd.toLocaleDateString('pt-BR')}` +
+          `${activity.title}${activity.is_critical ? ' 🔥' : ''} · ${mainStart.toLocaleDateString('pt-BR')} → ${mainEnd.toLocaleDateString('pt-BR')}` +
           ` · ${activity.hours_planned}h` +
+          (typeof activity.duration_business_days === 'number' ? ` · ${activity.duration_business_days} d.ú.` : '') +
           (activity.responsible?.name ? ` · ${activity.responsible.name}` : '') +
           (hasActual ? ' (real)' : ' (planejado)') +
-          (predecessorTitle ? `\n🔒 Aguardando: ${predecessorTitle}` : '')
+          (predecessorTitle ? `\n🔒 Bloqueada por: ${predecessorTitle}` : '')
         }
         style={{
           position: 'absolute',
-          top: rowIdx * ROW_HEIGHT + 8,
+          top: rowIdx * ROW_HEIGHT + 9,
           left: mainLeftPx,
           width: mainWidthPx,
-          height: 12,
+          height: 10,
           background: plannedColor,
-          borderRadius: 3,
+          borderRadius: 2,
           fontSize: 10,
           color: 'var(--primary-fg)',
           paddingLeft: 4, paddingRight: 4,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          lineHeight: '12px',
+          lineHeight: '10px',
           opacity: drag ? 0.6 : dimmed ? 0.25 : 0.85,
           cursor: canDrag ? (drag ? 'grabbing' : 'grab') : 'default',
           userSelect: 'none',
+          borderLeft: activity.is_critical ? '3px solid var(--danger)' : `2px solid ${plannedColor}`,
           outline: predecessorTitle
             ? '2px dashed var(--warning)'
             : highlighted ? '2px solid var(--primary)' : 'none',

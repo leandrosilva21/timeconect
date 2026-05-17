@@ -73,4 +73,21 @@ export class BusinessCalendar {
     if (!start || !hours || hours <= 0) return null
     return toISODate(this.addBusinessHours(start, hours, dailyHours))
   }
+
+  /** Conta dias úteis entre start e end (inclusivo). 0 se end < start. */
+  businessDaysBetween(start: string | Date | null, end: string | Date | null): number {
+    if (!start || !end) return 0
+    const a = toDate(start)
+    const b = toDate(end)
+    a.setHours(0, 0, 0, 0)
+    b.setHours(0, 0, 0, 0)
+    if (b < a) return 0
+    let count = 0
+    const cursor = new Date(a.getTime())
+    while (cursor <= b) {
+      if (this.isBusinessDay(cursor)) count++
+      cursor.setDate(cursor.getDate() + 1)
+    }
+    return count
+  }
 }
