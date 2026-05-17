@@ -97,9 +97,9 @@ export default function CronogramaPage() {
       if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
       const t = e.target as HTMLElement | null
       if (t && t.matches?.('input, textarea, select, [contenteditable="true"]')) return
-      if (e.key === '1') { setView('operacao'); e.preventDefault() }
-      else if (e.key === '2') { setView('planejamento'); e.preventDefault() }
-      else if (e.key === '3') { setView('timeline'); e.preventDefault() }
+      if (e.key === '1') { setView('planejamento'); e.preventDefault() }
+      else if (e.key === '2') { setView('timeline'); e.preventDefault() }
+      else if (e.key === '3') { setView('operacao'); e.preventDefault() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -327,7 +327,7 @@ export default function CronogramaPage() {
       }}>
         <Info size={11} />
         <span>
-          Cronograma é a camada operacional do projeto: <strong>Operação</strong>, <strong>Planejamento</strong> e <strong>Timeline</strong> são views da mesma fonte (ADR 0009). Atalhos: <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>.
+          Cronograma é a camada operacional do projeto: <strong>Planejamento</strong>, <strong>Linha do Tempo</strong> e <strong>Operação</strong> são views da mesma fonte (ADR 0009). Atalhos: <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>.
         </span>
       </div>
 
@@ -378,9 +378,9 @@ function SegmentedControl({
   counts: SegmentedCounts
 }) {
   const opts: { value: ViewMode; label: string; hintBase: string; countSuffix: (n: number) => string; countTone: 'primary' | 'warning' | 'danger' }[] = [
-    { value: 'operacao',     label: 'Operação',      hintBase: 'Atalho: 1', countSuffix: n => `${n} em execução`,  countTone: 'primary' },
-    { value: 'planejamento', label: 'Planejamento',  hintBase: 'Atalho: 2', countSuffix: n => `${n} conflito${n === 1 ? '' : 's'}`, countTone: 'warning' },
-    { value: 'timeline',     label: 'Linha do Tempo', hintBase: 'Atalho: 3', countSuffix: n => `${n} atrasada${n === 1 ? '' : 's'}`, countTone: 'danger' },
+    { value: 'planejamento', label: 'Planejamento',   hintBase: 'Atalho: 1', countSuffix: n => `${n} conflito${n === 1 ? '' : 's'}`, countTone: 'warning' },
+    { value: 'timeline',     label: 'Linha do Tempo', hintBase: 'Atalho: 2', countSuffix: n => `${n} atrasada${n === 1 ? '' : 's'}`, countTone: 'danger' },
+    { value: 'operacao',     label: 'Operação',       hintBase: 'Atalho: 3', countSuffix: n => `${n} em execução`,                  countTone: 'primary' },
   ]
   return (
     <div style={{
