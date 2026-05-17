@@ -34,6 +34,49 @@ export interface ScheduleResponse {
     allow_holiday_work?: boolean
     coordinators?: ProjectCoordinator[]
   } | null
+  /** Fase 10: resumo executivo agregado do cronograma. */
+  executive?: ExecutiveSummary
+  /** Fase 10: alertas operacionais leves. */
+  alerts?: CronogramaAlert[]
+  /** Fase 10: ocupação por consultor envolvido no cronograma. */
+  team_load?: TeamLoadItem[]
+}
+
+export interface ExecutiveSummary {
+  progress_pct: number
+  total_deliveries: number
+  done_deliveries: number
+  in_progress_count: number
+  review_count: number
+  blocked_count: number
+  waiting_client_count: number
+  overdue_count: number
+  hours_planned: number
+  hours_actual: number
+  hours_balance: number
+  overall_risk: 'low' | 'medium' | 'high'
+  high_risk_stages: number
+  medium_risk_stages: number
+  estimated_delay_days: number
+}
+
+export interface CronogramaAlert {
+  severity: 'warning' | 'danger'
+  type: 'stale_activity' | 'overdue' | 'waiting_client_stale' | 'no_responsible' | 'stage_high_risk'
+  message: string
+  delivery_id?: number
+  stage_id?: number
+  title?: string
+}
+
+export interface TeamLoadItem {
+  user: { id: number; name: string; profile_photo_url?: string | null }
+  capacity_hours: number
+  planned_hours: number
+  actual_hours: number
+  remaining_hours: number
+  usage_pct: number
+  overloaded: boolean
   stages: ScheduleStage[]
 }
 
@@ -46,6 +89,9 @@ export function useProjectSchedule(projectId: number | null | undefined) {
     project: data?.project ?? null,
     stages: data?.stages ?? [],
     holidays: data?.holidays ?? [],
+    executive: data?.executive ?? null,
+    alerts: data?.alerts ?? [],
+    teamLoad: data?.team_load ?? [],
     loading,
     error,
     refetch,

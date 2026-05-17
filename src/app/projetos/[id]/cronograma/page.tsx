@@ -17,6 +17,8 @@ import { OperacaoView } from './views/operacao'
 import { PlanejamentoView } from './views/planejamento'
 import { TimelineView } from './views/timeline'
 import { CronogramaSettingsModal } from '@/components/projects/cronograma-settings-modal'
+import { CronogramaExecutiveHeader } from '@/components/projects/cronograma-executive-header'
+import { CronogramaAlertsList } from '@/components/projects/cronograma-alerts-list'
 
 type ViewMode = 'operacao' | 'planejamento' | 'timeline'
 const ALLOWED_VIEWS: ViewMode[] = ['operacao', 'planejamento', 'timeline']
@@ -55,7 +57,7 @@ export default function CronogramaPage() {
 
   const view: ViewMode = normalizeView(searchParams.get('view')) ?? 'operacao'
 
-  const { isOperational, project, stages, projectWindow, holidays, loading, error, refetch } =
+  const { isOperational, project, stages, projectWindow, holidays, executive: executiveSummary, alerts, teamLoad, loading, error, refetch } =
     useProjectSchedule(projectId)
 
   // Restore last-used view do localStorage quando entra sem ?view= explícito.
@@ -212,6 +214,17 @@ export default function CronogramaPage() {
 
   return (
     <div>
+      {/* Fase 10: header executivo + alertas (acima dos KPIs simples) */}
+      {executiveSummary && (
+        <CronogramaExecutiveHeader
+          executive={executiveSummary}
+          teamLoad={teamLoad}
+          alerts={alerts}
+          estimatedEnd={project?.expected_end_date}
+        />
+      )}
+      {alerts.length > 0 && <CronogramaAlertsList alerts={alerts} />}
+
       {/* Strip de KPIs operacionais */}
       <div style={{
         display: 'grid', gap: 8, marginBottom: 12,
