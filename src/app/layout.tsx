@@ -41,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             left: 0,
             right: 0,
             zIndex: 9999,
-            background: 'linear-gradient(90deg, #f59e0b 0%, #ef4444 50%, #f59e0b 100%)',
+            background: 'linear-gradient(90deg, #fbbf24 0%, #fde047 50%, #fbbf24 100%)',
             color: '#0a0a0a',
             fontWeight: 700,
             fontSize: 12,
@@ -53,7 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             pointerEvents: 'none',
           }}
         >
-          REPLICA — DADOS COPIADOS DE PROD • localhost:3001
+          DESENV LOCAL
         </div>
         <div style={{ paddingTop: 24 }}>
           <Providers>{children}</Providers>

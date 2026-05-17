@@ -113,7 +113,7 @@ const NAV: NavEntry[] = [
     items: [
       { label: 'Gestão de Projetos',       href: '/gestao-projetos',          icon: Layers },
       { label: 'Kanban Contratos',         href: '/contratos/kanban',         icon: LayoutGrid },
-      { label: 'Demandas e Projetos',      href: '/contratos/pipeline',       icon: Layers },
+      { label: 'Demandas e Projetos',      href: '/contratos/pipeline',       icon: Layers, matchPaths: ['/portal-cliente/nova-requisicao'] },
       { label: 'Investimento Interno',      href: '/investimento-comercial',   icon: TrendingUp },
     ],
   },
@@ -146,7 +146,7 @@ const NAV: NavEntry[] = [
         label: 'Cliente',
         icon: Building2,
         items: [
-          { label: 'Home do Cliente',        href: '/portal-cliente',                icon: Building2 },
+          { label: 'Home do Cliente',        href: '/portal-cliente',                icon: Building2, exactMatch: true },
           { label: 'Banco de Horas Fixo',    href: '/dashboards/bank-hours-fixed',   icon: BarChart2 },
           { label: 'Banco de Horas Mensais', href: '/dashboards/bank-hours-monthly', icon: CalendarClock },
           { label: 'On Demand',              href: '/dashboards/on-demand',           icon: Zap },
@@ -464,14 +464,16 @@ function SidebarInner({ user }: { user: User }) {
       const base = href.split('?')[0]
       return pathname === base || pathname.startsWith(base + '/')
     }
+    const matchItem = (item: { href: string; matchPaths?: string[] }) =>
+      matchHref(item.href) || (item.matchPaths?.some(p => pathname === p || pathname.startsWith(p + '/')) ?? false)
     for (const entry of visibleNav) {
       if (entry.type !== 'group') continue
       for (const i of entry.items) {
         if ('href' in i) {
-          if (matchHref(i.href)) { auto.push(entry.label); break }
+          if (matchItem(i)) { auto.push(entry.label); break }
         } else {
           // sub-grupo: abre o pai e o sub-grupo se algum leaf casar
-          if (i.items.some(leaf => matchHref(leaf.href))) {
+          if (i.items.some(leaf => matchItem(leaf))) {
             auto.push(entry.label)
             auto.push(`${entry.label}/${i.label}`)
             break
@@ -508,9 +510,9 @@ function SidebarInner({ user }: { user: User }) {
     return true
   }
   const isNavLink = (x: NavLink | NavSubGroup): x is NavLink => (x as any).href !== undefined
-  const subGroupActive = (sg: NavSubGroup) => sg.items.some(i => isActive(i.href, undefined, i.exactMatch))
+  const subGroupActive = (sg: NavSubGroup) => sg.items.some(i => isActive(i.href, i.matchPaths, i.exactMatch))
   const groupActive = (g: NavGroup) => g.items.some(i =>
-    isNavLink(i) ? isActive(i.href, undefined, i.exactMatch) : subGroupActive(i)
+    isNavLink(i) ? isActive(i.href, i.matchPaths, i.exactMatch) : subGroupActive(i)
   )
 
   return (
@@ -607,7 +609,7 @@ function SidebarInner({ user }: { user: User }) {
               <div key={group.label} className="space-y-0.5">
                 {flatLinks(group.items).map(sub => {
                   const SubIcon = sub.icon
-                  const subActive = isActive(sub.href, undefined, sub.exactMatch)
+                  const subActive = isActive(sub.href, sub.matchPaths, sub.exactMatch)
                   const subItem = (
                     <Link
                       key={sub.href}
@@ -666,7 +668,7 @@ function SidebarInner({ user }: { user: User }) {
                             <div className="ml-3 mt-0.5 space-y-0.5 border-l pl-2" style={{ borderColor: 'var(--brand-border)' }}>
                               {sub.items.map(leaf => {
                                 const LeafIcon = leaf.icon
-                                const leafActive = isActive(leaf.href, undefined, leaf.exactMatch)
+                                const leafActive = isActive(leaf.href, leaf.matchPaths, leaf.exactMatch)
                                 return (
                                   <Link
                                     key={leaf.href}
@@ -688,7 +690,7 @@ function SidebarInner({ user }: { user: User }) {
                     }
                     // Link folha tradicional
                     const SubIcon = sub.icon
-                    const subActive = isActive(sub.href, undefined, sub.exactMatch)
+                    const subActive = isActive(sub.href, sub.matchPaths, sub.exactMatch)
                     return (
                       <Link
                         key={sub.href}
