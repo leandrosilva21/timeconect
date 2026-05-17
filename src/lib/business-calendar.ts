@@ -21,17 +21,29 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
+export interface BusinessCalendarOpts {
+  /** Se true, sábado/domingo são considerados dias úteis. */
+  allowWeekend?: boolean
+  /** Se true, feriados são considerados dias úteis. */
+  allowHoliday?: boolean
+}
+
 export class BusinessCalendar {
   private readonly holidays: Set<string>
+  private readonly opts: BusinessCalendarOpts
 
-  constructor(holidays: string[]) {
+  constructor(holidays: string[], opts: BusinessCalendarOpts = {}) {
     this.holidays = new Set(holidays.map(h => h.length > 10 ? h.slice(0, 10) : h))
+    this.opts = opts
   }
 
   isBusinessDay(date: Date): boolean {
     const dow = date.getDay()
-    if (dow === 0 || dow === 6) return false
-    return !this.holidays.has(toISODate(date))
+    const isWeekend = (dow === 0 || dow === 6)
+    if (isWeekend && !this.opts.allowWeekend) return false
+    const isHoliday = this.holidays.has(toISODate(date))
+    if (isHoliday && !this.opts.allowHoliday) return false
+    return true
   }
 
   nextBusinessDay(date: Date): Date {

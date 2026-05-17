@@ -9,10 +9,11 @@ interface Props {
   coordinators: ProjectCoordinator[]
   canEdit: boolean
   holidays?: string[]
+  calendarOpts?: { allowWeekend?: boolean; allowHoliday?: boolean }
   onChanged: () => void
 }
 
-export function PlanejamentoView({ projectId, stages, coordinators, canEdit, holidays, onChanged }: Props) {
+export function PlanejamentoView({ projectId, stages, coordinators, canEdit, holidays, calendarOpts, onChanged }: Props) {
   return (
     <ProjectScheduleTable
       projectId={projectId}
@@ -21,6 +22,7 @@ export function PlanejamentoView({ projectId, stages, coordinators, canEdit, hol
       canEdit={canEdit}
       onChanged={onChanged}
       holidays={holidays}
+      calendarOpts={calendarOpts}
     />
   )
 }

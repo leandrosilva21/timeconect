@@ -11,6 +11,7 @@ import { RecalcDependentsModal } from './recalc-dependents-modal'
 import { ResponsibleChip } from './responsible-chip'
 import { useUserCapacityIndex } from '@/hooks/use-user-capacity'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { buildCronogramaCodes } from '@/lib/cronograma-numbering'
 
 interface Props {
   projectId: number
@@ -19,6 +20,8 @@ interface Props {
   canEdit: boolean
   onChanged: () => void
   holidays?: string[]
+  /** Fase 7: opções do calendário operacional (sábado/feriado como úteis). */
+  calendarOpts?: { allowWeekend?: boolean; allowHoliday?: boolean }
 }
 
 function num(v: unknown): number {
@@ -77,10 +80,12 @@ const emptyActivityDraft = (defaultResp: number | null): NewActivityDraft => ({
   extra_allocations: [],
 })
 
-export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit, onChanged, holidays }: Props) {
+export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit, onChanged, holidays, calendarOpts }: Props) {
   const defaultCoordId = coordinators[0]?.id ?? null
 
-  const calendar = useMemo(() => new BusinessCalendar(holidays ?? []), [holidays])
+  const calendar = useMemo(() => new BusinessCalendar(holidays ?? [], calendarOpts ?? {}),
+    [holidays, calendarOpts?.allowWeekend, calendarOpts?.allowHoliday])
+  const codes = useMemo(() => buildCronogramaCodes(stages), [stages])
 
   // Set de delivery_ids que têm dependentes — usado pra abrir modal após edit
   const idsWithDependents = useMemo(() => {
@@ -230,6 +235,7 @@ export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit,
                 idsWithDependents={idsWithDependents}
                 onMaybeRecalc={setRecalcFor}
                 calendar={calendar}
+                codes={codes}
               />
             )
           })}
@@ -374,10 +380,11 @@ interface StageRowProps {
   idsWithDependents: Set<number>
   onMaybeRecalc: (deliveryId: number) => void
   calendar: BusinessCalendar
+  codes: ReturnType<typeof buildCronogramaCodes>
 }
 
 function StageRows(props: StageRowProps) {
-  const { stage, coordinators, collapsed, onToggle, canEdit, onChanged, creatingActivity, activityDraft, setActivityDraft, onStartCreateActivity, onCancelCreateActivity, onConfirmCreateActivity, idsWithDependents, onMaybeRecalc, calendar } = props
+  const { stage, coordinators, collapsed, onToggle, canEdit, onChanged, creatingActivity, activityDraft, setActivityDraft, onStartCreateActivity, onCancelCreateActivity, onConfirmCreateActivity, idsWithDependents, onMaybeRecalc, calendar, codes } = props
   const { byUserId: capacityByUserId } = useUserCapacityIndex()
 
   const allDeliveries = stage.deliveries ?? []
@@ -411,6 +418,9 @@ function StageRows(props: StageRowProps) {
             <button onClick={onToggle} aria-label="Expandir/recolher" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, marginRight: 4 }}>
               {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
             </button>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', minWidth: 18, fontVariantNumeric: 'tabular-nums' }}>
+              {codes.stageCode(stage.id)}.
+            </span>
             <InlineText
               value={stage.name}
               canEdit={canEdit}
@@ -467,6 +477,7 @@ function StageRows(props: StageRowProps) {
           hasDependents={idsWithDependents.has(d.id)}
           onMaybeRecalc={onMaybeRecalc}
           calendar={calendar}
+          activityCode={codes.activityCode(d.id)}
         />
       ))}
 
@@ -558,7 +569,7 @@ function StageRows(props: StageRowProps) {
   )
 }
 
-function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDependents, onMaybeRecalc, calendar }: {
+function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDependents, onMaybeRecalc, calendar, activityCode }: {
   delivery: StageDelivery
   stageDeliveries: StageDelivery[]
   canEdit: boolean
@@ -566,6 +577,7 @@ function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDepende
   hasDependents: boolean
   onMaybeRecalc: (id: number) => void
   calendar: BusinessCalendar
+  activityCode: string
 }) {
   const datesAffectingFields = ['planned_start_at', 'due_date', 'hours_planned']
   const { byUserId } = useUserCapacityIndex()
@@ -626,6 +638,9 @@ function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDepende
               style={{ fontSize: 12, lineHeight: 1 }}
             >🔥</span>
           )}
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', minWidth: 28 }}>
+            {activityCode}
+          </span>
           <InlineText value={delivery.title} canEdit={canEdit} onSave={v => patch('title', v)} />
           {isBlocked && predecessorRef && (
             <span
@@ -664,7 +679,21 @@ function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDepende
         <InlineDate value={delivery.due_date ?? null} canEdit={canEdit} onSave={v => patch('due_date', v)} placeholder="Definir fim" />
       </td>
       <td style={cell()}>
-        {typeof delivery.duration_business_days === 'number' ? (
+        {delivery.planned_start_at && canEdit ? (
+          <InlineNumber
+            value={delivery.duration_business_days ?? calendar.businessDaysBetween(delivery.planned_start_at, delivery.due_date ?? delivery.planned_start_at)}
+            canEdit
+            onSave={async (n) => {
+              const N = Math.max(1, Math.floor(n))
+              const newEnd = calendar.addBusinessDays(
+                new Date(delivery.planned_start_at!),
+                N - 1,
+              )
+              const iso = newEnd.toISOString().slice(0, 10)
+              await patch('due_date', iso)
+            }}
+          />
+        ) : typeof delivery.duration_business_days === 'number' ? (
           <span style={{ color: 'var(--text-muted)', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
             {delivery.duration_business_days} d.ú.
           </span>

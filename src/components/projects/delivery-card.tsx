@@ -11,6 +11,8 @@ interface Props {
   isDragging?: boolean
   /** Título da atividade predecessora (pra "Bloqueada por: {X}"). Passado pelo parent que tem visibilidade do conjunto. */
   predecessorTitle?: string
+  /** Código hierárquico (1.1, 1.2...) — passado pelo parent. Fase 7. */
+  code?: string
 }
 
 const PRIORITY_COLOR: Record<string, string> = {
@@ -39,7 +41,7 @@ function formatHours(planned: number, actual: number | undefined): string {
   return `${actual.toFixed(1)}/${planned}h`
 }
 
-export function DeliveryCard({ delivery, onClick, isDragging, predecessorTitle }: Props) {
+export function DeliveryCard({ delivery, onClick, isDragging, predecessorTitle, code }: Props) {
   const planned = Number(delivery.hours_planned ?? 0)
   const actual = delivery.effort_minutes_sum !== undefined && delivery.effort_minutes_sum !== null
     ? Number(delivery.effort_minutes_sum) / 60
@@ -91,6 +93,7 @@ export function DeliveryCard({ delivery, onClick, isDragging, predecessorTitle }
             WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical',
           }}>
+            {code && <span style={{ color: 'var(--text-muted)', fontWeight: 600, marginRight: 4, fontVariantNumeric: 'tabular-nums' }}>{code}</span>}
             {delivery.title}
           </div>
           {isBlocked && (

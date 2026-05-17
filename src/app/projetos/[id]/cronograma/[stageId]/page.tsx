@@ -6,6 +6,7 @@ import { ChevronLeft } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { useProjectStages } from '@/hooks/use-project-stages'
 import { StageOperationalBlock } from '@/components/projects/stage-operational-block'
+import { buildCronogramaCodes } from '@/lib/cronograma-numbering'
 
 /**
  * Drill da etapa — kanban das atividades + equipe alocada + aportes.
@@ -20,6 +21,7 @@ export default function StageDetailPage() {
 
   const { stages, loading, refetch } = useProjectStages(projectId)
   const stage = stages.find(s => s.id === stageId)
+  const codes = buildCronogramaCodes(stages as any)
 
   if (loading) {
     return <div style={{ color: 'var(--text-muted)' }}>Carregando…</div>
@@ -60,6 +62,7 @@ export default function StageDetailPage() {
         projectId={projectId}
         canEdit={canEdit}
         onChanged={refetch}
+        stageCode={codes.stageCode(stage.id)}
       />
     </div>
   )

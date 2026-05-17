@@ -29,6 +29,9 @@ export interface ScheduleResponse {
     sold_hours: number
     start_date: string | null
     expected_end_date: string | null
+    /** Fase 7: calendário operacional flexível (sábado/feriado como dias úteis). */
+    allow_weekend_work?: boolean
+    allow_holiday_work?: boolean
     coordinators?: ProjectCoordinator[]
   } | null
   stages: ScheduleStage[]

@@ -41,6 +41,16 @@ export function StageKanbanBoard({ stageId, projectId, deliveries, onChanged, ca
     return m
   }, [local])
 
+  // Numeração hierárquica dentro da etapa (1, 2, 3...). Como não temos contexto
+  // do índice da etapa no projeto inteiro, usamos só o sub-índice — o parent
+  // que monta o board todo pode passar prefixo explícito futuramente.
+  const codeByDeliveryId = useMemo(() => {
+    const m: Record<number, string> = {}
+    const sorted = [...local].sort((a, b) => a.order_index - b.order_index)
+    sorted.forEach((d, idx) => { m[d.id] = `${idx + 1}` })
+    return m
+  }, [local])
+
   const byColumn = useMemo(() => {
     const map: Record<DeliveryStatus, StageDelivery[]> = {
       backlog: [], in_progress: [], waiting_client: [], review: [], done: [],
@@ -194,6 +204,7 @@ export function StageKanbanBoard({ stageId, projectId, deliveries, onChanged, ca
                                 isDragging={snap.isDragging}
                                 onClick={() => setSelected(d)}
                                 predecessorTitle={d.depends_on_delivery_id ? titleById[d.depends_on_delivery_id] : undefined}
+                                code={codeByDeliveryId[d.id]}
                               />
                             </div>
                           )}

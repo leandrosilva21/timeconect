@@ -37,6 +37,8 @@ interface Props {
   /** Comando bulk vindo do pai (Expandir todos / Recolher todos). */
   bulkAction?: 'expand' | 'collapse' | null
   bulkKey?: number
+  /** Código hierárquico da etapa (1, 2, 3...) — prefixado no header. Fase 7. */
+  stageCode?: string
 }
 
 function formatHours(n: number): string {
@@ -46,7 +48,7 @@ function formatHours(n: number): string {
 
 export function StageOperationalBlock({
   stage, projectId, onChanged, canEdit = true,
-  bulkAction = null, bulkKey = 0,
+  bulkAction = null, bulkKey = 0, stageCode,
 }: Props) {
   const [expanded, setExpanded] = useState(true)
   const [activityKey, setActivityKey] = useState(0)
@@ -159,6 +161,7 @@ export function StageOperationalBlock({
                   fontFamily: 'var(--font-geist, var(--font-inter), sans-serif)',
                 }}
               >
+                {stageCode && <span style={{ color: 'var(--text-muted)', marginRight: 6 }}>{stageCode}.</span>}
                 {stage.name}
               </h3>
             )}

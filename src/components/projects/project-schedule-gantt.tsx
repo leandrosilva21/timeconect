@@ -5,6 +5,7 @@ import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import type { ScheduleStage, ProjectWindow } from '@/hooks/use-project-schedule'
 import type { StageDelivery, DeliveryStatus } from '@/lib/types/project-stage'
+import { buildCronogramaCodes } from '@/lib/cronograma-numbering'
 
 interface Props {
   stages: ScheduleStage[]
@@ -92,6 +93,7 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
   const widthPx = totalDays * dayWidth
 
   // Collapse/expand por etapa (persistido em sessionStorage por projeto)
+  const codes = useMemo(() => buildCronogramaCodes(stages), [stages])
   const collapseKey = `cronograma:gantt-collapsed:${stages[0]?.project_id ?? 'unknown'}`
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({})
   useEffect(() => {
@@ -351,6 +353,7 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
                     {isCollapsed ? '▸' : '▾'}
                   </span>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                    <span style={{ fontWeight: 700, color: 'var(--text-muted)', marginRight: 4 }}>{codes.stageCode(r.stage.id)}.</span>
                     {r.stage.name}
                   </span>
                   {isCollapsed && r.hiddenChildrenCount > 0 && (
@@ -371,6 +374,9 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
                 {r.activity.is_critical && <span style={{ marginRight: 4 }}>🔥</span>}
+                <span style={{ fontWeight: 600, color: 'var(--text-light)', marginRight: 4, fontVariantNumeric: 'tabular-nums' }}>
+                  {codes.activityCode(r.activity.id)}
+                </span>
                 {r.activity.title}
               </div>
             )

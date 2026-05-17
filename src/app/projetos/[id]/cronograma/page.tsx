@@ -5,8 +5,8 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { ApiError, api } from '@/lib/api'
 import { toast } from 'sonner'
 import {
-  Info, Plus, Eye, EyeOff,
-  Layers, CheckSquare, Play, Lock, UserCheck,
+  Info, Plus, Eye, EyeOff, Settings,
+  Layers, CheckSquare, Play, Lock, UserCheck, CalendarClock,
 } from 'lucide-react'
 import { useProjectSchedule } from '@/hooks/use-project-schedule'
 import { useAuth } from '@/hooks/use-auth'
@@ -16,6 +16,7 @@ import type { ProjectStage } from '@/lib/types/project-stage'
 import { OperacaoView } from './views/operacao'
 import { PlanejamentoView } from './views/planejamento'
 import { TimelineView } from './views/timeline'
+import { CronogramaSettingsModal } from '@/components/projects/cronograma-settings-modal'
 
 type ViewMode = 'operacao' | 'planejamento' | 'timeline'
 const ALLOWED_VIEWS: ViewMode[] = ['operacao', 'planejamento', 'timeline']
@@ -164,6 +165,10 @@ export default function CronogramaPage() {
   const [name, setName] = useState('')
   const [hours, setHours] = useState('')
   const [saving, setSaving] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const allowWeekend = !!project?.allow_weekend_work
+  const allowHoliday = !!project?.allow_holiday_work
+  const calendarFlexible = allowWeekend || allowHoliday
 
   async function handleCreateStage(e: React.FormEvent) {
     e.preventDefault()
@@ -265,6 +270,23 @@ export default function CronogramaPage() {
             {executive ? <EyeOff size={12} /> : <Eye size={12} />}
             Modo executivo
           </button>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              title="Configurações do Cronograma"
+              className="ds-btn-ghost"
+              style={{
+                fontSize: 12, padding: '6px 10px',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                color: calendarFlexible ? 'var(--warning)' : 'var(--text-muted)',
+                fontWeight: calendarFlexible ? 600 : 400,
+              }}
+            >
+              <Settings size={12} />
+              Configurações
+            </button>
+          )}
           {canEdit && !creating && (
             <button
               type="button"
@@ -331,6 +353,27 @@ export default function CronogramaPage() {
         </span>
       </div>
 
+      {calendarFlexible && (
+        <div
+          title={[
+            allowWeekend ? 'Inclui sábado/domingo' : null,
+            allowHoliday ? 'Inclui feriados' : null,
+          ].filter(Boolean).join(' · ')}
+          style={{
+            marginBottom: 12,
+            padding: '8px 12px',
+            background: 'var(--warning-bg)',
+            border: '1px solid var(--warning-border)',
+            borderRadius: 6,
+            fontSize: 11, color: 'var(--warning)',
+            display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600,
+          }}
+        >
+          <CalendarClock size={11} />
+          📅 Calendário operacional especial — {allowWeekend && allowHoliday ? 'sábado/domingo + feriados' : allowWeekend ? 'sábado/domingo' : 'feriados'} contam como dias úteis
+        </div>
+      )}
+
       {/* View ativa — key força remontagem suave; CSS animation fade-in rápido */}
       <div key={view} className="cronograma-view-fade">
         {view === 'operacao' && <OperacaoView projectId={projectId} stages={stages} />}
@@ -341,6 +384,7 @@ export default function CronogramaPage() {
             coordinators={project?.coordinators ?? []}
             canEdit={canEdit}
             holidays={holidays}
+            calendarOpts={{ allowWeekend, allowHoliday }}
             onChanged={refetch}
           />
         )}
@@ -364,6 +408,16 @@ export default function CronogramaPage() {
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+
+      {canEdit && (
+        <CronogramaSettingsModal
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          projectId={projectId}
+          initial={{ allow_weekend_work: allowWeekend, allow_holiday_work: allowHoliday }}
+          onSaved={refetch}
+        />
+      )}
     </div>
   )
 }
