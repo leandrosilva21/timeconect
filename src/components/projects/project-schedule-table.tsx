@@ -8,6 +8,8 @@ import type { ScheduleStage, ProjectCoordinator } from '@/hooks/use-project-sche
 import type { StageDelivery } from '@/lib/types/project-stage'
 import { BusinessCalendar } from '@/lib/business-calendar'
 import { RecalcDependentsModal } from './recalc-dependents-modal'
+import { ResponsibleChip } from './responsible-chip'
+import { useUserCapacityIndex } from '@/hooks/use-user-capacity'
 
 interface Props {
   projectId: number
@@ -374,6 +376,7 @@ interface StageRowProps {
 
 function StageRows(props: StageRowProps) {
   const { stage, coordinators, collapsed, onToggle, canEdit, onChanged, creatingActivity, activityDraft, setActivityDraft, onStartCreateActivity, onCancelCreateActivity, onConfirmCreateActivity, idsWithDependents, onMaybeRecalc, calendar } = props
+  const { byUserId: capacityByUserId } = useUserCapacityIndex()
 
   const allDeliveries = stage.deliveries ?? []
 
@@ -415,9 +418,11 @@ function StageRows(props: StageRowProps) {
           </div>
         </td>
         <td style={cell()}>
-          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-            {stage.responsible?.name ?? '—'}
-          </span>
+          <ResponsibleChip
+            user={stage.responsible}
+            capacity={stage.responsible ? capacityByUserId[stage.responsible.id] : undefined}
+            size="sm"
+          />
         </td>
         <td style={cell()}>
           <InlineDate value={stage.stage_start_at ?? null} canEdit={canEdit} onSave={v => patchStage('stage_start_at', v)} placeholder="Definir início" />
@@ -552,6 +557,8 @@ function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDepende
   calendar: BusinessCalendar
 }) {
   const datesAffectingFields = ['planned_start_at', 'due_date', 'hours_planned']
+  const { byUserId } = useUserCapacityIndex()
+  const responsibleCapacity = delivery.responsible_user_id ? byUserId[delivery.responsible_user_id] : undefined
 
   async function patch(field: string, value: unknown) {
     try {
@@ -602,21 +609,24 @@ function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDepende
           <InlineText value={delivery.title} canEdit={canEdit} onSave={v => patch('title', v)} />
           {isBlocked && dependsOn && (
             <span
-              title={`Aguardando: ${dependsOn.title}`}
+              title={`Bloqueada por: ${dependsOn.title}`}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 4,
                 padding: '2px 6px',
                 borderRadius: 4,
-                background: 'var(--warning-bg)',
-                color: 'var(--warning)',
+                background: 'var(--danger-bg)',
+                color: 'var(--danger)',
                 fontSize: 11,
                 fontWeight: 500,
                 whiteSpace: 'nowrap',
+                maxWidth: 320,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
               }}
             >
-              <Lock size={10} /> Aguardando: {dependsOn.title}
+              <Lock size={10} /> Bloqueada por: <strong>{dependsOn.title}</strong>
             </span>
           )}
           {hasDependents && (
@@ -641,9 +651,7 @@ function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDepende
         </div>
       </td>
       <td style={cell()}>
-        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-          {delivery.responsible?.name ?? <em style={{ color: 'var(--danger)' }}>sem responsável</em>}
-        </span>
+        <ResponsibleChip user={delivery.responsible} capacity={responsibleCapacity} size="sm" />
       </td>
       <td style={cell()}>
         <InlineDate value={delivery.planned_start_at ?? null} canEdit={canEdit} onSave={v => patch('planned_start_at', v)} placeholder="Definir início" />

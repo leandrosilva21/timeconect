@@ -34,6 +34,13 @@ export function StageKanbanBoard({ stageId, projectId, deliveries, onChanged, ca
   // Sincroniza local com prop quando refetch traz novos dados
   useEffect(() => { setLocal(deliveries) }, [deliveries])
 
+  // Lookup título do predecessor pra exibição "Bloqueada por: {X}" no card
+  const titleById = useMemo(() => {
+    const m: Record<number, string> = {}
+    local.forEach(d => { m[d.id] = d.title })
+    return m
+  }, [local])
+
   const byColumn = useMemo(() => {
     const map: Record<DeliveryStatus, StageDelivery[]> = {
       backlog: [], in_progress: [], waiting_client: [], review: [], done: [],
@@ -186,6 +193,7 @@ export function StageKanbanBoard({ stageId, projectId, deliveries, onChanged, ca
                                 delivery={d}
                                 isDragging={snap.isDragging}
                                 onClick={() => setSelected(d)}
+                                predecessorTitle={d.depends_on_delivery_id ? titleById[d.depends_on_delivery_id] : undefined}
                               />
                             </div>
                           )}

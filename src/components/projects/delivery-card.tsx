@@ -2,11 +2,15 @@
 
 import { Lock } from 'lucide-react'
 import type { StageDelivery } from '@/lib/types/project-stage'
+import { ResponsibleChip } from './responsible-chip'
+import { useUserCapacityIndex } from '@/hooks/use-user-capacity'
 
 interface Props {
   delivery: StageDelivery
   onClick: () => void
   isDragging?: boolean
+  /** Título da atividade predecessora (pra "Bloqueada por: {X}"). Passado pelo parent que tem visibilidade do conjunto. */
+  predecessorTitle?: string
 }
 
 const PRIORITY_COLOR: Record<string, string> = {
@@ -35,7 +39,7 @@ function formatHours(planned: number, actual: number | undefined): string {
   return `${actual.toFixed(1)}/${planned}h`
 }
 
-export function DeliveryCard({ delivery, onClick, isDragging }: Props) {
+export function DeliveryCard({ delivery, onClick, isDragging, predecessorTitle }: Props) {
   const planned = Number(delivery.hours_planned ?? 0)
   const actual = delivery.effort_minutes_sum !== undefined && delivery.effort_minutes_sum !== null
     ? Number(delivery.effort_minutes_sum) / 60
@@ -43,6 +47,8 @@ export function DeliveryCard({ delivery, onClick, isDragging }: Props) {
   const overdue = delivery.due_date && new Date(delivery.due_date) < new Date() && delivery.status !== 'done'
   const due = formatDue(delivery.due_date)
   const isBlocked = delivery.predecessor_state === 'pending' && delivery.status === 'backlog'
+  const { byUserId } = useUserCapacityIndex()
+  const responsibleCapacity = delivery.responsible_user_id ? byUserId[delivery.responsible_user_id] : undefined
 
   return (
     <button
@@ -89,7 +95,7 @@ export function DeliveryCard({ delivery, onClick, isDragging }: Props) {
           </div>
           {isBlocked && (
             <div
-              title="Aguardando conclusão do predecessor"
+              title={predecessorTitle ? `Bloqueada por: ${predecessorTitle}` : 'Aguardando conclusão do predecessor'}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -97,13 +103,17 @@ export function DeliveryCard({ delivery, onClick, isDragging }: Props) {
                 marginTop: 4,
                 padding: '2px 6px',
                 borderRadius: 4,
-                background: 'var(--warning-bg)',
-                color: 'var(--warning)',
+                background: 'var(--danger-bg)',
+                color: 'var(--danger)',
                 fontSize: 10,
                 fontWeight: 500,
+                maxWidth: '100%',
               }}
             >
-              <Lock size={9} /> Aguardando predecessor
+              <Lock size={9} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Bloqueada por: <strong>{predecessorTitle ?? 'predecessor'}</strong>
+              </span>
             </div>
           )}
         </div>
@@ -117,8 +127,8 @@ export function DeliveryCard({ delivery, onClick, isDragging }: Props) {
         fontSize: 11,
         color: 'var(--text-muted)',
       }}>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '60%' }}>
-          {delivery.responsible?.name ?? '—'}
+        <span style={{ overflow: 'hidden', maxWidth: '60%' }}>
+          <ResponsibleChip user={delivery.responsible} capacity={responsibleCapacity} compact />
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           {due && (

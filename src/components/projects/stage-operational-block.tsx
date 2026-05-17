@@ -9,6 +9,8 @@ import { HealthDots } from './health-dots'
 import { StageKanbanBoard } from './stage-kanban-board'
 import { StageActivityTimeline } from './stage-activity-timeline'
 import { useStageDeliveries } from '@/hooks/use-stage-deliveries'
+import { useUserCapacityIndex } from '@/hooks/use-user-capacity'
+import { ResponsibleChip } from './responsible-chip'
 import type { ProjectStage, StageDerivedStatus } from '@/lib/types/project-stage'
 
 const DERIVED_STATUS_LABEL: Record<StageDerivedStatus, string> = {
@@ -48,6 +50,7 @@ export function StageOperationalBlock({
 }: Props) {
   const [expanded, setExpanded] = useState(true)
   const [activityKey, setActivityKey] = useState(0)
+  const { byUserId } = useUserCapacityIndex()
 
   // Mobile: colapsa por default. Roda 1x no mount; usuário pode toggle manualmente.
   useEffect(() => {
@@ -111,11 +114,12 @@ export function StageOperationalBlock({
       marginBottom: 16,
       overflow: 'hidden',
     }}>
-      {/* Header da etapa */}
+      {/* Header da etapa — container operacional */}
       <header style={{
-        padding: '12px 16px',
+        padding: '14px 16px',
         borderBottom: expanded ? '1px solid var(--border)' : 'none',
-        background: 'var(--surface)',
+        background: 'var(--surface-hover)',
+        borderLeft: `4px solid ${stage.derived_status ? DERIVED_STATUS_COLOR[stage.derived_status] : 'var(--primary)'}`,
         display: 'flex', alignItems: 'flex-start', gap: 12,
       }}>
         <button
@@ -150,8 +154,9 @@ export function StageOperationalBlock({
               <h3
                 onClick={() => { if (canEdit) setEditingName(true) }}
                 style={{
-                  fontSize: 15, fontWeight: 600, color: 'var(--text)',
+                  fontSize: 16, fontWeight: 700, color: 'var(--text)',
                   margin: 0, cursor: canEdit ? 'text' : 'default',
+                  fontFamily: 'var(--font-geist, var(--font-inter), sans-serif)',
                 }}
               >
                 {stage.name}
@@ -205,14 +210,26 @@ export function StageOperationalBlock({
           </div>
 
           <div style={{
-            display: 'flex', flexWrap: 'wrap', gap: 12,
-            marginTop: 4, fontSize: 12, color: 'var(--text-muted)',
+            display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12,
+            marginTop: 6, fontSize: 12, color: 'var(--text-muted)',
           }}>
-            {planned > 0 && <span>{formatHours(planned)} planejadas</span>}
-            {totalDeliveries > 0 && (
-              <span>{doneDeliveries}/{totalDeliveries} atividades · {pctDeliveries}%</span>
+            {planned > 0 && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <strong style={{ color: 'var(--text)' }}>{formatHours(planned)}</strong> planejadas
+              </span>
             )}
-            {stage.responsible?.name && <span>Resp: {stage.responsible.name}</span>}
+            {totalDeliveries > 0 && (
+              <span>
+                <strong style={{ color: 'var(--text)' }}>{doneDeliveries}/{totalDeliveries}</strong> atividades · {pctDeliveries}%
+              </span>
+            )}
+            {stage.responsible && (
+              <ResponsibleChip
+                user={stage.responsible}
+                capacity={byUserId[stage.responsible.id]}
+                size="sm"
+              />
+            )}
           </div>
 
           {totalDeliveries > 0 && (
