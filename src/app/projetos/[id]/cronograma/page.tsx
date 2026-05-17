@@ -107,17 +107,57 @@ export default function CronogramaPage() {
   }, [projectId, searchParams.toString()])
 
   const counts = useMemo(() => {
-    const totalActivities = stages.reduce((s, st) => s + (st.deliveries?.length ?? 0), 0)
-    const totalHoursPlanned = stages.reduce((s, st) =>
-      s + (st.deliveries?.reduce((sub, d) => sub + (Number(d.hours_planned) || 0), 0) ?? 0)
-    , 0)
-    const inProgressCount = stages.reduce((s, st) => s + (st.deliveries_in_progress_count ?? 0), 0)
-    const waitingClientCount = stages.reduce((s, st) => s + (st.deliveries_waiting_client_count ?? 0), 0)
-    const blockedCount = stages.reduce((s, st) =>
-      s + (st.deliveries?.filter(d => d.predecessor_state === 'pending').length ?? 0)
-    , 0)
-    return { totalActivities, totalHoursPlanned, inProgressCount, waitingClientCount, blockedCount }
+    const todayIso = new Date().toISOString().slice(0, 10)
+    let totalActivities = 0
+    let totalHoursPlanned = 0
+    let inProgressCount = 0
+    let waitingClientCount = 0
+    let blockedCount = 0
+    let conflictsCount = 0   // Planejamento: predecessor termina depois do dependente começar (FS violado)
+    let overdueCount = 0     // Timeline: due_date < hoje e status !== done
+    const titleById: Record<number, string> = {}
+    const endById: Record<number, string | null> = {}
+    for (const st of stages) {
+      for (const d of st.deliveries ?? []) {
+        titleById[d.id] = d.title
+        endById[d.id] = d.due_date ?? null
+      }
+    }
+    for (const st of stages) {
+      const deliveries = st.deliveries ?? []
+      totalActivities += deliveries.length
+      for (const d of deliveries) {
+        totalHoursPlanned += Number(d.hours_planned) || 0
+        if (d.status === 'in_progress') inProgressCount++
+        if (d.status === 'waiting_client') waitingClientCount++
+        if (d.predecessor_state === 'pending') blockedCount++
+        if (d.due_date && d.status !== 'done' && d.due_date < todayIso) overdueCount++
+        // Conflito FS: predecessor.due_date > minha planned_start_at
+        if (d.depends_on_delivery_id && d.planned_start_at) {
+          const predEnd = endById[d.depends_on_delivery_id]
+          if (predEnd && predEnd > d.planned_start_at) conflictsCount++
+        }
+      }
+    }
+    return { totalActivities, totalHoursPlanned, inProgressCount, waitingClientCount, blockedCount, conflictsCount, overdueCount }
   }, [stages])
+
+  // Deep link contextual: ?stage=N | ?activity=N — estrutura preparada pra futuros
+  // estados (drill direto em etapa/atividade). Aqui só validamos parsing seguro
+  // sem efeito colateral — quando precisar atuar, os children consomem via prop.
+  const deepLink = useMemo(() => {
+    const stageRaw = searchParams.get('stage')
+    const activityRaw = searchParams.get('activity')
+    const toIntOrNull = (s: string | null): number | null => {
+      if (!s) return null
+      const n = Number(s)
+      return Number.isInteger(n) && n > 0 ? n : null
+    }
+    return {
+      stageId: toIntOrNull(stageRaw),
+      activityId: toIntOrNull(activityRaw),
+    }
+  }, [searchParams])
 
   // Form criar etapa (vive aqui, no hub)
   const [creating, setCreating] = useState(false)
@@ -188,12 +228,22 @@ export default function CronogramaPage() {
         )}
       </div>
 
-      {/* Toolbar: segmented control + ações */}
+      {/* Toolbar: segmented control + ações — sticky no topo */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         flexWrap: 'wrap', gap: 12, marginBottom: 16,
+        position: 'sticky',
+        top: 0,
+        zIndex: 6,
+        background: 'var(--bg)',
+        paddingTop: 8,
+        paddingBottom: 8,
       }}>
-        <SegmentedControl current={view} onChange={setView} />
+        <SegmentedControl current={view} onChange={setView} counts={{
+          operacao: counts.inProgressCount,
+          planejamento: counts.conflictsCount,
+          timeline: counts.overdueCount,
+        }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {project && (
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -281,37 +331,56 @@ export default function CronogramaPage() {
         </span>
       </div>
 
-      {/* View ativa */}
-      {view === 'operacao' && <OperacaoView projectId={projectId} stages={stages} />}
-      {view === 'planejamento' && (
-        <PlanejamentoView
-          projectId={projectId}
-          stages={stages}
-          coordinators={project?.coordinators ?? []}
-          canEdit={canEdit}
-          holidays={holidays}
-          onChanged={refetch}
-        />
-      )}
-      {view === 'timeline' && (
-        <TimelineView
-          stages={stages}
-          projectWindow={projectWindow}
-          canEdit={canEdit}
-          highlightUserId={highlightUserId}
-          onSelectUser={setHighlightUserId}
-          onChanged={refetch}
-        />
-      )}
+      {/* View ativa — key força remontagem suave; CSS animation fade-in rápido */}
+      <div key={view} className="cronograma-view-fade">
+        {view === 'operacao' && <OperacaoView projectId={projectId} stages={stages} />}
+        {view === 'planejamento' && (
+          <PlanejamentoView
+            projectId={projectId}
+            stages={stages}
+            coordinators={project?.coordinators ?? []}
+            canEdit={canEdit}
+            holidays={holidays}
+            onChanged={refetch}
+          />
+        )}
+        {view === 'timeline' && (
+          <TimelineView
+            stages={stages}
+            projectWindow={projectWindow}
+            canEdit={canEdit}
+            highlightUserId={highlightUserId}
+            onSelectUser={setHighlightUserId}
+            onChanged={refetch}
+          />
+        )}
+      </div>
+      <style jsx>{`
+        .cronograma-view-fade {
+          animation: cronograma-fade-in .14s ease-out;
+        }
+        @keyframes cronograma-fade-in {
+          from { opacity: 0; transform: translateY(2px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   )
 }
 
-function SegmentedControl({ current, onChange }: { current: ViewMode; onChange: (v: ViewMode) => void }) {
-  const opts: { value: ViewMode; label: string; hint: string }[] = [
-    { value: 'operacao',     label: 'Operação',     hint: 'Atalho: 1' },
-    { value: 'planejamento', label: 'Planejamento', hint: 'Atalho: 2' },
-    { value: 'timeline',     label: 'Timeline',     hint: 'Atalho: 3' },
+type SegmentedCounts = Record<ViewMode, number>
+
+function SegmentedControl({
+  current, onChange, counts,
+}: {
+  current: ViewMode
+  onChange: (v: ViewMode) => void
+  counts: SegmentedCounts
+}) {
+  const opts: { value: ViewMode; label: string; hintBase: string; countSuffix: (n: number) => string; countTone: 'primary' | 'warning' | 'danger' }[] = [
+    { value: 'operacao',     label: 'Operação',      hintBase: 'Atalho: 1', countSuffix: n => `${n} em execução`,  countTone: 'primary' },
+    { value: 'planejamento', label: 'Planejamento',  hintBase: 'Atalho: 2', countSuffix: n => `${n} conflito${n === 1 ? '' : 's'}`, countTone: 'warning' },
+    { value: 'timeline',     label: 'Linha do Tempo', hintBase: 'Atalho: 3', countSuffix: n => `${n} atrasada${n === 1 ? '' : 's'}`, countTone: 'danger' },
   ]
   return (
     <div style={{
@@ -323,11 +392,12 @@ function SegmentedControl({ current, onChange }: { current: ViewMode; onChange: 
     }}>
       {opts.map((opt, i) => {
         const active = current === opt.value
+        const n = counts[opt.value] ?? 0
         return (
           <button
             key={opt.value}
             type="button"
-            title={opt.hint}
+            title={n > 0 ? `${opt.hintBase} · ${opt.countSuffix(n)}` : opt.hintBase}
             onClick={() => onChange(opt.value)}
             className={active ? 'ds-tab-active' : 'ds-tab-inactive'}
             style={{
@@ -339,9 +409,28 @@ function SegmentedControl({ current, onChange }: { current: ViewMode; onChange: 
               border: 'none',
               borderLeft: i > 0 ? '1px solid var(--border)' : 'none',
               cursor: 'pointer',
+              transition: 'background .15s ease, color .15s ease',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
             }}
           >
             {opt.label}
+            {n > 0 && (
+              <span
+                style={{
+                  fontSize: 10, fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: 999,
+                  background: `var(--${opt.countTone}-bg)`,
+                  color: `var(--${opt.countTone})`,
+                  border: `1px solid var(--${opt.countTone}-border)`,
+                  minWidth: 18,
+                  textAlign: 'center',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {n}
+              </span>
+            )}
           </button>
         )
       })}
