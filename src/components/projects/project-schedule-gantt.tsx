@@ -393,7 +393,7 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
               <div key={i} style={{
                 position: 'absolute',
                 left: m.offsetPx,
-                top: 8,
+                top: 4,
                 fontSize: 11, fontWeight: 700,
                 color: 'var(--text)',
                 textTransform: 'uppercase', letterSpacing: '.04em',
@@ -402,6 +402,29 @@ export function ProjectScheduleGantt({ stages, projectWindow, canEdit = true, on
                 {m.label}
               </div>
             ))}
+            {/* Sub-linha de dia (zoom Dia: número de cada dia; Semana: a cada 2 dias) */}
+            {(zoom === 'day' || zoom === 'week') && Array.from({ length: totalDays }).map((_, i) => {
+              if (zoom === 'week' && i % 2 !== 0) return null
+              const d = addDays(window.start, i)
+              const dow = d.getDay()
+              const isWeekend = dow === 0 || dow === 6
+              return (
+                <div key={`d-${i}`} style={{
+                  position: 'absolute',
+                  left: i * dayWidth,
+                  top: HEADER_HEIGHT - 18,
+                  width: dayWidth,
+                  textAlign: 'center',
+                  fontSize: 9,
+                  color: isWeekend ? 'var(--text-light)' : 'var(--text-muted)',
+                  fontWeight: 500,
+                  fontVariantNumeric: 'tabular-nums',
+                  pointerEvents: 'none',
+                }}>
+                  {d.getDate()}
+                </div>
+              )
+            })}
             {/* Boundary lines of months */}
             {months.map((m, i) => (
               <div key={`mh-${i}`} style={{
