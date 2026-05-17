@@ -3582,34 +3582,34 @@ function KanbanColumn({
   const projectColor = isProject && col.color ? col.color : null
 
   const borderColor = isTransition
-    ? 'rgba(234,179,8,0.25)'
+    ? 'var(--warning-border)'
     : projectColor
-    ? `${projectColor}40`
+    ? `${projectColor}55`
     : isProject
-    ? 'rgba(99,102,241,0.25)'
+    ? 'var(--info-border)'
     : isClientCol
-    ? '#14B8A6'
-    : 'var(--brand-border)'
+    ? 'var(--success-border)'
+    : 'var(--border)'
 
   const headerColor = isTransition
-    ? '#eab308'
+    ? 'var(--warning)'
     : projectColor
     ? projectColor
     : isProject
-    ? '#818cf8'
+    ? 'var(--info)'
     : isClientCol
-    ? '#0F766E'
-    : 'var(--brand-text)'
+    ? 'var(--success)'
+    : 'var(--text)'
 
   const bg = isTransition
-    ? 'rgba(234,179,8,0.02)'
+    ? 'var(--warning-bg)'
     : projectColor
-    ? `${projectColor}08`
+    ? `${projectColor}14`
     : isProject
-    ? 'rgba(99,102,241,0.02)'
+    ? 'var(--info-bg)'
     : isClientCol
-    ? 'rgba(20,184,166,0.04)'
-    : 'rgba(255,255,255,0.02)'
+    ? 'var(--success-bg)'
+    : 'var(--surface)'
 
   return (
     <div
@@ -3619,28 +3619,28 @@ function KanbanColumn({
       <div className="px-4 py-3 shrink-0 border-b" style={{ borderColor }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {isTransition && <Rocket size={13} style={{ color: '#eab308' }} />}
-            {isProject && <FolderKanban size={13} style={{ color: '#818cf8' }} />}
-            {isClientCol && !isTransition && !isProject && <Layers size={13} style={{ color: '#0F766E' }} />}
-            {!isTransition && !isProject && !isClientCol && <Layers size={13} style={{ color: 'var(--brand-subtle)' }} />}
+            {isTransition && <Rocket size={13} style={{ color: 'var(--warning)' }} />}
+            {isProject && <FolderKanban size={13} style={{ color: 'var(--info)' }} />}
+            {isClientCol && !isTransition && !isProject && <Layers size={13} style={{ color: 'var(--success)' }} />}
+            {!isTransition && !isProject && !isClientCol && <Layers size={13} style={{ color: 'var(--text-muted)' }} />}
             <p className="text-sm font-semibold" style={{ color: headerColor }}>{col.label}</p>
             {isClientCol && (
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: '#CCFBF1', color: '#0F766E', border: '1px solid #14B8A6' }}>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-border)' }}>
                 C
               </span>
             )}
           </div>
-          <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>
+          <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
             {totalCards}
           </span>
         </div>
         {isTransition && (
-          <p className="text-[10px] mt-1" style={{ color: 'var(--brand-subtle)' }}>
+          <p className="text-[10px] mt-1 font-medium" style={{ color: 'var(--warning)' }}>
             Aguardando geração de projeto
           </p>
         )}
         {isClientCol && (
-          <p className="text-[10px] mt-1" style={{ color: 'rgba(45,212,191,0.6)' }}>
+          <p className="text-[10px] mt-1 font-medium" style={{ color: 'var(--success)' }}>
             Visível e interativa para o cliente
           </p>
         )}
@@ -4238,56 +4238,59 @@ function KanbanContent() {
           <div className="flex items-center gap-2">
             {!isConsultor && (
               <button onClick={() => router.push('/portal-cliente/nova-requisicao')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-80"
-                style={{ background: 'rgba(0,245,255,0.08)', border: '1px solid rgba(0,245,255,0.2)', color: '#00F5FF' }}>
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors"
+                style={{ background: 'var(--primary)', border: '1px solid var(--primary)', color: 'var(--primary-fg)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--primary-hover)'; e.currentTarget.style.borderColor = 'var(--primary-hover)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--primary)'; e.currentTarget.style.borderColor = 'var(--primary)' }}>
                 <Plus size={13} /> Nova Requisição
               </button>
             )}
             <button onClick={() => setViewMode(viewMode === 'kanban' ? 'list' : 'kanban')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-opacity hover:opacity-80"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--brand-border)', color: 'var(--brand-muted)' }}>
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; e.currentTarget.style.borderColor = 'var(--border-strong)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--surface)'; e.currentTarget.style.borderColor = 'var(--border)' }}>
               {viewMode === 'kanban' ? <><List size={13} /> Lista de Projetos</> : <><FolderKanban size={13} /> Kanban</>}
             </button>
           </div>
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-6 px-6 py-2 shrink-0 border-b text-[11px]" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-subtle)' }}>
+        <div className="flex items-center gap-6 px-6 py-2 shrink-0 border-b text-[11px] font-medium" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
           {!isConsultor && !isCoord && (
             <>
               <span className="flex items-center gap-1.5">
-                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded" style={{ background: 'var(--brand-border)' }}><Layers size={8} /></span>
+                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}><Layers size={8} /></span>
                 Fase Demanda
               </span>
               <span className="flex items-center gap-1.5">
-                <Rocket size={11} style={{ color: '#eab308' }} />
+                <Rocket size={11} style={{ color: 'var(--warning)' }} />
                 Início Autorizado
               </span>
             </>
           )}
           <span className="flex items-center gap-1.5">
-            <FolderKanban size={11} style={{ color: '#818cf8' }} />
+            <FolderKanban size={11} style={{ color: 'var(--info)' }} />
             Projetos em Execução
           </span>
-          {isConsultor && <span className="ml-auto opacity-50">Visualização somente leitura</span>}
-          {isCliente && <span className="ml-auto opacity-50">Pode mover somente nas colunas marcadas [C]</span>}
-          {!isConsultor && !isCliente && <span className="ml-auto opacity-50">Arraste para mover entre colunas</span>}
+          {isConsultor && <span className="ml-auto" style={{ color: 'var(--text-light)' }}>Visualização somente leitura</span>}
+          {isCliente && <span className="ml-auto" style={{ color: 'var(--text-light)' }}>Pode mover somente nas colunas marcadas [C]</span>}
+          {!isConsultor && !isCliente && <span className="ml-auto" style={{ color: 'var(--text-light)' }}>Arraste para mover entre colunas</span>}
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-2 px-6 py-2 shrink-0 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+        <div className="flex items-center gap-2 px-6 py-2 shrink-0 border-b" style={{ borderColor: 'var(--border)' }}>
           <div className="relative">
-            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--brand-subtle)' }} />
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
             <input
               value={filterSearch}
               onChange={e => setFilterSearch(e.target.value)}
               placeholder="Buscar nome ou descrição..."
-              className="pl-7 pr-7 py-1.5 rounded-lg text-xs outline-none w-56"
-              style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
+              className="pl-7 pr-7 py-1.5 rounded-lg text-xs outline-none w-56 ds-input"
             />
             {filterSearch && (
               <button onClick={() => setFilterSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2">
-                <X size={10} style={{ color: 'var(--brand-subtle)' }} />
+                <X size={10} style={{ color: 'var(--text-muted)' }} />
               </button>
             )}
           </div>
@@ -4329,8 +4332,10 @@ function KanbanContent() {
           )}
           {(filterSearch || filterCustomers.length > 0 || filterExecutivos.length > 0 || filterCoordinators.length > 0 || filterProjectNames.length > 0) && (
             <button onClick={() => { setFilterSearch(''); setFilterCustomers([]); setFilterExecutivos([]); setFilterCoordinators([]); setFilterProjectNames([]) }}
-              className="text-xs px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
-              style={{ color: 'var(--brand-subtle)' }}>
+              className="text-xs font-medium px-2 py-1.5 rounded-lg transition-colors"
+              style={{ color: 'var(--primary)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
               Limpar
             </button>
           )}
@@ -4607,7 +4612,7 @@ function KanbanContent() {
                   unreadContractIds={unreadContractIds}
                   onContractClick={setSelectedContract}
                   onContractAction={(card, action) => setContractAction({ card, action })}
-                  onProjectClick={card => setStagesPanelProject(card)}
+                  onProjectClick={setSelectedProject}
                   onProjectAction={(card, action) => setProjectAction({ card, action })}
                   onRequestClick={card =>
                     card.kanban_column === 'req_inicio_autorizado' && !card.req_decision
@@ -4654,7 +4659,7 @@ function KanbanContent() {
                       }
                     }}
                     onContractAction={(card, action) => setContractAction({ card, action })}
-                    onProjectClick={card => setStagesPanelProject(card)}
+                    onProjectClick={setSelectedProject}
                     onProjectAction={(card, action) => setProjectAction({ card, action })}
                     onRequestClick={setSelectedRequest}
                     onContractMove={(card, toCol) => handleContractMove(card.id, card, 'inicio_autorizado', toCol)}
@@ -4679,7 +4684,7 @@ function KanbanContent() {
                   onContractClick={setSelectedContract}
                   onProjectClick={card => {
                     if (newProjectIds?.has(card.id)) markProjectSeen(card.id)
-                    setStagesPanelProject(card)
+                    setSelectedProject(card)
                   }}
                   onProjectAction={(card, action) => setProjectAction({ card, action })}
                   onProjectMove={(card, toCol) => handleProjectMove(card.id, toCol)}
@@ -4720,7 +4725,7 @@ function KanbanContent() {
         />
       )}
       {selectedProject && (
-        <ProjectDetailModal card={selectedProject} onClose={() => setSelectedProject(null)} userRole={userRole} />
+        <ProjectViewModal projectId={selectedProject.id} onClose={() => setSelectedProject(null)} userRole={userRole} initialTab="overview" />
       )}
       {stagesPanelProject && (
         <ProjectStagesSidePanel
