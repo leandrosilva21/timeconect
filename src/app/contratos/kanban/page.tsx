@@ -300,9 +300,9 @@ function isActiveProject(p: ProjectCard): boolean {
 }
 
 function statusBadge(card: ContractCard) {
-  if (card.project_id) return { color: '#22c55e', bg: 'rgba(34,197,94,0.12)', label: '🟢 Projeto Ativo' }
-  if (card.is_complete) return { color: '#eab308', bg: 'rgba(234,179,8,0.12)',  label: '🟡 Pronto' }
-  return { color: '#ef4444', bg: 'rgba(239,68,68,0.12)', label: '🔴 Incompleto' }
+  if (card.project_id)  return { color: 'var(--success)', bg: 'var(--success-bg)', border: 'var(--success-border)', label: '🟢 Projeto Ativo' }
+  if (card.is_complete) return { color: 'var(--warning)', bg: 'var(--warning-bg)', border: 'var(--warning-border)', label: '🟡 Pronto' }
+  return { color: 'var(--danger)', bg: 'var(--danger-bg)', border: 'var(--danger-border)', label: '🔴 Incompleto' }
 }
 
 // ─── Project Modals ───────────────────────────────────────────────────────────
@@ -358,11 +358,11 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
   const riskLabel   = (pct: number) => pct >= 90 ? 'Crítico' : pct >= 70 ? 'Atenção' : 'Saudável'
 
   const statusColors: Record<string, { background: string; color: string }> = {
-    awaiting_start: { background: 'rgba(139,92,246,0.12)', color: '#8B5CF6' },
-    started:        { background: 'rgba(0,245,255,0.10)',   color: '#00F5FF' },
-    paused:         { background: 'rgba(245,158,11,0.12)',  color: '#F59E0B' },
-    cancelled:      { background: 'rgba(239,68,68,0.12)',   color: '#EF4444' },
-    finished:       { background: 'rgba(161,161,170,0.12)', color: '#71717A' },
+    awaiting_start: { background: 'var(--info-bg)',    color: 'var(--info)' },
+    started:        { background: 'var(--info-bg)',    color: 'var(--info)' },
+    paused:         { background: 'var(--warning-bg)', color: 'var(--warning)' },
+    cancelled:      { background: 'var(--danger-bg)',  color: 'var(--danger)' },
+    finished:       { background: 'var(--surface-hover)', color: 'var(--text-muted)' },
   }
   const statusLabel: Record<string, string> = {
     awaiting_start: 'Aguardando Início', started: 'Em Andamento',
@@ -414,11 +414,11 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                 <div className="w-1 h-14 rounded-full shrink-0" style={{ background: bar }} />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                    <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>{p.code}</span>
+                    <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded" style={{ background: 'var(--surface-hover)', color: 'var(--brand-subtle)' }}>{p.code}</span>
                     <span className="text-xs font-bold px-2.5 py-0.5 rounded-full" style={sc}>{p.status_display ?? statusLabel[p.status] ?? p.status}</span>
                     <span className="text-xs font-bold" title={`${Math.round(pct)}% consumido`}>{riskEmoji(pct)} {riskLabel(pct)}</span>
                   </div>
-                  <h2 className="text-xl font-bold leading-tight truncate" style={{ color: 'var(--brand-text)' }}>{p.name}</h2>
+                  <h2 className="ds-text-h2 leading-tight truncate" style={{ color: 'var(--text)' }}>{p.name}</h2>
                   {p.customer?.name && <p className="text-sm mt-0.5" style={{ color: 'var(--brand-muted)' }}>{p.customer.name}</p>}
                 </div>
               </div>
@@ -427,11 +427,11 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
               {userRole === 'admin' && p && (
                 <button onClick={() => setShowEdit(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-                  style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF', border: '1px solid rgba(0,245,255,0.2)' }}>
+                  style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid rgba(0,245,255,0.2)' }}>
                   <ExternalLink size={11} /> Editar
                 </button>
               )}
-              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"><X size={16} style={{ color: 'var(--brand-muted)' }} /></button>
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] transition-colors"><X size={16} style={{ color: 'var(--brand-muted)' }} /></button>
             </div>
           </div>
           <div className="flex gap-1 border-b" style={{ borderColor: 'var(--brand-border)' }}>
@@ -456,8 +456,8 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
               <div className="space-y-5">
                 <div className="grid grid-cols-4 gap-3">
                   {[
-                    { label: 'Horas Vendidas',   value: fmt(p.sold_hours, 1) + 'h',  color: 'var(--brand-text)', bg: 'rgba(255,255,255,0.03)' },
-                    { label: 'Horas Consumidas', value: fmt(consumed, 1) + 'h',       color: 'var(--brand-muted)', bg: 'rgba(255,255,255,0.03)' },
+                    { label: 'Horas Vendidas',   value: fmt(p.sold_hours, 1) + 'h',  color: 'var(--brand-text)', bg: 'var(--surface-hover)' },
+                    { label: 'Horas Consumidas', value: fmt(consumed, 1) + 'h',       color: 'var(--brand-muted)', bg: 'var(--surface-hover)' },
                     { label: 'Saldo',            value: fmt(p.general_hours_balance, 1) + 'h',
                       color: (p.general_hours_balance ?? 0) < 0 ? '#ef4444' : '#22c55e',
                       bg: (p.general_hours_balance ?? 0) < 0 ? 'rgba(239,68,68,0.06)' : 'rgba(34,197,94,0.06)' },
@@ -465,17 +465,17 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                   ].map(it => (
                     <div key={it.label} className="rounded-xl p-4 text-center" style={{ background: it.bg, border: '1px solid var(--brand-border)' }}>
                       <p className="text-[10px] mb-2 uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{it.label}</p>
-                      <p className="text-xl font-bold tabular-nums" style={{ color: it.color }}>{it.value}</p>
+                      <p className="ds-text-kpi ds-text-numeric" style={{ color: it.color }}>{it.value}</p>
                     </div>
                   ))}
                 </div>
 
-                <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${bar}33` }}>
+                <div className="rounded-xl p-4" style={{ background: 'var(--surface-hover)', border: `1px solid ${bar}33` }}>
                   <div className="flex justify-between items-center mb-3">
                     <span className="text-xs font-semibold" style={{ color: bar }}>{riskEmoji(pct)} {riskLabel(pct)}</span>
                     <span className="text-xs font-bold tabular-nums" style={{ color: bar }}>{totalAvail > 0 ? `${Math.round(pct)}% consumido` : 'Sem horas'}</span>
                   </div>
-                  <div className="w-full h-4 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <div className="w-full h-4 rounded-full overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
                     <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, background: bar }} />
                   </div>
                 </div>
@@ -521,7 +521,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                         <div>
                           <p className="text-[10px] mb-1.5 uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Coordenadores</p>
                           <div className="flex flex-wrap gap-1.5">{p.coordinators!.map(u => (
-                            <span key={u.id} className="text-xs px-2.5 py-1 rounded-lg font-medium" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{u.name}</span>
+                            <span key={u.id} className="text-xs px-2.5 py-1 rounded-lg font-medium" style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}>{u.name}</span>
                           ))}</div>
                         </div>
                       )}
@@ -546,12 +546,12 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                     <div className="space-y-2">
                       {[...breakdown].sort((a, b) => b.total_hours - a.total_hours).slice(0, 5).map((c, i) => {
                         const share = totalBreakdownHours > 0 ? (c.total_hours / totalBreakdownHours) * 100 : 0
-                        const colors = ['#00F5FF', '#a78bfa', '#22c55e', '#f59e0b', '#f87171']
+                        const colors = ['var(--primary)', '#a78bfa', '#22c55e', '#f59e0b', '#f87171']
                         const col = colors[i % colors.length]
                         return (
                           <div key={i} className="flex items-center gap-3">
                             <span className="text-xs shrink-0 w-28 truncate" style={{ color: 'var(--brand-text)' }}>{c.consultant_name}</span>
-                            <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                            <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
                               <div className="h-full rounded-full" style={{ width: `${share}%`, background: col }} />
                             </div>
                             <span className="text-[11px] font-semibold tabular-nums shrink-0 w-12 text-right" style={{ color: col }}>{fmt(c.total_hours, 1)}h</span>
@@ -575,9 +575,9 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                         { label: 'Consultores', value: String(breakdown.length), color: '#a78bfa' },
                         { label: 'Total Horas', value: fmt(totalBreakdownHours, 1) + 'h', color: 'var(--brand-text)' },
                         { label: 'Aprovadas',   value: fmt(breakdown.reduce((s, c) => s + c.approved_hours, 0), 1) + 'h', color: '#22c55e' },
-                        { label: 'Custo Total', value: fmtBRL(breakdown.reduce((s, c) => s + c.cost, 0)), color: '#00F5FF' },
+                        { label: 'Custo Total', value: fmtBRL(breakdown.reduce((s, c) => s + c.cost, 0)), color: 'var(--primary)' },
                       ].map(it => (
-                        <div key={it.label} className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--brand-border)' }}>
+                        <div key={it.label} className="rounded-xl p-4 text-center" style={{ background: 'var(--surface-hover)', border: '1px solid var(--brand-border)' }}>
                           <p className="text-[10px] mb-2 uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{it.label}</p>
                           <p className="text-lg font-bold tabular-nums" style={{ color: it.color }}>{it.value}</p>
                         </div>
@@ -586,22 +586,22 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                     <div className="space-y-2">
                       {[...breakdown].sort((a, b) => b.total_hours - a.total_hours).map((c, i) => {
                         const share = totalBreakdownHours > 0 ? (c.total_hours / totalBreakdownHours) * 100 : 0
-                        const colors = ['#00F5FF', '#a78bfa', '#22c55e', '#f59e0b', '#f87171', '#34d399', '#60a5fa']
+                        const colors = ['var(--primary)', '#a78bfa', '#22c55e', '#f59e0b', '#f87171', '#34d399', '#60a5fa']
                         const col = colors[i % colors.length]
                         return (
-                          <div key={i} className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--brand-border)' }}>
+                          <div key={i} className="rounded-xl p-4" style={{ background: 'var(--surface-hover)', border: '1px solid var(--brand-border)' }}>
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>{c.consultant_name}</span>
                               <span className="text-xs font-bold tabular-nums" style={{ color: col }}>{fmt(c.total_hours, 1)}h · {Math.round(share)}%</span>
                             </div>
-                            <div className="w-full h-2.5 rounded-full overflow-hidden mb-2" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                            <div className="w-full h-2.5 rounded-full overflow-hidden mb-2" style={{ background: 'var(--surface-hover)' }}>
                               <div className="h-full rounded-full" style={{ width: `${share}%`, background: col }} />
                             </div>
                             <div className="grid grid-cols-4 gap-2 text-[10px]">
                               <div><span style={{ color: 'var(--brand-subtle)' }}>Aprovadas</span><br /><span style={{ color: '#22c55e' }}>{fmt(c.approved_hours, 1)}h</span></div>
                               <div><span style={{ color: 'var(--brand-subtle)' }}>Pendentes</span><br /><span style={{ color: c.pending_hours > 0 ? '#f59e0b' : 'var(--brand-subtle)' }}>{fmt(c.pending_hours, 1)}h</span></div>
                               <div><span style={{ color: 'var(--brand-subtle)' }}>Taxa/h</span><br /><span style={{ color: 'var(--brand-muted)' }}>{fmtBRL(c.consultant_hourly_rate)}</span></div>
-                              <div><span style={{ color: 'var(--brand-subtle)' }}>Custo</span><br /><span style={{ color: '#00F5FF' }}>{fmtBRL(c.cost)}</span></div>
+                              <div><span style={{ color: 'var(--brand-subtle)' }}>Custo</span><br /><span style={{ color: 'var(--primary)' }}>{fmtBRL(c.cost)}</span></div>
                             </div>
                           </div>
                         )
@@ -626,9 +626,9 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                         { label: 'Aprovados', value: String(timesheets.filter(t => t.status === 'approved').length), color: '#22c55e' },
                         { label: 'Pendentes', value: String(timesheets.filter(t => t.status === 'pending').length),  color: '#f59e0b' },
                       ].map(it => (
-                        <div key={it.label} className="rounded-xl p-3 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--brand-border)' }}>
+                        <div key={it.label} className="rounded-xl p-3 text-center" style={{ background: 'var(--surface-hover)', border: '1px solid var(--brand-border)' }}>
                           <p className="text-[10px] mb-1 uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{it.label}</p>
-                          <p className="text-xl font-bold" style={{ color: it.color }}>{it.value}</p>
+                          <p className="ds-text-kpi" style={{ color: it.color }}>{it.value}</p>
                         </div>
                       ))}
                     </div>
@@ -636,7 +636,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                       {timesheets.map(ts => {
                         const sColor = tsStatusColor[ts.status] ?? '#94a3b8'
                         return (
-                          <div key={ts.id} className="flex items-start gap-3 rounded-xl px-4 py-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--brand-border)' }}>
+                          <div key={ts.id} className="flex items-start gap-3 rounded-xl px-4 py-3" style={{ background: 'var(--surface-hover)', border: '1px solid var(--brand-border)' }}>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>{ts.user?.name ?? '—'}</span>
@@ -646,7 +646,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                             </div>
                             <div className="text-right shrink-0">
                               <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{fmtDate(ts.date)}</p>
-                              <p className="text-sm font-bold tabular-nums" style={{ color: '#00F5FF' }}>{ts.effort_hours}h</p>
+                              <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--primary)' }}>{ts.effort_hours}h</p>
                             </div>
                           </div>
                         )
@@ -661,11 +661,11 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
               <div className="space-y-5">
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { label: 'Valor do Projeto',        value: fmtBRL(p.project_value),                          color: '#00F5FF' },
-                    { label: 'Valor Total (c/aportes)', value: fmtBRL(p.total_project_value ?? p.project_value), color: '#00F5FF' },
+                    { label: 'Valor do Projeto',        value: fmtBRL(p.project_value),                          color: 'var(--primary)' },
+                    { label: 'Valor Total (c/aportes)', value: fmtBRL(p.total_project_value ?? p.project_value), color: 'var(--primary)' },
                     { label: 'Taxa / Hora',             value: fmtBRL(p.hourly_rate),                            color: 'var(--brand-text)' },
                   ].map(it => (
-                    <div key={it.label} className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--brand-border)' }}>
+                    <div key={it.label} className="rounded-xl p-4 text-center" style={{ background: 'var(--surface-hover)', border: '1px solid var(--brand-border)' }}>
                       <p className="text-[10px] mb-2 uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{it.label}</p>
                       <p className="text-lg font-bold tabular-nums" style={{ color: it.color }}>{it.value}</p>
                     </div>
@@ -702,8 +702,8 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                   return (
                     <>
                       {/* Bloco 1 — RECEITA */}
-                      <div className="rounded-xl p-4" style={{ background: 'rgba(0,245,255,0.04)', border: '1px solid rgba(0,245,255,0.18)' }}>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: '#00F5FF' }}>
+                      <div className="rounded-xl p-4" style={{ background: 'var(--primary-soft)', border: '1px solid rgba(0,245,255,0.18)' }}>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--primary)' }}>
                           <DollarSign size={11} />Receita {isOnDemand && <span className="text-[9px] font-normal ml-1 opacity-70">(On Demand — horas × R$/h)</span>}
                         </p>
                         <div className="grid grid-cols-3 gap-3">
@@ -712,9 +712,9 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                             { label: 'Aportes',        value: fmtBRL(cc.aportes_total) },
                             { label: 'Receita Total',  value: fmtBRL(cc.receita_total), highlight: true },
                           ].map(c => (
-                            <div key={c.label} className="rounded-lg p-2.5" style={{ background: 'var(--brand-bg)', border: `1px solid ${c.highlight ? 'rgba(0,245,255,0.35)' : 'var(--brand-border)'}` }}>
+                            <div key={c.label} className="rounded-lg p-2.5" style={{ background: 'var(--brand-bg)', border: `1px solid ${c.highlight ? 'var(--ring)' : 'var(--brand-border)'}` }}>
                               <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>{c.label}</p>
-                              <p className="text-sm font-bold tabular-nums" style={{ color: c.highlight ? '#00F5FF' : 'var(--brand-text)' }}>{c.value}</p>
+                              <p className="text-sm font-bold tabular-nums" style={{ color: c.highlight ? 'var(--primary)' : 'var(--brand-text)' }}>{c.value}</p>
                             </div>
                           ))}
                         </div>
@@ -750,11 +750,11 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="rounded-lg p-3.5" style={{ background: 'var(--brand-bg)', border: `1px solid ${isPositive ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
                             <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>Margem R$</p>
-                            <p className="text-xl font-bold tabular-nums" style={{ color: marginColor }}>{fmtBRL(cc.margin)}</p>
+                            <p className="ds-text-kpi ds-text-numeric" style={{ color: marginColor }}>{fmtBRL(cc.margin)}</p>
                           </div>
                           <div className="rounded-lg p-3.5" style={{ background: 'var(--brand-bg)', border: `1px solid ${isPositive ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
                             <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>Margem %</p>
-                            <p className="text-xl font-bold tabular-nums" style={{ color: marginColor }}>{cc.margin_percentage.toFixed(1)}%</p>
+                            <p className="ds-text-kpi ds-text-numeric" style={{ color: marginColor }}>{cc.margin_percentage.toFixed(1)}%</p>
                           </div>
                         </div>
                       </div>
@@ -803,7 +803,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
 
                       {/* Bloco 6 — HISTÓRICO */}
                       {showHistorico && (
-                        <div className="rounded-xl px-4 py-3 flex flex-wrap gap-x-6 gap-y-1" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--brand-border)' }}>
+                        <div className="rounded-xl px-4 py-3 flex flex-wrap gap-x-6 gap-y-1" style={{ background: 'var(--surface-hover)', border: '1px solid var(--brand-border)' }}>
                           <p className="text-[9px] font-semibold uppercase tracking-wider w-full mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Saldo do sistema anterior</p>
                           <span className="text-xs tabular-nums" style={{ color: 'var(--brand-subtle)' }}>Horas iniciais: <strong>{(pi.initial_hours_balance ?? 0) < 0 ? '-' : ''}{Math.abs(pi.initial_hours_balance ?? 0).toFixed(1)}h</strong></span>
                           <span className="text-xs tabular-nums" style={{ color: 'var(--brand-subtle)' }}>Custo inicial: <strong>{fmtBRL(pi.initial_cost ?? 0)}</strong></span>
@@ -840,9 +840,9 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                                   <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--brand-text)' }}>{fmtBRL(c.cost)}</td>
                                 </tr>
                               ))}
-                              <tr style={{ background: 'rgba(0,245,255,0.04)', borderTop: '1px solid var(--brand-border)' }}>
+                              <tr style={{ background: 'var(--primary-soft)', borderTop: '1px solid var(--brand-border)' }}>
                                 <td className="px-3 py-2.5 font-bold text-[11px] uppercase" style={{ color: 'var(--brand-subtle)' }} colSpan={5}>Total Operacional</td>
-                                <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: '#00F5FF' }}>{fmtBRL(cc.custo_operacional)}</td>
+                                <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: 'var(--primary)' }}>{fmtBRL(cc.custo_operacional)}</td>
                               </tr>
                             </tbody>
                           </table>
@@ -857,7 +857,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
         )}
 
         <div className="flex justify-end px-6 py-3 shrink-0" style={{ borderTop: '1px solid var(--brand-border)' }}>
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Fechar</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Fechar</button>
         </div>
       </div>
       {showEdit && p && (
@@ -996,8 +996,8 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     <p className="text-[10px] font-semibold uppercase tracking-wider pt-3 pb-2" style={{ color: 'var(--brand-subtle)', borderTop: '1px solid var(--brand-border)' }}>{children}</p>
   )
   const Toggle2 = ({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) => (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--brand-border)' }}>
-      <button type="button" onClick={() => onChange(!checked)} className="relative w-10 h-5 rounded-full transition-colors shrink-0" style={{ background: checked ? '#22c55e' : 'rgba(255,255,255,0.1)' }}>
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{ background: 'var(--surface-hover)', border: '1px solid var(--brand-border)' }}>
+      <button type="button" onClick={() => onChange(!checked)} className="relative w-10 h-5 rounded-full transition-colors shrink-0" style={{ background: checked ? '#22c55e' : 'var(--border-strong)' }}>
         <span className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform" style={{ transform: checked ? 'translateX(20px)' : 'translateX(0)' }} />
       </button>
       <span className="text-xs" style={{ color: 'var(--brand-text)' }}>{label}</span>
@@ -1022,7 +1022,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
             <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>{d.code}</p>
             <h3 className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>Editar Projeto</h3>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"><X size={16} style={{ color: 'var(--brand-muted)' }} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] transition-colors"><X size={16} style={{ color: 'var(--brand-muted)' }} /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-2 gap-6">
@@ -1050,7 +1050,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 <div><label style={lStyle}>% Horas Coordenador</label><input type="number" value={form.coordinator_hours} onChange={setF('coordinator_hours')} style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
                 <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
               </div>
-              <div className="grid grid-cols-2 gap-3 rounded-xl p-3" style={{ border: '1px solid var(--brand-border)', background: 'rgba(255,255,255,0.02)' }}>
+              <div className="grid grid-cols-2 gap-3 rounded-xl p-3" style={{ border: '1px solid var(--brand-border)', background: 'var(--surface-hover)' }}>
                 <div className="col-span-2"><label style={{ ...lStyle, marginBottom: 0 }}>Histórico do sistema anterior</label></div>
                 <div><label style={lStyle}>Saldo Inicial de Horas</label><input type="number" value={form.initial_hours_balance} onChange={setF('initial_hours_balance')} style={iStyle} placeholder="0" step="0.5" /></div>
                 <div><label style={lStyle}>Custo Inicial (R$)</label><input type="number" value={form.initial_cost} onChange={setF('initial_cost')} style={iStyle} placeholder="0.00" step="0.01" /></div>
@@ -1078,7 +1078,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 const isSustentacao = stName.includes('sustenta')
                 if (!isAdmin || !isSustentacao) return null
                 return (
-                  <div className="rounded-xl p-3 mt-2" style={{ background: 'rgba(0,245,255,0.05)', border: '1px solid rgba(0,245,255,0.2)' }}>
+                  <div className="rounded-xl p-3 mt-2" style={{ background: 'var(--primary-soft)', border: '1px solid rgba(0,245,255,0.2)' }}>
                     <label style={lStyle} className="block mb-1">Gerenciado por outro coordenador</label>
                     <p className="text-[10px] mb-2" style={{ color: 'var(--brand-subtle)' }}>
                       Ao selecionar um coordenador, o card sai da fila de sustentação e migra pra fila dele.
@@ -1104,32 +1104,32 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                   <button key={id} onClick={() => { setTeamTab(id); setTeamSearch('') }}
                     className="px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap"
                     style={{ color: teamTab === id ? 'var(--text)' : 'var(--text-muted)', borderBottom: teamTab === id ? '2px solid var(--primary)' : '2px solid transparent', marginBottom: '-1px' }}>
-                    {label}{count > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px]" style={{ background: 'rgba(0,245,255,0.12)', color: '#00F5FF' }}>{count}</span>}
+                    {label}{count > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px]" style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}>{count}</span>}
                   </button>
                 ))}
               </div>
               <input value={teamSearch} onChange={e => setTeamSearch(e.target.value)} placeholder="Buscar..."
                 className="w-full text-xs px-3 py-2 rounded-xl outline-none mb-2"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }} />
-              <div className="flex-1 overflow-y-auto space-y-1 rounded-xl p-2" style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid var(--brand-border)', maxHeight: 520 }}>
+                style={{ background: 'var(--surface-hover)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }} />
+              <div className="flex-1 overflow-y-auto space-y-1 rounded-xl p-2" style={{ background: 'var(--surface-hover)', border: '1px solid var(--brand-border)', maxHeight: 520 }}>
                 {teamTab === 'coord' && filteredCoords.map(c => {
                   const sel = form.coordinator_ids.includes(c.id)
-                  return <button key={c.id} onClick={() => setForm(p => ({ ...p, coordinator_ids: toggleId(p.coordinator_ids, c.id) }))} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-white/5" style={{ background: sel ? 'rgba(0,245,255,0.06)' : 'transparent', border: `1px solid ${sel ? 'rgba(0,245,255,0.2)' : 'transparent'}` }}>
-                    <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'rgba(0,245,255,0.2)' : 'rgba(255,255,255,0.06)', border: '1px solid var(--brand-border)' }}>{sel && <Check size={10} style={{ color: '#00F5FF' }} />}</div>
-                    <span className="text-xs" style={{ color: sel ? '#00F5FF' : 'var(--brand-text)' }}>{c.name}</span>
+                  return <button key={c.id} onClick={() => setForm(p => ({ ...p, coordinator_ids: toggleId(p.coordinator_ids, c.id) }))} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-[var(--surface-hover)]" style={{ background: sel ? 'var(--primary-soft)' : 'transparent', border: `1px solid ${sel ? 'var(--ring)' : 'transparent'}` }}>
+                    <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'var(--ring)' : 'var(--surface-hover)', border: '1px solid var(--brand-border)' }}>{sel && <Check size={10} style={{ color: 'var(--primary)' }} />}</div>
+                    <span className="text-xs" style={{ color: sel ? 'var(--primary)' : 'var(--brand-text)' }}>{c.name}</span>
                   </button>
                 })}
                 {teamTab === 'consult' && filteredConsults.map(c => {
                   const sel = form.consultant_ids.includes(c.id)
-                  return <button key={c.id} onClick={() => setForm(p => ({ ...p, consultant_ids: toggleId(p.consultant_ids, c.id) }))} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-white/5" style={{ background: sel ? 'rgba(139,92,246,0.06)' : 'transparent', border: `1px solid ${sel ? 'rgba(139,92,246,0.25)' : 'transparent'}` }}>
-                    <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.06)', border: '1px solid var(--brand-border)' }}>{sel && <Check size={10} style={{ color: '#a78bfa' }} />}</div>
+                  return <button key={c.id} onClick={() => setForm(p => ({ ...p, consultant_ids: toggleId(p.consultant_ids, c.id) }))} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-[var(--surface-hover)]" style={{ background: sel ? 'rgba(139,92,246,0.06)' : 'transparent', border: `1px solid ${sel ? 'rgba(139,92,246,0.25)' : 'transparent'}` }}>
+                    <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'rgba(139,92,246,0.2)' : 'var(--surface-hover)', border: '1px solid var(--brand-border)' }}>{sel && <Check size={10} style={{ color: '#a78bfa' }} />}</div>
                     <span className="text-xs" style={{ color: sel ? '#a78bfa' : 'var(--brand-text)' }}>{c.name}</span>
                   </button>
                 })}
                 {teamTab === 'group' && filteredGroups.map(g => {
                   const sel = form.consultant_group_ids.includes(g.id)
-                  return <button key={g.id} onClick={() => setForm(p => ({ ...p, consultant_group_ids: toggleId(p.consultant_group_ids, g.id) }))} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-white/5" style={{ background: sel ? 'rgba(245,158,11,0.06)' : 'transparent', border: `1px solid ${sel ? 'rgba(245,158,11,0.25)' : 'transparent'}` }}>
-                    <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.06)', border: '1px solid var(--brand-border)' }}>{sel && <Check size={10} style={{ color: '#f59e0b' }} />}</div>
+                  return <button key={g.id} onClick={() => setForm(p => ({ ...p, consultant_group_ids: toggleId(p.consultant_group_ids, g.id) }))} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-[var(--surface-hover)]" style={{ background: sel ? 'rgba(245,158,11,0.06)' : 'transparent', border: `1px solid ${sel ? 'rgba(245,158,11,0.25)' : 'transparent'}` }}>
+                    <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'rgba(245,158,11,0.2)' : 'var(--surface-hover)', border: '1px solid var(--brand-border)' }}>{sel && <Check size={10} style={{ color: '#f59e0b' }} />}</div>
                     <span className="text-xs" style={{ color: sel ? '#f59e0b' : 'var(--brand-text)' }}>{g.name}</span>
                   </button>
                 })}
@@ -1141,8 +1141,8 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
           </div>
         </div>
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
-          <button onClick={handleSave} disabled={saving} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: saving ? 'rgba(0,245,255,0.05)' : 'rgba(0,245,255,0.1)', color: '#00F5FF', border: '1px solid rgba(0,245,255,0.3)', opacity: saving ? 0.6 : 1 }}>
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
+          <button onClick={handleSave} disabled={saving} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: saving ? 'var(--primary-soft)' : 'rgba(0,245,255,0.1)', color: 'var(--primary)', border: '1px solid rgba(0,245,255,0.3)', opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Salvando...' : 'Salvar Alterações'}
           </button>
         </div>
@@ -1191,7 +1191,7 @@ function ProjectStatusModal({ projectId, projectName, currentStatus, onClose, on
       <div className="w-full max-w-sm rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
         <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
           <div><p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Alterar Status</p><h3 className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{projectName}</h3></div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5"><X size={14} style={{ color: 'var(--brand-muted)' }} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)]"><X size={14} style={{ color: 'var(--brand-muted)' }} /></button>
         </div>
         <div className="p-5">
           <label className="block text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Novo Status</label>
@@ -1200,8 +1200,8 @@ function ProjectStatusModal({ projectId, projectName, currentStatus, onClose, on
           </select>
         </div>
         <div className="flex justify-end gap-2 px-5 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-medium hover:bg-white/5" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
-          <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded-xl text-xs font-semibold" style={{ background: 'rgba(0,245,255,0.1)', color: '#00F5FF', border: '1px solid rgba(0,245,255,0.3)', opacity: saving ? 0.6 : 1 }}>
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-medium hover:bg-[var(--surface-hover)]" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
+          <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded-xl text-xs font-semibold" style={{ background: 'rgba(0,245,255,0.1)', color: 'var(--primary)', border: '1px solid rgba(0,245,255,0.3)', opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Salvando...' : 'Confirmar'}
           </button>
         </div>
@@ -1268,17 +1268,17 @@ function ProjectTeamModal({ projectId, projectName, onClose, onSaved }: { projec
       <div className="flex flex-col w-full max-w-lg rounded-2xl max-h-[85vh]" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
           <div><p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Selecionar Equipe</p><h3 className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>{projectName}</h3></div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5"><X size={16} style={{ color: 'var(--brand-muted)' }} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)]"><X size={16} style={{ color: 'var(--brand-muted)' }} /></button>
         </div>
         {loading ? <div className="flex-1 flex items-center justify-center py-10"><p className="text-sm animate-pulse" style={{ color: 'var(--brand-subtle)' }}>Carregando...</p></div> : (
           <div className="flex flex-col flex-1 overflow-hidden px-5 pt-4">
             {projectConsultants.length > 0 && (
-              <div className="mb-3 rounded-xl p-2 shrink-0" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--brand-border)' }}>
+              <div className="mb-3 rounded-xl p-2 shrink-0" style={{ background: 'var(--surface-hover)', border: '1px solid var(--brand-border)' }}>
                 <p className="text-[10px] font-semibold uppercase tracking-widest mb-1.5 px-1" style={{ color: 'var(--brand-subtle)' }}>Apontamento manual — consultores no projeto</p>
                 {projectConsultants.map((c: any) => {
                   const allow = manualIds.has(c.id)
                   return (
-                    <div key={c.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/5">
+                    <div key={c.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-[var(--surface-hover)]">
                       <span className="text-xs" style={{ color: 'var(--brand-text)' }}>{c.name}</span>
                       <button onClick={() => setManualIds(prev => toggleSet(prev, c.id))}
                         title={allow ? 'Bloquear apontamento manual' : 'Liberar apontamento manual'}
@@ -1296,21 +1296,21 @@ function ProjectTeamModal({ projectId, projectName, onClose, onSaved }: { projec
                 <button key={id} onClick={() => { setTab(id); setSearch('') }}
                   className="px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap"
                   style={{ color: tab === id ? 'var(--text)' : 'var(--text-muted)', borderBottom: tab === id ? '2px solid var(--primary)' : '2px solid transparent', marginBottom: '-1px' }}>
-                  {label}{count > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px]" style={{ background: 'rgba(0,245,255,0.12)', color: '#00F5FF' }}>{count}</span>}
+                  {label}{count > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px]" style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}>{count}</span>}
                 </button>
               ))}
             </div>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..."
               className="w-full text-xs px-3 py-2 rounded-xl outline-none mb-2 shrink-0"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }} />
-            <div className="flex-1 overflow-y-auto space-y-1 rounded-xl p-2" style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid var(--brand-border)' }}>
+              style={{ background: 'var(--surface-hover)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }} />
+            <div className="flex-1 overflow-y-auto space-y-1 rounded-xl p-2" style={{ background: 'var(--surface-hover)', border: '1px solid var(--brand-border)' }}>
               {tab === 'consult' && filteredConsults.map(c => {
                 const sel = selectedIds.has(c.id)
                 return (
                   <button key={c.id} onClick={() => setSelectedIds(prev => toggleSet(prev, c.id))}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-white/5"
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-[var(--surface-hover)]"
                     style={{ background: sel ? 'rgba(139,92,246,0.06)' : 'transparent', border: `1px solid ${sel ? 'rgba(139,92,246,0.25)' : 'transparent'}` }}>
-                    <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.06)', border: '1px solid var(--brand-border)' }}>
+                    <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'rgba(139,92,246,0.2)' : 'var(--surface-hover)', border: '1px solid var(--brand-border)' }}>
                       {sel && <Check size={10} style={{ color: '#a78bfa' }} />}
                     </div>
                     <span className="text-xs" style={{ color: sel ? '#a78bfa' : 'var(--brand-text)' }}>{c.name}</span>
@@ -1321,9 +1321,9 @@ function ProjectTeamModal({ projectId, projectName, onClose, onSaved }: { projec
                 const sel = selectedGroupIds.has(g.id)
                 return (
                   <button key={g.id} onClick={() => setSelectedGroupIds(prev => toggleSet(prev, g.id))}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-white/5"
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-[var(--surface-hover)]"
                     style={{ background: sel ? 'rgba(245,158,11,0.06)' : 'transparent', border: `1px solid ${sel ? 'rgba(245,158,11,0.25)' : 'transparent'}` }}>
-                    <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.06)', border: '1px solid var(--brand-border)' }}>
+                    <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'rgba(245,158,11,0.2)' : 'var(--surface-hover)', border: '1px solid var(--brand-border)' }}>
                       {sel && <Check size={10} style={{ color: '#f59e0b' }} />}
                     </div>
                     <span className="text-xs" style={{ color: sel ? '#f59e0b' : 'var(--brand-text)' }}>{g.name}</span>
@@ -1336,7 +1336,7 @@ function ProjectTeamModal({ projectId, projectName, onClose, onSaved }: { projec
           </div>
         )}
         <div className="flex justify-end gap-2 px-6 py-4 border-t shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)]" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
           <button onClick={handleSave} disabled={saving} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: 'rgba(139,92,246,0.12)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)', opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Salvando...' : 'Salvar Equipe'}
           </button>
@@ -1380,19 +1380,18 @@ function ContractKanbanCard({ card, index, onClick, onAction, onMove, availableC
             boxShadow: snap.isDragging ? 'var(--brand-card-shadow-md)' : 'var(--brand-card-shadow)',
             opacity: snap.isDragging ? 0.85 : 1,
             ...prov.draggableProps.style,
+            ...(menuOpen ? { position: 'relative', zIndex: 50 } : {}),
           }}
         >
           <div className="flex items-start justify-between gap-2 mb-2">
             <div className="min-w-0">
-              <p className="text-sm font-semibold truncate" style={{ color: 'var(--brand-text)' }}>
-                {card.customer_name}
-              </p>
+              <p className="text-title truncate">{card.customer_name}</p>
               {card.project_name && (
-                <p className="text-xs truncate" style={{ color: 'var(--brand-subtle)' }}>{card.project_name}</p>
+                <p className="kpi-sub truncate">{card.project_name}</p>
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap"
+              <span className="kpi-label px-1.5 py-0.5 rounded-full whitespace-nowrap"
                 style={{ background: badge.bg, color: badge.color }}>
                 {badge.label}
               </span>
@@ -1433,27 +1432,26 @@ function ContractKanbanCard({ card, index, onClick, onAction, onMove, availableC
           <div className="flex flex-wrap gap-1 mb-2">
             {card.categoria && (() => {
               const svL = card.service_type?.toLowerCase() ?? ''
-              const ctL = card.contract_type?.toLowerCase() ?? ''
               const effectivelySust = card.categoria === 'sustentacao'
                 || svL.includes('sustent') || svL.includes('cloud') || svL.includes('bizify')
               return (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(139,92,246,0.12)', color: '#8B5CF6' }}>
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
                   {effectivelySust ? 'Sustentação' : 'Projeto'}
                 </span>
               )
             })()}
             {card.contract_type && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
                 {card.contract_type}
               </span>
             )}
             {card.service_type && card.service_type.toLowerCase() !== 'projeto' && card.service_type.toLowerCase() !== 'sustentação' && card.service_type.toLowerCase() !== 'sustentacao' && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(34,197,94,0.10)', color: '#22c55e' }}>
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
                 {card.service_type}
               </span>
             )}
             {card.tipo_faturamento && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md" style={{ background: 'var(--surface-hover)', color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
                 {TIPO_LABEL[card.tipo_faturamento] ?? card.tipo_faturamento}
               </span>
             )}
@@ -1526,14 +1524,23 @@ function ProjectKanbanCard({ card, index, onClick, onAction, onMove, availableCo
   }, [menuOpen])
 
   const statusColor: Record<string, string> = {
-    paused:    '#f97316',
-    cancelled: '#ef4444',
-    finished:  '#6366f1',
-    started:   '#22c55e',
-    awaiting_start: '#94a3b8',
-    liberado_para_testes: '#f59e0b',
+    paused:    'var(--warning)',
+    cancelled: 'var(--danger)',
+    finished:  'var(--info)',
+    started:   'var(--success)',
+    awaiting_start: 'var(--text-muted)',
+    liberado_para_testes: 'var(--warning)',
   }
-  const color = statusColor[card.status] ?? '#94a3b8'
+  const statusBg: Record<string, string> = {
+    paused:    'var(--warning-bg)',
+    cancelled: 'var(--danger-bg)',
+    finished:  'var(--info-bg)',
+    started:   'var(--success-bg)',
+    awaiting_start: 'var(--surface-hover)',
+    liberado_para_testes: 'var(--warning-bg)',
+  }
+  const color = statusColor[card.status] ?? 'var(--text-muted)'
+  const bgChip = statusBg[card.status] ?? 'var(--surface-hover)'
 
   return (
     <Draggable draggableId={`project-${card.id}`} index={index}>
@@ -1552,6 +1559,7 @@ function ProjectKanbanCard({ card, index, onClick, onAction, onMove, availableCo
             boxShadow: snap.isDragging ? 'var(--brand-card-shadow-md)' : 'var(--brand-card-shadow)',
             opacity: snap.isDragging ? 0.85 : 1,
             ...prov.draggableProps.style,
+            ...(menuOpen ? { position: 'relative', zIndex: 50 } : {}),
           }}
         >
           <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -1563,7 +1571,7 @@ function ProjectKanbanCard({ card, index, onClick, onAction, onMove, availableCo
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap"
-                style={{ background: `${color}18`, color }}>
+                style={{ background: bgChip, color }}>
                 {STATUS_LABEL[card.status] ?? card.status}
               </span>
               <div ref={menuRef} className="relative" onClick={e => e.stopPropagation()}>
@@ -1600,32 +1608,32 @@ function ProjectKanbanCard({ card, index, onClick, onAction, onMove, availableCo
           {(card.contract_type || card.service_type) && (
             <div className="flex flex-wrap gap-1 mb-2">
               {card.contract_type && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
                   {card.contract_type}
                 </span>
               )}
               {card.service_type && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(34,197,94,0.10)', color: '#22c55e' }}>
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
                   {card.service_type}
                 </span>
               )}
             </div>
           )}
-          <div className="flex items-center justify-between pt-2" style={{ borderTop: `1px solid ${color}20` }}>
-            <span className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>
+          <div className="flex items-center justify-between pt-2" style={{ borderTop: `1px solid var(--border)` }}>
+            <span className="text-[10px]" style={{ color: 'var(--text-light)' }}>
               {card.coordinators?.[0] ? `👤 ${card.coordinators[0]}` : ''}
             </span>
             <div className="flex items-center gap-1">
               {onAction && (
                 <button onClick={e => { e.stopPropagation(); onAction('chat') }}
                   className="p-1 rounded-md transition-colors" title="Abrir Chat"
-                  style={{ color: 'var(--brand-subtle)', background: 'transparent' }}
+                  style={{ color: 'var(--text-muted)', background: 'transparent' }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                   <MessageSquare size={11} />
                 </button>
               )}
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: `${color}12`, color }}>
+              <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
                 {card.code}
               </span>
             </div>
@@ -1745,7 +1753,7 @@ function CardDetailModal({ card, onClose, onEditContract, initialTab, userRole }
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-xs font-semibold px-2 py-1 rounded-full"
                 style={{ background: badge.bg, color: badge.color }}>{badge.label}</span>
-              <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10 transition-colors" style={{ color: 'var(--brand-subtle)' }}><X size={16} /></button>
+              <button onClick={onClose} className="p-1 rounded-lg hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--brand-subtle)' }}><X size={16} /></button>
             </div>
           </div>
           <div className="flex gap-1 mt-3">
@@ -2358,48 +2366,51 @@ function KanbanContent() {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 shrink-0 border-b" style={{ borderColor: 'var(--brand-border)' }}>
           <div>
-            <h1 className="text-lg font-bold" style={{ color: 'var(--brand-text)' }}>Kanban de Contratos</h1>
-            <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Arraste para o coordenador para gerar o projeto — depois gerencie nos status de execução</p>
+            <h1 className="ds-text-h1">Kanban de Contratos</h1>
+            <p className="ds-text-body-sm mt-1" style={{ color: 'var(--text-muted)' }}>Arraste para o coordenador para gerar o projeto — depois gerencie nos status de execução</p>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => router.push('/contratos')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--brand-border)', color: 'var(--brand-muted)' }}>
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; e.currentTarget.style.borderColor = 'var(--border-strong)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--surface)'; e.currentTarget.style.borderColor = 'var(--border)' }}>
               <List size={13} /> Lista
             </button>
 
             <button onClick={() => { setEditingContractData(null); setShowNewContract(true) }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold"
-              style={{ background: 'var(--brand-primary)', color: 'var(--primary-fg)' }}>
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors"
+              style={{ background: 'var(--primary)', color: 'var(--primary-fg)', border: '1px solid var(--primary)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--primary-hover)'; e.currentTarget.style.borderColor = 'var(--primary-hover)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--primary)'; e.currentTarget.style.borderColor = 'var(--primary)' }}>
               <Plus size={13} /> Novo Contrato
             </button>
           </div>
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-5 px-6 py-2 shrink-0 border-b text-[11px]" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-subtle)' }}>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />Incompleto</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" />Pronto</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Projeto Ativo</span>
+        <div className="flex items-center gap-5 px-6 py-2 shrink-0 border-b text-[11px] font-medium" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: 'var(--danger)' }} />Incompleto</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: 'var(--warning)' }} />Pronto</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: 'var(--success)' }} />Projeto Ativo</span>
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: SUST_COLOR }} />Sustentação</span>
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: BIZIFY_COLOR }} />Bizify</span>
-          <span className="ml-auto flex items-center gap-1.5"><Users size={11} />Colunas de coordenador geram projeto automaticamente</span>
+          <span className="ml-auto flex items-center gap-1.5" style={{ color: 'var(--text-light)' }}><Users size={11} />Colunas de coordenador geram projeto automaticamente</span>
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-2 px-6 py-2 shrink-0 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+        <div className="flex items-center gap-2 px-6 py-2 shrink-0 border-b" style={{ borderColor: 'var(--border)' }}>
           <div className="relative">
-            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--brand-subtle)' }} />
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
             <input
               value={filterSearch}
               onChange={e => setFilterSearch(e.target.value)}
               placeholder="Buscar nome ou projeto..."
-              className="pl-7 pr-7 py-1.5 rounded-lg text-xs outline-none w-56"
-              style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
+              className="pl-7 pr-7 py-1.5 rounded-lg text-xs outline-none w-56 ds-input"
             />
             {filterSearch && (
               <button onClick={() => setFilterSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2">
-                <X size={10} style={{ color: 'var(--brand-subtle)' }} />
+                <X size={10} style={{ color: 'var(--text-muted)' }} />
               </button>
             )}
           </div>
@@ -2430,8 +2441,8 @@ function KanbanContent() {
           )}
           {(filterSearch || filterCustomers.length > 0 || filterExecutivos.length > 0 || filterProjectNames.length > 0) && (
             <button onClick={() => { setFilterSearch(''); setFilterCustomers([]); setFilterExecutivos([]); setFilterProjectNames([]) }}
-              className="text-xs px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
-              style={{ color: 'var(--brand-subtle)' }}>
+              className="text-xs font-medium px-2 py-1.5 rounded-lg hover:bg-[var(--surface-hover)] transition-colors"
+              style={{ color: 'var(--primary)' }}>
               Limpar
             </button>
           )}

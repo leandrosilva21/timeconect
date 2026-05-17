@@ -6,7 +6,14 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
-import { Zap, Clock, DollarSign, Download } from 'lucide-react'
+import { Zap, Clock, DollarSign, Download, Undo2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { KpiCard } from '@/components/ui/kpi-card'
+import {
+  DataTable, DataTableHead, DataTableHeadRow, DataTableHeadCell,
+  DataTableBody, DataTableRow, DataTableCell, DataTableEmpty,
+  StatusBadge, getStatusVariant,
+} from '@/components/ui/ds'
 import * as XLSX from 'xlsx'
 import DashboardIndicators from '@/components/dashboard/DashboardIndicators'
 import {
@@ -57,27 +64,7 @@ function Tab({ label, active, onClick }: { label: string; active: boolean; onCli
   )
 }
 
-function MetricCard({ label, value, unit = '', icon: Icon, accent = 'default' }: {
-  label: string; value: string; unit?: string
-  icon: React.ElementType; accent?: 'default' | 'primary' | 'success' | 'danger'
-}) {
-  const color = accent === 'primary' ? '#00F5FF' : accent === 'success' ? '#10B981' : accent === 'danger' ? '#EF4444' : 'var(--brand-text)'
-  const bg    = accent === 'primary' ? 'rgba(0,245,255,0.08)' : accent === 'success' ? 'rgba(16,185,129,0.10)' : accent === 'danger' ? 'rgba(239,68,68,0.10)' : 'rgba(255,255,255,0.04)'
-  return (
-    <div className="rounded-2xl p-6 flex flex-col gap-4" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{label}</span>
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: bg }}>
-          <Icon size={16} color={color} />
-        </div>
-      </div>
-      <div className="flex items-end gap-1.5">
-        <span className="text-4xl font-extrabold tracking-tight" style={{ color, lineHeight: 1 }}>{value}</span>
-        {unit && <span className="text-lg font-medium mb-0.5" style={{ color: 'var(--brand-muted)' }}>{unit}</span>}
-      </div>
-    </div>
-  )
-}
+// MetricCard local removido — agora usamos KpiCard de '@/components/ui/kpi-card'.
 
 function SkeletonCard() {
   return (
@@ -95,6 +82,7 @@ export default function OnDemandPage() {
   const router = useRouter()
   const isAdmin   = user?.type === 'admin'
   const isCliente = user?.type === 'cliente'
+  const canReverseApproval = !!user && user.type !== 'consultor' && user.type !== 'cliente'
 
   useEffect(() => {
     if (user && user.type === 'coordenador') router.replace('/timesheets')
@@ -121,7 +109,7 @@ export default function OnDemandPage() {
 
   // Componentes embarcados (Sustentação + Despesas) — reusam endpoints do BH Fixo
   const mxKind: 'maintenance' | 'expenses' = activeTab === 'expenses' ? 'expenses' : 'maintenance'
-  const { rows: mxRows, loading: mxLoading, ticketSummary: mxTicketSummary, ticketLoading: mxTicketLoading } = useMaintenanceInline({
+  const { rows: mxRows, loading: mxLoading, ticketSummary: mxTicketSummary, ticketLoading: mxTicketLoading, reload: reloadMx } = useMaintenanceInline({
     enabled: activeTab === 'maintenance' || activeTab === 'expenses',
     kind: mxKind,
     customerId: (selectedCustomer as number) || user?.customer_id,
@@ -133,6 +121,8 @@ export default function OnDemandPage() {
   const [indicatorParams, setIndicatorParams] = useState<URLSearchParams>(new URLSearchParams())
   const [inlineRows, setInlineRows] = useState<any[]>([])
   const [inlineLoading, setInlineLoading] = useState(false)
+  const [inlineReloadKey, setInlineReloadKey] = useState(0)
+  const reloadInline = () => setInlineReloadKey(k => k + 1)
   const [ticketSummary, setTicketSummary] = useState<Array<{ticket: string; title: string|null; requester: string|null; period_minutes: number; lifetime_minutes: number}>>([])
   const [ticketSummaryLoading, setTicketSummaryLoading] = useState(false)
 
@@ -190,6 +180,18 @@ export default function OnDemandPage() {
     setIndicatorParams(buildParams())
   }, [buildParams])
 
+  // Legenda do "Consumo do Mês" — espelha o período efetivo do summary.
+  const MONTH_NAMES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+  const monthConsumptionHint = (() => {
+    if (dateFrom && dateTo) {
+      const fmt = (s: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); return m ? `${m[3]}/${m[2]}/${m[1]}` : s }
+      return `Período: ${fmt(dateFrom)} a ${fmt(dateTo)}`
+    }
+    if (refMonth && refYear) return `${MONTH_NAMES_PT[refMonth - 1]} ${refYear}`
+    const now = new Date()
+    return `Mês vigente — ${MONTH_NAMES_PT[now.getMonth()]} ${now.getFullYear()}`
+  })()
+
   const hasFilters = !isAdmin || !!selectedProject
 
   // Lista inline de apontamentos do projeto + ticket summary (mesmo padrão do BH Fixo/Sustentação)
@@ -211,7 +213,7 @@ export default function OnDemandPage() {
       .then(r => setTicketSummary(r.tickets ?? []))
       .catch(() => setTicketSummary([]))
       .finally(() => setTicketSummaryLoading(false))
-  }, [hasFilters, selectedProject, selectedCustomer, dateFrom, dateTo, user?.customer_id, activeTab])
+  }, [hasFilters, selectedProject, selectedCustomer, dateFrom, dateTo, user?.customer_id, activeTab, inlineReloadKey])
 
   function exportInlineToXLSX() {
     if (inlineRows.length === 0) return
@@ -347,20 +349,21 @@ export default function OnDemandPage() {
                   </div>
                 ) : summary ? (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <MetricCard
+                    <KpiCard
                       label="Consumo do Mês"
                       value={fmtH(summary.month_consumed_hours)}
                       unit="h"
                       icon={Clock}
                       accent="primary"
+                      hint={monthConsumptionHint}
                     />
-                    <MetricCard
+                    <KpiCard
                       label="Valor Hora"
                       value={fmtBRL(summary.hourly_rate)}
                       icon={DollarSign}
                       accent="default"
                     />
-                    <MetricCard
+                    <KpiCard
                       label="Valor a Pagar"
                       value={fmtBRL(summary.amount_to_pay)}
                       icon={DollarSign}
@@ -375,7 +378,7 @@ export default function OnDemandPage() {
 
                 {/* Exportar + Lista de apontamentos + Apuração por Ticket */}
                 <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
-                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} />
+                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} onReverseApproved={canReverseApproval} onReverseSuccess={reloadInline} />
                 <InlineTicketSummaryTable rows={ticketSummary} loading={ticketSummaryLoading} />
               </div>
             )}
@@ -384,7 +387,7 @@ export default function OnDemandPage() {
             {activeTab === 'maintenance' && (
               <div className="space-y-4">
                 <MxExportButton onClick={() => exportMaintenanceToXLSX('maintenance', mxRows)} disabled={mxRows.length === 0} />
-                <MxTimesheets rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} />
+                <MxTimesheets rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} onReverseApproved={canReverseApproval} onReverseSuccess={reloadMx} />
                 <MxTicketSummary rows={mxTicketSummary} loading={mxTicketLoading} />
               </div>
             )}
@@ -399,9 +402,9 @@ export default function OnDemandPage() {
               return (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <MetricCard label="Quantidade"    value={String(mxRows.length)} icon={DollarSign} />
-                    <MetricCard label="Valor Total"   value={fmtBRL(totalAmount)} icon={DollarSign} />
-                    <MetricCard label="Valor a Pagar" value={fmtBRL(toPay)} icon={DollarSign} accent="primary" />
+                    <KpiCard label="Quantidade"    value={String(mxRows.length)} icon={DollarSign} />
+                    <KpiCard label="Valor Total"   value={fmtBRL(totalAmount)} icon={DollarSign} />
+                    <KpiCard label="Valor a Pagar" value={fmtBRL(toPay)} icon={DollarSign} accent="primary" />
                   </div>
                   <MxExportButton onClick={() => exportMaintenanceToXLSX('expenses', mxRows)} disabled={mxRows.length === 0} />
                   <MxExpenses rows={mxRows} loading={mxLoading} />
@@ -427,55 +430,103 @@ export default function OnDemandPage() {
 
 // ─── Inline tables (mesmo padrão de /dashboards/bank-hours-fixed) ────────────
 
-function InlineTimesheetsTable({ rows, loading }: { rows: any[]; loading: boolean }) {
+function InlineTimesheetsTable({ rows, loading, onReverseApproved, onReverseSuccess }: {
+  rows: any[]; loading: boolean
+  onReverseApproved?: boolean
+  onReverseSuccess?: () => void
+}) {
+  const [reversingId, setReversingId] = useState<number | null>(null)
+  const handleReverse = async (id: number) => {
+    if (!confirm('Estornar a aprovação deste apontamento?')) return
+    setReversingId(id)
+    try {
+      await api.post(`/timesheets/${id}/reverse-approval`, {})
+      toast.success('Aprovação estornada')
+      onReverseSuccess?.()
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Falha ao estornar aprovação')
+    } finally {
+      setReversingId(null)
+    }
+  }
+  // POC do Design System: tabela canônica via <DataTable> + <StatusBadge>.
+  // Zero CSS local; todos os estilos vêm dos tokens via componentes do DS.
+  const colSpan = onReverseApproved ? 8 : 7
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        boxShadow: 'var(--shadow-sm)',
+      }}
+    >
       <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Apontamentos do período</h3>
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{rows.length} registros</span>
+        <h3 className="ds-text-h2" style={{ color: 'var(--text)' }}>Apontamentos do período</h3>
+        <span className="ds-text-caption" style={{ color: 'var(--text-muted)' }}>{rows.length} registros</span>
       </div>
-      <div className="overflow-x-auto">
-        {loading ? (
-          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
-        ) : rows.length === 0 ? (
-          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem apontamentos no período selecionado.</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Data</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Consultor</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Projeto</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Ticket</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Descrição</th>
-                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Horas</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td className="px-4 py-2">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
-                  <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
-                  <td className="px-4 py-2">
-                    <span className="font-mono text-xs" style={{ color: 'var(--text-light)' }}>{r.project?.code}</span>
-                    <span className="mx-1.5" style={{ color: 'var(--text-light)' }}>·</span>
-                    <span style={{ color: 'var(--text)' }}>{r.project?.name}</span>
-                  </td>
-                  <td className="px-4 py-2">
-                    {r.ticket
-                      ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }}>#{r.ticket}</a>
-                      : <span style={{ color: 'var(--text-light)' }}>—</span>}
-                  </td>
-                  <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{r.description ?? '—'}</td>
-                  <td className="px-4 py-2 text-right font-mono">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
-                  <td className="px-4 py-2 text-xs">{r.status_display ?? r.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <DataTable inline>
+        <DataTableHead>
+          <DataTableHeadRow>
+            <DataTableHeadCell>Data</DataTableHeadCell>
+            <DataTableHeadCell>Consultor</DataTableHeadCell>
+            <DataTableHeadCell>Projeto</DataTableHeadCell>
+            <DataTableHeadCell>Ticket</DataTableHeadCell>
+            <DataTableHeadCell>Descrição</DataTableHeadCell>
+            <DataTableHeadCell align="right">Horas</DataTableHeadCell>
+            <DataTableHeadCell>Status</DataTableHeadCell>
+            {onReverseApproved && <DataTableHeadCell align="right" />}
+          </DataTableHeadRow>
+        </DataTableHead>
+        <DataTableBody>
+          {loading ? (
+            <DataTableEmpty colSpan={colSpan} message="Carregando…" />
+          ) : rows.length === 0 ? (
+            <DataTableEmpty colSpan={colSpan} message="Sem apontamentos no período selecionado." />
+          ) : rows.map(r => {
+            const canReverse = onReverseApproved && String(r.status ?? '').toLowerCase() === 'approved'
+            return (
+              <DataTableRow key={r.id}>
+                <DataTableCell>{r.date ? r.date.split('-').reverse().join('/') : '—'}</DataTableCell>
+                <DataTableCell muted={false}>{r.user?.name ?? '—'}</DataTableCell>
+                <DataTableCell>
+                  <span className="font-mono text-xs" style={{ color: 'var(--text-light)' }}>{r.project?.code}</span>
+                  <span className="mx-1.5" style={{ color: 'var(--text-light)' }}>·</span>
+                  <span style={{ color: 'var(--text)' }}>{r.project?.name}</span>
+                </DataTableCell>
+                <DataTableCell>
+                  {r.ticket
+                    ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }} onClick={(e) => e.stopPropagation()}>#{r.ticket}</a>
+                    : <span style={{ color: 'var(--text-light)' }}>—</span>}
+                </DataTableCell>
+                <DataTableCell wrap>{r.description ?? '—'}</DataTableCell>
+                <DataTableCell align="right" numeric muted={false}>{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</DataTableCell>
+                <DataTableCell>
+                  <StatusBadge variant={getStatusVariant(r.status)}>{r.status_display ?? r.status}</StatusBadge>
+                </DataTableCell>
+                {onReverseApproved && (
+                  <DataTableCell align="right">
+                    {canReverse && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleReverse(r.id) }}
+                        disabled={reversingId === r.id}
+                        title="Estornar aprovação"
+                        className="inline-flex items-center justify-center p-1.5 rounded-md transition-colors disabled:opacity-40"
+                        style={{ color: 'var(--danger-border)' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <Undo2 size={13} />
+                      </button>
+                    )}
+                  </DataTableCell>
+                )}
+              </DataTableRow>
+            )
+          })}
+        </DataTableBody>
+      </DataTable>
     </div>
   )
 }

@@ -5,8 +5,14 @@ import { api } from '@/lib/api'
 import * as XLSX from 'xlsx'
 import {
   Clock, Eye, Download, Calendar, User as UserIcon, Building2, Folder,
-  Paperclip, FileText, X as CloseIcon,
+  Paperclip, FileText, X as CloseIcon, Undo2,
 } from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  DataTable, DataTableHead, DataTableHeadRow, DataTableHeadCell,
+  DataTableBody, DataTableRow, DataTableCell, DataTableEmpty,
+  isActionAllowed,
+} from '@/components/ui/ds'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -28,6 +34,8 @@ export function useMaintenanceInline(opts: {
   const [loading, setLoading] = useState(false)
   const [ticketSummary, setTicketSummary] = useState<any[]>([])
   const [ticketLoading, setTicketLoading] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+  const reload = () => setReloadKey(k => k + 1)
 
   useEffect(() => {
     if (!enabled) { setRows([]); setTicketSummary([]); return }
@@ -55,9 +63,9 @@ export function useMaintenanceInline(opts: {
     } else {
       setTicketSummary([])
     }
-  }, [enabled, kind, customerId, projectId, dateFrom, dateTo])
+  }, [enabled, kind, customerId, projectId, dateFrom, dateTo, reloadKey])
 
-  return { rows, loading, ticketSummary, ticketLoading }
+  return { rows, loading, ticketSummary, ticketLoading, reload }
 }
 
 // ─── Export Excel ───────────────────────────────────────────────────────────
@@ -115,89 +123,133 @@ export function ExportButton({ onClick, disabled }: { onClick: () => void; disab
   )
 }
 
-export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowClick }: {
+// Botão de estornar aprovação — visível só em linha aprovada e quando o caller habilita.
+function ReverseApprovalButton({ onClick, busy }: { onClick: () => void; busy: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onClick() }}
+      disabled={busy}
+      title="Estornar aprovação"
+      className="inline-flex items-center justify-center p-1.5 rounded-md transition-colors disabled:opacity-40"
+      style={{ color: 'var(--danger-border)' }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
+      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+    >
+      <Undo2 size={13} />
+    </button>
+  )
+}
+
+export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowClick, onReverseApproved, onReverseSuccess }: {
   rows: any[]
   loading: boolean
   variant?: 'maintenance' | 'architecture'
   onRowClick?: (r: any) => void
+  // Quando definido, mostra o botão de estornar nas linhas aprovadas.
+  onReverseApproved?: boolean
+  onReverseSuccess?: () => void
 }) {
+  const [reversingId, setReversingId] = useState<number | null>(null)
+  const handleReverse = async (id: number) => {
+    if (!confirm('Estornar a aprovação deste apontamento?')) return
+    setReversingId(id)
+    try {
+      await api.post(`/timesheets/${id}/reverse-approval`, {})
+      toast.success('Aprovação estornada')
+      onReverseSuccess?.()
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Falha ao estornar aprovação')
+    } finally {
+      setReversingId(null)
+    }
+  }
   const isArch = variant === 'architecture'
+  const colSpan = isArch ? 5 : 10
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        boxShadow: 'var(--shadow-sm)',
+      }}
+    >
       <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Apontamentos do período</h3>
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{rows.length} registros</span>
+        <h3 className="ds-text-h2" style={{ color: 'var(--text)' }}>Apontamentos do período</h3>
+        <span className="ds-text-caption" style={{ color: 'var(--text-muted)' }}>{rows.length} registros</span>
       </div>
-      <div className="overflow-x-auto">
-        {loading ? (
-          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
-        ) : rows.length === 0 ? (
-          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem apontamentos no período selecionado.</div>
-        ) : isArch ? (
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Data</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Consultor</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Descrição</th>
-                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Horas</th>
-                <th className="px-2 py-2 w-8"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(r => (
-                <tr key={r.id} className={onRowClick ? 'cursor-pointer' : ''} onClick={onRowClick ? () => onRowClick(r) : undefined} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td className="px-4 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
-                  <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
-                  <td className="px-4 py-2 max-w-2xl truncate" style={{ color: 'var(--text-muted)' }} title={r.description ?? '—'}>{r.description ?? '—'}</td>
-                  <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
-                  {onRowClick && <td className="px-2 py-2"><Eye size={14} style={{ color: 'var(--text-muted)' }} /></td>}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
-                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Data</th>
-                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Solicitante</th>
-                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Consultor</th>
-                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Ticket</th>
-                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Título do ticket</th>
-                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Descrição</th>
-                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Início</th>
-                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Fim</th>
-                <th className="text-right px-3 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Esforço (h)</th>
-                <th className="px-2 py-2 w-8"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(r => {
-                const desc = r.description ?? '—'
-                return (
-                  <tr key={r.id} className={onRowClick ? 'cursor-pointer' : ''} onClick={onRowClick ? () => onRowClick(r) : undefined} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td className="px-3 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
-                    <td className="px-3 py-2">{r.requester ?? '—'}</td>
-                    <td className="px-3 py-2">{r.user?.name ?? '—'}</td>
-                    <td className="px-3 py-2">
-                      {r.ticket
-                        ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }} onClick={e => e.stopPropagation()}>#{r.ticket}</a>
-                        : <span style={{ color: 'var(--text-light)' }}>—</span>}
-                    </td>
-                    <td className="px-3 py-2 max-w-xs truncate" style={{ color: 'var(--text-muted)' }} title={r.ticket_subject ?? '—'}>{r.ticket_subject ?? '—'}</td>
-                    <td className="px-3 py-2 max-w-sm truncate" style={{ color: 'var(--text-muted)' }} title={desc}>{desc}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{r.start_time ?? '—'}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{r.end_time ?? '—'}</td>
-                    <td className="px-3 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}</td>
-                    {onRowClick && <td className="px-2 py-2"><Eye size={14} style={{ color: 'var(--text-muted)' }} /></td>}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <DataTable inline>
+        <DataTableHead>
+          <DataTableHeadRow>
+            {isArch ? (
+              <>
+                <DataTableHeadCell>Data</DataTableHeadCell>
+                <DataTableHeadCell>Consultor</DataTableHeadCell>
+                <DataTableHeadCell>Descrição</DataTableHeadCell>
+                <DataTableHeadCell align="right">Horas</DataTableHeadCell>
+                <DataTableHeadCell align="right" />
+              </>
+            ) : (
+              <>
+                <DataTableHeadCell>Data</DataTableHeadCell>
+                <DataTableHeadCell>Solicitante</DataTableHeadCell>
+                <DataTableHeadCell>Consultor</DataTableHeadCell>
+                <DataTableHeadCell>Ticket</DataTableHeadCell>
+                <DataTableHeadCell>Título do ticket</DataTableHeadCell>
+                <DataTableHeadCell>Descrição</DataTableHeadCell>
+                <DataTableHeadCell>Início</DataTableHeadCell>
+                <DataTableHeadCell>Fim</DataTableHeadCell>
+                <DataTableHeadCell align="right">Esforço (h)</DataTableHeadCell>
+                <DataTableHeadCell align="right" />
+              </>
+            )}
+          </DataTableHeadRow>
+        </DataTableHead>
+        <DataTableBody>
+          {loading ? (
+            <DataTableEmpty colSpan={colSpan} message="Carregando…" />
+          ) : rows.length === 0 ? (
+            <DataTableEmpty colSpan={colSpan} message="Sem apontamentos no período selecionado." />
+          ) : rows.map(r => {
+            const desc = r.description ?? '—'
+            const canReverse = onReverseApproved && isActionAllowed(r.status, 'reverse_approval')
+            const handleClick = onRowClick ? () => onRowClick(r) : undefined
+            return isArch ? (
+              <DataTableRow key={r.id} onClick={handleClick}>
+                <DataTableCell>{r.date ? r.date.split('-').reverse().join('/') : '—'}</DataTableCell>
+                <DataTableCell muted={false}>{r.user?.name ?? '—'}</DataTableCell>
+                <DataTableCell className="max-w-2xl truncate" title={desc}>{desc}</DataTableCell>
+                <DataTableCell align="right" numeric muted={false}>{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</DataTableCell>
+                <DataTableCell align="right">
+                  {canReverse && <ReverseApprovalButton onClick={() => handleReverse(r.id)} busy={reversingId === r.id} />}
+                  {onRowClick && <Eye size={14} className="inline-block ml-1" style={{ color: 'var(--text-muted)' }} />}
+                </DataTableCell>
+              </DataTableRow>
+            ) : (
+              <DataTableRow key={r.id} onClick={handleClick}>
+                <DataTableCell>{r.date ? r.date.split('-').reverse().join('/') : '—'}</DataTableCell>
+                <DataTableCell muted={false}>{r.requester ?? '—'}</DataTableCell>
+                <DataTableCell muted={false}>{r.user?.name ?? '—'}</DataTableCell>
+                <DataTableCell>
+                  {r.ticket
+                    ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }} onClick={e => e.stopPropagation()}>#{r.ticket}</a>
+                    : <span style={{ color: 'var(--text-light)' }}>—</span>}
+                </DataTableCell>
+                <DataTableCell className="max-w-xs truncate" title={r.ticket_subject ?? '—'}>{r.ticket_subject ?? '—'}</DataTableCell>
+                <DataTableCell className="max-w-sm truncate" title={desc}>{desc}</DataTableCell>
+                <DataTableCell>{r.start_time ?? '—'}</DataTableCell>
+                <DataTableCell>{r.end_time ?? '—'}</DataTableCell>
+                <DataTableCell align="right" numeric muted={false}>{((r.effort_minutes ?? 0) / 60).toFixed(2)}</DataTableCell>
+                <DataTableCell align="right">
+                  {canReverse && <ReverseApprovalButton onClick={() => handleReverse(r.id)} busy={reversingId === r.id} />}
+                  {onRowClick && <Eye size={14} className="inline-block ml-1" style={{ color: 'var(--text-muted)' }} />}
+                </DataTableCell>
+              </DataTableRow>
+            )
+          })}
+        </DataTableBody>
+      </DataTable>
     </div>
   )
 }
@@ -210,86 +262,125 @@ export function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loadi
   }
   if (!loading && rows.length === 0) return null
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        boxShadow: 'var(--shadow-sm)',
+      }}
+    >
       <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Apuração por Ticket</h3>
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{rows.length} tickets</span>
+        <h3 className="ds-text-h2" style={{ color: 'var(--text)' }}>Apuração por Ticket</h3>
+        <span className="ds-text-caption" style={{ color: 'var(--text-muted)' }}>{rows.length} tickets</span>
       </div>
-      <div className="overflow-x-auto">
-        {loading ? (
-          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Ticket</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Título</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Solicitante</th>
-                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Total no período</th>
-                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Total histórico</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(tk => (
-                <tr key={tk.ticket} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td className="px-4 py-2">
-                    <a href={`https://erpserv.movidesk.com/Ticket/Edit/${tk.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }}>#{tk.ticket}</a>
-                  </td>
-                  <td className="px-4 py-2" style={{ color: 'var(--text)' }}>{tk.title ?? '—'}</td>
-                  <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{tk.requester ?? '—'}</td>
-                  <td className="px-4 py-2 text-right font-mono">{fmtH(tk.period_minutes)}</td>
-                  <td className="px-4 py-2 text-right font-mono" style={{ color: 'var(--text-muted)' }}>{fmtH(tk.lifetime_minutes)}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr style={{ borderTop: '1px solid var(--border)', fontWeight: 600 }}>
-                <td colSpan={3} className="px-4 py-2 text-right">Totais ({rows.length} {rows.length === 1 ? 'ticket' : 'tickets'})</td>
-                <td className="px-4 py-2 text-right font-mono">{fmtH(rows.reduce((s, r) => s + (r.period_minutes || 0), 0))}</td>
-                <td className="px-4 py-2 text-right font-mono">{fmtH(rows.reduce((s, r) => s + (r.lifetime_minutes || 0), 0))}</td>
-              </tr>
-            </tfoot>
-          </table>
+      <DataTable inline>
+        <DataTableHead>
+          <DataTableHeadRow>
+            <DataTableHeadCell>Ticket</DataTableHeadCell>
+            <DataTableHeadCell>Título</DataTableHeadCell>
+            <DataTableHeadCell>Solicitante</DataTableHeadCell>
+            <DataTableHeadCell align="right">Total no período</DataTableHeadCell>
+            <DataTableHeadCell align="right">Total histórico</DataTableHeadCell>
+          </DataTableHeadRow>
+        </DataTableHead>
+        <DataTableBody>
+          {loading ? (
+            <DataTableEmpty colSpan={5} message="Carregando…" />
+          ) : rows.map(tk => (
+            <DataTableRow key={tk.ticket}>
+              <DataTableCell>
+                <a href={`https://erpserv.movidesk.com/Ticket/Edit/${tk.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }}>#{tk.ticket}</a>
+              </DataTableCell>
+              <DataTableCell muted={false}>{tk.title ?? '—'}</DataTableCell>
+              <DataTableCell>{tk.requester ?? '—'}</DataTableCell>
+              <DataTableCell align="right" numeric muted={false}>{fmtH(tk.period_minutes)}</DataTableCell>
+              <DataTableCell align="right" numeric>{fmtH(tk.lifetime_minutes)}</DataTableCell>
+            </DataTableRow>
+          ))}
+        </DataTableBody>
+        {!loading && rows.length > 0 && (
+          <tfoot style={{ borderTop: '1px solid var(--border)' }}>
+            <tr>
+              <td colSpan={3} className="px-4 py-3 text-right text-[13px] font-semibold" style={{ color: 'var(--text)' }}>
+                Totais ({rows.length} {rows.length === 1 ? 'ticket' : 'tickets'})
+              </td>
+              <td className="px-4 py-3 text-right tabular-nums font-semibold text-[13px]" style={{ color: 'var(--text)' }}>{fmtH(rows.reduce((s, r) => s + (r.period_minutes || 0), 0))}</td>
+              <td className="px-4 py-3 text-right tabular-nums font-semibold text-[13px]" style={{ color: 'var(--text-muted)' }}>{fmtH(rows.reduce((s, r) => s + (r.lifetime_minutes || 0), 0))}</td>
+            </tr>
+          </tfoot>
         )}
-      </div>
+      </DataTable>
     </div>
   )
 }
 
-export function InlineExpensesTable({ rows, loading }: { rows: any[]; loading: boolean }) {
+export function InlineExpensesTable({ rows, loading, onReverseApproved, onReverseSuccess }: {
+  rows: any[]
+  loading: boolean
+  onReverseApproved?: boolean
+  onReverseSuccess?: () => void
+}) {
   const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  const [reversingId, setReversingId] = useState<number | null>(null)
+  const handleReverse = async (id: number) => {
+    if (!confirm('Estornar a aprovação desta despesa?')) return
+    setReversingId(id)
+    try {
+      await api.post(`/expenses/${id}/reverse-approval`, {})
+      toast.success('Aprovação estornada')
+      onReverseSuccess?.()
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Falha ao estornar aprovação')
+    } finally {
+      setReversingId(null)
+    }
+  }
+  const colSpan = onReverseApproved ? 4 : 3
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        boxShadow: 'var(--shadow-sm)',
+      }}
+    >
       <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Despesas do período</h3>
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{rows.length} registros</span>
+        <h3 className="ds-text-h2" style={{ color: 'var(--text)' }}>Despesas do período</h3>
+        <span className="ds-text-caption" style={{ color: 'var(--text-muted)' }}>{rows.length} registros</span>
       </div>
-      <div className="overflow-x-auto">
-        {loading ? (
-          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>
-        ) : rows.length === 0 ? (
-          <div className="py-10 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Sem despesas no período selecionado.</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Data</th>
-                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Colaborador</th>
-                <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td className="px-4 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
-                  <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
-                  <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{fmtBRL(Number(r.amount) || 0)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <DataTable inline>
+        <DataTableHead>
+          <DataTableHeadRow>
+            <DataTableHeadCell>Data</DataTableHeadCell>
+            <DataTableHeadCell>Colaborador</DataTableHeadCell>
+            <DataTableHeadCell align="right">Valor</DataTableHeadCell>
+            {onReverseApproved && <DataTableHeadCell align="right" />}
+          </DataTableHeadRow>
+        </DataTableHead>
+        <DataTableBody>
+          {loading ? (
+            <DataTableEmpty colSpan={colSpan} message="Carregando…" />
+          ) : rows.length === 0 ? (
+            <DataTableEmpty colSpan={colSpan} message="Sem despesas no período selecionado." />
+          ) : rows.map(r => {
+            const canReverse = onReverseApproved && isActionAllowed(r.status, 'reverse_approval')
+            return (
+              <DataTableRow key={r.id}>
+                <DataTableCell>{r.date ? r.date.split('-').reverse().join('/') : '—'}</DataTableCell>
+                <DataTableCell muted={false}>{r.user?.name ?? '—'}</DataTableCell>
+                <DataTableCell align="right" numeric muted={false}>{fmtBRL(Number(r.amount) || 0)}</DataTableCell>
+                {onReverseApproved && (
+                  <DataTableCell align="right">
+                    {canReverse && <ReverseApprovalButton onClick={() => handleReverse(r.id)} busy={reversingId === r.id} />}
+                  </DataTableCell>
+                )}
+              </DataTableRow>
+            )
+          })}
+        </DataTableBody>
+      </DataTable>
     </div>
   )
 }

@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { CheckSquare, Clock, FolderOpen, Receipt, Info } from 'lucide-react'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { SearchSelect } from '@/components/ui/search-select'
+import { KpiCard } from '@/components/ui/kpi-card'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -66,7 +67,11 @@ function fmtBRL(v: number | null | undefined) {
   if (v == null) return '—'
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
-function fmtDate(s: string) { return new Date(s).toLocaleDateString('pt-BR') }
+function fmtDate(s: string) {
+  // Sem shift de fuso — mantém DD/MM/AAAA literal do banco.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : new Date(s).toLocaleDateString('pt-BR')
+}
 
 // ─── Components ──────────────────────────────────────────────────────────────
 
@@ -82,27 +87,7 @@ function Tab({ label, active, onClick }: { label: string; active: boolean; onCli
   )
 }
 
-function MetricCard({ label, value, unit = '', icon: Icon, accent = 'default' }: {
-  label: string; value: string; unit?: string
-  icon: React.ElementType; accent?: 'default' | 'primary' | 'success' | 'info' | 'warning'
-}) {
-  const color = accent === 'primary' ? '#00F5FF' : accent === 'success' ? '#10B981' : accent === 'info' ? '#8B5CF6' : accent === 'warning' ? '#F59E0B' : 'var(--brand-text)'
-  const bg    = accent === 'primary' ? 'rgba(0,245,255,0.08)' : accent === 'success' ? 'rgba(16,185,129,0.10)' : accent === 'info' ? 'rgba(139,92,246,0.10)' : accent === 'warning' ? 'rgba(245,158,11,0.10)' : 'rgba(255,255,255,0.04)'
-  return (
-    <div className="rounded-2xl p-6 flex flex-col gap-4" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{label}</span>
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: bg }}>
-          <Icon size={16} color={color} />
-        </div>
-      </div>
-      <div className="flex items-end gap-1.5">
-        <span className="text-4xl font-extrabold tracking-tight" style={{ color, lineHeight: 1 }}>{value}</span>
-        {unit && <span className="text-lg font-medium mb-0.5" style={{ color: 'var(--brand-muted)' }}>{unit}</span>}
-      </div>
-    </div>
-  )
-}
+// MetricCard local removido — usar KpiCard de '@/components/ui/kpi-card'.
 
 function SkeletonCard() {
   return (
@@ -295,21 +280,21 @@ export default function FechadoPage() {
                 <NoTrackingNotice />
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <MetricCard
+                  <KpiCard
                     label="Horas Contratadas"
                     value={fmtH(summary.base_hours)}
                     unit="h"
                     icon={Clock}
                     accent="default"
                   />
-                  <MetricCard
+                  <KpiCard
                     label="Aportes"
                     value={fmtH(summary.contribution_hours)}
                     unit="h"
                     icon={Clock}
                     accent="success"
                   />
-                  <MetricCard
+                  <KpiCard
                     label="Total Contratado"
                     value={fmtH(summary.consumed_hours)}
                     unit="h"
@@ -319,7 +304,7 @@ export default function FechadoPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-1 gap-4">
-                  <MetricCard
+                  <KpiCard
                     label="Total em Despesas"
                     value={fmtBRL(summary.total_expenses)}
                     icon={Receipt}

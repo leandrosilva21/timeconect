@@ -6,12 +6,14 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
-import { BarChart2, Clock, TrendingUp, TrendingDown, AlertCircle, DollarSign, ChevronDown, ArrowUp, MousePointerClick, Download, MoreVertical, Calendar, User as UserIcon, Building2, Folder, Paperclip, FileText, X as CloseIcon, Eye } from 'lucide-react'
+import { BarChart2, Clock, TrendingUp, TrendingDown, AlertCircle, DollarSign, ChevronDown, ArrowUp, MousePointerClick, Download, MoreVertical, Calendar, User as UserIcon, Building2, Folder, Paperclip, FileText, X as CloseIcon, Eye, Undo2 } from 'lucide-react'
+import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
 import DashboardIndicators from '@/components/dashboard/DashboardIndicators'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { SearchSelect } from '@/components/ui/search-select'
+import { KpiCard } from '@/components/ui/kpi-card'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -74,7 +76,11 @@ function fmtBRL(v: number | null | undefined) {
   if (v == null) return '—'
   return formatBRL(v ?? 0)
 }
-function fmtDate(s: string) { return new Date(s).toLocaleDateString('pt-BR') }
+function fmtDate(s: string) {
+  // Mantém o dia/mês/ano literal do banco (YYYY-MM-DD) sem aplicar shift de fuso.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : new Date(s).toLocaleDateString('pt-BR')
+}
 
 const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                      'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
@@ -91,79 +97,7 @@ function buildMonthOptions() {
 
 const MONTH_OPTIONS = buildMonthOptions()
 
-// ─── Metric Card ─────────────────────────────────────────────────────────────
-
-function MetricCard({
-  label, value, unit = 'h', accent = 'default', icon: Icon,
-  monthFilter, onMonthChange, selectedMonth,
-}: {
-  label: string
-  value: string
-  unit?: string
-  accent?: 'default' | 'primary' | 'success' | 'danger' | 'warning'
-  icon?: React.ElementType
-  monthFilter?: boolean
-  onMonthChange?: (v: string) => void
-  selectedMonth?: string
-}) {
-  const color =
-    accent === 'primary' ? '#00F5FF' :
-    accent === 'success' ? '#10B981' :
-    accent === 'danger'  ? '#EF4444' :
-    accent === 'warning' ? '#F59E0B' :
-    'var(--brand-text)'
-
-  const bg =
-    accent === 'primary' ? 'rgba(0,245,255,0.08)'  :
-    accent === 'success' ? 'rgba(16,185,129,0.10)' :
-    accent === 'danger'  ? 'rgba(239,68,68,0.10)'  :
-    accent === 'warning' ? 'rgba(245,158,11,0.10)' :
-    'rgba(255,255,255,0.04)'
-
-  return (
-    <div
-      className="rounded-2xl p-5 flex flex-col gap-3 transition-all duration-150"
-      style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          {Icon && (
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: bg }}>
-              <Icon size={13} color={color} />
-            </div>
-          )}
-          <span className="text-xs font-semibold uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>
-            {label}
-          </span>
-        </div>
-        {monthFilter && onMonthChange && (
-          <div className="relative shrink-0">
-            <select
-              value={selectedMonth ?? ''}
-              onChange={e => onMonthChange(e.target.value)}
-              className="text-[10px] rounded-lg pr-5 pl-2 py-1 appearance-none outline-none cursor-pointer"
-              style={{
-                background: 'var(--brand-bg)',
-                border: '1px solid var(--brand-border)',
-                color: 'var(--brand-muted)',
-              }}
-            >
-              <option value="">Mês/Ano</option>
-              {MONTH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            <ChevronDown size={9} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--brand-subtle)' }} />
-          </div>
-        )}
-      </div>
-      {/* Value */}
-      <div className="flex items-end gap-1.5">
-        <span className="text-4xl font-extrabold tracking-tight" style={{ color, lineHeight: 1 }}>{value}</span>
-        {unit && <span className="text-base font-medium mb-0.5" style={{ color: 'var(--brand-muted)' }}>{unit}</span>}
-      </div>
-    </div>
-  )
-}
+// MetricCard local removido — agora usamos KpiCard de '@/components/ui/kpi-card'.
 
 // ─── Breakdown Card ───────────────────────────────────────────────────────────
 
@@ -298,8 +232,12 @@ export default function BankHoursFixedPage() {
 
   const [inlineRows, setInlineRows] = useState<any[]>([])
   const [inlineLoading, setInlineLoading] = useState(false)
+  const [inlineReloadKey, setInlineReloadKey] = useState(0)
   const [ticketSummary, setTicketSummary] = useState<Array<{ticket: string; title: string|null; requester: string|null; period_minutes: number; lifetime_minutes: number}>>([])
   const [ticketSummaryLoading, setTicketSummaryLoading] = useState(false)
+  // Cliente e Consultor não estornam aprovação — só admin, coord e parceiro_admin.
+  const canReverseApproval = !!user && user.type !== 'consultor' && user.type !== 'cliente'
+  const reloadInline = () => setInlineReloadKey(k => k + 1)
   useEffect(() => {
     // carrega lista inline conforme aba selecionada
     const isTimesheets = activeTab === 'maintenance' || activeTab === 'architecture'
@@ -342,7 +280,7 @@ export default function BankHoursFixedPage() {
     } else {
       setTicketSummary([])
     }
-  }, [activeTab, selectedCustomer, selectedProject, dateFrom, dateTo, refMonth, refYear, isLeafProject, user?.customer_id])
+  }, [activeTab, selectedCustomer, selectedProject, dateFrom, dateTo, refMonth, refYear, isLeafProject, user?.customer_id, inlineReloadKey])
 
   // Modais da aba Projetos: Ver Apontamentos + Detalhe
   const [projectTSModal, setProjectTSModal] = useState<{ projectId: number; projectName: string; isClosed?: boolean } | null>(null)
@@ -474,33 +412,61 @@ export default function BankHoursFixedPage() {
       .finally(() => setLoadingSummary(false))
   }, [baseParams, resolveMonthYear, hasFilters])
 
+  // Indica se o usuário limpou o filtro de data (ambos os modos vazios) — nesse caso
+  // omitimos month/year/date_from/date_to do request pra trazer projetos de qualquer período.
+  const dateFilterCleared = refMonth == null && refYear == null && !dateFrom && !dateTo
+
+  // Legenda do "Consumo do Mês" — reflete o período efetivo usado pelo summary.
+  const MONTH_NAMES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+  const monthConsumptionHint = (() => {
+    if (dateFrom && dateTo) {
+      const fmt = (s: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); return m ? `${m[3]}/${m[2]}/${m[1]}` : s }
+      return `Período: ${fmt(dateFrom)} a ${fmt(dateTo)}`
+    }
+    if (refMonth && refYear) return `${MONTH_NAMES_PT[refMonth - 1]} ${refYear}`
+    const now = new Date()
+    return `Mês vigente — ${MONTH_NAMES_PT[now.getMonth()]} ${now.getFullYear()}`
+  })()
+
   // Projects tab data
   const fetchProjects = useCallback(() => {
     if (!hasFilters) return
     const p = baseParams()
-    const [toM, toY] = resolveMonthYear()
-    p.set('month', String(toM)); p.set('year', String(toY))
+    if (!dateFilterCleared) {
+      if (dateFrom) p.set('date_from', dateFrom)
+      if (dateTo)   p.set('date_to',   dateTo)
+      if (!dateFrom && !dateTo) {
+        const [toM, toY] = resolveMonthYear()
+        p.set('month', String(toM)); p.set('year', String(toY))
+      }
+    }
     p.set('service_type_name', 'Projeto')
     setLoadingProjects(true)
     api.get<any>(`/dashboards/bank-hours-fixed/projects?${p}`)
       .then(r => setProjectsList(Array.isArray(r?.data) ? r.data : []))
       .catch(() => setProjectsList([]))
       .finally(() => setLoadingProjects(false))
-  }, [baseParams, resolveMonthYear, hasFilters])
+  }, [baseParams, resolveMonthYear, hasFilters, dateFilterCleared, dateFrom, dateTo])
 
   // Maintenance tab data
   const fetchMaintenance = useCallback(() => {
     if (!hasFilters) return
     const p = baseParams()
-    const [toM, toY] = resolveMonthYear()
-    p.set('month', String(toM)); p.set('year', String(toY))
+    if (!dateFilterCleared) {
+      if (dateFrom) p.set('date_from', dateFrom)
+      if (dateTo)   p.set('date_to',   dateTo)
+      if (!dateFrom && !dateTo) {
+        const [toM, toY] = resolveMonthYear()
+        p.set('month', String(toM)); p.set('year', String(toY))
+      }
+    }
     p.set('service_type_name', 'Sustentação')
     setLoadingMaint(true)
     api.get<any>(`/dashboards/bank-hours-fixed/projects?${p}`)
       .then(r => setMaintList(Array.isArray(r?.data) ? r.data : []))
       .catch(() => setMaintList([]))
       .finally(() => setLoadingMaint(false))
-  }, [baseParams, resolveMonthYear, hasFilters])
+  }, [baseParams, resolveMonthYear, hasFilters, dateFilterCleared, dateFrom, dateTo])
 
   useEffect(() => { fetchSummary() }, [fetchSummary])
   useEffect(() => { if (activeTab === 'projects')    fetchProjects()    }, [fetchProjects, activeTab])
@@ -639,7 +605,7 @@ export default function BankHoursFixedPage() {
                   month={refMonth}
                   year={refYear}
                   onChange={(m, y) => {
-                    if (m === 0) { setRefMonth(null); setRefYear(null) }
+                    if (m === 0) { setRefMonth(null); setRefYear(null); setDateFrom(''); setDateTo('') }
                     else { setRefMonth(m); setRefYear(y); setDateFrom(''); setDateTo('') }
                   }}
                 />
@@ -720,10 +686,10 @@ export default function BankHoursFixedPage() {
                   <>
                     {/* Row 1: 5 cards */}
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                      <MetricCard label="Horas Contratadas" value={fmtH(summary.contracted_hours)} icon={BarChart2} />
-                      <MetricCard label="Aporte de Horas"   value={fmtH(summary.contributed_hours)} icon={TrendingUp} />
+                      <KpiCard label="Horas Contratadas" value={fmtH(summary.contracted_hours)} icon={BarChart2} />
+                      <KpiCard label="Aporte de Horas"   value={fmtH(summary.contributed_hours)} icon={TrendingUp} />
                       {isLeafProject ? (
-                        <MetricCard label="Consumo Acumulado" value={fmtH(summary.consumed_hours)} icon={Clock} accent="primary" />
+                        <KpiCard label="Consumo Acumulado" value={fmtH(summary.consumed_hours)} icon={Clock} accent="primary" />
                       ) : (
                         <ConsumedBreakdownCard
                           total={summary.consumed_hours}
@@ -732,13 +698,14 @@ export default function BankHoursFixedPage() {
                           arquitetura={summary.architecture_consumed_hours}
                         />
                       )}
-                      <MetricCard
+                      <KpiCard
                         label="Consumo do Mês"
                         value={fmtH(summary.month_consumed_hours)}
+                        hint={monthConsumptionHint}
                         icon={Clock}
                         accent="default"
                       />
-                      <MetricCard
+                      <KpiCard
                         label="Saldo de Horas"
                         value={fmtH(summary.hours_balance)}
                         icon={summary.hours_balance >= 0 ? TrendingUp : TrendingDown}
@@ -749,14 +716,14 @@ export default function BankHoursFixedPage() {
                     {/* Row 2: 3 highlight cards (oculto em modo leaf) */}
                     {!isLeafProject && (
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <MetricCard
+                        <KpiCard
                           label="Horas Excedentes"
                           value={fmtH(summary.exceeded_hours)}
                           icon={AlertCircle}
                           accent={summary.exceeded_hours > 0 ? 'danger' : 'default'}
                         />
-                        <MetricCard label="Valor Hora"   value={fmtBRL(summary.hourly_rate)}   unit="" icon={DollarSign} />
-                        <MetricCard
+                        <KpiCard label="Valor Hora"   value={fmtBRL(summary.hourly_rate)}   unit="" icon={DollarSign} />
+                        <KpiCard
                           label="Valor a Pagar"
                           value={fmtBRL(summary.amount_to_pay)}
                           unit=""
@@ -770,7 +737,7 @@ export default function BankHoursFixedPage() {
                     {isLeafProject && (
                       <>
                         <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
-                        <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="leaf" onRowClick={setInlineDetail} />
+                        <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="leaf" onRowClick={setInlineDetail} onReverseApproved={canReverseApproval} onReverseSuccess={reloadInline} />
                       </>
                     )}
 
@@ -818,16 +785,17 @@ export default function BankHoursFixedPage() {
             {activeTab === 'projects' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <MetricCard
+                  <KpiCard
                     label="Consumo Acumulado"
                     value={fmtH(summary?.projects_consumed_hours ?? summary?.consumed_hours ?? 0)}
                     icon={Clock}
                     accent="primary"
                   />
-                  <MetricCard
+                  <KpiCard
                     label="Consumo do Mês"
                     value={fmtH(summary?.projects_month_consumed_hours ?? summary?.month_consumed_hours ?? 0)}
                     icon={Clock}
+                    hint={monthConsumptionHint}
                   />
                 </div>
                 <ProjectsTable items={projectsList} loading={loadingProjects} />
@@ -838,11 +806,11 @@ export default function BankHoursFixedPage() {
             {activeTab === 'architecture' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <MetricCard label="Consumo Acumulado" value={fmtH(summary?.architecture_consumed_hours ?? 0)} icon={Clock} accent="primary" />
-                  <MetricCard label="Consumo do Mês"    value={fmtH(summary?.architecture_month_consumed_hours ?? 0)} icon={Clock} />
+                  <KpiCard label="Consumo Acumulado" value={fmtH(summary?.architecture_consumed_hours ?? 0)} icon={Clock} accent="primary" />
+                  <KpiCard label="Consumo do Mês"    value={fmtH(summary?.architecture_month_consumed_hours ?? 0)} icon={Clock} hint={monthConsumptionHint} />
                 </div>
                 <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
-                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="architecture" onRowClick={setInlineDetail} />
+                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="architecture" onRowClick={setInlineDetail} onReverseApproved={canReverseApproval} onReverseSuccess={reloadInline} />
               </div>
             )}
 
@@ -850,11 +818,11 @@ export default function BankHoursFixedPage() {
             {activeTab === 'maintenance' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <MetricCard label="Consumo Acumulado" value={fmtH(summary?.maintenance_consumed_hours ?? 0)} icon={Clock} accent="primary" />
-                  <MetricCard label="Consumo do Mês"    value={fmtH(summary?.maintenance_month_consumed_hours ?? summary?.month_consumed_hours ?? 0)} icon={Clock} />
+                  <KpiCard label="Consumo Acumulado" value={fmtH(summary?.maintenance_consumed_hours ?? 0)} icon={Clock} accent="primary" />
+                  <KpiCard label="Consumo do Mês"    value={fmtH(summary?.maintenance_month_consumed_hours ?? summary?.month_consumed_hours ?? 0)} icon={Clock} hint={monthConsumptionHint} />
                 </div>
                 <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
-                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="maintenance" onRowClick={setInlineDetail} />
+                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} variant="maintenance" onRowClick={setInlineDetail} onReverseApproved={canReverseApproval} onReverseSuccess={reloadInline} />
                 <InlineTicketSummaryTable rows={ticketSummary} loading={ticketSummaryLoading} />
               </div>
             )}
@@ -878,9 +846,9 @@ export default function BankHoursFixedPage() {
               return (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <MetricCard label="Quantidade"    value={String(inlineRows.length)} icon={DollarSign} />
-                    <MetricCard label="Valor Total"   value={fmtBRL(totalAmount)} icon={DollarSign} />
-                    <MetricCard label="Valor a Pagar" value={fmtBRL(toPay)} icon={DollarSign} accent="primary" />
+                    <KpiCard label="Quantidade"    value={String(inlineRows.length)} icon={DollarSign} />
+                    <KpiCard label="Valor Total"   value={fmtBRL(totalAmount)} icon={DollarSign} />
+                    <KpiCard label="Valor a Pagar" value={fmtBRL(toPay)} icon={DollarSign} accent="primary" />
                   </div>
                   <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
                   <InlineExpensesTable rows={inlineRows} loading={inlineLoading} />
@@ -1172,9 +1140,43 @@ function IndicatorCard({
   )
 }
 
-function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowClick }: { rows: any[]; loading: boolean; variant?: 'maintenance' | 'architecture' | 'leaf'; onRowClick?: (r: any) => void }) {
+function ReverseApprovalBtn({ onClick, busy }: { onClick: () => void; busy: boolean }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onClick() }}
+      disabled={busy}
+      title="Estornar aprovação"
+      className="inline-flex items-center justify-center p-1.5 rounded-md hover:bg-white/5 disabled:opacity-40"
+      style={{ color: '#f87171' }}
+    >
+      <Undo2 size={13} />
+    </button>
+  )
+}
+
+function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowClick, onReverseApproved, onReverseSuccess }: {
+  rows: any[]; loading: boolean
+  variant?: 'maintenance' | 'architecture' | 'leaf'
+  onRowClick?: (r: any) => void
+  onReverseApproved?: boolean
+  onReverseSuccess?: () => void
+}) {
   const isArch = variant === 'architecture'
   const isLeaf = variant === 'leaf'
+  const [reversingId, setReversingId] = useState<number | null>(null)
+  const handleReverse = async (id: number) => {
+    if (!confirm('Estornar a aprovação deste apontamento?')) return
+    setReversingId(id)
+    try {
+      await api.post(`/timesheets/${id}/reverse-approval`, {})
+      toast.success('Aprovação estornada')
+      onReverseSuccess?.()
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Falha ao estornar aprovação')
+    } finally {
+      setReversingId(null)
+    }
+  }
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
       <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -1199,15 +1201,21 @@ function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowCl
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
+              {rows.map(r => {
+                const canReverse = onReverseApproved && String(r.status ?? '').toLowerCase() === 'approved'
+                return (
                 <tr key={r.id} className={onRowClick ? 'cursor-pointer' : ''} onClick={onRowClick ? () => onRowClick(r) : undefined} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td className="px-4 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
                   <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
                   <td className="px-4 py-2 max-w-2xl truncate" style={{ color: 'var(--text-muted)' }} title={r.description ?? '—'}>{r.description ?? '—'}</td>
                   <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
-                  {onRowClick && <td className="px-2 py-2"><Eye size={14} style={{ color: 'var(--text-muted)' }} /></td>}
+                  <td className="px-2 py-2 whitespace-nowrap text-right">
+                    {canReverse && <ReverseApprovalBtn onClick={() => handleReverse(r.id)} busy={reversingId === r.id} />}
+                    {onRowClick && <Eye size={14} className="inline-block ml-1" style={{ color: 'var(--text-muted)' }} />}
+                  </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         ) : isLeaf ? (
@@ -1225,7 +1233,9 @@ function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowCl
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
+              {rows.map(r => {
+                const canReverse = onReverseApproved && String(r.status ?? '').toLowerCase() === 'approved'
+                return (
                 <tr key={r.id} className={onRowClick ? 'cursor-pointer' : ''} onClick={onRowClick ? () => onRowClick(r) : undefined} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td className="px-3 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
                   <td className="px-3 py-2">{r.user?.name ?? '—'}</td>
@@ -1233,9 +1243,13 @@ function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowCl
                   <td className="px-3 py-2 whitespace-nowrap">{r.start_time ?? '—'}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{r.end_time ?? '—'}</td>
                   <td className="px-3 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}</td>
-                  {onRowClick && <td className="px-2 py-2"><Eye size={14} style={{ color: 'var(--text-muted)' }} /></td>}
+                  <td className="px-2 py-2 whitespace-nowrap text-right">
+                    {canReverse && <ReverseApprovalBtn onClick={() => handleReverse(r.id)} busy={reversingId === r.id} />}
+                    {onRowClick && <Eye size={14} className="inline-block ml-1" style={{ color: 'var(--text-muted)' }} />}
+                  </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         ) : (
@@ -1258,6 +1272,7 @@ function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowCl
             <tbody>
               {rows.map(r => {
                 const desc = r.description ?? '—'
+                const canReverse = onReverseApproved && String(r.status ?? '').toLowerCase() === 'approved'
                 return (
                   <tr key={r.id} className={onRowClick ? 'cursor-pointer' : ''} onClick={onRowClick ? () => onRowClick(r) : undefined} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td className="px-3 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
@@ -1273,7 +1288,10 @@ function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowCl
                     <td className="px-3 py-2 whitespace-nowrap">{r.start_time ?? '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{r.end_time ?? '—'}</td>
                     <td className="px-3 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}</td>
-                    {onRowClick && <td className="px-2 py-2"><Eye size={14} style={{ color: 'var(--text-muted)' }} /></td>}
+                    <td className="px-2 py-2 whitespace-nowrap text-right">
+                      {canReverse && <ReverseApprovalBtn onClick={() => handleReverse(r.id)} busy={reversingId === r.id} />}
+                      {onRowClick && <Eye size={14} className="inline-block ml-1" style={{ color: 'var(--text-muted)' }} />}
+                    </td>
                   </tr>
                 )
               })}
@@ -1355,8 +1373,26 @@ function ExportButton({ onClick, disabled }: { onClick: () => void; disabled: bo
   )
 }
 
-function InlineExpensesTable({ rows, loading }: { rows: any[]; loading: boolean }) {
+function InlineExpensesTable({ rows, loading, onReverseApproved, onReverseSuccess }: {
+  rows: any[]; loading: boolean
+  onReverseApproved?: boolean
+  onReverseSuccess?: () => void
+}) {
   const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  const [reversingId, setReversingId] = useState<number | null>(null)
+  const handleReverse = async (id: number) => {
+    if (!confirm('Estornar a aprovação desta despesa?')) return
+    setReversingId(id)
+    try {
+      await api.post(`/expenses/${id}/reverse-approval`, {})
+      toast.success('Aprovação estornada')
+      onReverseSuccess?.()
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Falha ao estornar aprovação')
+    } finally {
+      setReversingId(null)
+    }
+  }
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
       <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -1375,16 +1411,25 @@ function InlineExpensesTable({ rows, loading }: { rows: any[]; loading: boolean 
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Data</th>
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Colaborador</th>
                 <th className="text-right px-4 py-2 text-xs uppercase tracking-wide">Valor</th>
+                {onReverseApproved && <th className="px-2 py-2 w-8"></th>}
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td className="px-4 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
-                  <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
-                  <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{fmtBRL(Number(r.amount) || 0)}</td>
-                </tr>
-              ))}
+              {rows.map(r => {
+                const canReverse = onReverseApproved && String(r.status ?? '').toLowerCase() === 'approved'
+                return (
+                  <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td className="px-4 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                    <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
+                    <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{fmtBRL(Number(r.amount) || 0)}</td>
+                    {onReverseApproved && (
+                      <td className="px-2 py-2 whitespace-nowrap text-right">
+                        {canReverse && <ReverseApprovalBtn onClick={() => handleReverse(r.id)} busy={reversingId === r.id} />}
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}

@@ -71,10 +71,10 @@ function fmtMonth(m: string) {
   return `${names[parseInt(mo) - 1]}/${y}`
 }
 
-function MiniBar({ value, max, color = '#00F5FF' }: { value: number; max: number; color?: string }) {
+function MiniBar({ value, max, color = 'var(--primary)' }: { value: number; max: number; color?: string }) {
   const pct = max > 0 ? Math.max(3, (value / max) * 100) : 0
   return (
-    <div className="w-24 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+    <div className="w-24 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
       <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
     </div>
   )
@@ -375,33 +375,33 @@ export default function InvestimentoComercialPage() {
                   </Tr>
                 )}
                 {/* Linha do cliente (pai) */}
-                <Tr baseBackground={erpservRow ? 'rgba(0,245,255,0.04)' : undefined}>
+                <Tr baseBackground={erpservRow ? 'var(--primary-soft)' : undefined}>
                   <Td>
                     <button onClick={() => toggleCustomerExpand(customer.id)}
                       className="flex items-center gap-2 text-left w-full hover:opacity-80 transition-opacity">
                       {expanded
-                        ? <ChevronDown size={14} style={{ color: 'var(--brand-muted)' }} />
-                        : <ChevronRight size={14} style={{ color: 'var(--brand-muted)' }} />}
-                      <span className="font-medium text-sm" style={{ color: erpservRow ? '#00F5FF' : 'var(--brand-text)' }}>{customer.name}</span>
+                        ? <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
+                        : <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />}
+                      <span className="font-semibold text-sm" style={{ color: 'var(--text)' }}>{customer.name}</span>
                       {erpservRow && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded uppercase tracking-widest font-bold"
-                          style={{ background: 'rgba(0,245,255,0.12)', color: '#00F5FF', border: '1px solid rgba(0,245,255,0.25)' }}>
+                          style={{ background: 'var(--primary)', color: 'var(--primary-fg)' }}>
                           Casa
                         </span>
                       )}
-                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>{projects.length}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>{projects.length}</span>
                     </button>
                   </Td>
-                  <Td><span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>—</span></Td>
+                  <Td><span className="text-xs" style={{ color: 'var(--text-light)' }}>—</span></Td>
                   <Td>
                     {totalConsultorIds.size === 0
-                      ? <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhum alocado</span>
-                      : <span className="text-xs" style={{ color: 'var(--brand-muted)' }}>{totalConsultorIds.size} {totalConsultorIds.size === 1 ? 'consultor' : 'consultores'}</span>}
+                      ? <span className="text-xs" style={{ color: 'var(--text-light)' }}>Nenhum alocado</span>
+                      : <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{totalConsultorIds.size} {totalConsultorIds.size === 1 ? 'consultor' : 'consultores'}</span>}
                   </Td>
                   <Td>
                     {hoursLoading
-                      ? <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>…</span>
-                      : <span className="text-sm font-semibold tabular-nums" style={{ color: totalHoursCustomer > 0 ? '#00F5FF' : 'var(--brand-subtle)' }}>{fmtHours(totalHoursCustomer)}</span>}
+                      ? <span className="text-xs" style={{ color: 'var(--text-light)' }}>…</span>
+                      : <span className="text-sm font-semibold tabular-nums" style={{ color: totalHoursCustomer > 0 ? 'var(--text)' : 'var(--text-light)' }}>{fmtHours(totalHoursCustomer)}</span>}
                   </Td>
                   <Td></Td>
                 </Tr>
@@ -415,29 +415,29 @@ export default function InvestimentoComercialPage() {
                           <span className="text-zinc-600">└</span>
                           <span className="text-sm" style={{ color: 'var(--brand-text)' }}>{project.name || '—'}</span>
                           {project.categoria_interna && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider"
-                              style={{ background: 'rgba(167,139,250,0.12)', color: '#a78bfa' }}>
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider"
+                              style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
                               {project.categoria_interna}
                             </span>
                           )}
                         </span>
                       </Td>
-                      <Td><span className="text-xs font-mono px-2 py-0.5 rounded" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{project.code}</span></Td>
+                      <Td><span className="text-xs font-mono font-medium px-2 py-0.5 rounded" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>{project.code}</span></Td>
                       <Td>
                         {project.consultants.length === 0
                           ? <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhum alocado</span>
                           : <div className="flex flex-wrap gap-1">
                               {project.consultants.slice(0, 4).map(c => (
-                                <span key={c.id} className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)' }}>{c.name.split(' ')[0]}</span>
+                                <span key={c.id} className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--surface-hover)', color: 'var(--brand-muted)' }}>{c.name.split(' ')[0]}</span>
                               ))}
-                              {project.consultants.length > 4 && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>+{project.consultants.length - 4}</span>}
+                              {project.consultants.length > 4 && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--surface-hover)', color: 'var(--brand-subtle)' }}>+{project.consultants.length - 4}</span>}
                             </div>
                         }
                       </Td>
                       <Td>
                         {hoursLoading
-                          ? <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>…</span>
-                          : <span className="text-sm font-semibold tabular-nums" style={{ color: hours > 0 ? '#00F5FF' : 'var(--brand-subtle)' }}>{fmtHours(hours)}</span>
+                          ? <span className="text-xs" style={{ color: 'var(--text-light)' }}>…</span>
+                          : <span className="text-sm font-semibold tabular-nums" style={{ color: hours > 0 ? 'var(--text)' : 'var(--text-light)' }}>{fmtHours(hours)}</span>
                         }
                       </Td>
                       <Td>
@@ -472,13 +472,13 @@ export default function InvestimentoComercialPage() {
     return (
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.15)' }}>
-            <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'var(--brand-subtle)' }}>Total Horas</p>
-            <p className="text-xl font-bold" style={{ color: '#00F5FF' }}>{fmtHours(totalH)}</p>
+          <div className="rounded-xl px-4 py-3" style={{ background: 'var(--primary-soft)', border: '1px solid var(--primary)' }}>
+            <p className="text-[10px] uppercase tracking-widest mb-1 font-semibold" style={{ color: 'var(--text-muted)' }}>Total Horas</p>
+            <p className="text-xl font-bold tabular-nums" style={{ color: 'var(--primary)' }}>{fmtHours(totalH)}</p>
           </div>
-          <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.2)' }}>
-            <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'var(--brand-subtle)' }}>Custo Total</p>
-            <p className="text-xl font-bold" style={{ color: '#8B5CF6' }}>{fmtCurrency(totalC)}</p>
+          <div className="rounded-xl px-4 py-3" style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+            <p className="text-[10px] uppercase tracking-widest mb-1 font-semibold" style={{ color: 'var(--text-muted)' }}>Custo Total</p>
+            <p className="text-xl font-bold tabular-nums" style={{ color: 'var(--text)' }}>{fmtCurrency(totalC)}</p>
           </div>
         </div>
         <Table>
@@ -491,14 +491,14 @@ export default function InvestimentoComercialPage() {
                 <Td><span className="font-medium text-sm" style={{ color: 'var(--brand-text)' }}>{r.customer_name}</span></Td>
                 <Td>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold tabular-nums" style={{ color: '#00F5FF' }}>{fmtHours(r.total_hours)}</span>
-                    <MiniBar value={r.total_hours} max={maxHours} color="#00F5FF" />
+                    <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtHours(r.total_hours)}</span>
+                    <MiniBar value={r.total_hours} max={maxHours} color="var(--primary)" />
                   </div>
                 </Td>
                 <Td>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold tabular-nums" style={{ color: '#8B5CF6' }}>{fmtCurrency(r.total_cost)}</span>
-                    <MiniBar value={r.total_cost} max={maxCost} color="#8B5CF6" />
+                    <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtCurrency(r.total_cost)}</span>
+                    <MiniBar value={r.total_cost} max={maxCost} color="var(--text-muted)" />
                   </div>
                 </Td>
               </Tr>
@@ -529,12 +529,12 @@ export default function InvestimentoComercialPage() {
                 <Td><span className="font-medium text-sm" style={{ color: 'var(--brand-text)' }}>{r.user_name}</span></Td>
                 <Td>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold tabular-nums" style={{ color: '#00F5FF' }}>{fmtHours(r.total_hours)}</span>
+                    <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtHours(r.total_hours)}</span>
                     <MiniBar value={r.total_hours} max={maxH} />
                   </div>
                 </Td>
-                <Td><span className="text-sm font-semibold tabular-nums" style={{ color: '#8B5CF6' }}>{fmtCurrency(r.total_cost)}</span></Td>
-                <Td><span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)' }}>{r.num_customers} cliente{r.num_customers !== 1 ? 's' : ''}</span></Td>
+                <Td><span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtCurrency(r.total_cost)}</span></Td>
+                <Td><span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--surface-hover)', color: 'var(--brand-muted)' }}>{r.num_customers} cliente{r.num_customers !== 1 ? 's' : ''}</span></Td>
                 <Td>
                   {myDetail.length > 0 && (
                     <button onClick={() => setExpandedConsultant(expanded ? null : r.user_id)}
@@ -547,7 +547,7 @@ export default function InvestimentoComercialPage() {
                 </Td>
               </Tr>,
               ...(expanded ? myDetail.map(d => (
-                <Tr key={`${r.user_id}-${d.customer_id}`} baseBackground="rgba(0,245,255,0.02)">
+                <Tr key={`${r.user_id}-${d.customer_id}`} baseBackground="var(--surface-hover)">
                   <Td>
                     <span className="ml-5 text-xs" style={{ color: 'var(--brand-subtle)' }}>↳ {d.customer_name}</span>
                   </Td>
@@ -579,8 +579,8 @@ export default function InvestimentoComercialPage() {
               const pct = maxH > 0 ? (r.total_hours / maxH) * 100 : 0
               return (
                 <div key={r.month} className="flex-1 flex flex-col items-center gap-1 group">
-                  <span className="text-[9px] opacity-0 group-hover:opacity-100 transition-opacity tabular-nums" style={{ color: '#00F5FF' }}>{fmtHours(r.total_hours)}</span>
-                  <div className="w-full rounded-t-sm transition-all" style={{ height: `${Math.max(4, pct)}%`, background: 'rgba(0,245,255,0.5)', minHeight: 4 }} />
+                  <span className="text-[9px] opacity-0 group-hover:opacity-100 transition-opacity tabular-nums" style={{ color: 'var(--primary)' }}>{fmtHours(r.total_hours)}</span>
+                  <div className="w-full rounded-t-sm transition-all" style={{ height: `${Math.max(4, pct)}%`, background: 'var(--primary)', minHeight: 4 }} />
                   <span className="text-[9px] rotate-0 whitespace-nowrap" style={{ color: 'var(--brand-subtle)', fontSize: '8px' }}>{fmtMonth(r.month)}</span>
                 </div>
               )
@@ -597,14 +597,14 @@ export default function InvestimentoComercialPage() {
                 <Td><span className="font-medium text-sm" style={{ color: 'var(--brand-text)' }}>{fmtMonth(r.month)}</span></Td>
                 <Td>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold tabular-nums" style={{ color: '#00F5FF' }}>{fmtHours(r.total_hours)}</span>
+                    <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtHours(r.total_hours)}</span>
                     <MiniBar value={r.total_hours} max={maxH} />
                   </div>
                 </Td>
                 <Td>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold tabular-nums" style={{ color: '#8B5CF6' }}>{fmtCurrency(r.total_cost)}</span>
-                    <MiniBar value={r.total_cost} max={maxC} color="#8B5CF6" />
+                    <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtCurrency(r.total_cost)}</span>
+                    <MiniBar value={r.total_cost} max={maxC} color="var(--text-muted)" />
                   </div>
                 </Td>
               </Tr>
@@ -629,8 +629,8 @@ export default function InvestimentoComercialPage() {
             <Tr key={i}>
               <Td><span className="text-sm" style={{ color: 'var(--brand-text)' }}>{r.user_name}</span></Td>
               <Td><span className="text-sm" style={{ color: 'var(--brand-muted)' }}>{r.customer_name}</span></Td>
-              <Td><span className="text-sm font-semibold tabular-nums" style={{ color: '#00F5FF' }}>{fmtHours(r.total_hours)}</span></Td>
-              <Td><span className="text-sm font-semibold tabular-nums" style={{ color: '#8B5CF6' }}>{fmtCurrency(r.total_cost)}</span></Td>
+              <Td><span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtHours(r.total_hours)}</span></Td>
+              <Td><span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtCurrency(r.total_cost)}</span></Td>
             </Tr>
           ))}
         </Tbody>
@@ -666,7 +666,7 @@ export default function InvestimentoComercialPage() {
             <span className="text-xs ml-auto" style={{ color: 'var(--brand-subtle)' }}>
               {filtered.length} cliente{filtered.length !== 1 ? 's' : ''}
               {filterMonth > 0 && !hoursLoading && (
-                <span> · <span style={{ color: '#00F5FF' }}>{fmtHours(totalHours)}</span> total</span>
+                <span> · <span className="font-semibold" style={{ color: 'var(--text)' }}>{fmtHours(totalHours)}</span> total</span>
               )}
             </span>
             <Button size="sm" variant="primary" onClick={() => setNewProjectOpen(true)}>
@@ -856,7 +856,7 @@ export default function InvestimentoComercialPage() {
             <div className="w-full max-w-md rounded-2xl p-6 flex flex-col gap-4" style={surfaceStyle}>
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs font-semibold" style={{ color: '#00F5FF' }}>Investimento Interno</p>
+                  <p className="text-xs font-semibold" style={{ color: 'var(--primary)' }}>Investimento Interno</p>
                   <h2 className="text-base font-bold mt-0.5" style={{ color: 'var(--brand-text)' }}>{modal.project!.customer?.name ?? '—'}</h2>
                   <p className="text-[11px] mt-0.5" style={{ color: 'var(--brand-subtle)' }}>{modal.project!.name} · <span className="font-mono">{modal.project!.code}</span></p>
                 </div>
@@ -896,11 +896,11 @@ export default function InvestimentoComercialPage() {
                       const u = usersById.get(id)
                       if (!u) return null
                       return (
-                        <span key={id} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full"
-                          style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-text)', border: '1px solid rgba(0,245,255,0.2)' }}>
+                        <span key={id} className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full"
+                          style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--primary)' }}>
                           {u.name}
                           <button onClick={() => removeUser(id)} className="hover:opacity-70 transition-opacity" aria-label="Remover">
-                            <X size={11} style={{ color: '#00F5FF' }} />
+                            <X size={11} style={{ color: 'var(--primary)' }} />
                           </button>
                         </span>
                       )

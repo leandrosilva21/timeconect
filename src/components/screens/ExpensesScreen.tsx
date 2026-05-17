@@ -515,7 +515,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
   }, [clienteProjects])
 
   const params = useMemo(() => {
-    const p = new URLSearchParams({ page: String(page), per_page: '100' })
+    const p = new URLSearchParams({ page: String(page), pageSize: '100' })
     if (status)       p.set('status',    status)
     if (isPaidFilter) p.set('is_paid',   isPaidFilter)
     if (dateFrom)     p.set('start_date', dateFrom)

@@ -83,19 +83,20 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
   const [loading, setLoading] = useState(false)
 
   const fetchData = useCallback(async () => {
-    if (!startDate || !endDate) return
     setLoading(true)
     try {
+      const qs = new URLSearchParams()
+      qs.set('project_id', String(projectId))
+      qs.set('pageSize', '100')
+      if (startDate) qs.set('start_date', startDate)
+      if (endDate)   qs.set('end_date',   endDate)
       if (tab === 'timesheets') {
-        const r = await api.get<any>(
-          `/timesheets?project_id=${projectId}&start_date=${startDate}&end_date=${endDate}&per_page=500&sort=date&direction=desc`
-        )
+        qs.set('sort', 'date'); qs.set('direction', 'desc')
+        const r = await api.get<any>(`/timesheets?${qs}`)
         const items = Array.isArray(r?.data) ? r.data : Array.isArray(r?.items) ? r.items : Array.isArray(r) ? r : []
         setTimesheets(items)
       } else {
-        const r = await api.get<any>(
-          `/expenses?project_id=${projectId}&start_date=${startDate}&end_date=${endDate}&per_page=500`
-        )
+        const r = await api.get<any>(`/expenses?${qs}`)
         const items = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : Array.isArray(r) ? r : []
         setExpenses(items)
       }
@@ -212,6 +213,17 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
                 style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
               />
             </div>
+            {(startDate || endDate) && (
+              <button
+                type="button"
+                onClick={() => { setStartDate(''); setEndDate('') }}
+                className="text-[11px] px-2 py-1.5 rounded-lg transition-colors"
+                style={{ color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}
+                title="Mostrar todos os períodos"
+              >
+                × Limpar
+              </button>
+            )}
           </div>
         </div>
 
@@ -221,7 +233,7 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
             <p className="text-center text-sm animate-pulse py-16" style={{ color: 'var(--brand-subtle)' }}>Carregando...</p>
           ) : tab === 'timesheets' ? (
             timesheets.length === 0 ? (
-              <p className="text-center text-sm py-16" style={{ color: 'var(--brand-subtle)' }}>Nenhum apontamento neste período.</p>
+              <p className="text-center text-sm py-16" style={{ color: 'var(--brand-subtle)' }}>{startDate || endDate ? 'Nenhum apontamento neste período.' : 'Nenhum apontamento.'}</p>
             ) : (
               <div className="p-5 space-y-4">
                 <div className="grid grid-cols-4 gap-3">

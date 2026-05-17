@@ -5,6 +5,7 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
+import { SearchSelect } from '@/components/ui/search-select'
 import {
   Building2, Briefcase, Clock, Headphones, TrendingUp, ChevronDown,
 } from 'lucide-react'
@@ -86,7 +87,11 @@ const HEALTH_META: Record<Health, { label: string; color: string; bg: string }> 
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
-function KpiCard({
+/**
+ * Card "hero" do portal cliente — layout horizontal (ícone grande à esquerda + label/valor à direita).
+ * Diferente do KpiCard genérico do design system (que é vertical). Renomeado pra evitar colisão.
+ */
+function PortalHeroCard({
   icon: Icon, label, value, accent,
 }: {
   icon: React.ElementType
@@ -94,18 +99,23 @@ function KpiCard({
   value: string
   accent: 'primary' | 'purple' | 'amber'
 }) {
-  const primary = useThemePrimary()
-  const primaryBg = primary === '#00F5FF' ? 'rgba(0,245,255,0.10)' : 'rgba(14,116,144,0.12)'
-  const color = accent === 'primary' ? primary : accent === 'purple' ? '#A78BFA' : '#F59E0B'
-  const bg    = accent === 'primary' ? primaryBg : accent === 'purple' ? 'rgba(167,139,250,0.10)' : 'rgba(245,158,11,0.10)'
+  const color = accent === 'primary' ? 'var(--primary)' : accent === 'purple' ? '#A78BFA' : 'var(--warning-border)'
+  const bg    = accent === 'primary' ? 'var(--primary-soft)' : accent === 'purple' ? 'rgba(167,139,250,0.12)' : 'var(--warning-bg)'
   return (
-    <div className="rounded-2xl p-5 flex items-center gap-4" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-      <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: bg }}>
-        <Icon size={18} color={color} />
+    <div
+      className="rounded-xl p-4 flex items-center gap-4"
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        boxShadow: 'var(--shadow-xs)',
+      }}
+    >
+      <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: bg, color }}>
+        <Icon size={20} />
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: 'var(--brand-subtle)' }}>{label}</p>
-        <p className="text-2xl font-extrabold tracking-tight leading-none" style={{ color }}>{value}</p>
+        <p className="text-[12px] font-medium uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>{label}</p>
+        <p className="text-[24px] font-semibold tracking-tight leading-none mt-1" style={{ color: 'var(--text)' }}>{value}</p>
       </div>
     </div>
   )
@@ -128,7 +138,14 @@ function MonthlyEvolution({ series }: { series: MonthlyPoint[] }) {
   const hasAny = series.some(p => p.tickets > 0 || p.consumed_hours > 0)
   const primary = useThemePrimary()
   return (
-    <div className="rounded-2xl p-5" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+    <div
+      className="rounded-xl p-5"
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        boxShadow: 'var(--shadow-sm)',
+      }}
+    >
       <div className="mb-1">
         <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--brand-muted)' }}>
           Evolução Mensal — Tickets e Consumo de Horas
@@ -171,9 +188,9 @@ function MonthlyEvolution({ series }: { series: MonthlyPoint[] }) {
 
 function HealthBar({ pct }: { pct: number | null }) {
   const p = pct ?? 0
-  const color = pct === null ? '#71717A' : pct >= 90 ? '#EF4444' : pct >= 70 ? '#F59E0B' : '#10B981'
+  const color = pct === null ? 'var(--text-light)' : pct >= 90 ? 'var(--danger-border)' : pct >= 70 ? 'var(--warning-border)' : 'var(--success-border)'
   return (
-    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
       <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, p)}%`, background: color }} />
     </div>
   )
@@ -198,17 +215,19 @@ function ProjectTreeNode({
   return (
     <>
       <li className={isChild ? 'px-5 py-3 flex items-center gap-3' : 'px-5 py-4 flex items-center gap-3'}>
-        {isChild && <span className="ml-4 text-zinc-600 select-none">└</span>}
+        {isChild && <span className="ml-4 select-none" style={{ color: 'var(--text-light)' }}>└</span>}
         {!isChild && hasChildren && (
-          <button onClick={onToggle} className="p-1 rounded hover:bg-white/[0.04]" aria-label={isExpanded ? 'Recolher' : 'Expandir'}>
-            <span style={{ color: 'var(--brand-subtle)', display: 'inline-block', transition: 'transform 120ms', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
+          <button onClick={onToggle} className="p-1 rounded transition-colors" style={{ color: 'var(--text-muted)' }} aria-label={isExpanded ? 'Recolher' : 'Expandir'}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+            <span style={{ display: 'inline-block', transition: 'transform 120ms', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
           </button>
         )}
         {!isChild && !hasChildren && <span className="w-7" />}
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>{p.code}</span>
+            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>{p.code}</span>
             <span className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>{p.name}</span>
             {p.contract_type && (
               <span className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>· {p.contract_type}</span>
@@ -346,16 +365,13 @@ export default function PortalClientePage() {
           </div>
 
           {canPickCustomer && customers.length > 0 && (
-            <div className="relative">
-              <select
-                value={customerId}
-                onChange={e => setCustomerId(e.target.value === '' ? '' : Number(e.target.value))}
-                className="appearance-none pr-9 pl-3 h-10 rounded-xl text-sm outline-none cursor-pointer"
-                style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
-              >
-                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--brand-subtle)' }} />
+            <div className="w-72">
+              <SearchSelect
+                value={customerId === '' ? '' : String(customerId)}
+                onChange={v => setCustomerId(v === '' ? '' : Number(v))}
+                options={customers}
+                placeholder="Buscar cliente..."
+              />
             </div>
           )}
         </div>
@@ -386,22 +402,34 @@ export default function PortalClientePage() {
           <>
             {/* KPIs */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <KpiCard
+              <PortalHeroCard
                 icon={Headphones}
                 label={`Tickets Abertos em ${summary.current_month_label}`}
                 value={String(summary.open_tickets_current_month)}
                 accent="amber"
               />
-              <KpiCard   icon={Briefcase}  label="Projetos"          value={String(summary.total_projects)} accent="primary" />
-              <KpiCard   icon={Clock}      label="Horas Contratadas" value={fmtH(summary.total_sold_hours)} accent="purple" />
+              <PortalHeroCard   icon={Briefcase}  label="Projetos"          value={String(summary.total_projects)} accent="primary" />
+              <PortalHeroCard   icon={Clock}      label="Horas Contratadas" value={fmtH(summary.total_sold_hours)} accent="purple" />
             </div>
 
-            {/* Evolução 12 meses */}
-            <MonthlyEvolution series={summary.monthly_series} />
+            {/* Evolução até mai/26 — meses anteriores aparecem zerados (real começa em mai/26) */}
+            <MonthlyEvolution
+              series={summary.monthly_series
+                .filter(p => (p.month ?? '') <= '2026-05')
+                .map(p => (p.month ?? '') < '2026-05' ? { ...p, tickets: 0, consumed_hours: 0 } : p)
+              }
+            />
 
 
             {/* Saúde dos projetos (não-Fechados) */}
-            <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <div
+              className="rounded-xl overflow-hidden"
+              style={{
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                boxShadow: 'var(--shadow-sm)',
+              }}
+            >
               <div className="px-5 py-3.5 flex items-center gap-2 border-b" style={{ borderColor: 'var(--brand-border)' }}>
                 <TrendingUp size={14} style={{ color: 'var(--brand-primary)' }} />
                 <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--brand-muted)' }}>Projetos</h2>

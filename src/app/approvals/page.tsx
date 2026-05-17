@@ -1,6 +1,7 @@
 'use client'
 
 import { AppLayout } from '@/components/layout/app-layout'
+import { PageHeader } from '@/components/ds'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -875,6 +876,11 @@ export default function ApprovalsPage() {
 
   return (
     <AppLayout title="Aprovações">
+      <PageHeader
+        icon={CheckSquare}
+        title="Aprovações"
+        subtitle="Pendências de apontamentos e despesas para análise"
+      />
 
       {/* ── Tabs ── */}
       <div className="flex items-center gap-2 mb-5">

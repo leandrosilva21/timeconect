@@ -684,10 +684,22 @@ export default function DashboardIndicators({ basePath, params, disabled = false
 
         {/* 6 — Evolução Mensal (Tickets acima de 8h removido) */}
         {(() => {
+          // Ordena cronologicamente: parse "mes/ano" e compara (year, month).
+          const MONTH_ABBR_TO_NUM: Record<string, number> = {
+            jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6,
+            jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12,
+          }
+          const monthKey = (s: string): number => {
+            const m = /^([a-zà-ú]{3,})\/?(\d{2,4})$/i.exec(s.trim().toLowerCase())
+            if (!m) return 0
+            const mon = MONTH_ABBR_TO_NUM[m[1].slice(0, 3)] ?? 0
+            const y = Number(m[2].length === 2 ? '20' + m[2] : m[2])
+            return y * 12 + mon
+          }
           const allMonths = Array.from(new Set([
             ...data.monthlyTix.map(d => d.month),
             ...data.monthlyConsum.map(d => d.month),
-          ])).sort()
+          ])).sort((a, b) => monthKey(a) - monthKey(b))
           const combined = allMonths.map(month => ({
             month,
             ticket_count:   data.monthlyTix.find(d => d.month === month)?.ticket_count   ?? 0,

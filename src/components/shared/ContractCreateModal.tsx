@@ -76,11 +76,12 @@ const isSustentacaoName = (name: string) => {
 }
 
 // Regra de combinação Tipo de Serviço × Tipo de Contrato:
-// - Projeto     → permite: BH Fixo, BH Mensal, Fechado          (proíbe: On Demand, SaaS, Cloud)
-// - Sustentação → permite: BH Fixo, BH Mensal, On Demand, Cloud (proíbe: Fechado, SaaS)
-// - Bizify      → permite: BH Fixo, Fechado, On Demand, SaaS    (proíbe: BH Mensal, Cloud)
+// - Projeto     → permite: BH Fixo, BH Mensal, Fechado, On Demand (proíbe: SaaS, Cloud)
+// - Sustentação → permite: BH Fixo, BH Mensal, On Demand, Cloud   (proíbe: Fechado, SaaS)
+// - Bizify      → permite: BH Fixo, Fechado, On Demand, SaaS      (proíbe: BH Mensal, Cloud)
 // Subprojeto (filho) → adicionalmente proíbe BH Mensal, SaaS e Cloud (mensalidade
-// fica no projeto pai; filho herda regra de cobrança).
+// fica no projeto pai; filho herda regra de cobrança). Filho On Demand consome
+// do pai via apontamentos (horas_contratadas=0, valor cobrado por hora apontada).
 // O contract_type atualmente selecionado é sempre mantido visível (caso de edição
 // de contrato pré-existente que viole a nova regra).
 const allowedForService = (
@@ -98,7 +99,7 @@ const allowedForService = (
     if (String(ct.id) === String(selectedContractTypeId ?? '')) return true
     const n = String(ct.name ?? '').toLowerCase()
     if (isSubproject && (n.includes('banco de horas mensal') || n.includes('saas') || n === 'cloud')) return false
-    if (isProjeto && (n.includes('on demand') || n.includes('saas') || n === 'cloud')) return false
+    if (isProjeto && (n.includes('saas') || n === 'cloud')) return false
     if (isSustenta && (n.includes('fechado') || n.includes('saas'))) return false
     if (isBizify && (n.includes('banco de horas mensal') || n === 'cloud')) return false
     return true
@@ -117,6 +118,7 @@ export function ContractCreateModal({
   const TABS = ['Cliente', 'Classificação', 'Faturamento', 'Despesas', 'Operacional', 'Contatos', 'Financeiro', 'Comercial', 'Observações']
   const [activeTab, setActiveTab] = useState(customerReadOnly ? 1 : 0)
   const [saving, setSaving] = useState(false)
+  const [clientApprovalFile, setClientApprovalFile] = useState<File | null>(null)
 
   const [customers, setCustomers]         = useState<SelectOption[]>([])
   const [users, setUsers]                 = useState<SelectOption[]>([])
@@ -203,6 +205,26 @@ export function ContractCreateModal({
       .catch(() => setParentProjects([]))
   }, [form.customer_id])
 
+  // Sugere próximo code_seq quando customer muda (modo projeto raiz)
+  useEffect(() => {
+    if (!form.customer_id || form.is_subproject) return
+    api.get<{ seq?: string; year?: string }>(`/projects/next-code?customer_id=${form.customer_id}`)
+      .then(r => {
+        if (r?.seq) setForm(f => ({ ...f, code_seq: r.seq!, code_year: r.year ?? f.code_year }))
+      })
+      .catch(() => {})
+  }, [form.customer_id, form.is_subproject])
+
+  // Sugere próximo sub_seq quando projeto pai muda (modo subprojeto)
+  useEffect(() => {
+    if (!form.is_subproject || !form.parent_project_id) return
+    api.get<{ sub_seq?: string }>(`/projects/next-code?parent_project_id=${form.parent_project_id}`)
+      .then(r => {
+        if (r?.sub_seq) setForm(f => ({ ...f, sub_seq: r.sub_seq! }))
+      })
+      .catch(() => {})
+  }, [form.parent_project_id, form.is_subproject])
+
   // ── Derived ────────────────────────────────────────────────────────────────
 
   const selectedContractType = useMemo(
@@ -212,6 +234,7 @@ export function ContractCreateModal({
   const isOnDemand = selectedContractType?.name.toLowerCase().trim() === 'on demand'
   const isBankHours = selectedContractType?.name.toLowerCase().includes('banco de horas') ?? false
   const ctNameLower = selectedContractType?.name.toLowerCase().trim() ?? ''
+  const isBhFixo = isBankHours && ctNameLower.includes('fixo')
   // Mensalidade: Cloud e SaaS — só "Valor do Contrato" como mensalidade fixa.
   const isMensalidade = ctNameLower === 'cloud' || ctNameLower === 'saas'
   const isFechado = !!selectedContractType && !isOnDemand && !isBankHours && !isMensalidade
@@ -261,6 +284,7 @@ export function ContractCreateModal({
       case 0: // Cliente
         if (!form.customer_id)          { toast.error('Selecione o cliente'); return false }
         if (!form.project_name.trim())  { toast.error('Informe o nome do projeto'); return false }
+        if (!clientApprovalFile)        { toast.error('Anexe a aprovação do cliente / proposta assinada'); return false }
         return true
 
       case 1: // Classificação
@@ -286,11 +310,12 @@ export function ContractCreateModal({
         }
         return true
 
+      case 6: // Financeiro
+        if (!form.condicao_pagamento.trim()) { toast.error('Informe a Condição de Pagamento'); return false }
+        return true
+
       case 8: // Observações
-        if (form.observacoes.trim().length < 50) {
-          toast.error(`Observações obrigatórias — mínimo 50 caracteres (${form.observacoes.trim().length}/50)`)
-          return false
-        }
+        if (!form.observacoes.trim()) { toast.error('Observações obrigatórias'); return false }
         return true
 
       default:
@@ -351,7 +376,7 @@ export function ContractCreateModal({
   const save = async () => {
     // Revalidate all required tabs before saving
     const checks: [number, () => boolean][] = [
-      [0, () => !!form.customer_id && !!form.project_name.trim()],
+      [0, () => !!form.customer_id && !!form.project_name.trim() && !!clientApprovalFile],
       [1, () => !!form.service_type_id],
       [2, () => !!form.contract_type_id],
       [4, () => {
@@ -359,7 +384,8 @@ export function ContractCreateModal({
         if (isOnDemand)    return !!form.expectativa_inicio && !!form.valor_projeto
         return !!form.horas_contratadas && !!form.expectativa_inicio && !!form.valor_hora
       }],
-      [8, () => form.observacoes.trim().length >= 50],
+      [6, () => !!form.condicao_pagamento.trim()],
+      [8, () => !!form.observacoes.trim()],
     ]
     for (const [tab, check] of checks) {
       if (!check()) {
@@ -407,6 +433,19 @@ export function ContractCreateModal({
       }
 
       const contract = await api.post<{ id: number }>('/contracts', payload)
+
+      if (clientApprovalFile) {
+        const fd = new FormData()
+        fd.append('file', clientApprovalFile)
+        fd.append('type', 'aprovacao_cliente')
+        const res = await fetch(`/api/v1/contracts/${contract.id}/attachments`, {
+          method: 'POST', credentials: 'same-origin', body: fd,
+        })
+        if (!res.ok) {
+          toast.error('Contrato criado, mas falha ao enviar aprovação. Anexe manualmente na edição.')
+        }
+      }
+
       toast.success('Contrato criado com sucesso')
       onSuccess(contract.id)
     } catch (e: any) {
@@ -456,9 +495,18 @@ export function ContractCreateModal({
           {tabsToShow.map((t, i) => {
             const realIdx = i + tabOffset
             return (
-              <button key={t} onClick={() => setActiveTab(realIdx)}
+              <button
+                key={t}
+                type="button"
+                disabled={activeTab !== realIdx}
+                title={activeTab !== realIdx ? 'Use Próximo / Anterior para navegar' : undefined}
                 className="px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors shrink-0"
-                style={{ color: activeTab === realIdx ? 'var(--text)' : 'var(--text-muted)', borderBottom: activeTab === realIdx ? '2px solid var(--primary)' : '2px solid transparent' }}>
+                style={{
+                  color: activeTab === realIdx ? 'var(--text)' : 'var(--text-muted)',
+                  borderBottom: activeTab === realIdx ? '2px solid var(--primary)' : '2px solid transparent',
+                  cursor: activeTab === realIdx ? 'default' : 'not-allowed',
+                  opacity: activeTab === realIdx ? 1 : 0.55,
+                }}>
                 {t}
               </button>
             )
@@ -574,6 +622,21 @@ export function ContractCreateModal({
                   style={{ ...inputStyle, ...(!form.project_name.trim() ? { borderColor: 'rgba(239,68,68,0.5)' } : {}) }} />
               </div>
 
+              <div>
+                <label className={labelCls}>Aprovação do Cliente / Proposta Assinada <span style={{ color: '#ef4444' }}>*</span></label>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt,.csv,.zip"
+                  onChange={e => setClientApprovalFile(e.target.files?.[0] ?? null)}
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-1 focus:ring-cyan-500/40 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:bg-cyan-500/10 file:text-cyan-300 hover:file:bg-cyan-500/20 file:cursor-pointer"
+                  style={{ ...inputStyle, ...(!clientApprovalFile ? { borderColor: 'rgba(239,68,68,0.5)' } : {}) }}
+                />
+                {clientApprovalFile
+                  ? <p className="text-[11px] text-emerald-400 mt-1">✓ {clientApprovalFile.name} ({Math.round(clientApprovalFile.size / 1024)} KB)</p>
+                  : <p className="text-[10px] mt-1" style={{ color: '#f87171' }}>Anexe a aprovação formal (PDF, imagem ou e-mail exportado) — máx 20 MB</p>
+                }
+              </div>
+
               {form.customer_id && form.is_subproject && (
                 <div className="space-y-1.5">
                   <label className={labelCls}>Projeto Pai <span style={{ color: '#ef4444' }}>*</span></label>
@@ -615,7 +678,7 @@ export function ContractCreateModal({
                 <SearchSelect
                   value={form.service_type_id}
                   onChange={v => setForm(f => ({ ...f, service_type_id: v }))}
-                  options={excludeSustentacao ? serviceTypes.filter(s => !isSustentacaoName(String(s.name))) : serviceTypes}
+                  options={(excludeSustentacao ? serviceTypes.filter(s => !isSustentacaoName(String(s.name))) : serviceTypes).filter(s => !String(s.name ?? '').toLowerCase().includes('arquitetura'))}
                   placeholder="Selecionar tipo de serviço..."
                 />
                 {!form.service_type_id && (
@@ -807,19 +870,19 @@ export function ContractCreateModal({
                       <input {...numInput('pct_horas_coordenador')} placeholder="0,00" />
                     </div>
                   )}
+                  {(isFechado || isBhFixo) && (
+                    <div>
+                      <label className={labelCls}>Horas Consultor</label>
+                      <input {...numInput('horas_consultor')} placeholder="0,00" />
+                    </div>
+                  )}
                   {isFechado && (
-                    <>
-                      <div>
-                        <label className={labelCls}>Horas Consultor</label>
-                        <input {...numInput('horas_consultor')} placeholder="0,00" />
-                      </div>
-                      <div>
-                        <label className={labelCls}>Save ERPSERV</label>
-                        <input readOnly
-                          value={saveErpserv != null ? saveErpserv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
-                          className={inputCls} style={{ ...inputStyle, opacity: 0.5, cursor: 'not-allowed' }} />
-                      </div>
-                    </>
+                    <div>
+                      <label className={labelCls}>Save ERPSERV</label>
+                      <input readOnly
+                        value={saveErpserv != null ? saveErpserv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
+                        className={inputCls} style={{ ...inputStyle, opacity: 0.5, cursor: 'not-allowed' }} />
+                    </div>
                   )}
                 </div>
               </div>
@@ -890,11 +953,15 @@ export function ContractCreateModal({
           {/* Tab 6: Financeiro */}
           {activeTab === 6 && (
             <div>
-              <label className={labelCls}>Condição de Pagamento</label>
+              <label className={labelCls}>Condição de Pagamento <span style={{ color: '#ef4444' }}>*</span></label>
               <textarea value={form.condicao_pagamento}
                 onChange={e => setForm(f => ({ ...f, condicao_pagamento: e.target.value }))}
                 rows={5} placeholder="Ex: 30 dias após entrega da NF..."
-                className={inputCls} style={{ ...inputStyle, resize: 'vertical' }} />
+                className={inputCls}
+                style={{ ...inputStyle, resize: 'vertical', ...(!form.condicao_pagamento.trim() ? { borderColor: 'rgba(239,68,68,0.5)' } : {}) }} />
+              {!form.condicao_pagamento.trim() && (
+                <p className="text-[10px] mt-1" style={{ color: '#f87171' }}>Obrigatório</p>
+              )}
             </div>
           )}
 
@@ -922,14 +989,10 @@ export function ContractCreateModal({
                 onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
                 rows={10} placeholder="Descreva o escopo, premissas, restrições..."
                 className={inputCls}
-                style={{ ...inputStyle, resize: 'vertical', borderColor: form.observacoes.trim().length < 50 ? 'rgba(239,68,68,0.5)' : undefined }} />
-              <div className="flex items-center justify-between mt-1">
-                <p className="text-[10px]" style={{ color: form.observacoes.trim().length >= 50 ? '#71717a' : '#f87171' }}>
-                  {form.observacoes.trim().length < 50
-                    ? `Mínimo 50 caracteres — faltam ${50 - form.observacoes.trim().length}`
-                    : `${form.observacoes.trim().length} caracteres`}
-                </p>
-              </div>
+                style={{ ...inputStyle, resize: 'vertical', borderColor: !form.observacoes.trim() ? 'rgba(239,68,68,0.5)' : undefined }} />
+              {!form.observacoes.trim() && (
+                <p className="text-[10px] mt-1" style={{ color: '#f87171' }}>Obrigatório</p>
+              )}
             </div>
           )}
         </div>

@@ -14,6 +14,7 @@ import {
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { SearchSelect } from '@/components/ui/search-select'
+import { KpiCard } from '@/components/ui/kpi-card'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -72,18 +73,14 @@ function fmtBRL(v: number | null | undefined) {
   if (v == null) return '—'
   return formatBRL(v ?? 0)
 }
-function fmtDate(s: string) { return new Date(s).toLocaleDateString('pt-BR') }
-
-
-function StatCard({ label, value, accent }: { label: string; value: string; accent?: 'success' | 'danger' | 'primary' }) {
-  const color = accent === 'success' ? '#10B981' : accent === 'danger' ? '#EF4444' : accent === 'primary' ? '#00F5FF' : 'var(--brand-text)'
-  return (
-    <div className="rounded-2xl p-5 flex flex-col gap-3" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-      <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{label}</span>
-      <span className="text-3xl font-extrabold tracking-tight" style={{ color, lineHeight: 1 }}>{value}</span>
-    </div>
-  )
+function fmtDate(s: string) {
+  // Sem shift de fuso — mantém DD/MM/AAAA literal do banco.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : new Date(s).toLocaleDateString('pt-BR')
 }
+
+
+// StatCard local removido — agora usamos KpiCard de '@/components/ui/kpi-card'.
 
 function Tab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
@@ -156,6 +153,7 @@ export default function BankHoursMonthlyPage() {
   const router = useRouter()
   const isAdmin   = user?.type === 'admin'
   const isCliente = user?.type === 'cliente'
+  const canReverseApproval = !!user && user.type !== 'consultor' && user.type !== 'cliente'
 
   useEffect(() => {
     if (user && user.type === 'coordenador') router.replace('/timesheets')
@@ -186,7 +184,7 @@ export default function BankHoursMonthlyPage() {
 
   // Componentes embarcados (Sustentação completa + Despesas)
   const mxKind: 'maintenance' | 'expenses' = activeTab === 'expenses' ? 'expenses' : 'maintenance'
-  const { rows: mxRows, loading: mxLoading, ticketSummary: mxTicketSummary, ticketLoading: mxTicketLoading } = useMaintenanceInline({
+  const { rows: mxRows, loading: mxLoading, ticketSummary: mxTicketSummary, ticketLoading: mxTicketLoading, reload: reloadMx } = useMaintenanceInline({
     enabled: activeTab === 'maintenance' || activeTab === 'expenses',
     kind: mxKind,
     customerId: selectedCustomer || user?.customer_id,
@@ -277,6 +275,18 @@ export default function BankHoursMonthlyPage() {
   useEffect(() => { setIndicatorParams(buildParams()) }, [buildParams])
 
   const hasFilters = !isAdmin || !!selectedProject
+
+  // Legenda do "Consumo do Mês" — espelha o período efetivo do summary.
+  const MONTH_NAMES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+  const monthConsumptionHint = (() => {
+    if (dateFrom && dateTo) {
+      const fmt = (s: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); return m ? `${m[3]}/${m[2]}/${m[1]}` : s }
+      return `Período: ${fmt(dateFrom)} a ${fmt(dateTo)}`
+    }
+    if (refMonth && refYear) return `${MONTH_NAMES_PT[refMonth - 1]} ${refYear}`
+    const now = new Date()
+    return `Mês vigente — ${MONTH_NAMES_PT[now.getMonth()]} ${now.getFullYear()}`
+  })()
 
   return (
     <AppLayout title="Dashboard — Banco de Horas Mensais">
@@ -460,8 +470,8 @@ export default function BankHoursMonthlyPage() {
                           </div>
                         )}
                       </div>
-                      <StatCard label="Consumo do Mês" value={fmtH(summary.month_consumed_hours)} />
-                      <StatCard
+                      <KpiCard label="Consumo do Mês" value={fmtH(summary.month_consumed_hours)} hint={monthConsumptionHint} />
+                      <KpiCard
                         label="Saldo de Horas"
                         value={fmtH(summary.hours_balance)}
                         accent={summary.hours_balance >= 0 ? 'success' : 'danger'}
@@ -469,13 +479,13 @@ export default function BankHoursMonthlyPage() {
                     </div>
                     {/* Row 2 — 3 cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <StatCard
+                      <KpiCard
                         label="Horas Excedentes"
                         value={fmtH(summary.exceeded_hours ?? 0)}
                         accent={(summary.exceeded_hours ?? 0) > 0 ? 'danger' : undefined}
                       />
-                      <StatCard label="Valor Hora"   value={fmtBRL(summary.hourly_rate)} />
-                      <StatCard
+                      <KpiCard label="Valor Hora"   value={fmtBRL(summary.hourly_rate)} />
+                      <KpiCard
                         label="Valor a Pagar"
                         value={fmtBRL(summary.amount_to_pay)}
                         accent={(summary.amount_to_pay ?? 0) > 0 ? 'danger' : undefined}
@@ -527,8 +537,8 @@ export default function BankHoursMonthlyPage() {
               <div className="space-y-4">
                 {summary && (
                   <div className="grid grid-cols-2 gap-4">
-                    <StatCard label="Consumo Acumulado" value={fmtH(summary.projects_consumed_hours ?? 0)} accent="primary" />
-                    <StatCard label="Consumo do Mês"    value={fmtH(summary.projects_month_consumed_hours ?? 0)} />
+                    <KpiCard label="Consumo Acumulado" value={fmtH(summary.projects_consumed_hours ?? 0)} accent="primary" />
+                    <KpiCard label="Consumo do Mês"    value={fmtH(summary.projects_month_consumed_hours ?? 0)} hint={monthConsumptionHint} />
                   </div>
                 )}
                 <ProjectsTable items={projectsList} loading={loadingProjects} />
@@ -540,12 +550,12 @@ export default function BankHoursMonthlyPage() {
               <div className="space-y-4">
                 {summary && (
                   <div className="grid grid-cols-2 gap-4">
-                    <StatCard label="Consumo Acumulado" value={fmtH(summary.maintenance_consumed_hours ?? 0)} accent="primary" />
-                    <StatCard label="Consumo do Mês"    value={fmtH(summary.maintenance_month_consumed_hours ?? 0)} />
+                    <KpiCard label="Consumo Acumulado" value={fmtH(summary.maintenance_consumed_hours ?? 0)} accent="primary" />
+                    <KpiCard label="Consumo do Mês"    value={fmtH(summary.maintenance_month_consumed_hours ?? 0)} hint={monthConsumptionHint} />
                   </div>
                 )}
                 <ExportButton onClick={() => exportMaintenanceToXLSX('maintenance', mxRows)} disabled={mxRows.length === 0} />
-                <InlineTimesheetsTable rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} />
+                <InlineTimesheetsTable rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} onReverseApproved={canReverseApproval} onReverseSuccess={reloadMx} />
                 <InlineTicketSummaryTable rows={mxTicketSummary} loading={mxTicketLoading} />
               </div>
             )}
@@ -560,9 +570,9 @@ export default function BankHoursMonthlyPage() {
               return (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <StatCard label="Quantidade"    value={String(mxRows.length)} />
-                    <StatCard label="Valor Total"   value={fmtBRL(totalAmount)} />
-                    <StatCard label="Valor a Pagar" value={fmtBRL(toPay)} accent="primary" />
+                    <KpiCard label="Quantidade"    value={String(mxRows.length)} />
+                    <KpiCard label="Valor Total"   value={fmtBRL(totalAmount)} />
+                    <KpiCard label="Valor a Pagar" value={fmtBRL(toPay)} accent="primary" />
                   </div>
                   <ExportButton onClick={() => exportMaintenanceToXLSX('expenses', mxRows)} disabled={mxRows.length === 0} />
                   <InlineExpensesTable rows={mxRows} loading={mxLoading} />

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { Skeleton } from '@/components/ui/skeleton'
+import { KpiCard } from '@/components/ui/kpi-card'
 import {
   Clock, Receipt, CheckSquare, Plus, AlertTriangle,
   TrendingUp, FolderOpen, Users, X, ChevronRight,
@@ -46,25 +47,12 @@ function getMonthRange() {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function StatCard({
-  label, value, sub, loading, onClick,
-}: {
+// StatCard local removido — agora usamos KpiCard de '@/components/ui/kpi-card'.
+// Prop `sub` → `hint` no novo componente. Wrapper de retrocompatibilidade abaixo.
+function StatCard({ label, value, sub, loading, onClick }: {
   label: string; value: string; sub?: string; loading: boolean; onClick?: () => void
 }) {
-  return (
-    <div
-      onClick={onClick}
-      className={`rounded-xl p-4 transition-colors ${onClick ? 'cursor-pointer hover:bg-white/[0.03]' : ''}`}
-      style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
-    >
-      <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>{label}</p>
-      {loading
-        ? <Skeleton className="h-6 w-20 mb-1" />
-        : <p className="text-xl font-bold" style={{ color: 'var(--brand-text)' }}>{value}</p>
-      }
-      {sub && <p className="text-[10px] mt-1" style={{ color: 'var(--brand-subtle)' }}>{sub}</p>}
-    </div>
-  )
+  return <KpiCard label={label} value={value} hint={sub} loading={loading} onClick={onClick} />
 }
 
 function AlertRow({
