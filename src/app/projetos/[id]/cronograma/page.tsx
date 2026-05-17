@@ -13,18 +13,34 @@ import { useAuth } from '@/hooks/use-auth'
 import { useExecutiveMode } from '@/hooks/use-executive-mode'
 import { KpiCard } from '@/components/ui/kpi-card'
 import type { ProjectStage } from '@/lib/types/project-stage'
-import { BoardView } from './views/board'
-import { TabelaView } from './views/tabela'
-import { GanttView } from './views/gantt'
+import { OperacaoView } from './views/operacao'
+import { PlanejamentoView } from './views/planejamento'
+import { TimelineView } from './views/timeline'
 
-type ViewMode = 'board' | 'tabela' | 'gantt'
-const ALLOWED_VIEWS: ViewMode[] = ['board', 'tabela', 'gantt']
+type ViewMode = 'operacao' | 'planejamento' | 'timeline'
+const ALLOWED_VIEWS: ViewMode[] = ['operacao', 'planejamento', 'timeline']
+/** Compat permanente: bookmarks/links antigos continuam funcionando. */
+const LEGACY_MAP: Record<string, ViewMode> = {
+  board: 'operacao',
+  tabela: 'planejamento',
+  gantt: 'timeline',
+}
 const LS_KEY = (projectId: number) => `cronograma:view:${projectId}`
 
+function normalizeView(raw: string | null): ViewMode | null {
+  if (!raw) return null
+  if ((ALLOWED_VIEWS as string[]).includes(raw)) return raw as ViewMode
+  if (raw in LEGACY_MAP) return LEGACY_MAP[raw]
+  return null
+}
+
 /**
- * Hub do Cronograma — view única (ADR 0009): board (kanban macro de etapas),
- * tabela (linha-a-linha editável) e Gantt são modos da mesma fonte.
- * View atual em `?view=board|tabela|gantt` (default board).
+ * Hub do Cronograma — view única (ADR 0009): Operação (kanban macro de etapas),
+ * Planejamento (linha-a-linha editável) e Timeline (Gantt) são modos da mesma
+ * fonte operacional.
+ * View atual em `?view=operacao|planejamento|timeline` (default operacao).
+ * Legacy: board → operacao, tabela → planejamento, gantt → timeline (normalizado
+ * silently na leitura inicial e em localStorage).
  */
 export default function CronogramaPage() {
   const params = useParams<{ id: string }>()
@@ -36,22 +52,31 @@ export default function CronogramaPage() {
   const [executive, toggleExecutive] = useExecutiveMode()
   const [highlightUserId, setHighlightUserId] = useState<number | null>(null)
 
-  const view: ViewMode = (() => {
-    const v = searchParams.get('view')
-    return ALLOWED_VIEWS.includes(v as ViewMode) ? (v as ViewMode) : 'board'
-  })()
+  const view: ViewMode = normalizeView(searchParams.get('view')) ?? 'operacao'
 
   const { isOperational, project, stages, projectWindow, holidays, loading, error, refetch } =
     useProjectSchedule(projectId)
 
-  // Restore last-used view do localStorage quando entra sem ?view= explícito
+  // Restore last-used view do localStorage quando entra sem ?view= explícito.
+  // Normaliza legacy (board/tabela/gantt) → operacao/planejamento/timeline.
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (searchParams.has('view')) return
+    if (searchParams.has('view')) {
+      // Se URL veio com legacy (board/tabela/gantt), reescreve silently pra novo nome.
+      const raw = searchParams.get('view')
+      const normalized = normalizeView(raw)
+      if (normalized && raw !== normalized) {
+        const sp = new URLSearchParams(searchParams.toString())
+        sp.set('view', normalized)
+        router.replace(`?${sp.toString()}`)
+      }
+      return
+    }
     const last = window.localStorage.getItem(LS_KEY(projectId))
-    if (last && ALLOWED_VIEWS.includes(last as ViewMode) && last !== 'board') {
+    const normalized = normalizeView(last)
+    if (normalized && normalized !== 'operacao') {
       const sp = new URLSearchParams(searchParams.toString())
-      sp.set('view', last)
+      sp.set('view', normalized)
       router.replace(`?${sp.toString()}`)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -65,6 +90,21 @@ export default function CronogramaPage() {
       window.localStorage.setItem(LS_KEY(projectId), v)
     }
   }
+
+  // Hotkeys globais: 1/2/3 trocam de view. Guard pra não disparar em inputs.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
+      const t = e.target as HTMLElement | null
+      if (t && t.matches?.('input, textarea, select, [contenteditable="true"]')) return
+      if (e.key === '1') { setView('operacao'); e.preventDefault() }
+      else if (e.key === '2') { setView('planejamento'); e.preventDefault() }
+      else if (e.key === '3') { setView('timeline'); e.preventDefault() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, searchParams.toString()])
 
   const counts = useMemo(() => {
     const totalActivities = stages.reduce((s, st) => s + (st.deliveries?.length ?? 0), 0)
@@ -237,14 +277,14 @@ export default function CronogramaPage() {
       }}>
         <Info size={11} />
         <span>
-          Cronograma é a camada operacional do projeto: <strong>Board</strong>, <strong>Tabela</strong> e <strong>Gantt</strong> são views da mesma fonte (ADR 0009).
+          Cronograma é a camada operacional do projeto: <strong>Operação</strong>, <strong>Planejamento</strong> e <strong>Timeline</strong> são views da mesma fonte (ADR 0009). Atalhos: <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>.
         </span>
       </div>
 
       {/* View ativa */}
-      {view === 'board'  && <BoardView  projectId={projectId} stages={stages} />}
-      {view === 'tabela' && (
-        <TabelaView
+      {view === 'operacao' && <OperacaoView projectId={projectId} stages={stages} />}
+      {view === 'planejamento' && (
+        <PlanejamentoView
           projectId={projectId}
           stages={stages}
           coordinators={project?.coordinators ?? []}
@@ -253,8 +293,8 @@ export default function CronogramaPage() {
           onChanged={refetch}
         />
       )}
-      {view === 'gantt' && (
-        <GanttView
+      {view === 'timeline' && (
+        <TimelineView
           stages={stages}
           projectWindow={projectWindow}
           canEdit={canEdit}
@@ -268,10 +308,10 @@ export default function CronogramaPage() {
 }
 
 function SegmentedControl({ current, onChange }: { current: ViewMode; onChange: (v: ViewMode) => void }) {
-  const opts: { value: ViewMode; label: string }[] = [
-    { value: 'board',  label: 'Board' },
-    { value: 'tabela', label: 'Tabela' },
-    { value: 'gantt',  label: 'Gantt' },
+  const opts: { value: ViewMode; label: string; hint: string }[] = [
+    { value: 'operacao',     label: 'Operação',     hint: 'Atalho: 1' },
+    { value: 'planejamento', label: 'Planejamento', hint: 'Atalho: 2' },
+    { value: 'timeline',     label: 'Timeline',     hint: 'Atalho: 3' },
   ]
   return (
     <div style={{
@@ -287,6 +327,7 @@ function SegmentedControl({ current, onChange }: { current: ViewMode; onChange: 
           <button
             key={opt.value}
             type="button"
+            title={opt.hint}
             onClick={() => onChange(opt.value)}
             className={active ? 'ds-tab-active' : 'ds-tab-inactive'}
             style={{

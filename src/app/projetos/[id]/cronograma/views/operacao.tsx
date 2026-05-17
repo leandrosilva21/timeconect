@@ -8,7 +8,7 @@ interface Props {
   stages: ScheduleStage[]
 }
 
-export function BoardView({ projectId, stages }: Props) {
+export function OperacaoView({ projectId, stages }: Props) {
   if (stages.length === 0) {
     return (
       <div style={{

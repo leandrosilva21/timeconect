@@ -12,7 +12,7 @@ interface Props {
   onChanged: () => void
 }
 
-export function TabelaView({ projectId, stages, coordinators, canEdit, holidays, onChanged }: Props) {
+export function PlanejamentoView({ projectId, stages, coordinators, canEdit, holidays, onChanged }: Props) {
   return (
     <ProjectScheduleTable
       projectId={projectId}

@@ -66,9 +66,9 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       // Rotas antigas do Cronograma — consolidadas em /cronograma (ADR 0009)
-      { source: '/projetos/:id/etapas',           destination: '/projetos/:id/cronograma?view=board',  permanent: true },
-      { source: '/projetos/:id/etapas/:stageId',  destination: '/projetos/:id/cronograma/:stageId',     permanent: true },
-      { source: '/projetos/:id/planejamento',     destination: '/projetos/:id/cronograma?view=tabela', permanent: true },
+      { source: '/projetos/:id/etapas',           destination: '/projetos/:id/cronograma?view=operacao',      permanent: true },
+      { source: '/projetos/:id/etapas/:stageId',  destination: '/projetos/:id/cronograma/:stageId',           permanent: true },
+      { source: '/projetos/:id/planejamento',     destination: '/projetos/:id/cronograma?view=planejamento',  permanent: true },
     ]
   },
   async headers() {

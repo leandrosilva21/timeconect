@@ -13,7 +13,7 @@ interface Props {
   onChanged: () => void
 }
 
-export function GanttView({ stages, projectWindow, canEdit, highlightUserId, onSelectUser, onChanged }: Props) {
+export function TimelineView({ stages, projectWindow, canEdit, highlightUserId, onSelectUser, onChanged }: Props) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <ProjectScheduleGantt
