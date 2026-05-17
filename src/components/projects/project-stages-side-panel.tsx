@@ -120,7 +120,7 @@ export function ProjectStagesSidePanel({
           </div>
 
           <Link
-            href={`/projetos/${projectId}/etapas?from=pipeline`}
+            href={`/projetos/${projectId}/cronograma?from=pipeline`}
             className="ds-btn-primary"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,

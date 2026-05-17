@@ -12,8 +12,7 @@ interface Tab {
 
 const TABS: Tab[] = [
   { label: 'Visão Geral',  segment: 'visao-geral' },
-  { label: 'Planejamento', segment: 'planejamento', operationalOnly: true },
-  { label: 'Etapas',       segment: 'etapas',       operationalOnly: true },
+  { label: 'Cronograma',   segment: 'cronograma',   operationalOnly: true },
   { label: 'Horas',        segment: 'horas' },
   { label: 'Financeiro',   segment: 'financeiro' },
   { label: 'Arquivos',     segment: 'arquivos' },

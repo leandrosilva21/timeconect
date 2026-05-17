@@ -116,7 +116,7 @@ function StageMacroCard({ stage, projectId, executive }: { stage: ProjectStage; 
 
   return (
     <Link
-      href={`/projetos/${projectId}/etapas/${stage.id}`}
+      href={`/projetos/${projectId}/cronograma/${stage.id}`}
       className="ds-card"
       style={{
         display: 'block',

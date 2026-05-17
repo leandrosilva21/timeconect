@@ -49,7 +49,7 @@ function CardItem({ card }: { card: MyCard }) {
 
   return (
     <Link
-      href={`/projetos/${card.project_id}/etapas/${card.stage_id}`}
+      href={`/projetos/${card.project_id}/cronograma/${card.stage_id}`}
       className="ds-card"
       style={{
         display: 'block',

@@ -122,7 +122,7 @@ export function MentionsBell() {
                 {items.map(m => {
                   const isUnread = new Date(m.created_at).getTime() > lastSeen
                   const href = m.project_id && m.stage_id
-                    ? `/projetos/${m.project_id}/etapas/${m.stage_id}`
+                    ? `/projetos/${m.project_id}/cronograma/${m.stage_id}`
                     : '#'
                   return (
                     <li key={m.id} style={{
