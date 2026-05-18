@@ -128,6 +128,14 @@ function OriginBadge({ origin, isBillableOnly, isInternalAction, isReleased, can
         >
           <Webhook size={9} /> Movidesk
         </span>
+      ) : origin === 'movidesk_fallback' ? (
+        <span
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+          style={{ background: 'rgba(245,158,11,0.14)', color: '#F59E0B' }}
+          title="Sincronizado do Movidesk com autor não-mapeado — atribuído ao Usuário Padrão pra triagem"
+        >
+          <Webhook size={9} /> Movidesk (triagem)
+        </span>
       ) : (
         <span
           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
