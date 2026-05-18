@@ -3837,6 +3837,41 @@ function KanbanContent() {
     }
   }, [projectCards])
 
+  // Deep link de emails: ?req=<id> abre RequestDetailModal | ?project=<id> abre side panel
+  // do projeto. Hash #chat → tenta foco na seção de chat (Modal já tem tabs).
+  useEffect(() => {
+    if (requestCards.length === 0) return
+    const params = new URLSearchParams(window.location.search)
+    const reqIdParam = params.get('req')
+    if (!reqIdParam) return
+    const reqId = Number(reqIdParam)
+    const card = requestCards.find(r => r.id === reqId)
+    if (card) {
+      setSelectedRequest(card)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('req')
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [requestCards])
+
+  useEffect(() => {
+    if (projectCards.length === 0) return
+    const params = new URLSearchParams(window.location.search)
+    const projIdParam = params.get('project')
+    if (!projIdParam) return
+    const projId = Number(projIdParam)
+    const card = projectCards.find(p => p.id === projId)
+    if (card) {
+      // Hash #chat sinaliza foco no chat
+      const wantsChat = window.location.hash === '#chat'
+      setProjectAction({ card, action: wantsChat ? 'chat' : 'view' })
+      const url = new URL(window.location.href)
+      url.searchParams.delete('project')
+      if (wantsChat) url.hash = ''
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [projectCards])
+
   const colIsClientVisible = (colId: string): boolean =>
     DEMAND_COLS.find(c => c.id === colId)?.clientVisible ?? false
 
