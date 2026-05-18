@@ -5,17 +5,24 @@ import Link from 'next/link'
 import { AtSign, X } from 'lucide-react'
 import { useMentions } from '@/hooks/use-mentions'
 
-const STORAGE_KEY = 'minutor.mentions_last_seen'
+const STORAGE_KEY = 'minutor.mentions_seen_ids'
 
-function readLastSeen(): number {
-  if (typeof window === 'undefined') return 0
-  const v = window.localStorage.getItem(STORAGE_KEY)
-  return v ? Number(v) : 0
+/** Set de mention IDs já clicados (read). Abrir o popup NÃO marca — só o click. */
+function readSeenIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY)
+    if (!raw) return new Set()
+    const arr = JSON.parse(raw)
+    return Array.isArray(arr) ? new Set(arr.map(String)) : new Set()
+  } catch { return new Set() }
 }
 
-function writeLastSeen(ts: number) {
+function persistSeenIds(set: Set<string>) {
   if (typeof window === 'undefined') return
-  window.localStorage.setItem(STORAGE_KEY, String(ts))
+  // Limita a 500 entries pra não estourar localStorage
+  const arr = Array.from(set).slice(-500)
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(arr))
 }
 
 function timeAgo(iso: string): string {
@@ -39,7 +46,7 @@ function cleanMentionText(text: string | null | undefined): string {
 export function MentionsBell() {
   const { items, total, refetch } = useMentions()
   const [open, setOpen] = useState(false)
-  const [lastSeen, setLastSeen] = useState(readLastSeen())
+  const [seenIds, setSeenIds] = useState<Set<string>>(readSeenIds)
   const ref = useRef<HTMLDivElement>(null)
 
   // Poll a cada 60s
@@ -58,20 +65,22 @@ export function MentionsBell() {
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  const unread = items.filter(m => new Date(m.created_at).getTime() > lastSeen).length
+  // Contador = mentions cujo ID ainda não foi clicado
+  const unread = items.filter(m => !seenIds.has(String(m.id))).length
 
   function handleOpen() {
-    setOpen(v => {
-      const next = !v
-      if (next && items.length > 0) {
-        // Marca como visto quando abre
-        const newest = new Date(items[0].created_at).getTime()
-        writeLastSeen(newest)
-        setLastSeen(newest)
-      }
+    // Apenas abre/fecha o popup. Marcar como lido só acontece no click do item.
+    setOpen(v => !v)
+    refetch()
+  }
+
+  function markRead(itemId: string) {
+    setSeenIds(prev => {
+      const next = new Set(prev)
+      next.add(itemId)
+      persistSeenIds(next)
       return next
     })
-    refetch()
   }
 
   return (
@@ -120,18 +129,30 @@ export function MentionsBell() {
             ) : (
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {items.map(m => {
-                  const isUnread = new Date(m.created_at).getTime() > lastSeen
-                  const href = m.project_id && m.stage_id
-                    ? `/projetos/${m.project_id}/cronograma/${m.stage_id}`
-                    : '#'
+                  const itemId = String(m.id)
+                  const isUnread = !seenIds.has(itemId)
+                  // Deep link por source (Fase mentions 4-fontes)
+                  const anyM = m as any
+                  const href =
+                    anyM.source === 'request_chat' && anyM.request_id
+                      ? `/contratos/pipeline?req=${anyM.request_id}#chat`
+                      : anyM.source === 'contract_chat' && anyM.contract_id
+                      ? `/contratos/pipeline?chat_contract_id=${anyM.contract_id}`
+                      : anyM.source === 'project_chat' && m.project_id
+                      ? `/contratos/pipeline?project=${m.project_id}#chat`
+                      : m.project_id && m.stage_id
+                      ? `/projetos/${m.project_id}/cronograma/${m.stage_id}`
+                      : m.project_id
+                      ? `/projetos/${m.project_id}/cronograma`
+                      : '#'
                   return (
-                    <li key={m.id} style={{
+                    <li key={itemId} style={{
                       borderBottom: '1px solid var(--border)',
                       background: isUnread ? 'var(--primary-soft)' : 'transparent',
                     }}>
                       <Link
                         href={href}
-                        onClick={() => setOpen(false)}
+                        onClick={() => { markRead(itemId); setOpen(false) }}
                         style={{
                           display: 'block', padding: '10px 14px',
                           textDecoration: 'none', color: 'inherit',
@@ -158,7 +179,13 @@ export function MentionsBell() {
                           marginTop: 4, fontSize: 11, color: 'var(--text-light)',
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>
-                          {m.project ?? '—'} · {m.stage ?? '—'} · {m.delivery ?? '—'}
+                          {anyM.source === 'request_chat'
+                            ? `Requisição · ${anyM.customer ?? '—'}`
+                          : anyM.source === 'contract_chat'
+                            ? `Contrato · ${anyM.customer ?? '—'}`
+                          : anyM.source === 'project_chat'
+                            ? `Projeto · ${m.project ?? '—'}`
+                          : `${m.project ?? '—'} · ${m.stage ?? '—'} · ${m.delivery ?? '—'}`}
                         </div>
                       </Link>
                     </li>
