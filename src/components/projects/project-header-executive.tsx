@@ -83,17 +83,21 @@ function KPI({ label, value, sub }: { label: string; value: string; sub?: string
 function PrazoKPI({
   projectId,
   expectedEndDate,
+  suggestedEndDate,
   canEdit,
   onChange,
 }: {
   projectId: number
   expectedEndDate: string | null | undefined
+  /** Sugestão = última data do cronograma (latest_stage_end). Usada ao abrir o editor vazio. */
+  suggestedEndDate?: string | null
   canEdit: boolean
   onChange?: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(expectedEndDate ? expectedEndDate.slice(0, 10) : '')
   const [saving, setSaving] = useState(false)
+  const suggested = suggestedEndDate ? suggestedEndDate.slice(0, 10) : ''
 
   const hasDate = Boolean(expectedEndDate)
   const isOverdue = hasDate && new Date(expectedEndDate as string) < new Date(new Date().toDateString())
@@ -136,7 +140,11 @@ function PrazoKPI({
       {!editing ? (
         <button
           type="button"
-          onClick={canEdit ? () => { setValue(expectedEndDate ? expectedEndDate.slice(0, 10) : ''); setEditing(true) } : undefined}
+          onClick={canEdit ? () => {
+            // Pré-preenche com prazo atual; se vazio, com sugestão do cronograma
+            setValue(expectedEndDate ? expectedEndDate.slice(0, 10) : suggested)
+            setEditing(true)
+          } : undefined}
           disabled={!canEdit}
           style={{
             background: 'transparent', border: 'none', padding: 0, margin: 0,
@@ -157,19 +165,20 @@ function PrazoKPI({
           )}
         </button>
       ) : (
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
-          <input
-            type="date"
-            className="ds-input"
-            autoFocus
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') save()
-              if (e.key === 'Escape') setEditing(false)
-            }}
-            style={{ fontSize: 14, padding: '4px 8px', flex: 1, minWidth: 0 }}
-          />
+        <div style={{ marginTop: 4 }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              type="date"
+              className="ds-input"
+              autoFocus
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') save()
+                if (e.key === 'Escape') setEditing(false)
+              }}
+              style={{ fontSize: 14, padding: '4px 8px', flex: 1, minWidth: 0 }}
+            />
           <button
             type="button"
             onClick={save}
@@ -179,14 +188,29 @@ function PrazoKPI({
           >
             {saving ? '…' : 'Salvar'}
           </button>
-          <button
-            type="button"
-            onClick={() => setEditing(false)}
-            className="ds-btn-ghost"
-            style={{ fontSize: 12, padding: '4px 8px', flexShrink: 0 }}
-          >
-            ✕
-          </button>
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="ds-btn-ghost"
+              style={{ fontSize: 12, padding: '4px 8px', flexShrink: 0 }}
+            >
+              ✕
+            </button>
+          </div>
+          {suggested && suggested !== value && (
+            <button
+              type="button"
+              onClick={() => setValue(suggested)}
+              title="Aplicar data sugerida pelo cronograma"
+              style={{
+                marginTop: 4, fontSize: 11, color: 'var(--primary)',
+                background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+              }}
+            >
+              💡 Sugerido pelo cronograma: {new Date(suggested + 'T00:00:00').toLocaleDateString('pt-BR')}
+            </button>
+          )}
         </div>
       )}
 
@@ -274,6 +298,7 @@ export function ProjectHeaderExecutive({ project, onProjectChange }: Props) {
         <PrazoKPI
           projectId={project.id}
           expectedEndDate={project.expected_end_date}
+          suggestedEndDate={delayRisk?.latest_stage_end}
           canEdit={canEditPrazo}
           onChange={onProjectChange}
         />
