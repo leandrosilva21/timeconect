@@ -186,13 +186,29 @@ export function MentionsBell() {
                           marginTop: 4, fontSize: 11, color: 'var(--text-light)',
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>
-                          {anyM.source === 'request_chat'
-                            ? `Requisição · ${anyM.customer ?? '—'}`
-                          : anyM.source === 'contract_chat'
-                            ? `Contrato · ${anyM.customer ?? '—'}`
-                          : anyM.source === 'project_chat'
-                            ? `Projeto · ${m.project ?? '—'}`
-                          : `${m.project ?? '—'} · ${m.stage ?? '—'} · ${m.delivery ?? '—'}`}
+                          {(() => {
+                            const customer = anyM.customer
+                            const projectName = anyM.project_name || m.project
+                            const parts: string[] = []
+                            if (anyM.source === 'request_chat') {
+                              parts.push('Requisição')
+                              if (customer) parts.push(customer)
+                              if (projectName) parts.push(projectName)
+                            } else if (anyM.source === 'contract_chat') {
+                              parts.push('Contrato')
+                              if (customer) parts.push(customer)
+                              if (projectName) parts.push(projectName)
+                            } else if (anyM.source === 'project_chat') {
+                              parts.push('Projeto')
+                              if (projectName) parts.push(projectName)
+                            } else {
+                              // activity / legacy
+                              if (m.project) parts.push(m.project)
+                              if (m.stage) parts.push(m.stage)
+                              if (m.delivery) parts.push(m.delivery)
+                            }
+                            return parts.length ? parts.join(' · ') : '—'
+                          })()}
                         </div>
                       </Link>
                     </li>
