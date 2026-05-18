@@ -68,6 +68,13 @@ export function MentionsBell() {
   // Contador = mentions cujo ID ainda não foi clicado
   const unread = items.filter(m => !seenIds.has(String(m.id))).length
 
+  // Display: TODAS não-lidas + até 10 lidas mais recentes (modelo Slack/Linear)
+  // Mantém ordem por created_at desc dentro de cada grupo.
+  const unreadItems = items.filter(m => !seenIds.has(String(m.id)))
+  const readRecent = items.filter(m => seenIds.has(String(m.id))).slice(0, 10)
+  const displayItems = [...unreadItems, ...readRecent]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
   function handleOpen() {
     // Apenas abre/fecha o popup. Marcar como lido só acontece no click do item.
     setOpen(v => !v)
@@ -121,14 +128,14 @@ export function MentionsBell() {
           </div>
 
           <div className="max-h-96 overflow-y-auto">
-            {items.length === 0 ? (
+            {displayItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 gap-1">
                 <AtSign size={20} style={{ color: 'var(--brand-muted)' }} />
                 <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhuma menção ainda</p>
               </div>
             ) : (
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {items.map(m => {
+                {displayItems.map(m => {
                   const itemId = String(m.id)
                   const isUnread = !seenIds.has(itemId)
                   // Deep link por source (Fase mentions 4-fontes)
