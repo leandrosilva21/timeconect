@@ -59,6 +59,8 @@ interface NewActivityDraft {
   client_user_id: string
   client_email: string
   extra_allocations: ExtraAllocationDraft[]
+  /** Flag interna: vira true quando user digita fim manualmente; trava o auto-sugest. */
+  dueTouched: boolean
 }
 
 const emptyStageDraft = (defaultResp: number | null): NewStageDraft => ({
@@ -79,6 +81,7 @@ const emptyActivityDraft = (defaultResp: number | null): NewActivityDraft => ({
   client_user_id: '',
   client_email: '',
   extra_allocations: [],
+  dueTouched: false,
 })
 
 export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit, onChanged, holidays, calendarOpts }: Props) {
@@ -525,7 +528,18 @@ function StageRows(props: StageRowProps) {
                     type="date"
                     className="ds-input"
                     value={activityDraft.planned_start_at}
-                    onChange={e => setActivityDraft(d => ({ ...d, planned_start_at: e.target.value }))}
+                    onChange={e => {
+                      const v = e.target.value
+                      setActivityDraft(d => {
+                        const next = { ...d, planned_start_at: v }
+                        // Auto-sugere fim quando user não digitou um fim manual
+                        if (!d.dueTouched && v && d.hours_planned) {
+                          const suggested = calendar.suggestedEndISO(v, Number(d.hours_planned), 8)
+                          if (suggested) next.due_date = suggested
+                        }
+                        return next
+                      })
+                    }}
                     style={{ width: 130, fontSize: 13, padding: '4px 8px' }}
                   />
                 </FieldLabeled>
@@ -534,7 +548,7 @@ function StageRows(props: StageRowProps) {
                     type="date"
                     className="ds-input"
                     value={activityDraft.due_date}
-                    onChange={e => setActivityDraft(d => ({ ...d, due_date: e.target.value }))}
+                    onChange={e => setActivityDraft(d => ({ ...d, due_date: e.target.value, dueTouched: true }))}
                     style={{ width: 130, fontSize: 13, padding: '4px 8px' }}
                   />
                 </FieldLabeled>
@@ -545,7 +559,17 @@ function StageRows(props: StageRowProps) {
                     step="0.5"
                     className="ds-input"
                     value={activityDraft.hours_planned}
-                    onChange={e => setActivityDraft(d => ({ ...d, hours_planned: e.target.value }))}
+                    onChange={e => {
+                      const v = e.target.value
+                      setActivityDraft(d => {
+                        const next = { ...d, hours_planned: v }
+                        if (!d.dueTouched && d.planned_start_at && v) {
+                          const suggested = calendar.suggestedEndISO(d.planned_start_at, Number(v), 8)
+                          if (suggested) next.due_date = suggested
+                        }
+                        return next
+                      })
+                    }}
                     style={{ width: 80, fontSize: 13, padding: '4px 8px' }}
                   />
                 </FieldLabeled>
