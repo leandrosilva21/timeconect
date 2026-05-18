@@ -142,11 +142,11 @@ export function MentionsBell() {
                   const anyM = m as any
                   const href =
                     anyM.source === 'request_chat' && anyM.request_id
-                      ? `/contratos/pipeline?req=${anyM.request_id}#chat`
+                      ? `/contratos/pipeline?req=${anyM.request_id}&tab=chat`
                       : anyM.source === 'contract_chat' && anyM.contract_id
                       ? `/contratos/pipeline?chat_contract_id=${anyM.contract_id}`
                       : anyM.source === 'project_chat' && m.project_id
-                      ? `/contratos/pipeline?project=${m.project_id}#chat`
+                      ? `/contratos/pipeline?project=${m.project_id}&tab=chat`
                       : m.project_id && m.stage_id
                       ? `/projetos/${m.project_id}/cronograma/${m.stage_id}`
                       : m.project_id

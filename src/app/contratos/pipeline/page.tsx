@@ -3850,11 +3850,14 @@ function KanbanContent() {
     const reqId = Number(reqIdParam)
     const card = requestCards.find(r => r.id === reqId)
     if (card) {
-      const wantsChat = typeof window !== 'undefined' && window.location.hash === '#chat'
+      // ?tab=chat OU hash #chat (compat) → abre direto em Comentários
+      const wantsChat = searchParams.get('tab') === 'chat'
+        || (typeof window !== 'undefined' && window.location.hash === '#chat')
       setRequestInitialTab(wantsChat ? 'comments' : 'details')
       setSelectedRequest(card)
       const url = new URL(window.location.href)
       url.searchParams.delete('req')
+      url.searchParams.delete('tab')
       if (wantsChat) url.hash = ''
       window.history.replaceState({}, '', url.toString())
     }
@@ -3867,11 +3870,12 @@ function KanbanContent() {
     const projId = Number(projIdParam)
     const card = projectCards.find(p => p.id === projId)
     if (card) {
-      // Hash #chat sinaliza foco no chat
-      const wantsChat = typeof window !== 'undefined' && window.location.hash === '#chat'
+      const wantsChat = searchParams.get('tab') === 'chat'
+        || (typeof window !== 'undefined' && window.location.hash === '#chat')
       setProjectAction({ card, action: wantsChat ? 'chat' : 'view' })
       const url = new URL(window.location.href)
       url.searchParams.delete('project')
+      url.searchParams.delete('tab')
       if (wantsChat) url.hash = ''
       window.history.replaceState({}, '', url.toString())
     }
