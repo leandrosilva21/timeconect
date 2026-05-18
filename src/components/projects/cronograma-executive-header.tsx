@@ -77,7 +77,7 @@ export function CronogramaExecutiveHeader({ executive, teamLoad, alerts }: Props
           </div>
         </Card>
 
-        {/* Prazo Final */}
+        {/* Prazo Final — data da última entrega do cronograma */}
         <Card icon={<CalendarClock size={14} />} label="Prazo final">
           {e.estimated_end_date ? (
             <>
@@ -87,21 +87,9 @@ export function CronogramaExecutiveHeader({ executive, teamLoad, alerts }: Props
               }}>
                 {fmtDateBr(e.estimated_end_date)}
               </div>
-              {e.planned_end_date && e.end_date_delta_days != null && e.end_date_delta_days !== 0 ? (
-                <div className="ds-text-body-sm" style={{
-                  color: e.end_date_delta_days > 0 ? 'var(--danger)' : 'var(--success)',
-                }}>
-                  {e.end_date_delta_days > 0 ? '+' : ''}{e.end_date_delta_days}d vs {fmtDateBr(e.planned_end_date)}
-                </div>
-              ) : e.planned_end_date ? (
-                <div className="ds-text-body-sm" style={{ color: 'var(--text-muted)' }}>
-                  dentro do prazo planejado
-                </div>
-              ) : (
-                <div className="ds-text-body-sm" style={{ color: 'var(--text-muted)' }}>
-                  sem baseline definida
-                </div>
-              )}
+              <div className="ds-text-body-sm" style={{ color: 'var(--text-muted)' }}>
+                fim da última atividade
+              </div>
             </>
           ) : (
             <div style={{ color: 'var(--text-light)', fontSize: 12 }}>sem datas previstas</div>
