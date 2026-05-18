@@ -111,8 +111,8 @@ export function MentionsBell() {
 
       {open && (
         <div
-          className="absolute right-0 top-full mt-2 w-96 rounded-xl shadow-2xl z-50 overflow-hidden"
-          style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
+          className="absolute right-0 top-full mt-2 rounded-xl shadow-2xl z-50 overflow-hidden"
+          style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)', width: 440 }}
         >
           <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--brand-border)' }}>
             <div className="flex items-center gap-2">
@@ -184,30 +184,41 @@ export function MentionsBell() {
                         )}
                         <div style={{
                           marginTop: 4, fontSize: 11, color: 'var(--text-light)',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center',
                         }}>
                           {(() => {
                             const customer = anyM.customer
                             const projectName = anyM.project_name || m.project
-                            const parts: string[] = []
-                            if (anyM.source === 'request_chat') {
-                              parts.push('Requisição')
-                              if (customer) parts.push(customer)
-                              if (projectName) parts.push(projectName)
-                            } else if (anyM.source === 'contract_chat') {
-                              parts.push('Contrato')
-                              if (customer) parts.push(customer)
-                              if (projectName) parts.push(projectName)
-                            } else if (anyM.source === 'project_chat') {
-                              parts.push('Projeto')
-                              if (projectName) parts.push(projectName)
-                            } else {
-                              // activity / legacy
-                              if (m.project) parts.push(m.project)
-                              if (m.stage) parts.push(m.stage)
-                              if (m.delivery) parts.push(m.delivery)
+                            const tipo =
+                              anyM.source === 'request_chat' ? 'Requisição'
+                              : anyM.source === 'contract_chat' ? 'Contrato'
+                              : anyM.source === 'project_chat' ? 'Projeto'
+                              : null
+                            const nodes: React.ReactNode[] = []
+                            if (tipo) {
+                              nodes.push(<span key="t">{tipo}</span>)
                             }
-                            return parts.length ? parts.join(' · ') : '—'
+                            if (customer) {
+                              if (nodes.length) nodes.push(<span key="d1" style={{ color: 'var(--text-light)' }}>·</span>)
+                              nodes.push(
+                                <span key="c" style={{
+                                  color: 'var(--primary)', fontWeight: 600,
+                                  background: 'var(--primary-soft)',
+                                  padding: '1px 6px', borderRadius: 4,
+                                }}>{customer}</span>
+                              )
+                            }
+                            if (projectName) {
+                              if (nodes.length) nodes.push(<span key="d2" style={{ color: 'var(--text-light)' }}>·</span>)
+                              nodes.push(<span key="p" style={{ color: 'var(--text-muted)' }}>{projectName}</span>)
+                            }
+                            if (!tipo && nodes.length === 0) {
+                              // activity / legacy
+                              if (m.project) nodes.push(<span key="p2">{m.project}</span>)
+                              if (m.stage) { nodes.push(<span key="d3">·</span>); nodes.push(<span key="s">{m.stage}</span>) }
+                              if (m.delivery) { nodes.push(<span key="d4">·</span>); nodes.push(<span key="dl">{m.delivery}</span>) }
+                            }
+                            return nodes.length ? nodes : '—'
                           })()}
                         </div>
                       </Link>
