@@ -91,10 +91,18 @@ export function CronogramaRecalcModal({
     setManualHours(t.simulate.hours_planned != null ? String(t.simulate.hours_planned) : '')
   }
 
-  if (!trigger) return null
+  const isCalendar = trigger?.type === 'project_calendar'
+  const isDelivery = trigger?.type === 'delivery_field'
 
-  const isCalendar = trigger.type === 'project_calendar'
-  const isDelivery = trigger.type === 'delivery_field'
+  // Detecção simples de conflito FS no modo manual: due_date < start_date.
+  // HOOK precisa vir ANTES de qualquer return condicional (rules-of-hooks).
+  const manualConflict = useMemo(() => {
+    if (mode !== 'manual' || !isDelivery || !manualStart) return null
+    if (manualDue && manualDue < manualStart) return 'Fim antes do início.'
+    return null
+  }, [mode, isDelivery, manualStart, manualDue])
+
+  if (!trigger) return null
 
   async function applyAuto() {
     if (!preview) return
@@ -139,14 +147,6 @@ export function CronogramaRecalcModal({
       setApplying(false)
     }
   }
-
-  // Detecção simples de conflito FS no modo manual: start manual < pred end (informativo)
-  const manualConflict = useMemo(() => {
-    if (mode !== 'manual' || !isDelivery || !manualStart) return null
-    // Sem info do pred end aqui — best effort: se due_date manual < start manual
-    if (manualDue && manualDue < manualStart) return 'Fim antes do início.'
-    return null
-  }, [mode, isDelivery, manualStart, manualDue])
 
   return (
     <Modal open={open} onClose={onCancel} size={compact ? 'sm' : 'lg'} zIndex={75}>
