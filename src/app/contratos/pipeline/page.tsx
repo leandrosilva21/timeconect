@@ -4,7 +4,7 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { ProjectStagesSidePanel } from '@/components/projects/project-stages-side-panel'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import { previewText } from '@/lib/sanitize'
 import { useAuth } from '@/hooks/use-auth'
@@ -3192,8 +3192,8 @@ function ProjectTeamModal({ projectId, projectName, onClose, onSaved }: { projec
   )
 }
 
-function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () => void }) {
-  const [tab, setTab]               = useState<'details' | 'comments' | 'log'>('details')
+function RequestDetailModal({ card, onClose, initialTab }: { card: RequestCard; onClose: () => void; initialTab?: 'details' | 'comments' | 'log' }) {
+  const [tab, setTab]               = useState<'details' | 'comments' | 'log'>(initialTab ?? 'details')
   const [msgs, setMsgs]             = useState<ReqMsg[]>([])
   const [msgsLoaded, setMsgsLoaded] = useState(false)
   const [logs, setLogs]             = useState<KanbanLogEntry[]>([])
@@ -3743,6 +3743,8 @@ function PhaseSeparator({ label, icon }: { label: string; icon: React.ReactNode 
 
 function KanbanContent() {
   const router = useRouter()
+  // useSearchParams pra deep link de emails re-rodar em client-side nav (?req=, ?project=)
+  const searchParams = useSearchParams()
   const { user } = useAuth()
   const canWrite = user?.type === 'admin' || user?.type === 'administrativo'
 
@@ -3754,6 +3756,8 @@ function KanbanContent() {
   const [userRole,        setUserRole]        = useState<string>('admin')
   const [loading,         setLoading]         = useState(true)
   const [selectedRequest,      setSelectedRequest]      = useState<RequestCard | null>(null)
+  // Tab inicial do RequestDetailModal — usado quando vem de deep link #chat
+  const [requestInitialTab, setRequestInitialTab] = useState<'details' | 'comments' | 'log' | undefined>(undefined)
   const [planDecisionCard,     setPlanDecisionCard]     = useState<RequestCard | null>(null)
   const [contractCreateForReq, setContractCreateForReq] = useState<RequestCard | null>(null)
   const [subprojetoForReq, setSubprojetoForReq] = useState<{ card: RequestCard; projectId: number; subSeq: string } | null>(null)
@@ -3825,8 +3829,7 @@ function KanbanContent() {
 
   useEffect(() => {
     if (projectCards.length === 0) return
-    const params = new URLSearchParams(window.location.search)
-    const contractIdParam = params.get('chat_contract_id')
+    const contractIdParam = searchParams.get('chat_contract_id')
     if (!contractIdParam) return
     const contractId = Number(contractIdParam)
     const card = projectCards.find(p => p.contract_id === contractId)
@@ -3836,42 +3839,43 @@ function KanbanContent() {
       url.searchParams.delete('chat_contract_id')
       window.history.replaceState({}, '', url.toString())
     }
-  }, [projectCards])
+  }, [projectCards, searchParams])
 
   // Deep link de emails: ?req=<id> abre RequestDetailModal | ?project=<id> abre side panel
   // do projeto. Hash #chat → tenta foco na seção de chat (Modal já tem tabs).
   useEffect(() => {
     if (requestCards.length === 0) return
-    const params = new URLSearchParams(window.location.search)
-    const reqIdParam = params.get('req')
+    const reqIdParam = searchParams.get('req')
     if (!reqIdParam) return
     const reqId = Number(reqIdParam)
     const card = requestCards.find(r => r.id === reqId)
     if (card) {
+      const wantsChat = typeof window !== 'undefined' && window.location.hash === '#chat'
+      setRequestInitialTab(wantsChat ? 'comments' : 'details')
       setSelectedRequest(card)
       const url = new URL(window.location.href)
       url.searchParams.delete('req')
+      if (wantsChat) url.hash = ''
       window.history.replaceState({}, '', url.toString())
     }
-  }, [requestCards])
+  }, [requestCards, searchParams])
 
   useEffect(() => {
     if (projectCards.length === 0) return
-    const params = new URLSearchParams(window.location.search)
-    const projIdParam = params.get('project')
+    const projIdParam = searchParams.get('project')
     if (!projIdParam) return
     const projId = Number(projIdParam)
     const card = projectCards.find(p => p.id === projId)
     if (card) {
       // Hash #chat sinaliza foco no chat
-      const wantsChat = window.location.hash === '#chat'
+      const wantsChat = typeof window !== 'undefined' && window.location.hash === '#chat'
       setProjectAction({ card, action: wantsChat ? 'chat' : 'view' })
       const url = new URL(window.location.href)
       url.searchParams.delete('project')
       if (wantsChat) url.hash = ''
       window.history.replaceState({}, '', url.toString())
     }
-  }, [projectCards])
+  }, [projectCards, searchParams])
 
   const colIsClientVisible = (colId: string): boolean =>
     DEMAND_COLS.find(c => c.id === colId)?.clientVisible ?? false
@@ -4777,7 +4781,11 @@ function KanbanContent() {
         />
       )}
       {selectedRequest && (
-        <RequestDetailModal card={selectedRequest} onClose={() => setSelectedRequest(null)} />
+        <RequestDetailModal
+          card={selectedRequest}
+          initialTab={requestInitialTab}
+          onClose={() => { setSelectedRequest(null); setRequestInitialTab(undefined) }}
+        />
       )}
       {contractDecisionCard && (
         <ContractDecisionModal
