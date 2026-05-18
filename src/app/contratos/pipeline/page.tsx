@@ -3249,7 +3249,8 @@ function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () 
   const insertMention = (user: MentionUser) => {
     const before = input.slice(0, mentionStart)
     const after  = input.slice(textareaRef.current?.selectionStart ?? input.length)
-    const next   = `${before}@${user.name} ${after}`
+    // Token canônico que o backend parseia: @[id:Nome]
+    const next   = `${before}@[${user.id}:${user.name}] ${after}`
     setInput(next)
     setShowMentions(false)
     setTimeout(() => textareaRef.current?.focus(), 0)
