@@ -14,6 +14,11 @@ interface Props {
     allow_holiday_work: boolean
   }
   onSaved: () => void
+  /**
+   * Fase 10.1 — chamado SE o save mudou alguma flag de calendário.
+   * Recebe o `simulate` pra page disparar o CronogramaRecalcModal (informativo).
+   */
+  onCalendarChanged?: (simulate: { allow_weekend_work?: boolean; allow_holiday_work?: boolean }) => void
 }
 
 /**
@@ -21,7 +26,7 @@ interface Props {
  * Hoje: 2 toggles do calendário (sábado/feriado). Sem mexer em outras
  * configurações do projeto — só as que afetam o cronograma diretamente.
  */
-export function CronogramaSettingsModal({ open, onClose, projectId, initial, onSaved }: Props) {
+export function CronogramaSettingsModal({ open, onClose, projectId, initial, onSaved, onCalendarChanged }: Props) {
   const [allowWeekend, setAllowWeekend] = useState(initial.allow_weekend_work)
   const [allowHoliday, setAllowHoliday] = useState(initial.allow_holiday_work)
   const [saving, setSaving] = useState(false)
@@ -43,7 +48,16 @@ export function CronogramaSettingsModal({ open, onClose, projectId, initial, onS
       })
       toast.success('Configurações salvas')
       onSaved()
+
+      // Fase 10.1: se alguma flag mudou, sinaliza a page pra abrir recalc modal
+      const changed: { allow_weekend_work?: boolean; allow_holiday_work?: boolean } = {}
+      if (allowWeekend !== initial.allow_weekend_work) changed.allow_weekend_work = allowWeekend
+      if (allowHoliday !== initial.allow_holiday_work) changed.allow_holiday_work = allowHoliday
       onClose()
+      if (Object.keys(changed).length > 0 && onCalendarChanged) {
+        // Delay pra evitar 2 modais sobrepostos (settings fecha animado primeiro)
+        setTimeout(() => onCalendarChanged(changed), 150)
+      }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Erro ao salvar')
     } finally {

@@ -7,7 +7,8 @@ import { toast } from 'sonner'
 import type { ScheduleStage, ProjectCoordinator } from '@/hooks/use-project-schedule'
 import type { StageDelivery } from '@/lib/types/project-stage'
 import { BusinessCalendar } from '@/lib/business-calendar'
-import { RecalcDependentsModal } from './recalc-dependents-modal'
+import { CronogramaRecalcModal } from './cronograma-recalc-modal'
+import { usePreviewRecalc, hasMeaningfulImpact, type RecalcTrigger } from '@/hooks/use-preview-recalc'
 import { ResponsibleChip } from './responsible-chip'
 import { useUserCapacityIndex } from '@/hooks/use-user-capacity'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
@@ -103,7 +104,8 @@ export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit,
   const [stageDraft, setStageDraft] = useState<NewStageDraft>(emptyStageDraft(defaultCoordId))
   const [creatingActivityIn, setCreatingActivityIn] = useState<number | null>(null)
   const [activityDraft, setActivityDraft] = useState<NewActivityDraft>(emptyActivityDraft(defaultCoordId))
-  const [recalcFor, setRecalcFor] = useState<number | null>(null)
+  const [recalcTrigger, setRecalcTrigger] = useState<RecalcTrigger | null>(null)
+  const previewRecalc = usePreviewRecalc(projectId)
 
   function toggleCollapse(stageId: number) {
     setCollapsed(c => ({ ...c, [stageId]: !c[stageId] }))
@@ -233,7 +235,8 @@ export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit,
                 onCancelCreateActivity={() => { setCreatingActivityIn(null); setActivityDraft(emptyActivityDraft(defaultCoordId)) }}
                 onConfirmCreateActivity={() => createActivity(stage.id)}
                 idsWithDependents={idsWithDependents}
-                onMaybeRecalc={setRecalcFor}
+                previewRecalc={previewRecalc}
+                onOpenRecalcModal={setRecalcTrigger}
                 calendar={calendar}
                 codes={codes}
               />
@@ -320,10 +323,12 @@ export function ProjectScheduleTable({ projectId, stages, coordinators, canEdit,
         </tbody>
       </table>
 
-      <RecalcDependentsModal
-        deliveryId={recalcFor}
-        onClose={() => setRecalcFor(null)}
-        onApplied={onChanged}
+      <CronogramaRecalcModal
+        open={!!recalcTrigger}
+        projectId={projectId}
+        trigger={recalcTrigger}
+        onCancel={() => setRecalcTrigger(null)}
+        onApplied={() => { setRecalcTrigger(null); onChanged() }}
       />
     </div>
   )
@@ -378,13 +383,14 @@ interface StageRowProps {
   onCancelCreateActivity: () => void
   onConfirmCreateActivity: () => void
   idsWithDependents: Set<number>
-  onMaybeRecalc: (deliveryId: number) => void
+  previewRecalc: ReturnType<typeof usePreviewRecalc>
+  onOpenRecalcModal: (trigger: RecalcTrigger) => void
   calendar: BusinessCalendar
   codes: ReturnType<typeof buildCronogramaCodes>
 }
 
 function StageRows(props: StageRowProps) {
-  const { stage, coordinators, collapsed, onToggle, canEdit, onChanged, creatingActivity, activityDraft, setActivityDraft, onStartCreateActivity, onCancelCreateActivity, onConfirmCreateActivity, idsWithDependents, onMaybeRecalc, calendar, codes } = props
+  const { stage, coordinators, collapsed, onToggle, canEdit, onChanged, creatingActivity, activityDraft, setActivityDraft, onStartCreateActivity, onCancelCreateActivity, onConfirmCreateActivity, idsWithDependents, previewRecalc, onOpenRecalcModal, calendar, codes } = props
   const { byUserId: capacityByUserId } = useUserCapacityIndex()
 
   const allDeliveries = stage.deliveries ?? []
@@ -475,7 +481,8 @@ function StageRows(props: StageRowProps) {
           canEdit={canEdit}
           onChanged={onChanged}
           hasDependents={idsWithDependents.has(d.id)}
-          onMaybeRecalc={onMaybeRecalc}
+          previewRecalc={previewRecalc}
+          onOpenRecalcModal={onOpenRecalcModal}
           calendar={calendar}
           activityCode={codes.activityCode(d.id)}
         />
@@ -569,41 +576,62 @@ function StageRows(props: StageRowProps) {
   )
 }
 
-function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDependents, onMaybeRecalc, calendar, activityCode }: {
+function ActivityRow({ delivery, stageDeliveries, canEdit, onChanged, hasDependents, previewRecalc, onOpenRecalcModal, calendar, activityCode }: {
   delivery: StageDelivery
   stageDeliveries: StageDelivery[]
   canEdit: boolean
   onChanged: () => void
   hasDependents: boolean
-  onMaybeRecalc: (id: number) => void
+  previewRecalc: ReturnType<typeof usePreviewRecalc>
+  onOpenRecalcModal: (trigger: RecalcTrigger) => void
   calendar: BusinessCalendar
   activityCode: string
 }) {
-  const datesAffectingFields = ['planned_start_at', 'due_date', 'hours_planned']
+  const structuralFields = new Set(['planned_start_at', 'due_date', 'hours_planned', 'depends_on_delivery_id'])
   const { byUserId } = useUserCapacityIndex()
   const responsibleCapacity = delivery.responsible_user_id ? byUserId[delivery.responsible_user_id] : undefined
 
   async function patch(field: string, value: unknown) {
     try {
-      const body: Record<string, unknown> = { [field]: value }
+      // Campo estrutural — preview-first (Fase 10.1)
+      if (structuralFields.has(field)) {
+        const simulate: Record<string, unknown> = { [field]: value }
+        // Sugestão automática de fim: se editou start ou horas e atividade não tem
+        // due_date setado, simula com fim derivado pra preview já refletir.
+        if (!delivery.due_date && field === 'planned_start_at' && value && delivery.hours_planned) {
+          const suggested = calendar.suggestedEndISO(String(value), Number(delivery.hours_planned), 8)
+          if (suggested) simulate.due_date = suggested
+        }
+        if (!delivery.due_date && field === 'hours_planned' && delivery.planned_start_at && value) {
+          const suggested = calendar.suggestedEndISO(delivery.planned_start_at, Number(value), 8)
+          if (suggested) simulate.due_date = suggested
+        }
 
-      // Sugestão automática de fim: se editou start ou horas e atividade
-      // não tem due_date setado, calcular client-side via business calendar.
-      if (!delivery.due_date && field === 'planned_start_at' && value && delivery.hours_planned) {
-        const suggested = calendar.suggestedEndISO(String(value), Number(delivery.hours_planned), 8)
-        if (suggested) body.due_date = suggested
-      }
-      if (!delivery.due_date && field === 'hours_planned' && delivery.planned_start_at && value) {
-        const suggested = calendar.suggestedEndISO(delivery.planned_start_at, Number(value), 8)
-        if (suggested) body.due_date = suggested
+        const preview = await previewRecalc({
+          type: 'delivery_field',
+          deliveryId: delivery.id,
+          simulate,
+        })
+
+        if (hasMeaningfulImpact(preview)) {
+          // Há propagação — abre modal pra coord decidir (não faz PATCH ainda)
+          onOpenRecalcModal({
+            type: 'delivery_field',
+            deliveryId: delivery.id,
+            simulate,
+          })
+          return
+        }
+
+        // Sem impacto temporal — PATCH silencioso direto
+        await api.patch(`/deliveries/${delivery.id}`, simulate)
+        onChanged()
+        return
       }
 
-      await api.patch(`/deliveries/${delivery.id}`, body)
+      // Campos triviais (title, status, priority, responsible_user_id, client_*) — PATCH direto
+      await api.patch(`/deliveries/${delivery.id}`, { [field]: value })
       onChanged()
-
-      if (hasDependents && datesAffectingFields.includes(field)) {
-        onMaybeRecalc(delivery.id)
-      }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Erro ao salvar')
     }

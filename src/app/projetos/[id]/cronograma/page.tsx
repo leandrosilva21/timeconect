@@ -19,6 +19,8 @@ import { TimelineView } from './views/timeline'
 import { CronogramaSettingsModal } from '@/components/projects/cronograma-settings-modal'
 import { CronogramaExecutiveHeader } from '@/components/projects/cronograma-executive-header'
 import { CronogramaAlertsList } from '@/components/projects/cronograma-alerts-list'
+import { CronogramaRecalcModal } from '@/components/projects/cronograma-recalc-modal'
+import type { RecalcTrigger } from '@/hooks/use-preview-recalc'
 
 type ViewMode = 'operacao' | 'planejamento' | 'timeline'
 const ALLOWED_VIEWS: ViewMode[] = ['operacao', 'planejamento', 'timeline']
@@ -168,6 +170,7 @@ export default function CronogramaPage() {
   const [hours, setHours] = useState('')
   const [saving, setSaving] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [calendarRecalc, setCalendarRecalc] = useState<RecalcTrigger | null>(null)
   const allowWeekend = !!project?.allow_weekend_work
   const allowHoliday = !!project?.allow_holiday_work
   const calendarFlexible = allowWeekend || allowHoliday
@@ -429,8 +432,18 @@ export default function CronogramaPage() {
           projectId={projectId}
           initial={{ allow_weekend_work: allowWeekend, allow_holiday_work: allowHoliday }}
           onSaved={refetch}
+          onCalendarChanged={(simulate) => setCalendarRecalc({ type: 'project_calendar', simulate })}
         />
       )}
+
+      {/* Fase 10.1: recalc modal disparado pelo Settings (informativo — PATCH já foi). */}
+      <CronogramaRecalcModal
+        open={!!calendarRecalc}
+        projectId={projectId}
+        trigger={calendarRecalc}
+        onCancel={() => setCalendarRecalc(null)}
+        onApplied={() => { setCalendarRecalc(null); refetch() }}
+      />
     </div>
   )
 }
