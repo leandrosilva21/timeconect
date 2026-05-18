@@ -102,8 +102,10 @@ export function Header({ title, actions }: HeaderProps) {
         {/* Theme toggle — sun/moon */}
         <ThemeToggle />
 
-        {/* Mentions bell — comentários onde o usuário foi @-mencionado */}
-        {user && user.type !== 'cliente' && <MentionsBell />}
+        {/* Mentions bell — todos os perfis (cliente também, pra fases que ele recebe mensagens:
+            chat de requisição até req_decided_at + chat de contrato com visibility=client).
+            Backend /me/mentions filtra mentions de chat de projeto pro cliente (regra ADR cards). */}
+        {user && <MentionsBell />}
 
         {/* Bell notification — visible for all logged-in users; content scoped server-side */}
         {user && (
