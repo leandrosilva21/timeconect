@@ -223,7 +223,6 @@ export default function CronogramaPage() {
           executive={executiveSummary}
           teamLoad={teamLoad}
           alerts={alerts}
-          estimatedEnd={project?.expected_end_date}
         />
       )}
       {alerts.length > 0 && <CronogramaAlertsList alerts={alerts} />}

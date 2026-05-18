@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertTriangle, Activity, Users, Calendar, TrendingUp, Lock, Clock } from 'lucide-react'
+import { AlertTriangle, Activity, Users, Calendar, TrendingUp, Lock, Clock, CalendarClock } from 'lucide-react'
 import type { ExecutiveSummary, TeamLoadItem, CronogramaAlert } from '@/hooks/use-project-schedule'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
@@ -8,7 +8,6 @@ interface Props {
   executive: ExecutiveSummary
   teamLoad: TeamLoadItem[]
   alerts: CronogramaAlert[]
-  estimatedEnd?: string | null
 }
 
 const RISK_BG = { low: 'var(--success-bg)', medium: 'var(--warning-bg)', high: 'var(--danger-bg)' } as const
@@ -27,7 +26,7 @@ function initials(name: string): string {
  * Mostra: progresso, risco, atraso, ocupação da equipe, alertas críticos.
  * Estrutura compacta — coordenador lê em <5s o estado do projeto.
  */
-export function CronogramaExecutiveHeader({ executive, teamLoad, alerts, estimatedEnd }: Props) {
+export function CronogramaExecutiveHeader({ executive, teamLoad, alerts }: Props) {
   const e = executive
   const dangerAlerts = alerts.filter(a => a.severity === 'danger').length
   const warnAlerts = alerts.filter(a => a.severity === 'warning').length
@@ -76,6 +75,37 @@ export function CronogramaExecutiveHeader({ executive, teamLoad, alerts, estimat
           <div className="ds-text-body-sm" style={{ color: e.hours_balance < 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
             saldo {e.hours_balance >= 0 ? '+' : ''}{Math.round(e.hours_balance)}h
           </div>
+        </Card>
+
+        {/* Prazo Final */}
+        <Card icon={<CalendarClock size={14} />} label="Prazo final">
+          {e.estimated_end_date ? (
+            <>
+              <div style={{
+                fontSize: 18, fontWeight: 700, color: 'var(--text)',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {fmtDateBr(e.estimated_end_date)}
+              </div>
+              {e.planned_end_date && e.end_date_delta_days != null && e.end_date_delta_days !== 0 ? (
+                <div className="ds-text-body-sm" style={{
+                  color: e.end_date_delta_days > 0 ? 'var(--danger)' : 'var(--success)',
+                }}>
+                  {e.end_date_delta_days > 0 ? '+' : ''}{e.end_date_delta_days}d vs {fmtDateBr(e.planned_end_date)}
+                </div>
+              ) : e.planned_end_date ? (
+                <div className="ds-text-body-sm" style={{ color: 'var(--text-muted)' }}>
+                  dentro do prazo planejado
+                </div>
+              ) : (
+                <div className="ds-text-body-sm" style={{ color: 'var(--text-muted)' }}>
+                  sem baseline definida
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ color: 'var(--text-light)', fontSize: 12 }}>sem datas previstas</div>
+          )}
         </Card>
 
         {/* Bloqueios + atrasos */}
@@ -144,11 +174,6 @@ export function CronogramaExecutiveHeader({ executive, teamLoad, alerts, estimat
               </span>
             </div>
           )}
-          {estimatedEnd && (
-            <div className="ds-text-body-sm" style={{ color: 'var(--text-muted)' }}>
-              Prazo: {new Date(estimatedEnd).toLocaleDateString('pt-BR')}
-            </div>
-          )}
         </Card>
       </div>
     </div>
@@ -183,6 +208,13 @@ function ProgressBar({ pct }: { pct: number }) {
       <div style={{ height: '100%', width: `${clamped}%`, background: 'var(--primary)' }} />
     </div>
   )
+}
+
+function fmtDateBr(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  if (!m) return iso
+  return `${m[3]}/${m[2]}/${m[1].slice(2)}`
 }
 
 function Pill({ color, value, label }: { color: 'primary' | 'warning' | 'danger'; value: number; label: string }) {

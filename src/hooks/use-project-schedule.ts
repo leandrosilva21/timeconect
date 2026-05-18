@@ -58,6 +58,11 @@ export interface ExecutiveSummary {
   high_risk_stages: number
   medium_risk_stages: number
   estimated_delay_days: number
+  /** Fase 10.1: card "Prazo Final" no header executivo. */
+  estimated_end_date?: string | null
+  planned_end_date?: string | null
+  /** Positivo = projeto vai atrasar vs prazo planejado. */
+  end_date_delta_days?: number | null
 }
 
 export interface CronogramaAlert {
