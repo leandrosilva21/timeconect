@@ -8,12 +8,20 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 // Visual mais geométrico/moderno vs Inter (humanista). Inter segue no body.
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist' })
 
-// Favicon env-aware: cores das faixas (dev=amarelo, homolog=vermelho, prod=cyan original)
+// Favicon + banner env-aware (dev=amarelo, homolog=vermelho, prod=sem banner)
 const APP_ENV = process.env.NEXT_PUBLIC_APP_ENV
 const ICON_HREF =
   APP_ENV === 'dev'     ? '/favicon-dev.svg' :
   APP_ENV === 'homolog' ? '/favicon-homolog.svg' :
                           '/favicon-prod.svg'
+
+const BANNER = APP_ENV === 'homolog'
+  ? { label: 'HOMOLOG', bg: 'linear-gradient(90deg, #dc2626 0%, #ef4444 50%, #dc2626 100%)', fg: '#ffffff' }
+  : APP_ENV === 'dev'
+    ? { label: 'DESENV1', bg: 'linear-gradient(90deg, #ea580c 0%, #f97316 50%, #ea580c 100%)', fg: '#ffffff' }
+    : APP_ENV === 'production' || APP_ENV === 'prod'
+      ? null
+      : { label: 'DESENV LOCAL', bg: 'linear-gradient(90deg, #fbbf24 0%, #fde047 50%, #fbbf24 100%)', fg: '#0a0a0a' }
 
 export const metadata: Metadata = {
   title: 'Minutor',
@@ -34,28 +42,30 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR" className={`${inter.variable} ${geist.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="h-full">
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            zIndex: 9999,
-            background: 'linear-gradient(90deg, #fbbf24 0%, #fde047 50%, #fbbf24 100%)',
-            color: '#0a0a0a',
-            fontWeight: 700,
-            fontSize: 12,
-            letterSpacing: '0.15em',
-            textAlign: 'center',
-            padding: '4px 8px',
-            fontFamily: 'var(--font-inter), sans-serif',
-            textShadow: '0 1px 0 rgba(255,255,255,0.4)',
-            pointerEvents: 'none',
-          }}
-        >
-          DESENV LOCAL
-        </div>
-        <div style={{ paddingTop: 24 }}>
+        {BANNER && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 9999,
+              background: BANNER.bg,
+              color: BANNER.fg,
+              fontWeight: 700,
+              fontSize: 12,
+              letterSpacing: '0.15em',
+              textAlign: 'center',
+              padding: '4px 8px',
+              fontFamily: 'var(--font-inter), sans-serif',
+              textShadow: BANNER.fg === '#0a0a0a' ? '0 1px 0 rgba(255,255,255,0.4)' : 'none',
+              pointerEvents: 'none',
+            }}
+          >
+            {BANNER.label}
+          </div>
+        )}
+        <div style={{ paddingTop: BANNER ? 24 : 0 }}>
           <Providers>{children}</Providers>
         </div>
       </body>
