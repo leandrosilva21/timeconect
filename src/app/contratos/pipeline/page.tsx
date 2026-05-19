@@ -4823,9 +4823,7 @@ function KanbanContent() {
       {contractCreateForDecision && (
         <ContractCreateModal
           initialCustomerId={contractCreateForDecision.customer_id}
-          customerReadOnly
-          excludeSustentacao
-          title="Novo Projeto"
+          title="Novo Contrato"
           onClose={() => setContractCreateForDecision(null)}
           onSuccess={async (_contractId: number) => {
             const card = contractCreateForDecision
@@ -4873,9 +4871,7 @@ function KanbanContent() {
         <ContractCreateModal
           initialCustomerId={contractCreateForReq.customer_id}
           initialProjectName={contractCreateForReq.project_name}
-          customerReadOnly
-          excludeSustentacao
-          title="Novo Projeto"
+          title="Novo Contrato"
           onClose={() => setContractCreateForReq(null)}
           onSuccess={async (contractId) => {
             const card = contractCreateForReq
@@ -4903,8 +4899,6 @@ function KanbanContent() {
           initialProjectName={subprojetoForReq.card.project_name}
           initialParentProjectId={subprojetoForReq.projectId}
           initialSubSeq={subprojetoForReq.subSeq}
-          customerReadOnly
-          excludeSustentacao
           title="Subprojeto — Novo Contrato"
           onClose={() => setSubprojetoForReq(null)}
           onSuccess={async (contractId) => {
