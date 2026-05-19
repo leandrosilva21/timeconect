@@ -1075,7 +1075,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
                   options={projectsList}
                   placeholder="Todos os projetos"
                 />
-                {coordinators.length > 0 && (
+                {!triagemPadrao && coordinators.length > 0 && (
                   <MultiSelect
                     value={coordinatorIds}
                     onChange={v => { setCoordinatorIds(v); resetPage() }}
@@ -1083,7 +1083,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
                     placeholder="Todos os coordenadores"
                   />
                 )}
-                {executives.length > 0 && (
+                {!triagemPadrao && executives.length > 0 && (
                   <MultiSelect
                     value={executiveIds}
                     onChange={v => { setExecutiveIds(v); resetPage() }}
@@ -1091,28 +1091,35 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
                     placeholder="Todos os executivos"
                   />
                 )}
-                <MultiSelect
-                  value={contractTypeIds}
-                  onChange={v => { setContractTypeIds(v); resetPage() }}
-                  options={contractTypeList}
-                  placeholder="Tipo de contrato"
-                />
-                <MultiSelect
-                  value={origins}
-                  onChange={v => { setOrigins(v); resetPage() }}
-                  options={ORIGIN_OPTIONS.filter(o => o.value).map(o => ({ id: o.value, name: o.label }))}
-                  placeholder="Todas as origens"
-                />
-                <TextInput
-                  placeholder="Nº ticket..."
-                  value={ticket}
-                  onChange={e => { setTicket(e.target.value); resetPage() }}
-                />
+                {!triagemPadrao && (
+                  <MultiSelect
+                    value={contractTypeIds}
+                    onChange={v => { setContractTypeIds(v); resetPage() }}
+                    options={contractTypeList}
+                    placeholder="Tipo de contrato"
+                  />
+                )}
+                {!triagemPadrao && (
+                  <MultiSelect
+                    value={origins}
+                    onChange={v => { setOrigins(v); resetPage() }}
+                    options={ORIGIN_OPTIONS.filter(o => o.value).map(o => ({ id: o.value, name: o.label }))}
+                    placeholder="Todas as origens"
+                  />
+                )}
+                {!triagemPadrao && (
+                  <TextInput
+                    placeholder="Nº ticket..."
+                    value={ticket}
+                    onChange={e => { setTicket(e.target.value); resetPage() }}
+                  />
+                )}
               </>
             )}
           </div>
 
-          {/* Linha 2: datas + limpar */}
+          {/* Linha 2: datas + categorias + limpar — escondida em modo Triagem */}
+          {!triagemPadrao && (
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex rounded-lg border border-zinc-700 overflow-hidden text-xs">
               {(['month', 'period'] as const).map((mode) => (
@@ -1200,6 +1207,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
               </button>
             )}
           </div>
+          )}
         </div>
 
         {/* Pills de tipo de contrato — apenas para cliente */}
