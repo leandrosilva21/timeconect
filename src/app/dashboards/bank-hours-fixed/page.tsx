@@ -587,7 +587,37 @@ export default function BankHoursFixedPage() {
             placeholder="Selecione um projeto"
             wide
           />
-          {/* Filtro de data removido por solicitação — dashboard sempre considera período total */}
+          {/* Filtro de data */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Data</label>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-lg border border-zinc-700 overflow-hidden text-xs">
+                {(['month', 'period'] as const).map((mode) => (
+                  <button key={mode} onClick={() => setFilterMode(mode)}
+                    className="px-3 py-1.5 font-medium transition-colors"
+                    style={{ background: filterMode === mode ? 'var(--primary)' : 'transparent', color: filterMode === mode ? 'var(--primary-fg)' : 'var(--text-muted)' }}>
+                    {mode === 'month' ? 'Mês/Ano' : 'Período'}
+                  </button>
+                ))}
+              </div>
+              {filterMode === 'month' ? (
+                <MonthYearPicker
+                  month={refMonth}
+                  year={refYear}
+                  onChange={(m, y) => {
+                    if (m === 0) { setRefMonth(null); setRefYear(null); setDateFrom(''); setDateTo('') }
+                    else { setRefMonth(m); setRefYear(y); setDateFrom(''); setDateTo('') }
+                  }}
+                />
+              ) : (
+                <DateRangePicker
+                  from={dateFrom}
+                  to={dateTo}
+                  onChange={(f, t) => { setDateFrom(f); setDateTo(t); setRefMonth(null); setRefYear(null) }}
+                />
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Empty — chama atenção pra selecionar o projeto */}
@@ -754,12 +784,18 @@ export default function BankHoursFixedPage() {
             {/* ── PROJETOS ── */}
             {activeTab === 'projects' && (
               <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <KpiCard
                     label="Consumo Acumulado"
                     value={fmtH(summary?.projects_consumed_hours ?? summary?.consumed_hours ?? 0)}
                     icon={Clock}
                     accent="primary"
+                  />
+                  <KpiCard
+                    label="Consumo do Mês"
+                    value={fmtH(summary?.projects_month_consumed_hours ?? summary?.month_consumed_hours ?? 0)}
+                    icon={Clock}
+                    hint={monthConsumptionHint}
                   />
                 </div>
                 <ProjectsTable items={projectsList} loading={loadingProjects} />
