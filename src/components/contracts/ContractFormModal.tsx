@@ -787,7 +787,9 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                         className={inputCls} style={inputStyle} />
                     </div>
                   )}
-                  {isFechado && (
+                  {/* Horas Consultor aparece sempre que faz sentido (igual ao Saving):
+                      Fechado, BH Fixo e BH Mensal — esconde só em On Demand e mensalidades. */}
+                  {!isOnDemand && !isMensalidade && (
                     <div>
                       <label className={labelCls}>Horas Consultor</label>
                       <input type="number" min="0" step="1" placeholder="0"

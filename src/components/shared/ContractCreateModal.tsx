@@ -872,7 +872,8 @@ export function ContractCreateModal({
                       <input {...numInput('pct_horas_coordenador')} placeholder="0,00" />
                     </div>
                   )}
-                  {(isFechado || isBhFixo) && (
+                  {/* Horas Consultor: Fechado, BH Fixo e BH Mensal — esconde em On Demand e mensalidades */}
+                  {!isOnDemand && !isMensalidade && (
                     <div>
                       <label className={labelCls}>Horas Consultor</label>
                       <input {...numInput('horas_consultor')} placeholder="0,00" />

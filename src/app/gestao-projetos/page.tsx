@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { Project, PaginatedResponse, HourContribution } from '@/types'
@@ -699,6 +699,7 @@ interface ProjectEditForm {
   max_expense_per_consultant: string
   timesheet_retroactive_limit_days: string
   allow_manual_timesheets: boolean; allow_negative_balance: boolean
+  movidesk_integration_enabled: boolean
   coordinator_ids: number[]; consultant_ids: number[]; consultant_group_ids: number[]
   kanban_coordinator_override_id: string
 }
@@ -759,6 +760,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     timesheet_retroactive_limit_days: d.timesheet_retroactive_limit_days != null ? String(d.timesheet_retroactive_limit_days) : '',
     allow_manual_timesheets:         d.allow_manual_timesheets ?? true,
     allow_negative_balance:          d.allow_negative_balance ?? false,
+    movidesk_integration_enabled:    d.movidesk_integration_enabled ?? false,
     coordinator_ids:                 (d.coordinators ?? d.approvers ?? []).map((c: any) => c.id),
     consultant_ids:                  (d.consultants ?? []).map((c: any) => c.id),
     consultant_group_ids:            (d.consultant_groups ?? []).map((g: any) => g.id),
@@ -864,6 +866,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
         encerramento_date:    form.encerramento_date || null,
         allow_manual_timesheets: form.allow_manual_timesheets,
         allow_negative_balance:  form.allow_negative_balance,
+        movidesk_integration_enabled: form.movidesk_integration_enabled,
         cobra_despesa_cliente:   form.cobra_despesa_cliente,
         observacoes_contrato: form.observacoes_contrato || null,
         condicao_pagamento:   form.condicao_pagamento || null,
@@ -894,7 +897,23 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       payload.kanban_coordinator_override_id = form.kanban_coordinator_override_id === ''
         ? null
         : Number(form.kanban_coordinator_override_id)
-      await api.put(`/projects/${project.id}`, payload)
+      try {
+        await api.put(`/projects/${project.id}`, payload)
+      } catch (err: any) {
+        // Conflito: outro projeto do mesmo cliente já tem integração Movidesk
+        const isConflict = (err instanceof ApiError) && err.status === 409 && err.data?.code === 'MOVIDESK_INTEGRATION_CONFLICT'
+        if (!isConflict) throw err
+        const current = err.data?.current_project as { name?: string; code?: string } | undefined
+        const ok = window.confirm(
+          `Cliente já tem integração Movidesk ativa em "${current?.code ?? ''} ${current?.name ?? ''}". ` +
+          `Deseja desativar nele e mover pra este projeto?`
+        )
+        if (!ok) {
+          setSaving(false)
+          return
+        }
+        await api.put(`/projects/${project.id}`, { ...payload, confirm_movidesk_swap: true })
+      }
       // Salva allow_manual_timesheet por consultor (pivô separado)
       const directInitial: any[] = d.consultants ?? []
       const groupInitial: any[] = (d.consultant_groups ?? []).flatMap((g: any) => g.consultants ?? [])
@@ -1200,6 +1219,11 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 </div>
               </div>
               <Toggle2 checked={form.allow_negative_balance} onChange={v => setForm(p => ({ ...p, allow_negative_balance: v }))} label="Permitir saldo negativo de horas" />
+              <Toggle2
+                checked={form.movidesk_integration_enabled}
+                onChange={v => setForm(p => ({ ...p, movidesk_integration_enabled: v }))}
+                label="Receber integração Movidesk (apontamentos importados deste cliente caem neste projeto)"
+              />
 
               {/* Override de Coordenador (sustentação) — só admin */}
               {(() => {
