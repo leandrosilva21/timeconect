@@ -219,7 +219,7 @@ export function ProjectMessages({ projectId, userRole, readOnly }: Props) {
     try {
       const fd = new FormData()
       if (text) fd.append('message', text)
-      fd.append('visibility', isCliente ? 'client' : visibility)
+      // Chat de projeto é sempre interno — backend ignora e força 'internal'.
       files.forEach(f => fd.append('files[]', f))
 
       const res = await fetch(`/api/v1/projects/${projectId}/messages`, {
@@ -356,29 +356,7 @@ export function ProjectMessages({ projectId, userRole, readOnly }: Props) {
         </div>
       ) : (
       <div className="px-4 pb-4 pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-        {/* Visibility toggle — hidden for clients and admins (admins always post internal) */}
-        {!isCliente && !isAdmin && (
-          <div className="flex items-center gap-2 mb-2">
-            <button
-              onClick={() => setVisibility('internal')}
-              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all"
-              style={visibility === 'internal'
-                ? { background: 'rgba(255,255,255,0.08)', color: 'var(--brand-text)', border: '1px solid var(--brand-border)' }
-                : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid transparent' }}
-            >
-              <Lock size={10} /> Interno
-            </button>
-            <button
-              onClick={() => setVisibility('client')}
-              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all"
-              style={visibility === 'client'
-                ? { background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }
-                : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid transparent' }}
-            >
-              <Eye size={10} /> Visível ao cliente
-            </button>
-          </div>
-        )}
+        {/* Chat de projeto é sempre interno — toggle "Visível ao cliente" removido. */}
 
         <div className="flex gap-2 items-end">
           {/* Attachment button */}
