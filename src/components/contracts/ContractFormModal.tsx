@@ -600,6 +600,45 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                 />
               </div>
 
+              {/* Aprovação do Cliente / Proposta — atalho de upload (mesma funcionalidade
+                  da aba Anexos, mas visível na aba Cliente pra não precisar trocar de tab). */}
+              <div>
+                <label className={labelCls}>Aprovação do Cliente / Proposta Assinada</label>
+                {(() => {
+                  const existing = internalEdit?.attachments?.filter(a => a.type === 'proposta') ?? []
+                  const pendingPropostas = pendingFiles.filter(pf => pf.type === 'proposta')
+                  return (
+                    <>
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt,.csv,.zip"
+                        onChange={e => {
+                          const f = e.target.files?.[0]
+                          if (f) { setPendingFiles(p => [...p, { file: f, type: 'proposta' }]); e.target.value = '' }
+                        }}
+                        className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-1 focus:ring-cyan-500/40 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:bg-cyan-500/10 file:text-cyan-300 hover:file:bg-cyan-500/20 file:cursor-pointer"
+                        style={inputStyle}
+                      />
+                      {existing.length > 0 && (
+                        <p className="text-[11px] text-emerald-400 mt-1">
+                          ✓ {existing.length} arquivo(s) já enviado(s): {existing.map(a => a.original_name).join(', ')}
+                        </p>
+                      )}
+                      {pendingPropostas.length > 0 && (
+                        <p className="text-[11px] text-cyan-400 mt-1">
+                          + {pendingPropostas.length} arquivo(s) aguardando upload
+                        </p>
+                      )}
+                      {existing.length === 0 && pendingPropostas.length === 0 && (
+                        <p className="text-[10px] mt-1" style={{ color: 'var(--text-light)' }}>
+                          Anexe a aprovação formal (PDF, imagem ou e-mail exportado) — máx 20 MB
+                        </p>
+                      )}
+                    </>
+                  )
+                })()}
+              </div>
+
               {/* Projeto Pai */}
               {form.customer_id && form.is_subproject && (
                 <div>
