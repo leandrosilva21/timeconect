@@ -1357,6 +1357,11 @@ function PlanDecisionModal({ card, coordinators, onClose, onDone, onNovoProjeto,
       })
       .catch(() => {})
       .finally(() => setParentBalanceLoading(false))
+
+    // Sugere o próximo número de subprojeto (backend pula códigos já existentes).
+    api.get<{ sub_seq?: string }>(`/projects/next-code?parent_project_id=${id}`)
+      .then(r => { if (r?.sub_seq) setSubSeq(r.sub_seq) })
+      .catch(() => {})
   }
 
   const handleSubprojetoAvancar = () => {
