@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '@/lib/api'
+import { useAuth } from '@/hooks/use-auth'
 import type { ProjectMessage } from '@/types'
 import { Send, Paperclip, X, Download, FileText, Eye, EyeOff, Lock } from 'lucide-react'
 import { toast } from 'sonner'
@@ -100,6 +101,7 @@ function AttachmentChip({ att, messageId }: { att: Attachment; messageId: number
 }
 
 export function ProjectMessages({ projectId, userRole, readOnly }: Props) {
+  const { user: currentUser } = useAuth()
   const isCliente = userRole === 'cliente'
   const isAdmin   = userRole === 'admin'
 
@@ -188,7 +190,7 @@ export function ProjectMessages({ projectId, userRole, readOnly }: Props) {
   }
 
   const filteredMentions = mentionQuery !== null
-    ? mentionUsers.filter(u => u.name.toLowerCase().includes(mentionQuery))
+    ? mentionUsers.filter(u => u.id !== currentUser?.id && u.name.toLowerCase().includes(mentionQuery))
     : []
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

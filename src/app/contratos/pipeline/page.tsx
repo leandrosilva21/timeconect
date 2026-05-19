@@ -3193,6 +3193,7 @@ function ProjectTeamModal({ projectId, projectName, onClose, onSaved }: { projec
 }
 
 function RequestDetailModal({ card, onClose, initialTab }: { card: RequestCard; onClose: () => void; initialTab?: 'details' | 'comments' | 'log' }) {
+  const { user: currentUser } = useAuth()
   const [tab, setTab]               = useState<'details' | 'comments' | 'log'>(initialTab ?? 'details')
   const [msgs, setMsgs]             = useState<ReqMsg[]>([])
   const [msgsLoaded, setMsgsLoaded] = useState(false)
@@ -3257,7 +3258,7 @@ function RequestDetailModal({ card, onClose, initialTab }: { card: RequestCard; 
   }
 
   const filteredMentions = mentionUsers.filter(u =>
-    u.name.toLowerCase().includes(mentionQuery)
+    u.id !== currentUser?.id && u.name.toLowerCase().includes(mentionQuery)
   )
 
   const handleSend = async () => {
