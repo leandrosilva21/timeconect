@@ -1,0 +1,87 @@
+'use client'
+
+import { useState } from 'react'
+
+/**
+ * Tooltip flutuante (canto superior direito, pointer-events:none) que
+ * mostra preview do apontamento ao passar o mouse na linha. Pode receber
+ * qualquer objeto com os campos opcionais abaixo — funciona tanto pro
+ * Timesheet completo quanto pro shape `{ user_name, customer_name, project_name }`
+ * usado no /meu-painel.
+ */
+export interface TimesheetPreview {
+  id?: number | string
+  user?: { name?: string } | null
+  user_name?: string
+  customer?: { name?: string } | null
+  customer_name?: string
+  project?: { name?: string; customer?: { name?: string } } | null
+  project_name?: string
+  effort_minutes?: number
+  ticket?: string | null
+  observation?: string | null
+}
+
+export function useTimesheetHover() {
+  const [ts, setTs] = useState<TimesheetPreview | null>(null)
+  const bind = (item: TimesheetPreview) => ({
+    onMouseEnter: () => setTs(item),
+    onMouseLeave: () => setTs(null),
+  })
+  return { ts, bind, clear: () => setTs(null) }
+}
+
+function toHHMM(mins: number): string {
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return `${h}h${String(m).padStart(2, '0')}`
+}
+
+export function TimesheetHoverTooltip({ ts }: { ts: TimesheetPreview | null }) {
+  if (!ts) return null
+
+  const userName    = ts.user?.name ?? ts.user_name ?? '—'
+  const customerName = ts.customer?.name ?? ts.project?.customer?.name ?? ts.customer_name ?? '—'
+  const projectName = ts.project?.name ?? ts.project_name ?? '—'
+  const horas       = ts.effort_minutes != null ? toHHMM(ts.effort_minutes) : '—'
+
+  const obsText = (ts.observation ?? '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const obsPreview = obsText.length > 240 ? obsText.slice(0, 240) + '…' : obsText
+
+  return (
+    <div
+      className="fixed z-40 rounded-lg shadow-2xl pointer-events-none"
+      style={{
+        top: 80, right: 16, minWidth: 280, maxWidth: 380,
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        padding: '12px 14px',
+      }}
+    >
+      {ts.id != null && (
+        <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>
+          Apontamento #{ts.id}
+        </p>
+      )}
+      <div className="space-y-1 text-xs" style={{ color: 'var(--text)' }}>
+        <div><span style={{ color: 'var(--text-muted)' }}>Colaborador:</span> <span className="font-medium">{userName}</span></div>
+        <div><span style={{ color: 'var(--text-muted)' }}>Cliente:</span> <span className="font-medium">{customerName}</span></div>
+        <div><span style={{ color: 'var(--text-muted)' }}>Projeto:</span> <span className="font-medium">{projectName}</span></div>
+        <div><span style={{ color: 'var(--text-muted)' }}>Horas:</span> <span className="font-semibold" style={{ color: 'var(--brand-primary)' }}>{horas}</span></div>
+        {ts.ticket && (
+          <div><span style={{ color: 'var(--text-muted)' }}>Ticket:</span> <span className="font-medium">#{ts.ticket}</span></div>
+        )}
+        {obsPreview && (
+          <div className="pt-2 mt-2" style={{ borderTop: '1px solid var(--border)' }}>
+            <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>Descrição</p>
+            <p className="leading-snug" style={{ color: 'var(--text-muted)' }}>{obsPreview}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

@@ -25,6 +25,7 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts'
 import { TimesheetConflictModal, type ConflictTimesheet } from '@/components/timesheet/TimesheetConflictModal'
+import { TimesheetHoverTooltip, useTimesheetHover } from '@/components/ui/timesheet-hover-tooltip'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1444,6 +1445,7 @@ const EMPTY_EXP = {
 export default function MeuPainelPage() {
   const { user } = useAuth()
   const isCoordenador = user?.type === 'coordenador'
+  const hover = useTimesheetHover()
 
   // Period
   const now = new Date()
@@ -2580,6 +2582,7 @@ export default function MeuPainelPage() {
                   const clientName = ts.customer?.name ?? ts.project?.customer?.name
                   return (
                     <tr key={ts.id}
+                      {...hover.bind(ts)}
                       className={`border-b border-zinc-800 transition-colors last:border-0 ${
                         locked ? 'bg-zinc-900/40' : 'hover:bg-zinc-800/25'
                       }`}>
@@ -3421,7 +3424,7 @@ export default function MeuPainelPage() {
                           const hrs = ts.effort_minutes / 60
                           const locked = isLocked(ts.status)
                           return (
-                            <tr key={ts.id} className="border-b hover:bg-white/[0.02] transition-colors" style={{ borderColor: 'var(--brand-border)' }}>
+                            <tr key={ts.id} {...hover.bind(ts)} className="border-b hover:bg-white/[0.02] transition-colors" style={{ borderColor: 'var(--brand-border)' }}>
                               <td className="px-2 py-2.5 w-10">
                                 <RowMenu items={[
                                   { label: 'Visualizar', icon: <Eye size={12} />, onClick: () => setTsViewItem(ts) },
@@ -3515,7 +3518,7 @@ export default function MeuPainelPage() {
                           const val = effectiveRate > 0 ? hrs * effectiveRate : null
                           const locked = isLocked(ts.status)
                           return (
-                            <tr key={ts.id} className="border-b hover:bg-white/[0.02] transition-colors" style={{ borderColor: 'var(--brand-border)' }}>
+                            <tr key={ts.id} {...hover.bind(ts)} className="border-b hover:bg-white/[0.02] transition-colors" style={{ borderColor: 'var(--brand-border)' }}>
                               <td className="px-2 py-2.5 w-10">
                                 <RowMenu items={[
                                   { label: 'Visualizar', icon: <Eye size={12} />, onClick: () => setTsViewItem(ts) },
@@ -4215,6 +4218,7 @@ export default function MeuPainelPage() {
         </ModalOverlay>
       )}
 
+      <TimesheetHoverTooltip ts={hover.ts} />
     </AppLayout>
   )
 }
