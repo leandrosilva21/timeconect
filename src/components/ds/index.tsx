@@ -126,16 +126,24 @@ interface TrProps {
   onClick?: () => void
   className?: string
   baseBackground?: string
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
 }
 
-export function Tr({ children, onClick, className, baseBackground }: TrProps) {
+export function Tr({ children, onClick, className, baseBackground, onMouseEnter, onMouseLeave }: TrProps) {
   const base = baseBackground ?? 'transparent'
   return (
     <tr
       className={cn('transition-colors duration-100', onClick && 'cursor-pointer', className)}
       style={{ borderBottom: '1px solid var(--brand-border)', background: base }}
-      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,245,255,0.03)' }}
-      onMouseLeave={e => { e.currentTarget.style.background = base }}
+      onMouseEnter={e => {
+        e.currentTarget.style.background = 'rgba(0,245,255,0.03)'
+        onMouseEnter?.()
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.background = base
+        onMouseLeave?.()
+      }}
       onClick={onClick}
     >
       {children}

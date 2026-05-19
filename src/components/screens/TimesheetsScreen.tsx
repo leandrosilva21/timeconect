@@ -21,6 +21,7 @@ import { TimesheetLogsModal } from '@/components/timesheet/TimesheetLogsModal'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { Label } from '@/components/ui/label'
+import { TimesheetHoverTooltip, useTimesheetHover } from '@/components/ui/timesheet-hover-tooltip'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { ApiError } from '@/lib/api'
@@ -769,6 +770,8 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
   const [reverseRejectionReason, setReverseRejectionReason] = useState('')
   const [reverseRejecting, setReverseRejecting] = useState(false)
   const [logsModalTsId, setLogsModalTsId] = useState<number | null>(null)
+  // Hover preview do apontamento (tooltip fixo no canto superior direito)
+  const hover = useTimesheetHover()
   const [conflictItem, setConflictItem]   = useState<ConflictTimesheet | null>(null)
 
   const handleReprocessMovidesk = async (ids?: number[]) => {
@@ -1386,6 +1389,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
                   key={ts.id}
                   baseBackground={ts.is_internal_action ? 'rgba(100,116,139,0.07)' : ts.is_billable_only ? 'rgba(245,158,11,0.06)' : undefined}
                   onClick={() => openView(ts)}
+                  {...hover.bind(ts)}
                 >
                   <Td className="w-10">
                     <div onClick={e => e.stopPropagation()}>
@@ -1636,6 +1640,9 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
           onSaved={() => { refetch(); setSelectedIds(new Set()) }}
         />
       )}
+
+      {/* Tooltip de preview ao hover na linha (não intercepta clicks) */}
+      <TimesheetHoverTooltip ts={hover.ts} />
 
       {/* Modal de histórico de alterações */}
       <TimesheetLogsModal
