@@ -21,6 +21,7 @@ import { TimesheetLogsModal } from '@/components/timesheet/TimesheetLogsModal'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { Label } from '@/components/ui/label'
+import { TimesheetHoverTooltip, useTimesheetHover } from '@/components/ui/timesheet-hover-tooltip'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { ApiError } from '@/lib/api'
@@ -127,6 +128,14 @@ function OriginBadge({ origin, isBillableOnly, isInternalAction, isReleased, can
           style={{ background: 'rgba(139,92,246,0.12)', color: '#8B5CF6' }}
         >
           <Webhook size={9} /> Movidesk
+        </span>
+      ) : origin === 'movidesk_fallback' ? (
+        <span
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+          style={{ background: 'rgba(245,158,11,0.14)', color: '#F59E0B' }}
+          title="Sincronizado do Movidesk com autor não-mapeado — atribuído ao Usuário Padrão pra triagem"
+        >
+          <Webhook size={9} /> Movidesk (triagem)
         </span>
       ) : (
         <span
@@ -672,7 +681,9 @@ function toHHMM(mins: number): string {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
-function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; embedded?: boolean } = {}) {
+function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'sustentacao'; embedded?: boolean; triagemPadrao?: boolean } = {}) {
+  // Filtro de dimensão pra modo Triagem: '' = todos (OR), ou 'user'|'customer'|'project'
+  const [triagemField, setTriagemField] = useState<string>('')
   const { user } = useAuth()
   const isAdmin        = user?.type === 'admin'
   const isCoordenador  = user?.type === 'coordenador'
@@ -759,6 +770,8 @@ function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; emb
   const [reverseRejectionReason, setReverseRejectionReason] = useState('')
   const [reverseRejecting, setReverseRejecting] = useState(false)
   const [logsModalTsId, setLogsModalTsId] = useState<number | null>(null)
+  // Hover preview do apontamento (tooltip fixo no canto superior direito)
+  const hover = useTimesheetHover()
   const [conflictItem, setConflictItem]   = useState<ConflictTimesheet | null>(null)
 
   const handleReprocessMovidesk = async (ids?: number[]) => {
@@ -912,8 +925,10 @@ function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; emb
     projectIds.forEach(v => p.append('project_id[]', v))
     if (sortField)     p.set('order', sortDir === 'desc' ? `-${sortField}` : sortField)
     if (scope)         p.set('scope', scope)
+    if (triagemPadrao) p.set('triagem_padrao', '1')
+    if (triagemPadrao && triagemField) p.set('triagem_field', triagemField)
     return p.toString()
-  }, [page, status, origins, serviceTypeIds, contractTypeIds, categoriaServico, customerIds, coordinatorIds, executiveIds, userIds, projectId, projectIds, startDate, endDate, ticket, requester, ticketService, sortField, sortDir, isCliente, user?.customer_id, scope])
+  }, [page, status, origins, serviceTypeIds, contractTypeIds, categoriaServico, customerIds, coordinatorIds, executiveIds, userIds, projectId, projectIds, startDate, endDate, ticket, requester, ticketService, sortField, sortDir, isCliente, user?.customer_id, scope, triagemPadrao, triagemField])
 
   const { data, loading, error, refetch } = useApiQuery<PaginatedResponse<Timesheet>>(
     `/timesheets?${params}`, [params]
@@ -1066,7 +1081,7 @@ function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; emb
                   options={projectsList}
                   placeholder="Todos os projetos"
                 />
-                {coordinators.length > 0 && (
+                {!triagemPadrao && coordinators.length > 0 && (
                   <MultiSelect
                     value={coordinatorIds}
                     onChange={v => { setCoordinatorIds(v); resetPage() }}
@@ -1074,7 +1089,7 @@ function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; emb
                     placeholder="Todos os coordenadores"
                   />
                 )}
-                {executives.length > 0 && (
+                {!triagemPadrao && executives.length > 0 && (
                   <MultiSelect
                     value={executiveIds}
                     onChange={v => { setExecutiveIds(v); resetPage() }}
@@ -1082,28 +1097,35 @@ function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; emb
                     placeholder="Todos os executivos"
                   />
                 )}
-                <MultiSelect
-                  value={contractTypeIds}
-                  onChange={v => { setContractTypeIds(v); resetPage() }}
-                  options={contractTypeList}
-                  placeholder="Tipo de contrato"
-                />
-                <MultiSelect
-                  value={origins}
-                  onChange={v => { setOrigins(v); resetPage() }}
-                  options={ORIGIN_OPTIONS.filter(o => o.value).map(o => ({ id: o.value, name: o.label }))}
-                  placeholder="Todas as origens"
-                />
-                <TextInput
-                  placeholder="Nº ticket..."
-                  value={ticket}
-                  onChange={e => { setTicket(e.target.value); resetPage() }}
-                />
+                {!triagemPadrao && (
+                  <MultiSelect
+                    value={contractTypeIds}
+                    onChange={v => { setContractTypeIds(v); resetPage() }}
+                    options={contractTypeList}
+                    placeholder="Tipo de contrato"
+                  />
+                )}
+                {!triagemPadrao && (
+                  <MultiSelect
+                    value={origins}
+                    onChange={v => { setOrigins(v); resetPage() }}
+                    options={ORIGIN_OPTIONS.filter(o => o.value).map(o => ({ id: o.value, name: o.label }))}
+                    placeholder="Todas as origens"
+                  />
+                )}
+                {!triagemPadrao && (
+                  <TextInput
+                    placeholder="Nº ticket..."
+                    value={ticket}
+                    onChange={e => { setTicket(e.target.value); resetPage() }}
+                  />
+                )}
               </>
             )}
           </div>
 
-          {/* Linha 2: datas + limpar */}
+          {/* Linha 2: datas + categorias + limpar — escondida em modo Triagem */}
+          {!triagemPadrao && (
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex rounded-lg border border-zinc-700 overflow-hidden text-xs">
               {(['month', 'period'] as const).map((mode) => (
@@ -1191,6 +1213,7 @@ function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; emb
               </button>
             )}
           </div>
+          )}
         </div>
 
         {/* Pills de tipo de contrato — apenas para cliente */}
@@ -1220,8 +1243,8 @@ function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; emb
           </div>
         )}
 
-        {/* Status pills — oculto para clientes */}
-        {!isCliente && <div className="flex items-center gap-1 p-1 rounded-xl w-fit mb-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+        {/* Status pills — oculto para clientes e em modo Triagem */}
+        {!isCliente && !triagemPadrao && <div className="flex items-center gap-1 p-1 rounded-xl w-fit mb-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
           {STATUS_PILLS.map(s => (
             <button
               key={s.value}
@@ -1229,6 +1252,28 @@ function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; emb
               className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
               style={status === s.value
 
+                ? { background: 'var(--brand-primary)', color: 'var(--primary-fg)' }
+                : { color: 'var(--brand-muted)', background: 'transparent' }
+              }
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>}
+
+        {/* Pills Triagem: filtra por dimensão padrão (user/customer/project) */}
+        {triagemPadrao && <div className="flex items-center gap-1 p-1 rounded-xl w-fit mb-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+          {[
+            { value: '',         label: 'Todos' },
+            { value: 'user',     label: 'Usuário' },
+            { value: 'customer', label: 'Cliente' },
+            { value: 'project',  label: 'Projeto' },
+          ].map(s => (
+            <button
+              key={s.value}
+              onClick={() => { setTriagemField(s.value); setPage(1) }}
+              className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={triagemField === s.value
                 ? { background: 'var(--brand-primary)', color: 'var(--primary-fg)' }
                 : { color: 'var(--brand-muted)', background: 'transparent' }
               }
@@ -1344,6 +1389,7 @@ function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; emb
                   key={ts.id}
                   baseBackground={ts.is_internal_action ? 'rgba(100,116,139,0.07)' : ts.is_billable_only ? 'rgba(245,158,11,0.06)' : undefined}
                   onClick={() => openView(ts)}
+                  {...hover.bind(ts)}
                 >
                   <Td className="w-10">
                     <div onClick={e => e.stopPropagation()}>
@@ -1595,6 +1641,9 @@ function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; emb
         />
       )}
 
+      {/* Tooltip de preview ao hover na linha (não intercepta clicks) */}
+      <TimesheetHoverTooltip ts={hover.ts} />
+
       {/* Modal de histórico de alterações */}
       <TimesheetLogsModal
         timesheetId={logsModalTsId}
@@ -1650,12 +1699,14 @@ function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; emb
 export interface TimesheetsScreenProps {
   scope?: 'sustentacao'
   embedded?: boolean
+  /** Filtra timesheets atribuídos ao Usuário/Cliente/Projeto Padrão Movidesk (OR). Usado pela rotina Triagem. */
+  triagemPadrao?: boolean
 }
 
 export function TimesheetsScreen(props: TimesheetsScreenProps = {}) {
   return (
     <Suspense>
-      <TimesheetsPageContent scope={props.scope} embedded={props.embedded} />
+      <TimesheetsPageContent scope={props.scope} embedded={props.embedded} triagemPadrao={props.triagemPadrao} />
     </Suspense>
   )
 }
