@@ -431,22 +431,15 @@ export default function BankHoursFixedPage() {
   // Projects tab data
   const fetchProjects = useCallback(() => {
     if (!hasFilters) return
+    // Aba Projetos ignora o filtro de data por design — sempre lista tudo.
     const p = baseParams()
-    if (!dateFilterCleared) {
-      if (dateFrom) p.set('date_from', dateFrom)
-      if (dateTo)   p.set('date_to',   dateTo)
-      if (!dateFrom && !dateTo) {
-        const [toM, toY] = resolveMonthYear()
-        p.set('month', String(toM)); p.set('year', String(toY))
-      }
-    }
     p.set('service_type_name', 'Projeto')
     setLoadingProjects(true)
     api.get<any>(`/dashboards/bank-hours-fixed/projects?${p}`)
       .then(r => setProjectsList(Array.isArray(r?.data) ? r.data : []))
       .catch(() => setProjectsList([]))
       .finally(() => setLoadingProjects(false))
-  }, [baseParams, resolveMonthYear, hasFilters, dateFilterCleared, dateFrom, dateTo])
+  }, [baseParams, hasFilters])
 
   // Maintenance tab data
   const fetchMaintenance = useCallback(() => {
@@ -784,18 +777,12 @@ export default function BankHoursFixedPage() {
             {/* ── PROJETOS ── */}
             {activeTab === 'projects' && (
               <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <KpiCard
                     label="Consumo Acumulado"
                     value={fmtH(summary?.projects_consumed_hours ?? summary?.consumed_hours ?? 0)}
                     icon={Clock}
                     accent="primary"
-                  />
-                  <KpiCard
-                    label="Consumo do Mês"
-                    value={fmtH(summary?.projects_month_consumed_hours ?? summary?.month_consumed_hours ?? 0)}
-                    icon={Clock}
-                    hint={monthConsumptionHint}
                   />
                 </div>
                 <ProjectsTable items={projectsList} loading={loadingProjects} />
