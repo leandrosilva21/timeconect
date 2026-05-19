@@ -411,7 +411,7 @@ function SidebarInner({ user }: { user: User }) {
         .map(([, item]) => item)
       const nav: NavEntry[] = [
         { type: 'item', label: 'Home',                 href: '/portal-cliente',              icon: Building2 },
-        // 'Minhas atividades' temporariamente oculta — não pronta para produção
+        { type: 'item', label: 'Minhas atividades',    href: '/portal-cliente/atividades',   icon: Layers },
         { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline',          icon: LayoutGrid },
       ]
       if (dashItems.length > 0) {
