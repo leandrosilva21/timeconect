@@ -238,14 +238,20 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
       // Load full contract data
       api.get<Contract>(`/contracts/${editContract.id}`).then(full => {
         setInternalEdit(full)
+        // Parse o código do projeto pra pré-popular os campos seq/ano/subSeq
+        // Formato: PREFIX001-26  ou  PREFIX001-26-01 (subprojeto)
+        const codeMatch = (full.project?.code ?? '').match(/^[A-Za-z]+(\d+)-(\d+)(?:-(\d+))?/)
+        const parsedSeq    = codeMatch?.[1] ?? ''
+        const parsedYear   = codeMatch?.[2] ?? CURRENT_YEAR_2D
+        const parsedSubSeq = codeMatch?.[3] ?? ''
         setForm({
           customer_id:           String(full.customer_id),
           project_name:          (full as any).project_name ?? '',
           is_subproject:         !!(full as any).parent_project_id,
-          sub_seq:               '',
+          sub_seq:               parsedSubSeq,
           parent_project_id:     (full as any).parent_project_id ? String((full as any).parent_project_id) : '',
-          code_seq:              '',
-          code_year:             CURRENT_YEAR_2D,
+          code_seq:              parsedSeq,
+          code_year:             parsedYear,
           categoria:             full.categoria,
           service_type_id:       full.service_type_id ? String(full.service_type_id) : '',
           contract_type_id:      full.contract_type_id ? String(full.contract_type_id) : '',
