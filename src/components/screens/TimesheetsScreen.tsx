@@ -681,6 +681,8 @@ function toHHMM(mins: number): string {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'sustentacao'; embedded?: boolean; triagemPadrao?: boolean } = {}) {
+  // Filtro de dimensão pra modo Triagem: '' = todos (OR), ou 'user'|'customer'|'project'
+  const [triagemField, setTriagemField] = useState<string>('')
   const { user } = useAuth()
   const isAdmin        = user?.type === 'admin'
   const isCoordenador  = user?.type === 'coordenador'
@@ -921,8 +923,9 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
     if (sortField)     p.set('order', sortDir === 'desc' ? `-${sortField}` : sortField)
     if (scope)         p.set('scope', scope)
     if (triagemPadrao) p.set('triagem_padrao', '1')
+    if (triagemPadrao && triagemField) p.set('triagem_field', triagemField)
     return p.toString()
-  }, [page, status, origins, serviceTypeIds, contractTypeIds, categoriaServico, customerIds, coordinatorIds, executiveIds, userIds, projectId, projectIds, startDate, endDate, ticket, requester, ticketService, sortField, sortDir, isCliente, user?.customer_id, scope, triagemPadrao])
+  }, [page, status, origins, serviceTypeIds, contractTypeIds, categoriaServico, customerIds, coordinatorIds, executiveIds, userIds, projectId, projectIds, startDate, endDate, ticket, requester, ticketService, sortField, sortDir, isCliente, user?.customer_id, scope, triagemPadrao, triagemField])
 
   const { data, loading, error, refetch } = useApiQuery<PaginatedResponse<Timesheet>>(
     `/timesheets?${params}`, [params]
@@ -1237,8 +1240,8 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
           </div>
         )}
 
-        {/* Status pills — oculto para clientes */}
-        {!isCliente && <div className="flex items-center gap-1 p-1 rounded-xl w-fit mb-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+        {/* Status pills — oculto para clientes e em modo Triagem */}
+        {!isCliente && !triagemPadrao && <div className="flex items-center gap-1 p-1 rounded-xl w-fit mb-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
           {STATUS_PILLS.map(s => (
             <button
               key={s.value}
@@ -1246,6 +1249,28 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
               className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
               style={status === s.value
 
+                ? { background: 'var(--brand-primary)', color: 'var(--primary-fg)' }
+                : { color: 'var(--brand-muted)', background: 'transparent' }
+              }
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>}
+
+        {/* Pills Triagem: filtra por dimensão padrão (user/customer/project) */}
+        {triagemPadrao && <div className="flex items-center gap-1 p-1 rounded-xl w-fit mb-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+          {[
+            { value: '',         label: 'Todos' },
+            { value: 'user',     label: 'Usuário' },
+            { value: 'customer', label: 'Cliente' },
+            { value: 'project',  label: 'Projeto' },
+          ].map(s => (
+            <button
+              key={s.value}
+              onClick={() => { setTriagemField(s.value); setPage(1) }}
+              className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={triagemField === s.value
                 ? { background: 'var(--brand-primary)', color: 'var(--primary-fg)' }
                 : { color: 'var(--brand-muted)', background: 'transparent' }
               }

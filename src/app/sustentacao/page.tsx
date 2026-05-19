@@ -181,7 +181,7 @@ const ROUTINE_TABS = [
   { id: 'expenses',   label: 'Despesas',     icon: DollarSign,     desc: 'Reembolsos e despesas dos projetos'        },
   { id: 'approvals',  label: 'Aprovações',   icon: CheckSquare,    desc: 'Apontamentos/despesas pendentes'           },
   { id: 'auditoria',  label: 'Auditoria',    icon: FileText,       desc: 'Histórico de alterações de apontamentos'   },
-  { id: 'triagem',    label: 'Triagem',      icon: AlertTriangle,  desc: 'Apontamentos atribuídos ao Usuário/Cliente/Projeto Padrão (revisão manual)' },
+  { id: 'triagem',    label: 'Lançamentos não identificados', icon: AlertTriangle, desc: 'Apontamentos atribuídos ao Usuário/Cliente/Projeto Padrão (revisão manual)' },
 ] as const
 
 type RoutineTabId = typeof ROUTINE_TABS[number]['id']
