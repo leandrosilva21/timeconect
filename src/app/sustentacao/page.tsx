@@ -177,10 +177,11 @@ const TABS = [
 ]
 
 const ROUTINE_TABS = [
-  { id: 'timesheets', label: 'Apontamentos', icon: Clock,       desc: 'Horas lançadas em projetos de sustentação' },
-  { id: 'expenses',   label: 'Despesas',     icon: DollarSign,  desc: 'Reembolsos e despesas dos projetos'        },
-  { id: 'approvals',  label: 'Aprovações',   icon: CheckSquare, desc: 'Apontamentos/despesas pendentes'           },
-  { id: 'auditoria',  label: 'Auditoria',    icon: FileText,    desc: 'Histórico de alterações de apontamentos'   },
+  { id: 'timesheets', label: 'Apontamentos', icon: Clock,          desc: 'Horas lançadas em projetos de sustentação' },
+  { id: 'expenses',   label: 'Despesas',     icon: DollarSign,     desc: 'Reembolsos e despesas dos projetos'        },
+  { id: 'approvals',  label: 'Aprovações',   icon: CheckSquare,    desc: 'Apontamentos/despesas pendentes'           },
+  { id: 'auditoria',  label: 'Auditoria',    icon: FileText,       desc: 'Histórico de alterações de apontamentos'   },
+  { id: 'triagem',    label: 'Lançamentos não identificados', icon: AlertTriangle, desc: 'Apontamentos atribuídos ao Usuário/Cliente/Projeto Padrão (revisão manual)' },
 ] as const
 
 type RoutineTabId = typeof ROUTINE_TABS[number]['id']
@@ -962,54 +963,52 @@ export default function SustentacaoPage() {
         </div>
       </div>
 
-      {/* ── Centralzinha — Rotinas (separada dos Indicadores) ── */}
-      {!routineTab && (
-        <div className="px-6 pt-3 shrink-0">
-          <div
-            className="rounded-2xl p-3"
-            style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
-          >
-            <div className="flex items-center gap-2 mb-2 px-1">
-              <Zap size={14} style={{ color: 'var(--primary)' }} />
-              <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text)' }}>
-                Centralzinha — Rotinas
-              </h3>
-              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                · escopo Sustentação (respeita override de coordenador)
-              </span>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {ROUTINE_TABS.map(r => {
-                const Icon = r.icon
-                return (
-                  <button
-                    key={r.id}
-                    onClick={() => setRoutineTab(r.id)}
-                    className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all hover:scale-[1.02]"
-                    style={{
-                      background: 'var(--brand-bg)',
-                      border: '1px solid var(--brand-border)',
-                    }}
-                  >
-                    <span
-                      className="shrink-0 p-1.5 rounded-lg"
-                      style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--primary)' }}
-                    >
-                      <Icon size={14} />
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{r.label}</div>
-                      <div className="text-[10px] leading-tight mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                        {r.desc}
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
+      {/* ── Central de Lançamentos — sempre visível (navegação entre rotinas) ── */}
+      <div className="px-6 pt-3 shrink-0">
+        <div
+          className="rounded-xl px-3 py-2 flex items-center gap-2 flex-wrap"
+          style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
+        >
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Zap size={12} style={{ color: 'var(--primary)' }} />
+            <h3 className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text)' }}>
+              Central de Lançamentos
+            </h3>
           </div>
+          <div className="flex items-center gap-1.5 flex-wrap flex-1">
+            {ROUTINE_TABS.map(r => {
+              const Icon = r.icon
+              const active = routineTab === r.id
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => setRoutineTab(r.id)}
+                  title={r.desc}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors"
+                  style={{
+                    background: active ? 'rgba(0,245,255,0.10)' : 'var(--brand-bg)',
+                    border: active ? '1px solid var(--primary)' : '1px solid var(--brand-border)',
+                    color: active ? 'var(--primary)' : 'var(--text)',
+                  }}
+                >
+                  <Icon size={12} />
+                  <span>{r.label}</span>
+                </button>
+              )
+            })}
+          </div>
+          {routineTab && (
+            <button
+              onClick={() => setRoutineTab(null)}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium transition-colors shrink-0"
+              style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--text-muted)' }}
+              title="Voltar aos indicadores do portal"
+            >
+              <CloseIcon size={11} /> Home do Portal
+            </button>
+          )}
         </div>
-      )}
+      </div>
 
       {/* ── Tabs (Indicadores) — escondidas quando uma rotina está ativa ── */}
       {!routineTab && (
@@ -1033,32 +1032,8 @@ export default function SustentacaoPage() {
         </div>
       )}
 
-      {/* ── Header da rotina ativa (com botão voltar) ── */}
-      {routineTab && (() => {
-        const r = ROUTINE_TABS.find(x => x.id === routineTab)!
-        const Icon = r.icon
-        return (
-          <div className="px-6 pt-3 pb-2 border-b shrink-0 flex items-center justify-between gap-3"
-            style={{ borderColor: 'var(--brand-border)' }}>
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--primary)' }}>
-                <Icon size={14} />
-              </span>
-              <div>
-                <h2 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{r.label}</h2>
-                <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{r.desc}</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setRoutineTab(null)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-              style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)', color: 'var(--text-muted)' }}
-            >
-              <CloseIcon size={12} /> Voltar aos Indicadores
-            </button>
-          </div>
-        )
-      })()}
+      {/* Header da rotina ativa removido — o destaque do card na Central de
+          Lançamentos + o botão "Voltar à Home do Portal" já fazem o papel. */}
 
       {/* ── Content ── */}
       <div className="flex-1 overflow-y-auto p-6">
@@ -1754,6 +1729,7 @@ export default function SustentacaoPage() {
         {routineTab === 'expenses'   && <ExpensesScreen              scope="sustentacao" embedded />}
         {routineTab === 'approvals'  && <ApprovalsScreen             scope="sustentacao" embedded />}
         {routineTab === 'auditoria'  && <AuditoriaApontamentosScreen scope="sustentacao" embedded />}
+        {routineTab === 'triagem'    && <TimesheetsScreen            scope="sustentacao" embedded triagemPadrao />}
 
         {!routineTab && tab === 'debug' && (
           <DiagnosticoTab
