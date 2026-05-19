@@ -188,10 +188,12 @@ export default function BankHoursFixedPage() {
   const [selectedCustomer,  setSelectedCustomer]  = useState<number | ''>('')
   const [selectedExecutive, setSelectedExecutive] = useState<number | ''>('')
   const [selectedProject,   setSelectedProject]   = useState<number | ''>('')
-  const [dateFrom, setDateFrom] = useState(isoFirstDay)
-  const [dateTo,   setDateTo]   = useState(isoLastDay)
-  const [refMonth, setRefMonth] = useState<number | null>(now.getMonth() + 1)
-  const [refYear,  setRefYear]  = useState<number | null>(now.getFullYear())
+  // Estado inicial do filtro de data = SEM filtro selecionado (qualquer data).
+  // Antes vinha pré-selecionado com o mês atual.
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo,   setDateTo]   = useState('')
+  const [refMonth, setRefMonth] = useState<number | null>(null)
+  const [refYear,  setRefYear]  = useState<number | null>(null)
   const [filterMode, setFilterMode] = useState<'month' | 'period'>('month')
 
   const [summary,      setSummary]      = useState<SummaryData | null>(null)
@@ -775,19 +777,45 @@ export default function BankHoursFixedPage() {
             )}
 
             {/* ── PROJETOS ── */}
-            {activeTab === 'projects' && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-4">
-                  <KpiCard
-                    label="Consumo Acumulado"
-                    value={fmtH(summary?.projects_consumed_hours ?? summary?.consumed_hours ?? 0)}
-                    icon={Clock}
-                    accent="primary"
-                  />
+            {activeTab === 'projects' && (() => {
+              // Filtro local pela data de INÍCIO do projeto:
+              // - Sem filtro selecionado → lista todos
+              // - Modo Mês/Ano → projetos cujo start_date esteja naquele mês
+              // - Modo Período → projetos cujo start_date esteja dentro do range
+              const filteredProjects = (() => {
+                if (!projectsList || projectsList.length === 0) return projectsList
+                const hasMonthFilter = refMonth != null && refYear != null
+                const hasRangeFilter = !!dateFrom || !!dateTo
+                if (!hasMonthFilter && !hasRangeFilter) return projectsList
+                return projectsList.filter(p => {
+                  if (!p.start_date) return false
+                  // YYYY-MM-DD literal — comparação string-safe
+                  if (hasMonthFilter) {
+                    const [y, m] = p.start_date.split('-')
+                    return Number(y) === refYear && Number(m) === refMonth
+                  }
+                  if (hasRangeFilter) {
+                    if (dateFrom && p.start_date < dateFrom) return false
+                    if (dateTo   && p.start_date > dateTo)   return false
+                    return true
+                  }
+                  return true
+                })
+              })()
+              return (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-4">
+                    <KpiCard
+                      label="Consumo Acumulado"
+                      value={fmtH(summary?.projects_consumed_hours ?? summary?.consumed_hours ?? 0)}
+                      icon={Clock}
+                      accent="primary"
+                    />
+                  </div>
+                  <ProjectsTable items={filteredProjects} loading={loadingProjects} />
                 </div>
-                <ProjectsTable items={projectsList} loading={loadingProjects} />
-              </div>
-            )}
+              )
+            })()}
 
             {/* ── ARQUITETURA ── */}
             {activeTab === 'architecture' && (
