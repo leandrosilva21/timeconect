@@ -1,15 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { Bell, Bot, Cog, Settings2, Sparkles, Zap } from 'lucide-react'
+import { Bell, Bot, Cog, Settings2, Sparkles, Users, Zap } from 'lucide-react'
 import { AppLayout } from '@/components/layout/app-layout'
 import { GeneralTab } from '@/components/bot-config/GeneralTab'
 import { ProvidersTab } from '@/components/bot-config/ProvidersTab'
 import { AgentsTab } from '@/components/bot-config/AgentsTab'
 import { SkillsTab } from '@/components/bot-config/SkillsTab'
 import { RulesTab } from '@/components/bot-config/RulesTab'
+import { GroupsTab } from '@/components/bot-config/GroupsTab'
 
-type TabKey = 'general' | 'providers' | 'agents' | 'skills' | 'rules'
+type TabKey = 'general' | 'providers' | 'agents' | 'skills' | 'rules' | 'groups'
 
 const TABS: { key: TabKey; label: string; icon: typeof Bot; description: string }[] = [
   { key: 'general',   label: 'Geral',         icon: Cog,        description: 'Provedor padrão, modelo, temperatura, frequência de execução e janela anti-ruído.' },
@@ -17,6 +18,7 @@ const TABS: { key: TabKey; label: string; icon: typeof Bot; description: string 
   { key: 'agents',    label: 'Agents',        icon: Sparkles,   description: 'Agentes especializados (Account, Support, Growth…) com prompts, cooldown e limites diários.' },
   { key: 'skills',    label: 'Skills',        icon: Zap,        description: 'Regras determinísticas (Rule Engine) que classificam eventos antes da IA rodar.' },
   { key: 'rules',     label: 'Notificações',  icon: Bell,       description: 'Para QUEM e por QUAL canal cada evento é entregue. Skill/severity → grupo/inbox/email.' },
+  { key: 'groups',    label: 'Grupos',        icon: Users,      description: 'Grupos operacionais (Coordenadores, Sustentação, CS…) que recebem alertas do BOT e conversam entre si.' },
 ]
 
 export default function BotMinutorConfigPage() {
@@ -72,6 +74,7 @@ export default function BotMinutorConfigPage() {
           {tab === 'agents'    && <AgentsTab />}
           {tab === 'skills'    && <SkillsTab />}
           {tab === 'rules'     && <RulesTab />}
+          {tab === 'groups'    && <GroupsTab />}
         </div>
       </div>
     </AppLayout>

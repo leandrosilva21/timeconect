@@ -30,3 +30,40 @@ export const deleteRule      = (id: number): Promise<{ deleted: boolean }> => ap
 export const testRule        = (id: number, feedId?: number): Promise<{ data: RuleTestPreview }> => api.post(`/bot/rules/${id}/test`, feedId ? { feed_id: feedId } : {})
 export const dispatchTestRule = (id: number): Promise<{ data: { rule: BotRule; delivered: number; channel: string; group: { id: number; title: string|null } | null; recipients_count: number } }> => api.post(`/bot/rules/${id}/dispatch-test`, {})
 export const listChatUsersForRule = (): Promise<{ data: ChatUser[] }> => api.get('/conversations/users')
+
+// Grupos admin
+export interface AdminGroup {
+  id: number
+  title: string | null
+  members_count: number
+  created_by: number | null
+  created_at: string | null
+  last_message_at: string | null
+}
+
+export interface GroupMember {
+  user_id: number
+  role: 'member' | 'admin'
+  name: string | null
+  email: string | null
+  profile_photo: string | null
+  is_creator: boolean
+}
+
+export interface GroupUserOption {
+  id: number
+  name: string
+  email: string
+  profile_photo: string | null
+  type: string | null
+}
+
+export const listGroups        = (): Promise<{ data: AdminGroup[] }> => api.get('/bot/groups')
+export const getGroupMembers   = (id: number): Promise<{ data: { id: number; title: string|null; members: GroupMember[] } }> => api.get(`/bot/groups/${id}/members`)
+export const createGroupAdmin  = (name: string, participantIds: number[] = []): Promise<{ data: { id: number; title: string } }> => api.post('/bot/groups', { name, participant_ids: participantIds })
+export const renameGroup       = (id: number, name: string): Promise<{ data: { id: number; title: string } }> => api.patch(`/bot/groups/${id}`, { name })
+export const deleteGroup       = (id: number): Promise<{ deleted: boolean }> => api.delete(`/bot/groups/${id}`)
+export const addGroupMember    = (id: number, userId: number) => api.post(`/bot/groups/${id}/members`, { user_id: userId })
+export const removeGroupMember = (id: number, userId: number) => api.delete(`/bot/groups/${id}/members/${userId}`)
+export const seedDefaultGroups = (): Promise<{ data: { created: { id:number;title:string }[]; already_existed: string[] } }> => api.post('/bot/groups/seed-defaults', {})
+export const listGroupUserOptions = (q?: string): Promise<{ data: GroupUserOption[] }> => api.get(`/bot/groups/available-users${q ? `?q=${encodeURIComponent(q)}` : ''}`)
