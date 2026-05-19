@@ -465,7 +465,7 @@ export default function PagamentoDespesasPage() {
                           </span>
                         </Td>
                         <Td>
-                          <span className="truncate max-w-[160px] block" title={(exp.project as any)?.name}>
+                          <span className="truncate max-w-[280px] block" title={(exp.project as any)?.name}>
                             {(exp.project as any)?.name ?? '—'}
                           </span>
                         </Td>

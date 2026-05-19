@@ -1187,7 +1187,7 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
                 </td>
                 <td className="px-3 py-2.5 text-zinc-200 font-medium">{ts.user?.name ?? '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-500 hidden md:table-cell">{ts.project?.customer?.name ?? '—'}</td>
-                <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell truncate max-w-[160px]">{ts.project?.name ?? '—'}</td>
+                <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell truncate max-w-[280px]">{ts.project?.name ?? '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-500 hidden lg:table-cell truncate max-w-[160px]">{ts.ticket_subject ?? '—'}</td>
                 <td className="px-3 py-2.5 hidden lg:table-cell max-w-[200px]">
                   {ts.observation ? (
@@ -1225,7 +1225,7 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
                 <td className="px-3 py-2.5 text-zinc-400 whitespace-nowrap hidden sm:table-cell">{fmtDateTime(exp.created_at)}</td>
                 <td className="px-3 py-2.5 text-zinc-200 font-medium">{exp.user?.name ?? '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-500 hidden md:table-cell">{exp.project?.customer?.name ?? '—'}</td>
-                <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell truncate max-w-[160px]">{exp.project?.name ?? '—'}</td>
+                <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell truncate max-w-[280px]">{exp.project?.name ?? '—'}</td>
                 <td className="px-3 py-2.5 hidden lg:table-cell max-w-[200px]">
                   <div className="flex items-center gap-1.5">
                     <span title={exp.description} className="block truncate text-zinc-400 cursor-default">

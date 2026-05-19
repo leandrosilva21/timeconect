@@ -395,7 +395,7 @@ export default function PagamentoConsultoresPage() {
                           </span>
                         </Td>
                         <Td>
-                          <span className="truncate max-w-[160px] block" title={(ts.project as any)?.name}>
+                          <span className="truncate max-w-[280px] block" title={(ts.project as any)?.name}>
                             {(ts.project as any)?.name ?? '—'}
                           </span>
                         </Td>

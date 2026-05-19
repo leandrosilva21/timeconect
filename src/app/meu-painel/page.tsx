@@ -2773,7 +2773,7 @@ export default function MeuPainelPage() {
                         {exp.project?.customer?.name ?? <span className="text-zinc-700">—</span>}
                       </td>
                       <td className="px-4 py-3.5 text-zinc-200 max-w-[160px] truncate" title={exp.description}>{exp.description}</td>
-                      <td className="px-4 py-3.5 text-zinc-400 hidden md:table-cell max-w-[140px] truncate">{exp.project?.name ?? '—'}</td>
+                      <td className="px-4 py-3.5 text-zinc-400 hidden md:table-cell max-w-[260px] truncate">{exp.project?.name ?? '—'}</td>
                       <td className="px-4 py-3.5 text-zinc-400 hidden lg:table-cell">{exp.category?.name ?? '—'}</td>
                       <td className="px-4 py-3.5 text-zinc-500 hidden xl:table-cell max-w-[120px] truncate">{(exp as any).project?.service_type?.name ?? '—'}</td>
                       <td className="px-4 py-3.5 text-white font-bold whitespace-nowrap">
@@ -3439,7 +3439,7 @@ export default function MeuPainelPage() {
                                 ]} />
                               </td>
                               <td className="px-4 py-2.5 font-medium" style={{ color: 'var(--brand-text)' }}>{fmt(ts.date)}</td>
-                              <td className="px-4 py-2.5 text-center max-w-[180px] truncate" style={{ color: 'var(--brand-muted)' }}>{ts.project?.name ?? '—'}</td>
+                              <td className="px-4 py-2.5 text-center max-w-[280px] truncate" style={{ color: 'var(--brand-muted)' }}>{ts.project?.name ?? '—'}</td>
                               <td className="px-4 py-2.5 text-center font-mono" style={{ color: 'var(--brand-text)' }}>{fmtHours(hrs)}</td>
                               <td className="px-4 py-2.5 text-center">
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
@@ -3533,7 +3533,7 @@ export default function MeuPainelPage() {
                                 ]} />
                               </td>
                               <td className="px-4 py-2.5 font-medium" style={{ color: 'var(--brand-text)' }}>{fmt(ts.date)}</td>
-                              <td className="px-4 py-2.5 text-center max-w-[180px] truncate" style={{ color: 'var(--brand-muted)' }}>{ts.project?.name ?? '—'}</td>
+                              <td className="px-4 py-2.5 text-center max-w-[280px] truncate" style={{ color: 'var(--brand-muted)' }}>{ts.project?.name ?? '—'}</td>
                               <td className="px-4 py-2.5 text-center font-mono" style={{ color: 'var(--brand-text)' }}>{fmtHours(hrs)}</td>
                               {!isParceiroSimples && <td className="px-4 py-2.5 text-center font-mono" style={{ color: val ? '#22c55e' : 'var(--brand-subtle)' }}>{val ? formatBRL(val) : '—'}</td>}
                               <td className="px-4 py-2.5 text-center">
