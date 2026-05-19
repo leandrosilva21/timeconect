@@ -707,6 +707,11 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
   const { user } = useAuth()
   const isAdmin = user?.type === 'admin'
   const d = project as any
+  // Captura no mount se o projeto tem valores de histórico — mantém bloco visível
+  // durante a edição mesmo se o user apagar pra zerar (evita "campo some ao limpar").
+  const [hadInitialHistory] = useState(
+    Number(d.initial_hours_consumed ?? 0) > 0 || Number(d.initial_cost ?? 0) > 0
+  )
   // Parse existing code: PREFIX001-26 → seq='001', year='26'; PREFIX001-26-01 → suffix='01'
   const parsedCode = useMemo(() => {
     const m = (d.code ?? '').match(/^[A-Za-z]+(\d+)-(\d+)(?:-(\d+))?/)
@@ -880,8 +885,9 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       if (form.sold_hours !== '')            payload.sold_hours                   = Number(form.sold_hours)
       if (form.consultant_hours !== '')      payload.consultant_hours             = Number(form.consultant_hours)
       if (form.coordinator_hours !== '')     payload.coordinator_hours            = Number(form.coordinator_hours)
-      if (form.initial_hours_consumed !== '') payload.initial_hours_consumed      = Number(form.initial_hours_consumed)
-      if (form.initial_cost !== '')          payload.initial_cost                 = Number(form.initial_cost)
+      // initial_* sempre enviam: '' vira 0 pra permitir zerar valor existente.
+      payload.initial_hours_consumed = form.initial_hours_consumed === '' ? 0 : Number(form.initial_hours_consumed)
+      payload.initial_cost           = form.initial_cost === '' ? 0 : Number(form.initial_cost)
       if (form.max_expense_per_consultant !== '') payload.max_expense_per_consultant = Number(form.max_expense_per_consultant)
       if (form.timesheet_retroactive_limit_days !== '') payload.timesheet_retroactive_limit_days = Number(form.timesheet_retroactive_limit_days)
       // kanban_coordinator_override_id: envia null se vazio (pra limpar) ou int se preenchido
@@ -1128,8 +1134,10 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 )}
               </div>
               {/* Histórico: oculto em On Demand novo (sem valor); mostra em On Demand
-                  legado pra permitir zerar valores migrados do sistema anterior. */}
-              {(!isOnDemandForm || Number(form.initial_hours_consumed) > 0 || Number(form.initial_cost) > 0) && (
+                  legado pra permitir zerar valores migrados do sistema anterior.
+                  Usa hadInitialHistory (capturado no mount) pra não sumir quando o
+                  user limpa os campos durante a edição. */}
+              {(!isOnDemandForm || hadInitialHistory) && (
                 <div className="grid grid-cols-2 gap-3 rounded-xl p-3" style={{ border: '1px solid var(--border)', background: 'var(--surface-hover)' }}>
                   <div><label style={{ ...lStyle, marginBottom: 0 }}>Histórico do sistema anterior</label></div>
                   <div />
