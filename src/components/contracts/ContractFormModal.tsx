@@ -351,7 +351,8 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
     if (form.is_subproject && !form.parent_project_id)                   { toast.error('Selecione o projeto pai para o subprojeto'); setActiveTab(0); return }
     if (!isOnDemand && !isMensalidade && !form.horas_contratadas)        { toast.error('Informe as horas contratadas'); setActiveTab(4); return }
     if (isMensalidade && !form.valor_projeto)                            { toast.error('Informe o Valor do Contrato (mensalidade)'); setActiveTab(4); return }
-    if (isOnDemand && !isMensalidade && !form.valor_projeto)             { toast.error('Informe o Valor do Projeto'); setActiveTab(4); return }
+    // Subprojeto On Demand não tem Valor do Projeto — herda lógica do pai
+    if (isOnDemand && !isMensalidade && !form.is_subproject && !form.valor_projeto) { toast.error('Informe o Valor do Projeto'); setActiveTab(4); return }
 
     setSaving(true)
     try {
@@ -782,6 +783,8 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-3">Valores e Horas</p>
                 <div className="grid grid-cols-3 gap-3">
+                  {/* Subprojeto On Demand não tem Valor do Projeto — fechamento financeiro fica no pai */}
+                  {!(isOnDemand && form.is_subproject) && (
                   <div>
                     <label className={labelCls}>
                       {isMensalidade ? 'Valor do Contrato (R$) — mensalidade' : 'Valor do Projeto (R$)'}
@@ -797,6 +800,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                       }}
                       className={inputCls} style={inputStyle} />
                   </div>
+                  )}
                   {!isMensalidade && !isOnDemand && (
                     <div>
                       <label className={labelCls}>Valor da Hora (R$)</label>

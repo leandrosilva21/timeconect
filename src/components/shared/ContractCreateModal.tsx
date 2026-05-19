@@ -80,7 +80,8 @@ const isSustentacaoName = (name: string) => {
 // - Sustentação → permite: BH Fixo, BH Mensal, On Demand, Cloud   (proíbe: Fechado, SaaS)
 // - Bizify      → permite: BH Fixo, Fechado, On Demand, SaaS      (proíbe: BH Mensal, Cloud)
 // Subprojeto (filho) → adicionalmente proíbe BH Mensal, SaaS e Cloud (mensalidade
-// fica no projeto pai; filho herda regra de cobrança).
+// fica no projeto pai; filho herda regra de cobrança). Filho On Demand consome
+// do pai via apontamentos (horas_contratadas=0, valor cobrado por hora apontada).
 // O contract_type atualmente selecionado é sempre mantido visível (caso de edição
 // de contrato pré-existente que viole a nova regra).
 const allowedForService = (
@@ -238,16 +239,13 @@ export function ContractCreateModal({
   const isMensalidade = ctNameLower === 'cloud' || ctNameLower === 'saas'
   const isFechado = !!selectedContractType && !isOnDemand && !isBankHours && !isMensalidade
 
-  // Saving = margem de horas da operação. Aparece para qualquer tipo de contrato
-  // com horas_contratadas (Fechado, BH Fixo, BH Mensal). Antes só Fechado.
   const saveErpserv = useMemo(() => {
-    if (isOnDemand || isMensalidade) return null
+    if (!isFechado) return null
     const sold = Number(form.horas_contratadas) || 0
-    if (sold <= 0) return null
     const consult = Number(form.horas_consultor) || 0
     const coord = Number(form.pct_horas_coordenador) || 0
     return sold - consult - Math.round((coord / 100) * consult)
-  }, [isOnDemand, isMensalidade, form.horas_contratadas, form.horas_consultor, form.pct_horas_coordenador])
+  }, [isFechado, form.horas_contratadas, form.horas_consultor, form.pct_horas_coordenador])
 
   const selectedCustomerObj = useMemo(
     () => customers.find(c => String(c.id) === String(form.customer_id)),
@@ -301,7 +299,8 @@ export function ContractCreateModal({
         if (!isOnDemand && !isMensalidade && !form.horas_contratadas)        { toast.error('Informe as Horas Contratadas'); return false }
         if (!form.expectativa_inicio)                                        { toast.error('Informe a Expectativa de Início'); return false }
         if (isMensalidade && !form.valor_projeto)                            { toast.error('Informe o Valor do Contrato (mensalidade)'); return false }
-        if (isOnDemand && !isMensalidade && !form.valor_projeto)             { toast.error('Informe o Valor do Projeto'); return false }
+        // Subprojeto On Demand não tem Valor do Projeto — fica no pai
+        if (isOnDemand && !isMensalidade && !form.is_subproject && !form.valor_projeto) { toast.error('Informe o Valor do Projeto'); return false }
         if (!isMensalidade && !isOnDemand && !form.valor_hora)               { toast.error('Informe o Valor da Hora'); return false }
         if (form.parent_project_id && parentBalance && !parentBalance.allow_negative) {
           const childHours = Number(form.horas_contratadas) || 0
@@ -383,7 +382,8 @@ export function ContractCreateModal({
       [2, () => !!form.contract_type_id],
       [4, () => {
         if (isMensalidade) return !!form.expectativa_inicio && !!form.valor_projeto
-        if (isOnDemand)    return !!form.expectativa_inicio && !!form.valor_projeto
+        // Subprojeto On Demand não exige Valor do Projeto — herda do pai
+        if (isOnDemand)    return !!form.expectativa_inicio && (form.is_subproject || !!form.valor_projeto)
         return !!form.horas_contratadas && !!form.expectativa_inicio && !!form.valor_hora
       }],
       [6, () => !!form.condicao_pagamento.trim()],
@@ -833,6 +833,8 @@ export function ContractCreateModal({
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-3">Valores</p>
                 <div className="grid grid-cols-3 gap-3">
+                  {/* Subprojeto On Demand não tem Valor do Projeto — fechamento financeiro fica no pai */}
+                  {!(isOnDemand && form.is_subproject) && (
                   <div>
                     <label className={labelCls}>
                       {isMensalidade ? 'Valor do Contrato (R$) — mensalidade' : 'Valor do Projeto (R$)'}
@@ -846,6 +848,7 @@ export function ContractCreateModal({
                       })
                     )} placeholder="0,00" />
                   </div>
+                  )}
                   {!isMensalidade && !isOnDemand && (
                     <div>
                       <label className={labelCls}>
@@ -872,18 +875,17 @@ export function ContractCreateModal({
                       <input {...numInput('pct_horas_coordenador')} placeholder="0,00" />
                     </div>
                   )}
-                  {/* Horas Consultor: Fechado, BH Fixo e BH Mensal — esconde em On Demand e mensalidades */}
-                  {!isOnDemand && !isMensalidade && (
+                  {(isFechado || isBhFixo) && (
                     <div>
                       <label className={labelCls}>Horas Consultor</label>
                       <input {...numInput('horas_consultor')} placeholder="0,00" />
                     </div>
                   )}
-                  {saveErpserv != null && (
+                  {isFechado && (
                     <div>
-                      <label className={labelCls}>Saving</label>
+                      <label className={labelCls}>Save ERPSERV</label>
                       <input readOnly
-                        value={saveErpserv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        value={saveErpserv != null ? saveErpserv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
                         className={inputCls} style={{ ...inputStyle, opacity: 0.5, cursor: 'not-allowed' }} />
                     </div>
                   )}
