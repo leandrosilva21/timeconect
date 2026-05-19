@@ -1510,7 +1510,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
                   {(isAdmin || isCoordenador) && (
                     <Td muted>{ts.customer?.name ?? ts.project?.customer?.name ?? '—'}</Td>
                   )}
-                  <Td className="max-w-[160px]">
+                  <Td className="max-w-[280px]">
                     <button
                       onClick={() => openView(ts)}
                       className="truncate block text-left transition-colors hover:underline w-full"

@@ -920,7 +920,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
                   )}
                   <Td className="whitespace-nowrap font-medium">{formatDate(exp.expense_date)}</Td>
                   <Td muted className="truncate max-w-[140px]">{exp.user?.name ?? '—'}</Td>
-                  <Td muted className="hidden md:table-cell truncate max-w-[140px]">{exp.project?.name ?? '—'}</Td>
+                  <Td muted className="hidden md:table-cell truncate max-w-[260px]">{exp.project?.name ?? '—'}</Td>
                   {!isCliente && <Td muted className="hidden sm:table-cell truncate max-w-[120px]">{exp.project?.customer?.name ?? '—'}</Td>}
                   {!isCliente && (
                     <Td className="max-w-[200px]">
