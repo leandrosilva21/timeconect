@@ -34,7 +34,8 @@ export function AppLayout({ children, title, actions }: AppLayoutProps) {
 
   useEffect(() => {
     if (user?.type === 'cliente' && user.customer_id) {
-      api.get<any>(`/customers/${user.customer_id}`)
+      // /me/customer não exige customers.view (cliente não tem essa perm).
+      api.get<{ id: number; name: string } | null>(`/me/customer`)
         .then(r => setCompanyName(r?.name ?? null))
         .catch(() => {})
     } else {
