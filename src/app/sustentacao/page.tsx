@@ -177,10 +177,11 @@ const TABS = [
 ]
 
 const ROUTINE_TABS = [
-  { id: 'timesheets', label: 'Apontamentos', icon: Clock,       desc: 'Horas lançadas em projetos de sustentação' },
-  { id: 'expenses',   label: 'Despesas',     icon: DollarSign,  desc: 'Reembolsos e despesas dos projetos'        },
-  { id: 'approvals',  label: 'Aprovações',   icon: CheckSquare, desc: 'Apontamentos/despesas pendentes'           },
-  { id: 'auditoria',  label: 'Auditoria',    icon: FileText,    desc: 'Histórico de alterações de apontamentos'   },
+  { id: 'timesheets', label: 'Apontamentos', icon: Clock,          desc: 'Horas lançadas em projetos de sustentação' },
+  { id: 'expenses',   label: 'Despesas',     icon: DollarSign,     desc: 'Reembolsos e despesas dos projetos'        },
+  { id: 'approvals',  label: 'Aprovações',   icon: CheckSquare,    desc: 'Apontamentos/despesas pendentes'           },
+  { id: 'auditoria',  label: 'Auditoria',    icon: FileText,       desc: 'Histórico de alterações de apontamentos'   },
+  { id: 'triagem',    label: 'Triagem',      icon: AlertTriangle,  desc: 'Apontamentos atribuídos ao Usuário/Cliente/Projeto Padrão (revisão manual)' },
 ] as const
 
 type RoutineTabId = typeof ROUTINE_TABS[number]['id']
@@ -1754,6 +1755,7 @@ export default function SustentacaoPage() {
         {routineTab === 'expenses'   && <ExpensesScreen              scope="sustentacao" embedded />}
         {routineTab === 'approvals'  && <ApprovalsScreen             scope="sustentacao" embedded />}
         {routineTab === 'auditoria'  && <AuditoriaApontamentosScreen scope="sustentacao" embedded />}
+        {routineTab === 'triagem'    && <TimesheetsScreen            scope="sustentacao" embedded triagemPadrao />}
 
         {!routineTab && tab === 'debug' && (
           <DiagnosticoTab

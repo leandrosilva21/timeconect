@@ -680,7 +680,7 @@ function toHHMM(mins: number): string {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
-function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; embedded?: boolean } = {}) {
+function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'sustentacao'; embedded?: boolean; triagemPadrao?: boolean } = {}) {
   const { user } = useAuth()
   const isAdmin        = user?.type === 'admin'
   const isCoordenador  = user?.type === 'coordenador'
@@ -920,8 +920,9 @@ function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; emb
     projectIds.forEach(v => p.append('project_id[]', v))
     if (sortField)     p.set('order', sortDir === 'desc' ? `-${sortField}` : sortField)
     if (scope)         p.set('scope', scope)
+    if (triagemPadrao) p.set('triagem_padrao', '1')
     return p.toString()
-  }, [page, status, origins, serviceTypeIds, contractTypeIds, categoriaServico, customerIds, coordinatorIds, executiveIds, userIds, projectId, projectIds, startDate, endDate, ticket, requester, ticketService, sortField, sortDir, isCliente, user?.customer_id, scope])
+  }, [page, status, origins, serviceTypeIds, contractTypeIds, categoriaServico, customerIds, coordinatorIds, executiveIds, userIds, projectId, projectIds, startDate, endDate, ticket, requester, ticketService, sortField, sortDir, isCliente, user?.customer_id, scope, triagemPadrao])
 
   const { data, loading, error, refetch } = useApiQuery<PaginatedResponse<Timesheet>>(
     `/timesheets?${params}`, [params]
@@ -1658,12 +1659,14 @@ function TimesheetsPageContent({ scope, embedded }: { scope?: 'sustentacao'; emb
 export interface TimesheetsScreenProps {
   scope?: 'sustentacao'
   embedded?: boolean
+  /** Filtra timesheets atribuídos ao Usuário/Cliente/Projeto Padrão Movidesk (OR). Usado pela rotina Triagem. */
+  triagemPadrao?: boolean
 }
 
 export function TimesheetsScreen(props: TimesheetsScreenProps = {}) {
   return (
     <Suspense>
-      <TimesheetsPageContent scope={props.scope} embedded={props.embedded} />
+      <TimesheetsPageContent scope={props.scope} embedded={props.embedded} triagemPadrao={props.triagemPadrao} />
     </Suspense>
   )
 }
