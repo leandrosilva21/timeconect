@@ -1127,7 +1127,9 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                   <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
                 )}
               </div>
-              {!isOnDemandForm && (
+              {/* Histórico: oculto em On Demand novo (sem valor); mostra em On Demand
+                  legado pra permitir zerar valores migrados do sistema anterior. */}
+              {(!isOnDemandForm || Number(form.initial_hours_consumed) > 0 || Number(form.initial_cost) > 0) && (
                 <div className="grid grid-cols-2 gap-3 rounded-xl p-3" style={{ border: '1px solid var(--border)', background: 'var(--surface-hover)' }}>
                   <div><label style={{ ...lStyle, marginBottom: 0 }}>Histórico do sistema anterior</label></div>
                   <div />
