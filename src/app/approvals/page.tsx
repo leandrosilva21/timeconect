@@ -16,6 +16,7 @@ import { RowMenu } from '@/components/ui/row-menu'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { TimesheetViewModal } from '@/components/ui/timesheet-view-modal'
+import { TimesheetHoverTooltip, useTimesheetHover } from '@/components/ui/timesheet-hover-tooltip'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { api, ApiError, toRelativePath } from '@/lib/api'
 import { previewText } from '@/lib/sanitize'
@@ -559,6 +560,7 @@ function ExpApproveModal({
 export default function ApprovalsPage() {
   const { user } = useAuth()
   const isCoordenador = user?.type === 'coordenador'
+  const hover = useTimesheetHover()
 
   const { filters: flt, set: setFilter, clear: clearPersistedFilters } = usePersistedFilters(
     'approvals',
@@ -1130,6 +1132,7 @@ export default function ApprovalsPage() {
             {/* Timesheets rows */}
             {!currentLoading && tab === 'timesheets' && tsItems.map(ts => (
               <tr key={ts.id} onClick={() => openTsView(ts)}
+                {...hover.bind(ts)}
                 className={`border-b border-zinc-800/60 cursor-pointer transition-colors ${
                   selected.includes(ts.id) ? 'bg-blue-950/30' : 'hover:bg-zinc-800/40'
                 }`}>
@@ -1381,6 +1384,7 @@ export default function ApprovalsPage() {
           </div>
         </div>
       )}
+      <TimesheetHoverTooltip ts={hover.ts} />
     </AppLayout>
   )
 }
