@@ -238,13 +238,16 @@ export function ContractCreateModal({
   const isMensalidade = ctNameLower === 'cloud' || ctNameLower === 'saas'
   const isFechado = !!selectedContractType && !isOnDemand && !isBankHours && !isMensalidade
 
+  // Saving = margem de horas da operação. Aparece para qualquer tipo de contrato
+  // com horas_contratadas (Fechado, BH Fixo, BH Mensal). Antes só Fechado.
   const saveErpserv = useMemo(() => {
-    if (!isFechado) return null
+    if (isOnDemand || isMensalidade) return null
     const sold = Number(form.horas_contratadas) || 0
+    if (sold <= 0) return null
     const consult = Number(form.horas_consultor) || 0
     const coord = Number(form.pct_horas_coordenador) || 0
     return sold - consult - Math.round((coord / 100) * consult)
-  }, [isFechado, form.horas_contratadas, form.horas_consultor, form.pct_horas_coordenador])
+  }, [isOnDemand, isMensalidade, form.horas_contratadas, form.horas_consultor, form.pct_horas_coordenador])
 
   const selectedCustomerObj = useMemo(
     () => customers.find(c => String(c.id) === String(form.customer_id)),
@@ -875,11 +878,11 @@ export function ContractCreateModal({
                       <input {...numInput('horas_consultor')} placeholder="0,00" />
                     </div>
                   )}
-                  {isFechado && (
+                  {saveErpserv != null && (
                     <div>
-                      <label className={labelCls}>Save ERPSERV</label>
+                      <label className={labelCls}>Saving</label>
                       <input readOnly
-                        value={saveErpserv != null ? saveErpserv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
+                        value={saveErpserv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         className={inputCls} style={{ ...inputStyle, opacity: 0.5, cursor: 'not-allowed' }} />
                     </div>
                   )}

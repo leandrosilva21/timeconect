@@ -2512,7 +2512,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
                     {p.weighted_hourly_rate != null && <Row label="Taxa Média Ponderada" value={fmtBRL(p.weighted_hourly_rate)} />}
                     <Row label="Hora Adicional" value={fmtBRL(p.additional_hourly_rate)} />
                     <Row label="Custo Inicial" value={fmtBRL(p.initial_cost)} />
-                    {p.save_erpserv != null && p.save_erpserv > 0 && <Row label="Save ERPSERV" value={<span style={{ color: '#22c55e' }}>{fmtBRL(p.save_erpserv)}</span>} />}
+                    {p.save_erpserv != null && p.save_erpserv > 0 && <Row label="Saving" value={<span style={{ color: '#22c55e' }}>{fmtBRL(p.save_erpserv)}</span>} />}
                   </div>
                 </div>
                 <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--brand-border)' }}>
