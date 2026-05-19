@@ -74,3 +74,10 @@ export function addParticipant(conversationId: number, userId: number): Promise<
 export function removeParticipant(conversationId: number, userId: number): Promise<{ removed: boolean }> {
   return api.delete(`/conversations/${conversationId}/participants/${userId}`)
 }
+
+export function botQuery(
+  conversationId: number,
+  question: string,
+): Promise<{ user_message: InboxMessage; bot_message: InboxMessage; tools_called: string[] }> {
+  return api.post(`/conversations/${conversationId}/bot-query`, { question })
+}

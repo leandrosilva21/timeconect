@@ -2,8 +2,9 @@
 
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { Bot } from 'lucide-react'
+import { Bot, Wrench } from 'lucide-react'
 import type { InboxMessage } from '@/types/inbox'
+import { MarkdownLite } from './MarkdownLite'
 
 interface Props {
   message: InboxMessage
@@ -23,6 +24,10 @@ export function ChatMessageItem({ message, isOwn, compact = false }: Props) {
   const sender = message.sender
   const isBotMsg = ['bot', 'ai_insight', 'alert', 'system'].includes(message.type.value)
   const time = format(new Date(message.created_at), 'HH:mm', { locale: ptBR })
+
+  const meta = (message.metadata ?? {}) as Record<string, unknown>
+  const pending = meta.pending === true
+  const toolsCalled = Array.isArray(meta.tools_called) ? (meta.tools_called as string[]) : []
 
   return (
     <div className={[
@@ -57,13 +62,29 @@ export function ChatMessageItem({ message, isOwn, compact = false }: Props) {
           </div>
         )}
         <div className={[
-          'rounded-lg px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap shadow-sm',
+          'rounded-lg px-3 py-2 text-sm leading-relaxed shadow-sm',
           isOwn
-            ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-900 dark:text-emerald-50'
-            : 'bg-[var(--surface)] border border-[var(--brand-border)] text-[var(--text)]',
+            ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-900 dark:text-emerald-50 whitespace-pre-wrap'
+            : isBotMsg
+              ? 'bg-[var(--surface)] border border-[var(--brand-border)] text-[var(--text)]'
+              : 'bg-[var(--surface)] border border-[var(--brand-border)] text-[var(--text)] whitespace-pre-wrap',
         ].join(' ')}>
-          {message.body}
+          {isBotMsg && !isOwn
+            ? (pending
+                ? <span className="inline-flex items-center gap-1.5 text-[var(--text-muted)]"><Bot size={13} className="animate-pulse" /> {message.body}</span>
+                : <MarkdownLite source={message.body} />)
+            : message.body}
         </div>
+        {toolsCalled.length > 0 && (
+          <div className="mt-1 flex items-center gap-1 flex-wrap">
+            <Wrench size={9} className="text-[var(--text-light)]" />
+            {[...new Set(toolsCalled)].map(t => (
+              <span key={t} className="text-[9px] font-mono px-1 py-0.5 rounded bg-[var(--surface-hover)] text-[var(--text-light)]">
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
