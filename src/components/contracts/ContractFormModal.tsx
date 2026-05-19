@@ -298,14 +298,17 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
   const isMensalidade = ctNameLower === 'cloud' || ctNameLower === 'saas'
   const isFechado   = !!selectedContractType && !isOnDemand && !isBankHours && !isMensalidade
 
-  // saveErpserv (read-only calc for Fechado)
+  // Saving = margem de horas da operação (read-only).
+  // Aparece para qualquer tipo de contrato que tenha horas_contratadas
+  // (Fechado, BH Fixo, BH Mensal). Antes só Fechado.
   const saveErpserv = useMemo(() => {
-    if (!isFechado) return null
+    if (isOnDemand || isMensalidade) return null
     const sold    = Number(form.horas_contratadas) || 0
+    if (sold <= 0) return null
     const consult = Number(form.horas_consultor) || 0
     const coord   = Number(form.pct_horas_coordenador) || 0
     return sold - consult - Math.round((coord / 100) * consult)
-  }, [isFechado, form.horas_contratadas, form.horas_consultor, form.pct_horas_coordenador])
+  }, [isOnDemand, isMensalidade, form.horas_contratadas, form.horas_consultor, form.pct_horas_coordenador])
 
   // Derived: project code preview
   const selectedCustomerObj = useMemo(
@@ -779,20 +782,20 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                     </div>
                   )}
                   {isFechado && (
-                    <>
-                      <div>
-                        <label className={labelCls}>Horas Consultor</label>
-                        <input type="number" min="0" step="1" placeholder="0"
-                          value={form.horas_consultor}
-                          onChange={e => setForm(f => ({ ...f, horas_consultor: e.target.value }))}
-                          className={inputCls} style={inputStyle} />
-                      </div>
-                      <div>
-                        <label className={labelCls}>Save ERPSERV</label>
-                        <input readOnly value={saveErpserv ?? ''}
-                          className={inputCls} style={{ ...inputStyle, opacity: 0.5, cursor: 'not-allowed' }} />
-                      </div>
-                    </>
+                    <div>
+                      <label className={labelCls}>Horas Consultor</label>
+                      <input type="number" min="0" step="1" placeholder="0"
+                        value={form.horas_consultor}
+                        onChange={e => setForm(f => ({ ...f, horas_consultor: e.target.value }))}
+                        className={inputCls} style={inputStyle} />
+                    </div>
+                  )}
+                  {saveErpserv != null && (
+                    <div>
+                      <label className={labelCls}>Saving</label>
+                      <input readOnly value={saveErpserv}
+                        className={inputCls} style={{ ...inputStyle, opacity: 0.5, cursor: 'not-allowed' }} />
+                    </div>
                   )}
                 </div>
               </div>
