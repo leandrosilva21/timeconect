@@ -707,6 +707,11 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
   const { user } = useAuth()
   const isAdmin = user?.type === 'admin'
   const d = project as any
+  // Captura no mount se o projeto tem valores de histórico — mantém bloco visível
+  // durante a edição mesmo se o user apagar pra zerar (evita "campo some ao limpar").
+  const [hadInitialHistory] = useState(
+    Number(d.initial_hours_consumed ?? 0) > 0 || Number(d.initial_cost ?? 0) > 0
+  )
   // Parse existing code: PREFIX001-26 → seq='001', year='26'; PREFIX001-26-01 → suffix='01'
   const parsedCode = useMemo(() => {
     const m = (d.code ?? '').match(/^[A-Za-z]+(\d+)-(\d+)(?:-(\d+))?/)
@@ -880,8 +885,9 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       if (form.sold_hours !== '')            payload.sold_hours                   = Number(form.sold_hours)
       if (form.consultant_hours !== '')      payload.consultant_hours             = Number(form.consultant_hours)
       if (form.coordinator_hours !== '')     payload.coordinator_hours            = Number(form.coordinator_hours)
-      if (form.initial_hours_consumed !== '') payload.initial_hours_consumed      = Number(form.initial_hours_consumed)
-      if (form.initial_cost !== '')          payload.initial_cost                 = Number(form.initial_cost)
+      // initial_* sempre enviam: '' vira 0 pra permitir zerar valor existente.
+      payload.initial_hours_consumed = form.initial_hours_consumed === '' ? 0 : Number(form.initial_hours_consumed)
+      payload.initial_cost           = form.initial_cost === '' ? 0 : Number(form.initial_cost)
       if (form.max_expense_per_consultant !== '') payload.max_expense_per_consultant = Number(form.max_expense_per_consultant)
       if (form.timesheet_retroactive_limit_days !== '') payload.timesheet_retroactive_limit_days = Number(form.timesheet_retroactive_limit_days)
       // kanban_coordinator_override_id: envia null se vazio (pra limpar) ou int se preenchido
@@ -1078,18 +1084,25 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
               </div>
               <div><label style={lStyle}>Descrição</label><textarea value={form.description} onChange={setF('description')} style={{ ...iStyle, resize: 'vertical', minHeight: '64px' }} /></div>
 
-              {/* Financeiro */}
+              {/* Financeiro — On Demand mostra só Valor da Hora; demais tipos mostram tudo. */}
               <SecTitle>Financeiro</SecTitle>
+              {(() => {
+                const ctNameForm = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase() ?? ''
+                const isOnDemandForm = ctNameForm.includes('on demand') || form.tipo_faturamento === 'on_demand'
+                return (
+              <>
               <div className="grid grid-cols-2 gap-3">
-                <div><label style={lStyle}>Valor do Projeto (R$)</label><input type="number" value={form.project_value} onChange={e => {
-                  const pv = e.target.value
-                  const hrs = Number(form.sold_hours)
-                  setForm(prev => ({
-                    ...prev,
-                    project_value: pv,
-                    hourly_rate: hrs > 0 && pv !== '' ? String(+(Number(pv) / hrs).toFixed(2)) : prev.hourly_rate,
-                  }))
-                }} style={iStyle} placeholder="0.00" step="0.01" /></div>
+                {!isOnDemandForm && (
+                  <div><label style={lStyle}>Valor do Projeto (R$)</label><input type="number" value={form.project_value} onChange={e => {
+                    const pv = e.target.value
+                    const hrs = Number(form.sold_hours)
+                    setForm(prev => ({
+                      ...prev,
+                      project_value: pv,
+                      hourly_rate: hrs > 0 && pv !== '' ? String(+(Number(pv) / hrs).toFixed(2)) : prev.hourly_rate,
+                    }))
+                  }} style={iStyle} placeholder="0.00" step="0.01" /></div>
+                )}
                 <div><label style={lStyle}>Valor da Hora (R$)</label><input type="number" value={form.hourly_rate} onChange={e => {
                   const hr = e.target.value
                   const hrs = Number(form.sold_hours)
@@ -1099,25 +1112,42 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                     project_value: hrs > 0 && hr !== '' ? String(+(Number(hr) * hrs).toFixed(2)) : prev.project_value,
                   }))
                 }} style={iStyle} placeholder="0.00" step="0.01" /></div>
-                <div><label style={lStyle}>Hora Adicional (R$)</label><input type="number" value={form.additional_hourly_rate} onChange={setF('additional_hourly_rate')} style={iStyle} placeholder="0.00" step="0.01" /></div>
-                <div><label style={lStyle}>Horas Contratadas</label><input type="number" value={form.sold_hours} onChange={e => {
-                  const hrs = e.target.value
-                  const hr = Number(form.hourly_rate)
-                  setForm(prev => ({
-                    ...prev,
-                    sold_hours: hrs,
-                    project_value: hr > 0 && hrs !== '' ? String(+(hr * Number(hrs)).toFixed(2)) : prev.project_value,
-                  }))
-                }} style={iStyle} placeholder="0" step="1" /></div>
-                <div><label style={lStyle}>% Horas Coordenador</label><input type="number" value={form.coordinator_hours} onChange={setF('coordinator_hours')} style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
-                <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
+                {!isOnDemandForm && (
+                  <div><label style={lStyle}>Hora Adicional (R$)</label><input type="number" value={form.additional_hourly_rate} onChange={setF('additional_hourly_rate')} style={iStyle} placeholder="0.00" step="0.01" /></div>
+                )}
+                {!isOnDemandForm && (
+                  <div><label style={lStyle}>Horas Contratadas</label><input type="number" value={form.sold_hours} onChange={e => {
+                    const hrs = e.target.value
+                    const hr = Number(form.hourly_rate)
+                    setForm(prev => ({
+                      ...prev,
+                      sold_hours: hrs,
+                      project_value: hr > 0 && hrs !== '' ? String(+(hr * Number(hrs)).toFixed(2)) : prev.project_value,
+                    }))
+                  }} style={iStyle} placeholder="0" step="1" /></div>
+                )}
+                {!isOnDemandForm && (
+                  <div><label style={lStyle}>% Horas Coordenador</label><input type="number" value={form.coordinator_hours} onChange={setF('coordinator_hours')} style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
+                )}
+                {!isOnDemandForm && (
+                  <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
+                )}
               </div>
-              <div className="grid grid-cols-2 gap-3 rounded-xl p-3" style={{ border: '1px solid var(--border)', background: 'var(--surface-hover)' }}>
-                <div><label style={{ ...lStyle, marginBottom: 0 }}>Histórico do sistema anterior</label></div>
-                <div />
-                <div><label style={lStyle}>HS Consumidas Iniciais</label><input type="number" value={form.initial_hours_consumed} onChange={setF('initial_hours_consumed')} style={iStyle} placeholder="0" step="0.5" /></div>
-                <div><label style={lStyle}>Custo Inicial (R$)</label><input type="number" value={form.initial_cost} onChange={setF('initial_cost')} style={iStyle} placeholder="0.00" step="0.01" /></div>
-              </div>
+              {/* Histórico: oculto em On Demand novo (sem valor); mostra em On Demand
+                  legado pra permitir zerar valores migrados do sistema anterior.
+                  Usa hadInitialHistory (capturado no mount) pra não sumir quando o
+                  user limpa os campos durante a edição. */}
+              {(!isOnDemandForm || hadInitialHistory) && (
+                <div className="grid grid-cols-2 gap-3 rounded-xl p-3" style={{ border: '1px solid var(--border)', background: 'var(--surface-hover)' }}>
+                  <div><label style={{ ...lStyle, marginBottom: 0 }}>Histórico do sistema anterior</label></div>
+                  <div />
+                  <div><label style={lStyle}>HS Consumidas Iniciais</label><input type="number" value={form.initial_hours_consumed} onChange={setF('initial_hours_consumed')} style={iStyle} placeholder="0" step="0.5" /></div>
+                  <div><label style={lStyle}>Custo Inicial (R$)</label><input type="number" value={form.initial_cost} onChange={setF('initial_cost')} style={iStyle} placeholder="0.00" step="0.01" /></div>
+                </div>
+              )}
+              </>
+                )
+              })()}
 
               {/* Comercial */}
               <SecTitle>Informações Comerciais</SecTitle>
@@ -1145,10 +1175,13 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 <div><label style={lStyle}>Condição de Pagamento</label><input value={form.condicao_pagamento} onChange={setF('condicao_pagamento')} style={iStyle} placeholder="Ex: 30/60/90 dias" /></div>
                 <div>
                   <label style={lStyle}>Vendedor</label>
-                  <select value={form.vendedor_id} onChange={setF('vendedor_id')} style={iStyle}>
-                    <option value="">Não definido</option>
-                    {optConsultants.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                  </select>
+                  <SearchSelect
+                    value={form.vendedor_id}
+                    onChange={v => setForm(f => ({ ...f, vendedor_id: v }))}
+                    options={optConsultants}
+                    placeholder="Buscar vendedor..."
+                    portal
+                  />
                 </div>
               </div>
               <div><label style={lStyle}>Observações do Contrato</label><textarea value={form.observacoes_contrato} onChange={setF('observacoes_contrato')} style={{ ...iStyle, resize: 'vertical', minHeight: '56px' }} placeholder="Observações, termos especiais..." /></div>
