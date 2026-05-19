@@ -1830,7 +1830,7 @@ function FinalizeRequestModal({ card, onClose, onDone }: {
 
 interface ReqAttachment { id: number; original_name: string; file_path: string; file_size: number; mime_type?: string }
 interface ReqMsg { id: number; message: string; author?: { id: number; name: string }; created_at: string; attachments?: ReqAttachment[] }
-interface MentionUser { id: number; name: string }
+interface MentionUser { id: number; name: string; role?: 'admin' | 'executivo' | 'cliente' }
 
 interface KanbanLogEntry {
   id: number
@@ -3487,15 +3487,27 @@ function RequestDetailModal({ card, onClose, initialTab }: { card: RequestCard; 
               {/* Mention dropdown */}
               <div className="relative">
                 {showMentions && filteredMentions.length > 0 && (
-                  <div className="absolute bottom-full left-0 mb-1 w-56 rounded-lg overflow-hidden shadow-lg z-10"
+                  <div className="absolute bottom-full left-0 mb-1 w-64 max-h-60 overflow-y-auto rounded-lg shadow-lg z-10"
                     style={{ background: 'var(--brand-bg)', border: '1px solid rgba(139,92,246,0.3)' }}>
-                    {filteredMentions.map(u => (
-                      <button key={u.id} onClick={() => insertMention(u)}
-                        className="w-full text-left px-3 py-2 text-sm hover:opacity-80 transition-opacity"
-                        style={{ color: 'var(--brand-text)' }}>
-                        <span className="text-[#a78bfa] font-semibold">@</span>{u.name}
-                      </button>
-                    ))}
+                    {filteredMentions.map(u => {
+                      const isCliente = u.role === 'cliente'
+                      const accent = isCliente ? 'var(--success)' : '#a78bfa'
+                      return (
+                        <button key={u.id} onClick={() => insertMention(u)}
+                          className="w-full flex items-center justify-between gap-2 text-left px-3 py-2 text-sm hover:opacity-80 transition-opacity"
+                          style={{ color: isCliente ? 'var(--success)' : 'var(--brand-text)' }}>
+                          <span className="truncate">
+                            <span style={{ color: accent }} className="font-semibold">@</span>{u.name}
+                          </span>
+                          {u.role && (
+                            <span className="text-[10px] uppercase tracking-wider opacity-70 shrink-0"
+                              style={{ color: accent }}>
+                              {u.role}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
                 <div className="flex gap-2 items-end">
