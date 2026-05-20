@@ -109,13 +109,14 @@ export function MultiSelect({
         >
           <div className="p-2 border-b" style={{ borderColor: 'var(--border)' }}>
             <div className="relative">
-              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
               <input
                 ref={inputRef}
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Buscar..."
-                className="w-full pl-7 pr-3 py-1.5 rounded-lg text-xs outline-none ds-input"
+                className="w-full rounded-lg outline-none ds-input"
+                style={{ paddingLeft: '2rem', paddingRight: '0.75rem', paddingTop: '0.375rem', paddingBottom: '0.375rem', fontSize: '0.75rem' }}
               />
             </div>
           </div>

@@ -15,13 +15,13 @@ const ICON_HREF =
   APP_ENV === 'homolog' ? '/favicon-homolog.svg' :
                           '/favicon-prod.svg'
 
-const BANNER = APP_ENV === 'homolog'
-  ? { label: 'HOMOLOG', bg: 'linear-gradient(90deg, #dc2626 0%, #ef4444 50%, #dc2626 100%)', fg: '#ffffff' }
-  : APP_ENV === 'dev'
-    ? { label: 'DESENV1', bg: 'linear-gradient(90deg, #ea580c 0%, #f97316 50%, #ea580c 100%)', fg: '#ffffff' }
-    : APP_ENV === 'production' || APP_ENV === 'prod'
-      ? null
-      : { label: 'DESENV LOCAL', bg: 'linear-gradient(90deg, #fbbf24 0%, #fde047 50%, #fbbf24 100%)', fg: '#0a0a0a' }
+// Banner env-aware. DEFAULT = null → produção (NEXT_PUBLIC_APP_ENV não setado)
+// NUNCA mostra faixa (fix do vazamento, PR prod #8). 'local' = Replica.
+const BANNER =
+  APP_ENV === 'homolog' ? { label: 'HOMOLOG', bg: 'linear-gradient(90deg, #dc2626 0%, #ef4444 50%, #dc2626 100%)', fg: '#ffffff' }
+  : APP_ENV === 'dev'   ? { label: 'DESENV1', bg: 'linear-gradient(90deg, #ea580c 0%, #f97316 50%, #ea580c 100%)', fg: '#ffffff' }
+  : APP_ENV === 'local' ? { label: 'REPLICA LOCAL — DADOS COPIADOS DE PROD • localhost:3001 • NÃO É PRODUÇÃO', bg: 'repeating-linear-gradient(45deg, #facc15 0px, #facc15 14px, #1a1a1a 14px, #1a1a1a 28px)', fg: '#0a0a0a' }
+  : null
 
 export const metadata: Metadata = {
   title: 'Minutor',

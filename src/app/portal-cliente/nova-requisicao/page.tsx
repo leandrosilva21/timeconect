@@ -97,7 +97,7 @@ function SectionTitle({ number, title }: { number: string; title: string }) {
 
 // ─── Success Screen ───────────────────────────────────────────────────────────
 
-function SuccessScreen({ onNew, onList, onClose }: { onNew: () => void; onList: () => void; onClose: () => void }) {
+function SuccessScreen({ onNew, onClose }: { onNew: () => void; onClose: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-6 py-20">
       <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)' }}>
@@ -115,12 +115,8 @@ function SuccessScreen({ onNew, onList, onClose }: { onNew: () => void; onList: 
           Fechar
         </button>
         <button onClick={onNew} className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-opacity hover:opacity-80"
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--brand-border)', color: 'var(--brand-muted)' }}>
-          Nova Requisição
-        </button>
-        <button onClick={onList} className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-opacity hover:opacity-80"
           style={{ background: 'var(--brand-primary)', color: 'var(--primary-fg)' }}>
-          Ver Minhas Requisições
+          Nova Requisição
         </button>
       </div>
     </div>
@@ -274,7 +270,7 @@ function NovaRequisicaoContent() {
         </div>
 
         {submitted ? (
-          <SuccessScreen onNew={resetForm} onList={() => router.push('/portal-cliente/requisicoes')} onClose={() => router.back()} />
+          <SuccessScreen onNew={resetForm} onClose={() => router.back()} />
         ) : (
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-2xl mx-auto px-6 py-8 space-y-8">

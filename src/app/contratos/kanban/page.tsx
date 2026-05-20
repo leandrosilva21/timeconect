@@ -8,7 +8,7 @@ import { previewText } from '@/lib/sanitize'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
-import { List, Plus, ExternalLink, CheckCircle, AlertCircle, AlertTriangle, Clock, Users, Layers, PauseCircle, XCircle, MoreVertical, Eye, Pencil, DollarSign, TrendingUp, BarChart2, UserCheck, X, Check, MessageSquare, Trash2, Search } from 'lucide-react'
+import { List, Plus, ExternalLink, CheckCircle, AlertCircle, AlertTriangle, Clock, Users, Layers, PauseCircle, XCircle, MoreVertical, Eye, Pencil, DollarSign, TrendingUp, BarChart2, UserCheck, X, Check, MessageSquare, Trash2, Search, Download, FileText } from 'lucide-react'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { ContractFormModal } from '@/components/contracts/ContractFormModal'
 import { ContractCreateModal } from '@/components/shared/ContractCreateModal'
@@ -1705,6 +1705,18 @@ function CardDetailModal({ card, onClose, onEditContract, initialTab, userRole }
   const fmtMoney = (val: any) => val != null ? `R$ ${Number(val).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'
   const fmtHours = (val: any) => val != null ? `${val}h` : '—'
   const fmtDate  = (val: any) => val ? new Date(val).toLocaleDateString('pt-BR') : '—'
+  const fmtSize  = (b: any) => b == null ? '' : b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1048576).toFixed(1)} MB`
+  const ATT_LABEL: Record<string, string> = { proposta: 'Proposta', contrato: 'Contrato', logo: 'Logo' }
+
+  const downloadAttachment = async (att: any) => {
+    const res = await fetch(`/api/v1/contracts/${card.id}/attachments/${att.id}`, { credentials: 'same-origin' })
+    if (!res.ok) { toast.error('Erro ao baixar arquivo'); return }
+    const blob = await res.blob()
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url; a.download = att.original_name; a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const fields: [string, string][] = full ? [
     ['Categoria',           full.categoria === 'sustentacao' ? 'Sustentação' : 'Projeto'],
@@ -1809,6 +1821,31 @@ function CardDetailModal({ card, onClose, onEditContract, initialTab, userRole }
                   </div>
                 ))}
               </div>
+              {full && (
+                <div className="pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Anexos ({full.attachments?.length ?? 0})</p>
+                  {full.attachments?.length > 0 ? (
+                    <div className="space-y-2">
+                      {full.attachments.map((att: any) => (
+                        <div key={att.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--brand-border)' }}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText size={13} className="shrink-0" style={{ color: 'var(--brand-subtle)' }} />
+                            <div className="min-w-0">
+                              <p className="text-xs truncate" style={{ color: 'var(--brand-text)' }}>{att.original_name}</p>
+                              <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{ATT_LABEL[att.type] ?? att.type}{att.size != null ? ` · ${fmtSize(att.size)}` : ''}</p>
+                            </div>
+                          </div>
+                          <button onClick={() => downloadAttachment(att)} title="Baixar" className="p-1 shrink-0 rounded transition-colors hover:bg-white/10" style={{ color: 'var(--brand-subtle)' }}>
+                            <Download size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhum anexo</p>
+                  )}
+                </div>
+              )}
               {!card.is_complete && (
                 <div className="flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs"
                   style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444' }}>
@@ -2409,7 +2446,8 @@ function KanbanContent() {
               value={filterSearch}
               onChange={e => setFilterSearch(e.target.value)}
               placeholder="Buscar nome ou projeto..."
-              className="pl-7 pr-7 py-1.5 rounded-lg text-xs outline-none w-56 ds-input"
+              className="py-1.5 rounded-lg text-xs outline-none w-56 ds-input"
+              style={{ paddingLeft: '1.75rem', paddingRight: '1.75rem' }}
             />
             {filterSearch && (
               <button onClick={() => setFilterSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2">

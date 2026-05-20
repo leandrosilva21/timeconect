@@ -90,6 +90,15 @@ function OriginChip({ origin }: { origin?: string }) {
       <Webhook size={11} /> Auto (Movidesk)
     </span>
   )
+  if (origin === 'movidesk_fallback') return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+      style={{ background: 'rgba(245,158,11,0.14)', color: '#F59E0B' }}
+      title="Sincronizado do Movidesk, mas o agente não casou com nenhum consultor — atribuído ao Usuário Padrão pra triagem manual"
+    >
+      <Webhook size={11} /> Movidesk (triagem)
+    </span>
+  )
   return (
     <span
       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
