@@ -20,7 +20,7 @@ const ICON_HREF =
 const BANNER =
   APP_ENV === 'homolog' ? { label: 'HOMOLOG', bg: 'linear-gradient(90deg, #dc2626 0%, #ef4444 50%, #dc2626 100%)', fg: '#ffffff' }
   : APP_ENV === 'dev'   ? { label: 'DESENV1', bg: 'linear-gradient(90deg, #ea580c 0%, #f97316 50%, #ea580c 100%)', fg: '#ffffff' }
-  : APP_ENV === 'local' ? { label: 'REPLICA LOCAL — DADOS COPIADOS DE PROD • localhost:3001 • NÃO É PRODUÇÃO', bg: 'repeating-linear-gradient(45deg, #facc15 0px, #facc15 14px, #1a1a1a 14px, #1a1a1a 28px)', fg: '#0a0a0a' }
+  : APP_ENV === 'local' ? { label: '⚠ AMBIENTE LOCAL — DADOS COPIADOS DE PROD • NÃO É PRODUÇÃO', bg: 'repeating-linear-gradient(45deg, #facc15 0px, #facc15 14px, #1a1a1a 14px, #1a1a1a 28px)', fg: '#0a0a0a' }
   : null
 
 export const metadata: Metadata = {
