@@ -836,6 +836,10 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
 
   const [codeExists,   setCodeExists]   = useState(false)
   const [codeChecking, setCodeChecking] = useState(false)
+  // Fluxo in-app de troca de integração Movidesk (substitui window.confirm)
+  const [movideskConflict, setMovideskConflict] = useState<{ current?: { code?: string; name?: string }; payload: Record<string, unknown> } | null>(null)
+  const [movideskStep, setMovideskStep] = useState<'confirm' | 'migrate' | 'processing'>('confirm')
+  const [movideskMigrating, setMovideskMigrating] = useState(false)
 
   const selectedCustomerObj = useMemo(() => optCustomers.find(c => String(c.id) === form.customer_id), [optCustomers, form.customer_id])
   // Use prefix from selected customer, or fall back to original code prefix
@@ -920,19 +924,13 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       try {
         await api.put(`/projects/${project.id}`, payload)
       } catch (err: any) {
-        // Conflito: outro projeto do mesmo cliente já tem integração Movidesk
-        const isConflict = (err instanceof ApiError) && err.status === 409 && err.data?.code === 'MOVIDESK_INTEGRATION_CONFLICT'
+        // Conflito Movidesk: abre o fluxo de modais in-app; o PUT de swap é refeito por submitMovideskSwap.
+        const isConflict = (err instanceof ApiError) && err.status === 409 && (err.data as any)?.code === 'MOVIDESK_INTEGRATION_CONFLICT'
         if (!isConflict) throw err
-        const current = err.data?.current_project as { name?: string; code?: string } | undefined
-        const ok = window.confirm(
-          `Cliente já tem integração Movidesk ativa em "${current?.code ?? ''} ${current?.name ?? ''}". ` +
-          `Deseja desativar nele e mover pra este projeto?`
-        )
-        if (!ok) {
-          setSaving(false)
-          return
-        }
-        await api.put(`/projects/${project.id}`, { ...payload, confirm_movidesk_swap: true })
+        setMovideskConflict({ current: (err.data as any)?.current_project, payload })
+        setMovideskStep('confirm')
+        setSaving(false)
+        return
       }
       // Salva allow_manual_timesheet por consultor (pivô separado)
       const directInitial: any[] = d.consultants ?? []
@@ -953,11 +951,50 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
           await fetch(`/api/v1/projects/${project.id}/attachments`, { method: 'POST', credentials: 'same-origin', body: fd })
         }
         setPendingAttach([])
-      }
-      toast.success('Projeto atualizado')
-      onSaved()
+      await finishAfterSave()
     } catch (e: any) { toast.error(e?.message ?? 'Erro ao salvar projeto') }
     finally { setSaving(false) }
+  }
+
+  // Pós-processamento compartilhado entre o fluxo normal e o de troca Movidesk.
+  const finishAfterSave = async () => {
+    // Salva allow_manual_timesheet por consultor (pivô separado)
+    const directInitial: any[] = d.consultants ?? []
+    const groupInitial: any[] = (d.consultant_groups ?? []).flatMap((g: any) => g.consultants ?? [])
+    const allInitialConsultants = [...directInitial, ...groupInitial].filter((c, i, arr) => arr.findIndex((x: any) => x.id === c.id) === i)
+    const initialManual = new Set<number>(allInitialConsultants.filter((c: any) => c.pivot?.allow_manual_timesheet).map((c: any) => Number(c.id)))
+    const allIds = new Set<number>([...allInitialConsultants.map((c: any) => Number(c.id)), ...Array.from(initialManual)])
+    await Promise.allSettled(
+      Array.from(allIds).filter(id => manualTimesheetIds.has(id) !== initialManual.has(id)).map(id =>
+        api.put(`/projects/${project.id}/consultants/${id}/manual-timesheet`, { allow: manualTimesheetIds.has(id) })
+      )
+    )
+    if (pendingAttach.length > 0) {
+      for (const { file, type } of pendingAttach) {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('type', type)
+        await fetch(`/api/v1/projects/${project.id}/attachments`, { method: 'POST', credentials: 'same-origin', body: fd })
+      }
+      setPendingAttach([])
+    }
+    toast.success('Projeto atualizado')
+    onSaved()
+  }
+
+  // Refaz o PUT confirmando a troca de integração Movidesk (com ou sem migração).
+  const submitMovideskSwap = async (migrate: boolean) => {
+    if (!movideskConflict) return
+    setMovideskMigrating(migrate)
+    setMovideskStep('processing')
+    try {
+      await api.put(`/projects/${project.id}`, { ...movideskConflict.payload, confirm_movidesk_swap: true, migrate_movidesk_timesheets: migrate })
+      await finishAfterSave()
+      setMovideskConflict(null)
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao salvar projeto')
+      setMovideskConflict(null)
+    }
   }
 
   const iStyle: React.CSSProperties = { width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '0.625rem', padding: '0.5rem 0.75rem', fontSize: '0.8125rem', color: 'var(--text)', outline: 'none' }
@@ -1427,6 +1464,49 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
           </button>
         </div>
       </div>
+
+      {/* Fluxo de troca de integração Movidesk (modais in-app) */}
+      {movideskConflict && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="w-full max-w-md rounded-2xl p-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <p className="text-sm font-semibold mb-3" style={{ color: 'var(--brand-text)' }}>Integração Movidesk</p>
+
+            {movideskStep === 'confirm' && (
+              <>
+                <p className="text-[13px] leading-relaxed mb-5" style={{ color: 'var(--brand-muted)' }}>
+                  Cliente já tem a integração ativa em <strong style={{ color: 'var(--brand-text)' }}>{movideskConflict.current?.code ?? ''} {movideskConflict.current?.name ?? ''}</strong>. Deseja mudar a integração para este projeto?
+                </p>
+                <div className="flex items-center justify-end gap-3">
+                  <button onClick={() => setMovideskConflict(null)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancelar</button>
+                  <button onClick={() => setMovideskStep('migrate')} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}>Sim, mudar</button>
+                </div>
+              </>
+            )}
+
+            {movideskStep === 'migrate' && (
+              <>
+                <p className="text-[13px] leading-relaxed mb-5" style={{ color: 'var(--brand-muted)' }}>
+                  Deseja migrar os apontamentos de origem Movidesk de <strong style={{ color: 'var(--brand-text)' }}>{movideskConflict.current?.code ?? ''} {movideskConflict.current?.name ?? ''}</strong> para este projeto? (somente os apontamentos importados do Movidesk são movidos)
+                </p>
+                <div className="flex items-center justify-end gap-3">
+                  <button onClick={() => submitMovideskSwap(false)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Não migrar</button>
+                  <button onClick={() => submitMovideskSwap(true)} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}>Sim, migrar</button>
+                </div>
+              </>
+            )}
+
+            {movideskStep === 'processing' && (
+              <>
+                <p className="text-[13px] leading-relaxed mb-4" style={{ color: 'var(--brand-muted)' }}>{movideskMigrating ? 'Migrando apontamentos...' : 'Salvando...'}</p>
+                <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--brand-border)' }}>
+                  <div className="h-full w-1/3 rounded-full animate-[mvProgress_1.1s_ease-in-out_infinite]" style={{ background: 'var(--brand-primary)' }} />
+                </div>
+                <style>{`@keyframes mvProgress{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}`}</style>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
