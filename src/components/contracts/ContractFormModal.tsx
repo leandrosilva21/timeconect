@@ -674,10 +674,41 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                 </div>
               )}
 
-              {/* Anexos — também acessível na aba Anexos */}
-              <div className="pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-                <label className={labelCls}>Anexos (aprovação do cliente / proposta, contrato, logo)</label>
-                {attachmentSection}
+              {/* Aprovação do Cliente / Proposta Assinada — mesmo campo da criação */}
+              <div>
+                <label className={labelCls}>Aprovação do Cliente / Proposta Assinada</label>
+                {internalEdit && internalEdit.attachments.length > 0 && (
+                  <div className="space-y-1 mb-2">
+                    {internalEdit.attachments.map(att => (
+                      <div key={att.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--brand-border)' }}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText size={13} className="shrink-0 text-zinc-400" />
+                          <div className="min-w-0">
+                            <p className="text-xs truncate text-zinc-300">{att.original_name}</p>
+                            <p className="text-[10px] text-zinc-600">{ATTACHMENT_TYPE_LABEL[att.type]} · {fmt(att.size)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button type="button" onClick={() => downloadAttachment(internalEdit.id, att)} className="p-1 text-zinc-400 hover:text-cyan-400 transition-colors"><Download size={13} /></button>
+                          <button type="button" onClick={() => deleteAttachment(internalEdit.id, att.id)} className="p-1 text-zinc-400 hover:text-red-400 transition-colors"><Trash2 size={13} /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt,.csv,.zip"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) { setPendingFiles(p => [...p.filter(x => x.type !== 'proposta'), { file: f, type: 'proposta' }]); e.target.value = '' } }}
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-1 focus:ring-cyan-500/40 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:bg-cyan-500/10 file:text-cyan-300 hover:file:bg-cyan-500/20 file:cursor-pointer"
+                  style={inputStyle}
+                />
+                {(() => {
+                  const pend = pendingFiles.find(p => p.type === 'proposta')
+                  if (pend) return <p className="text-[11px] text-emerald-400 mt-1">✓ {pend.file.name} ({Math.round(pend.file.size / 1024)} KB)</p>
+                  if (internalEdit && internalEdit.attachments.length > 0) return <p className="text-[10px] mt-1 text-zinc-600">Selecione um arquivo para substituir/adicionar.</p>
+                  return <p className="text-[10px] mt-1" style={{ color: '#f87171' }}>Anexe a aprovação formal (PDF, imagem ou e-mail exportado) — máx 20 MB</p>
+                })()}
               </div>
             </div>
           )}
