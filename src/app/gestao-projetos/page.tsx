@@ -1499,6 +1499,7 @@ export default function GestaoProjetosPage() {
   const hasActiveFilters = !!(search || statusFilters.length || clienteFilters.length || saudeFilter || filterContractType || filterServiceTypes.length || filterCoordinators.length || filterExecutives.length)
 
   const [projects, setProjects]   = useState<ProjectWithTeam[]>([])
+  const [showClosed, setShowClosed] = useState(false)
   const [loading, setLoading]     = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [expanded, setExpanded]   = useState<Set<number>>(new Set())
@@ -1695,6 +1696,10 @@ export default function GestaoProjetosPage() {
 
   const filtered = useMemo(() => {
     return projects.filter(p => {
+      // Fila separada: encerrados/cancelados só aparecem na aba "Encerrados" (showClosed);
+      // nas demais abas eles ficam de fora.
+      const isClosed = p.status === 'finished' || p.status === 'cancelled'
+      if (showClosed ? !isClosed : isClosed) return false
       if (filterContractType && p.contract_type_display !== filterContractType) return false
       if (filterServiceTypes.length > 0) {
         const stId = (p as any).service_type_id ?? (p as any).service_type?.id
@@ -1726,7 +1731,7 @@ export default function GestaoProjetosPage() {
       }
       return true
     })
-  }, [projects, search, statusFilters, clienteFilters, saudeFilter, filterContractType, filterServiceTypes, filterCoordinators, filterExecutives, customerExecutiveMap])
+  }, [projects, search, statusFilters, clienteFilters, saudeFilter, filterContractType, filterServiceTypes, filterCoordinators, filterExecutives, customerExecutiveMap, showClosed])
 
   const toggleTree = (row: TreeRow) => {
     setRows(prev => {
@@ -1749,6 +1754,8 @@ export default function GestaoProjetosPage() {
     if (!multiContratual) return [] as TreeRow[]
     const parentRows = rows.filter(r => r._level === 0)
     const filteredParents = parentRows.filter(p => {
+      const isClosed = p.status === 'finished' || p.status === 'cancelled'
+      if (showClosed ? !isClosed : isClosed) return false
       if (statusFilters.length > 0 && !statusFilters.includes(p.status ?? '')) return false
       if (clienteFilters.length > 0 && !clienteFilters.includes(String(p.customer_id))) return false
       if (filterCoordinators.length > 0) {
@@ -1777,7 +1784,7 @@ export default function GestaoProjetosPage() {
       if (live._isExpanded) result.push(...rows.filter(r => r._parentId === live.id && r._level > 0))
     }
     return result
-  }, [rows, multiContratual, statusFilters, clienteFilters, saudeFilter, search, filterCoordinators, filterExecutives, customerExecutiveMap])
+  }, [rows, multiContratual, statusFilters, clienteFilters, saudeFilter, search, filterCoordinators, filterExecutives, customerExecutiveMap, showClosed])
 
   // ── Métricas dos cards ──
   const stats = useMemo(() => {
@@ -2229,7 +2236,7 @@ export default function GestaoProjetosPage() {
         <div className="flex items-center gap-3 flex-wrap">
           {/* Botão Multi-contratual */}
           <button
-            onClick={() => { setMultiContratual(v => !v) }}
+            onClick={() => { setMultiContratual(v => !v); setShowClosed(false) }}
             className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap"
             style={multiContratual
               ? { background: 'var(--brand-primary)', color: 'var(--primary-fg)', boxShadow: '0 0 12px rgba(0,245,255,0.35)' }
@@ -2242,9 +2249,9 @@ export default function GestaoProjetosPage() {
             style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)' }}
           >
             <button
-              onClick={() => { setFilterContractType(''); setMultiContratual(false) }}
+              onClick={() => { setFilterContractType(''); setMultiContratual(false); setShowClosed(false) }}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-              style={!filterContractType && !multiContratual
+              style={!filterContractType && !multiContratual && !showClosed
                 ? { background: 'var(--brand-primary)', color: 'var(--primary-fg)' }
                 : { color: 'var(--brand-muted)' }}
             >
@@ -2253,9 +2260,9 @@ export default function GestaoProjetosPage() {
             {availableContractTypes.map(ct => (
               <button
                 key={ct.id}
-                onClick={() => { setFilterContractType(String(ct.id)); setMultiContratual(false) }}
+                onClick={() => { setFilterContractType(String(ct.id)); setMultiContratual(false); setShowClosed(false) }}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-                style={filterContractType === String(ct.id)
+                style={filterContractType === String(ct.id) && !showClosed
                   ? { background: 'var(--brand-primary)', color: 'var(--primary-fg)' }
                   : { color: 'var(--brand-muted)' }}
               >
@@ -2263,6 +2270,21 @@ export default function GestaoProjetosPage() {
               </button>
             ))}
           </div>
+          {/* Fila separada: Encerrados / Cancelados */}
+          {(() => {
+            const closedCount = projects.filter(p => p.status === 'finished' || p.status === 'cancelled').length
+            return (
+              <button
+                onClick={() => { setShowClosed(true); setFilterContractType(''); setMultiContratual(false) }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap"
+                style={showClosed
+                  ? { background: 'var(--danger-border)', color: 'var(--surface)' }
+                  : { background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+              >
+                <CalendarOff size={13} /> Encerrados / Cancelados{closedCount ? ` (${closedCount})` : ''}
+              </button>
+            )
+          })()}
         </div>
 
         {/* ── Tabela ── */}
