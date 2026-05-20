@@ -322,9 +322,17 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
   const [tsLoading, setTsLoading] = useState(false)
   const [tsLoaded, setTsLoaded] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
+  const [viewAttachments, setViewAttachments] = useState<any[]>([])
+  const downloadViewAtt = async (att: any) => {
+    const res = await fetch(`/api/v1/projects/${projectId}/attachments/${att.id}`, { credentials: 'same-origin' })
+    if (!res.ok) { toast.error('Erro ao baixar arquivo'); return }
+    const blob = await res.blob(); const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = att.original_name; a.click(); URL.revokeObjectURL(url)
+  }
 
   const reload = () => {
     setLoading(true)
+    api.get<any[]>(`/projects/${projectId}/attachments`).then(r => setViewAttachments(Array.isArray(r) ? r : [])).catch(() => {})
     Promise.all([
       api.get<ProjectFull>(`/projects/${projectId}`),
       api.get<CostSummary>(`/projects/${projectId}/cost-summary`).catch(() => null),
@@ -541,6 +549,29 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                       )}
                     </div>
                   </div>
+                </div>
+
+                {/* Anexos */}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Anexos</p>
+                  {viewAttachments.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {viewAttachments.map(att => (
+                        <div key={att.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--brand-border)' }}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText size={13} className="shrink-0" style={{ color: 'var(--brand-subtle)' }} />
+                            <div className="min-w-0">
+                              <p className="text-xs truncate" style={{ color: 'var(--brand-text)' }}>{att.original_name}</p>
+                              <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{att.type ?? 'anexo'}{att.source === 'contract' ? ' · do contrato' : ''}</p>
+                            </div>
+                          </div>
+                          <button type="button" onClick={() => downloadViewAtt(att)} title="Baixar" className="p-1 rounded transition-colors hover:bg-white/10" style={{ color: 'var(--brand-subtle)' }}><Download size={13} /></button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhum anexo</p>
+                  )}
                 </div>
 
                 {breakdown.length > 0 && (
@@ -907,6 +938,24 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     kanban_coordinator_override_id:  d.kanban_coordinator_override_id ? String(d.kanban_coordinator_override_id) : '',
   } as any)
   const [saving, setSaving] = useState(false)
+  const [projAttachments, setProjAttachments] = useState<any[]>([])
+  const [pendingAttach, setPendingAttach] = useState<{ file: File; type: string }[]>([])
+  const attachFileRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    api.get<any[]>(`/projects/${project.id}/attachments`).then(r => setProjAttachments(Array.isArray(r) ? r : [])).catch(() => {})
+  }, [project.id])
+  const fmtAttSize = (b: any) => b == null ? '' : b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1048576).toFixed(1)} MB`
+  const downloadProjAtt = async (att: any) => {
+    const res = await fetch(`/api/v1/projects/${project.id}/attachments/${att.id}`, { credentials: 'same-origin' })
+    if (!res.ok) { toast.error('Erro ao baixar arquivo'); return }
+    const blob = await res.blob(); const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = att.original_name; a.click(); URL.revokeObjectURL(url)
+  }
+  const deleteProjAtt = async (att: any) => {
+    if (!confirm('Remover este anexo?')) return
+    try { await api.delete(`/projects/${project.id}/attachments/${att.id}`); setProjAttachments(p => p.filter(x => x.id !== att.id)); toast.success('Anexo removido') }
+    catch (e: any) { toast.error(e?.message ?? 'Erro ao remover anexo') }
+  }
   const [optServiceTypes,   setOptServiceTypes]   = useState<{id:number;name:string}[]>([])
   const [optContractTypes,  setOptContractTypes]  = useState<{id:number;name:string}[]>([])
   const [optCoordinators,   setOptCoordinators]   = useState<{id:number;name:string}[]>([])
@@ -987,6 +1036,15 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
         payload.kanban_coordinator_override_id = overrideVal === '' ? null : Number(overrideVal)
       }
       await api.put(`/projects/${project.id}`, payload)
+      if (pendingAttach.length > 0) {
+        for (const { file, type } of pendingAttach) {
+          const fd = new FormData()
+          fd.append('file', file)
+          fd.append('type', type)
+          await fetch(`/api/v1/projects/${project.id}/attachments`, { method: 'POST', credentials: 'same-origin', body: fd })
+        }
+        setPendingAttach([])
+      }
       toast.success('Projeto atualizado')
       onSaved()
     } catch { toast.error('Erro ao salvar projeto') }
@@ -1043,6 +1101,51 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
               </div>
               <div><label style={lStyle}>Projeto Pai (Subprojeto)</label><select value={form.parent_project_id} onChange={setF('parent_project_id')} style={iStyle}><option value="">Nenhum</option>{optParentProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
               <div><label style={lStyle}>Descrição</label><textarea value={form.description} onChange={setF('description')} style={{ ...iStyle, resize: 'vertical', minHeight: '64px' }} /></div>
+
+              {/* Anexos */}
+              <div>
+                <label style={lStyle}>Anexos (aprovação do cliente / proposta, contrato, logo)</label>
+                {(projAttachments.length > 0 || pendingAttach.length > 0) ? (
+                  <div className="space-y-1.5 mb-2">
+                    {projAttachments.map(att => (
+                      <div key={att.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--brand-border)' }}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText size={13} className="shrink-0" style={{ color: 'var(--brand-subtle)' }} />
+                          <div className="min-w-0">
+                            <p className="text-xs truncate" style={{ color: 'var(--brand-text)' }}>{att.original_name}</p>
+                            <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{att.type ?? 'anexo'}{att.size != null ? ` · ${fmtAttSize(att.size)}` : ''}{att.source === 'contract' ? ' · do contrato' : ''}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button type="button" onClick={() => downloadProjAtt(att)} title="Baixar" className="p-1 rounded transition-colors hover:bg-white/10" style={{ color: 'var(--brand-subtle)' }}><Download size={13} /></button>
+                          {att.source !== 'contract' && (
+                            <button type="button" onClick={() => deleteProjAtt(att)} title="Remover" className="p-1 rounded transition-colors hover:bg-white/10" style={{ color: 'var(--brand-subtle)' }}><Trash2 size={13} /></button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {pendingAttach.map((pf, i) => (
+                      <div key={`pend-${i}`} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(0,245,255,0.04)', border: '1px solid rgba(0,245,255,0.15)' }}>
+                        <div className="min-w-0">
+                          <p className="text-xs truncate" style={{ color: 'var(--brand-text)' }}>{pf.file.name}</p>
+                          <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{pf.type} · aguardando salvar</p>
+                        </div>
+                        <button type="button" onClick={() => setPendingAttach(p => p.filter((_, j) => j !== i))} className="p-1 shrink-0" style={{ color: 'var(--brand-subtle)' }}><X size={12} /></button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] italic mb-2" style={{ color: 'var(--brand-subtle)' }}>Nenhum anexo</p>
+                )}
+                <input ref={attachFileRef} type="file" className="hidden"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt,.csv,.zip"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) { setPendingAttach(p => [...p, { file: f, type: 'proposta' }]); e.target.value = '' } }} />
+                <button type="button" onClick={() => attachFileRef.current?.click()}
+                  className="w-full py-3 rounded-lg border-2 border-dashed text-xs transition-colors hover:border-cyan-500/40"
+                  style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-subtle)' }}>
+                  Clique para adicionar anexo
+                </button>
+              </div>
 
               <SecTitle>Financeiro</SecTitle>
               <div className="grid grid-cols-2 gap-3">
