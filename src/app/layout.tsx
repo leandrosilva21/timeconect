@@ -15,12 +15,17 @@ const ICON_HREF =
   APP_ENV === 'homolog' ? '/favicon-homolog.svg' :
                           '/favicon-prod.svg'
 
+// Nome do ambiente exibido na faixa. Cada base seta NEXT_PUBLIC_ENV_LABEL no
+// seu .env.local (ex: DESENVOLVIMENTO, REPLICA). Fallback genérico se ausente.
+const ENV_LABEL = process.env.NEXT_PUBLIC_ENV_LABEL ?? 'AMBIENTE LOCAL'
+
 // Banner env-aware. DEFAULT = null → produção (NEXT_PUBLIC_APP_ENV não setado)
-// NUNCA mostra faixa (fix do vazamento, PR prod #8). 'local' = Replica.
+// NUNCA mostra faixa (fix do vazamento, PR prod #8). 'local' = base local (desenv/replica).
+// pillFg = cor do texto na caixa sólida central (legível sobre as listras/gradiente).
 const BANNER =
-  APP_ENV === 'homolog' ? { label: 'HOMOLOG', bg: 'linear-gradient(90deg, #dc2626 0%, #ef4444 50%, #dc2626 100%)', fg: '#ffffff' }
-  : APP_ENV === 'dev'   ? { label: 'DESENV1', bg: 'linear-gradient(90deg, #ea580c 0%, #f97316 50%, #ea580c 100%)', fg: '#ffffff' }
-  : APP_ENV === 'local' ? { label: '⚠ AMBIENTE LOCAL — DADOS COPIADOS DE PROD • NÃO É PRODUÇÃO', bg: 'repeating-linear-gradient(45deg, #facc15 0px, #facc15 14px, #1a1a1a 14px, #1a1a1a 28px)', fg: '#0a0a0a' }
+  APP_ENV === 'homolog' ? { label: 'HOMOLOG — AMBIENTE DE VALIDAÇÃO', bg: 'linear-gradient(90deg, #dc2626 0%, #ef4444 50%, #dc2626 100%)', pillFg: '#fca5a5' }
+  : APP_ENV === 'dev'   ? { label: 'DESENV1 — DADOS COPIADOS DE PROD', bg: 'linear-gradient(90deg, #ea580c 0%, #f97316 50%, #ea580c 100%)', pillFg: '#fdba74' }
+  : APP_ENV === 'local' ? { label: `${ENV_LABEL} — DADOS COPIADOS DE PROD • NÃO É PRODUÇÃO`, bg: 'repeating-linear-gradient(45deg, #facc15 0px, #facc15 14px, #1a1a1a 14px, #1a1a1a 28px)', pillFg: '#fde047' }
   : null
 
 export const metadata: Metadata = {
@@ -51,21 +56,35 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               right: 0,
               zIndex: 9999,
               background: BANNER.bg,
-              color: BANNER.fg,
-              fontWeight: 700,
-              fontSize: 12,
-              letterSpacing: '0.15em',
-              textAlign: 'center',
-              padding: '4px 8px',
+              minHeight: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '3px 8px',
               fontFamily: 'var(--font-inter), sans-serif',
-              textShadow: BANNER.fg === '#0a0a0a' ? '0 1px 0 rgba(255,255,255,0.4)' : 'none',
               pointerEvents: 'none',
             }}
           >
-            {BANNER.label}
+            <span
+              style={{
+                background: 'rgba(0,0,0,0.82)',
+                color: BANNER.pillFg,
+                fontWeight: 800,
+                fontSize: 12,
+                letterSpacing: '0.12em',
+                padding: '3px 18px',
+                borderRadius: 5,
+                whiteSpace: 'nowrap',
+                maxWidth: '94vw',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              ⚠ {BANNER.label}
+            </span>
           </div>
         )}
-        <div style={{ paddingTop: BANNER ? 24 : 0 }}>
+        <div style={{ paddingTop: BANNER ? 28 : 0 }}>
           <Providers>{children}</Providers>
         </div>
       </body>
