@@ -11,7 +11,7 @@ import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { Project, PaginatedResponse, HourContribution } from '@/types'
 import { formatBRL } from '@/lib/format'
 import { toast } from 'sonner'
-import { Layers, Search, ChevronDown, ChevronRight, Users, TrendingUp, Clock, BarChart2, AlertTriangle, DollarSign, X, UserCheck, Pencil, Trash2, Plus, Edit2, MessageCircle, Eye, Check, UserPlus, CalendarPlus, CalendarOff } from 'lucide-react'
+import { Layers, Search, ChevronDown, ChevronRight, Users, TrendingUp, Clock, BarChart2, AlertTriangle, DollarSign, X, UserCheck, Pencil, Trash2, Plus, Edit2, MessageCircle, Eye, Check, UserPlus, CalendarPlus, CalendarOff, FileText, Download } from 'lucide-react'
 import { ProjectMessages } from '@/components/shared/ProjectMessages'
 import { ProjectDataModal } from '@/components/shared/ProjectDataModal'
 import { MultiSelect } from '@/components/ui/multi-select'
@@ -732,6 +732,26 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     () => new Set((d.consultants ?? []).filter((c: any) => c.pivot?.allow_manual_timesheet).map((c: any) => c.id))
   )
 
+  // Anexos do projeto (inclui os herdados do contrato vinculado, source='contract')
+  const [projAttachments, setProjAttachments] = useState<any[]>([])
+  const [pendingAttach, setPendingAttach] = useState<{ file: File; type: string }[]>([])
+  const attachFileRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    api.get<any[]>(`/projects/${project.id}/attachments`).then(r => setProjAttachments(Array.isArray(r) ? r : [])).catch(() => {})
+  }, [project.id])
+  const fmtAttSize = (b: any) => b == null ? '' : b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1048576).toFixed(1)} MB`
+  const downloadProjAtt = async (att: any) => {
+    const res = await fetch(`/api/v1/projects/${project.id}/attachments/${att.id}`, { credentials: 'same-origin' })
+    if (!res.ok) { toast.error('Erro ao baixar arquivo'); return }
+    const blob = await res.blob(); const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = att.original_name; a.click(); URL.revokeObjectURL(url)
+  }
+  const deleteProjAtt = async (att: any) => {
+    if (!confirm('Remover este anexo?')) return
+    try { await api.delete(`/projects/${project.id}/attachments/${att.id}`); setProjAttachments(p => p.filter(x => x.id !== att.id)); toast.success('Anexo removido') }
+    catch (e: any) { toast.error(e?.message ?? 'Erro ao remover anexo') }
+  }
+
   const [optServiceTypes,    setOptServiceTypes]    = useState<{id:number;name:string}[]>([])
   const [optContractTypes,   setOptContractTypes]   = useState<{id:number;name:string}[]>([])
   const [optCoordinators,    setOptCoordinators]    = useState<{id:number;name:string}[]>([])
@@ -868,6 +888,15 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
           api.put(`/projects/${project.id}/consultants/${id}/manual-timesheet`, { allow: manualTimesheetIds.has(id) })
         )
       )
+      if (pendingAttach.length > 0) {
+        for (const { file, type } of pendingAttach) {
+          const fd = new FormData()
+          fd.append('file', file)
+          fd.append('type', type)
+          await fetch(`/api/v1/projects/${project.id}/attachments`, { method: 'POST', credentials: 'same-origin', body: fd })
+        }
+        setPendingAttach([])
+      }
       toast.success('Projeto atualizado')
       onSaved()
     } catch (e: any) { toast.error(e?.message ?? 'Erro ao salvar projeto') }
@@ -1045,6 +1074,51 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 </select>
               </div>
               <div><label style={lStyle}>Descrição</label><textarea value={form.description} onChange={setF('description')} style={{ ...iStyle, resize: 'vertical', minHeight: '64px' }} /></div>
+
+              {/* Anexos */}
+              <div>
+                <label style={lStyle}>Anexos (aprovação do cliente / proposta, contrato, logo)</label>
+                {(projAttachments.length > 0 || pendingAttach.length > 0) ? (
+                  <div className="space-y-1.5 mb-2">
+                    {projAttachments.map(att => (
+                      <div key={att.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--brand-border)' }}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText size={13} className="shrink-0" style={{ color: 'var(--brand-subtle)' }} />
+                          <div className="min-w-0">
+                            <p className="text-xs truncate" style={{ color: 'var(--brand-text)' }}>{att.original_name}</p>
+                            <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{att.type ?? 'anexo'}{att.size != null ? ` · ${fmtAttSize(att.size)}` : ''}{att.source === 'contract' ? ' · do contrato' : ''}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button type="button" onClick={() => downloadProjAtt(att)} title="Baixar" className="p-1 rounded transition-colors hover:bg-white/10" style={{ color: 'var(--brand-subtle)' }}><Download size={13} /></button>
+                          {att.source !== 'contract' && (
+                            <button type="button" onClick={() => deleteProjAtt(att)} title="Remover" className="p-1 rounded transition-colors hover:bg-white/10" style={{ color: 'var(--brand-subtle)' }}><Trash2 size={13} /></button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {pendingAttach.map((pf, i) => (
+                      <div key={`pend-${i}`} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(0,245,255,0.04)', border: '1px solid rgba(0,245,255,0.15)' }}>
+                        <div className="min-w-0">
+                          <p className="text-xs truncate" style={{ color: 'var(--brand-text)' }}>{pf.file.name}</p>
+                          <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{pf.type} · aguardando salvar</p>
+                        </div>
+                        <button type="button" onClick={() => setPendingAttach(p => p.filter((_, j) => j !== i))} className="p-1 shrink-0" style={{ color: 'var(--brand-subtle)' }}><X size={12} /></button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] italic mb-2" style={{ color: 'var(--brand-subtle)' }}>Nenhum anexo</p>
+                )}
+                <input ref={attachFileRef} type="file" className="hidden"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt,.csv,.zip"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) { setPendingAttach(p => [...p, { file: f, type: 'proposta' }]); e.target.value = '' } }} />
+                <button type="button" onClick={() => attachFileRef.current?.click()}
+                  className="w-full py-3 rounded-lg border-2 border-dashed text-xs transition-colors hover:border-cyan-500/40"
+                  style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-subtle)' }}>
+                  Clique para adicionar anexo
+                </button>
+              </div>
 
               {/* Financeiro */}
               <SecTitle>Financeiro</SecTitle>
@@ -1686,6 +1760,13 @@ export default function GestaoProjetosPage() {
 
   const [viewProject, setViewProject] = useState<ProjectWithTeam | null>(null)
   const [viewProjectFull, setViewProjectFull] = useState<ProjectFull | null>(null)
+  const [viewAttachments, setViewAttachments] = useState<any[]>([])
+  const downloadViewAtt = async (projId: number, att: any) => {
+    const res = await fetch(`/api/v1/projects/${projId}/attachments/${att.id}`, { credentials: 'same-origin' })
+    if (!res.ok) { toast.error('Erro ao baixar arquivo'); return }
+    const blob = await res.blob(); const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = att.original_name; a.click(); URL.revokeObjectURL(url)
+  }
   const [viewProjectLoading, setViewProjectLoading] = useState(false)
   const [viewProjectTab, setViewProjectTab] = useState<'overview' | 'cost'>('overview')
   const [viewCostSummary, setViewCostSummary] = useState<CostSummary | null>(null)
@@ -1734,6 +1815,7 @@ export default function GestaoProjetosPage() {
     if (action === 'view') {
       setViewProject(project)
       setViewProjectFull(null)
+      setViewAttachments([])
       setViewProjectTab('overview')
       setViewCostSummary(null)
       setViewProjectLoading(true)
@@ -1741,6 +1823,9 @@ export default function GestaoProjetosPage() {
         .then(r => setViewProjectFull(r))
         .catch(() => {})
         .finally(() => setViewProjectLoading(false))
+      api.get<any[]>(`/projects/${project.id}/attachments`)
+        .then(r => setViewAttachments(Array.isArray(r) ? r : []))
+        .catch(() => {})
       return
     }
     if (action === 'messages') { setMessagesProject(project); return }
@@ -3042,6 +3127,29 @@ export default function GestaoProjetosPage() {
                           <p className="text-xs text-center py-2" style={{ color: 'var(--brand-subtle)' }}>Sem equipe cadastrada</p>
                         )}
                       </div>
+                    </div>
+
+                    {/* Anexos */}
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Anexos</p>
+                      {viewAttachments.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {viewAttachments.map(att => (
+                            <div key={att.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--brand-border)' }}>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <FileText size={13} className="shrink-0" style={{ color: 'var(--brand-subtle)' }} />
+                                <div className="min-w-0">
+                                  <p className="text-xs truncate" style={{ color: 'var(--brand-text)' }}>{att.original_name}</p>
+                                  <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{att.type ?? 'anexo'}{att.source === 'contract' ? ' · do contrato' : ''}</p>
+                                </div>
+                              </div>
+                              <button type="button" onClick={() => downloadViewAtt(p.id, att)} title="Baixar" className="p-1 rounded transition-colors hover:bg-white/10" style={{ color: 'var(--brand-subtle)' }}><Download size={13} /></button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhum anexo</p>
+                      )}
                     </div>
 
                   </div>
