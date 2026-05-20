@@ -238,14 +238,16 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
       // Load full contract data
       api.get<Contract>(`/contracts/${editContract.id}`).then(full => {
         setInternalEdit(full)
+        // Parse o código existente (ex: "AVN005-26" ou "AVN005-26-01") pros segmentos
+        const codeMatch = ((full as any).project_code_preview ?? '').match(/^[A-Za-z]+(\d+)-(\d{2})(?:-(\d{2}))?$/)
         setForm({
           customer_id:           String(full.customer_id),
           project_name:          (full as any).project_name ?? '',
           is_subproject:         !!(full as any).parent_project_id,
-          sub_seq:               '',
+          sub_seq:               codeMatch?.[3] ?? '',
           parent_project_id:     (full as any).parent_project_id ? String((full as any).parent_project_id) : '',
-          code_seq:              '',
-          code_year:             CURRENT_YEAR_2D,
+          code_seq:              codeMatch?.[1] ?? '',
+          code_year:             codeMatch?.[2] ?? CURRENT_YEAR_2D,
           categoria:             full.categoria,
           service_type_id:       full.service_type_id ? String(full.service_type_id) : '',
           contract_type_id:      full.contract_type_id ? String(full.contract_type_id) : '',
@@ -445,6 +447,71 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
   const inputStyle = { border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }
   const labelCls   = 'block text-xs text-zinc-400 mb-1'
 
+  const attachmentSection = (
+    <div className="space-y-4">
+      {internalEdit && internalEdit.attachments.length > 0 && (
+        <div>
+          <p className="text-xs text-zinc-400 mb-2">Arquivos já enviados</p>
+          <div className="space-y-2">
+            {internalEdit.attachments.map(att => (
+              <div key={att.id} className="flex items-center justify-between px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--brand-border)' }}>
+                <div className="flex items-center gap-2">
+                  <FileText size={14} className="text-zinc-400" />
+                  <div>
+                    <p className="text-xs text-zinc-300">{att.original_name}</p>
+                    <p className="text-[10px] text-zinc-600">{ATTACHMENT_TYPE_LABEL[att.type]} · {fmt(att.size)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => downloadAttachment(internalEdit.id, att)} className="p-1 text-zinc-400 hover:text-cyan-400 transition-colors"><Download size={13} /></button>
+                  <button onClick={() => deleteAttachment(internalEdit.id, att.id)} className="p-1 text-zinc-400 hover:text-red-400 transition-colors"><Trash2 size={13} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <p className="text-xs text-zinc-400 mb-2">Adicionar arquivo</p>
+        <div className="flex items-center gap-2 mb-3">
+          {(['proposta', 'contrato', 'logo'] as const).map(t => (
+            <button key={t} onClick={() => setSelectedAttachType(t)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+              style={{ background: selectedAttachType === t ? 'rgba(0,245,255,0.15)' : 'transparent', border: '1px solid var(--brand-border)', color: selectedAttachType === t ? 'var(--text)' : 'var(--text-muted)' }}>
+              {ATTACHMENT_TYPE_LABEL[t]}
+            </button>
+          ))}
+        </div>
+        <input ref={fileInputRef} type="file" className="hidden"
+          onChange={e => {
+            const f = e.target.files?.[0]
+            if (f) { setPendingFiles(p => [...p, { file: f, type: selectedAttachType }]); e.target.value = '' }
+          }} />
+        <button onClick={() => fileInputRef.current?.click()}
+          className="w-full py-6 rounded-lg border-2 border-dashed text-xs text-zinc-500 hover:border-cyan-500/40 hover:text-zinc-300 transition-colors"
+          style={{ borderColor: 'var(--brand-border)' }}>
+          Clique para selecionar arquivo ({ATTACHMENT_TYPE_LABEL[selectedAttachType]})
+        </button>
+      </div>
+
+      {pendingFiles.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs text-zinc-400">Aguardando upload ({pendingFiles.length})</p>
+          {pendingFiles.map((pf, i) => (
+            <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(0,245,255,0.04)', border: '1px solid rgba(0,245,255,0.15)' }}>
+              <div>
+                <p className="text-xs text-zinc-300">{pf.file.name}</p>
+                <p className="text-[10px] text-zinc-600">{ATTACHMENT_TYPE_LABEL[pf.type]} · {fmt(pf.file.size)}</p>
+              </div>
+              <button onClick={() => setPendingFiles(p => p.filter((_, j) => j !== i))} className="text-zinc-600 hover:text-red-400"><X size={12} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
       <div className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-2xl border overflow-hidden" style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}>
@@ -606,6 +673,12 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                   }
                 </div>
               )}
+
+              {/* Anexos — também acessível na aba Anexos */}
+              <div className="pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+                <label className={labelCls}>Anexos (aprovação do cliente / proposta, contrato, logo)</label>
+                {attachmentSection}
+              </div>
             </div>
           )}
 
@@ -936,70 +1009,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
           )}
 
           {/* Tab 9: Anexos */}
-          {activeTab === 9 && (
-            <div className="space-y-4">
-              {internalEdit && internalEdit.attachments.length > 0 && (
-                <div>
-                  <p className="text-xs text-zinc-400 mb-2">Arquivos já enviados</p>
-                  <div className="space-y-2">
-                    {internalEdit.attachments.map(att => (
-                      <div key={att.id} className="flex items-center justify-between px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--brand-border)' }}>
-                        <div className="flex items-center gap-2">
-                          <FileText size={14} className="text-zinc-400" />
-                          <div>
-                            <p className="text-xs text-zinc-300">{att.original_name}</p>
-                            <p className="text-[10px] text-zinc-600">{ATTACHMENT_TYPE_LABEL[att.type]} · {fmt(att.size)}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => downloadAttachment(internalEdit.id, att)} className="p-1 text-zinc-400 hover:text-cyan-400 transition-colors"><Download size={13} /></button>
-                          <button onClick={() => deleteAttachment(internalEdit.id, att.id)} className="p-1 text-zinc-400 hover:text-red-400 transition-colors"><Trash2 size={13} /></button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <p className="text-xs text-zinc-400 mb-2">Adicionar arquivo</p>
-                <div className="flex items-center gap-2 mb-3">
-                  {(['proposta', 'contrato', 'logo'] as const).map(t => (
-                    <button key={t} onClick={() => setSelectedAttachType(t)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                      style={{ background: selectedAttachType === t ? 'rgba(0,245,255,0.15)' : 'transparent', border: '1px solid var(--brand-border)', color: selectedAttachType === t ? 'var(--text)' : 'var(--text-muted)' }}>
-                      {ATTACHMENT_TYPE_LABEL[t]}
-                    </button>
-                  ))}
-                </div>
-                <input ref={fileInputRef} type="file" className="hidden"
-                  onChange={e => {
-                    const f = e.target.files?.[0]
-                    if (f) { setPendingFiles(p => [...p, { file: f, type: selectedAttachType }]); e.target.value = '' }
-                  }} />
-                <button onClick={() => fileInputRef.current?.click()}
-                  className="w-full py-6 rounded-lg border-2 border-dashed text-xs text-zinc-500 hover:border-cyan-500/40 hover:text-zinc-300 transition-colors"
-                  style={{ borderColor: 'var(--brand-border)' }}>
-                  Clique para selecionar arquivo ({ATTACHMENT_TYPE_LABEL[selectedAttachType]})
-                </button>
-              </div>
-
-              {pendingFiles.length > 0 && (
-                <div className="space-y-1">
-                  <p className="text-xs text-zinc-400">Aguardando upload ({pendingFiles.length})</p>
-                  {pendingFiles.map((pf, i) => (
-                    <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(0,245,255,0.04)', border: '1px solid rgba(0,245,255,0.15)' }}>
-                      <div>
-                        <p className="text-xs text-zinc-300">{pf.file.name}</p>
-                        <p className="text-[10px] text-zinc-600">{ATTACHMENT_TYPE_LABEL[pf.type]} · {fmt(pf.file.size)}</p>
-                      </div>
-                      <button onClick={() => setPendingFiles(p => p.filter((_, j) => j !== i))} className="text-zinc-600 hover:text-red-400"><X size={12} /></button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          {activeTab === 9 && attachmentSection}
         </div>
 
         {/* Footer */}

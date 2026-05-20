@@ -1818,25 +1818,29 @@ function CardDetailModal({ card, onClose, onEditContract, initialTab, userRole }
                   </div>
                 ))}
               </div>
-              {full?.attachments?.length > 0 && (
+              {full && (
                 <div className="pt-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Anexos ({full.attachments.length})</p>
-                  <div className="space-y-2">
-                    {full.attachments.map((att: any) => (
-                      <div key={att.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--brand-border)' }}>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <FileText size={13} className="shrink-0" style={{ color: 'var(--brand-subtle)' }} />
-                          <div className="min-w-0">
-                            <p className="text-xs truncate" style={{ color: 'var(--brand-text)' }}>{att.original_name}</p>
-                            <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{ATT_LABEL[att.type] ?? att.type}{att.size != null ? ` · ${fmtSize(att.size)}` : ''}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Anexos ({full.attachments?.length ?? 0})</p>
+                  {full.attachments?.length > 0 ? (
+                    <div className="space-y-2">
+                      {full.attachments.map((att: any) => (
+                        <div key={att.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--brand-border)' }}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText size={13} className="shrink-0" style={{ color: 'var(--brand-subtle)' }} />
+                            <div className="min-w-0">
+                              <p className="text-xs truncate" style={{ color: 'var(--brand-text)' }}>{att.original_name}</p>
+                              <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{ATT_LABEL[att.type] ?? att.type}{att.size != null ? ` · ${fmtSize(att.size)}` : ''}</p>
+                            </div>
                           </div>
+                          <button onClick={() => downloadAttachment(att)} title="Baixar" className="p-1 shrink-0 rounded transition-colors hover:bg-white/10" style={{ color: 'var(--brand-subtle)' }}>
+                            <Download size={14} />
+                          </button>
                         </div>
-                        <button onClick={() => downloadAttachment(att)} title="Baixar" className="p-1 shrink-0 rounded transition-colors hover:bg-white/10" style={{ color: 'var(--brand-subtle)' }}>
-                          <Download size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhum anexo</p>
+                  )}
                 </div>
               )}
               {!card.is_complete && (
