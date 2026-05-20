@@ -2439,7 +2439,8 @@ function KanbanContent() {
               value={filterSearch}
               onChange={e => setFilterSearch(e.target.value)}
               placeholder="Buscar nome ou projeto..."
-              className="pl-7 pr-7 py-1.5 rounded-lg text-xs outline-none w-56 ds-input"
+              className="py-1.5 rounded-lg text-xs outline-none w-56 ds-input"
+              style={{ paddingLeft: '1.75rem', paddingRight: '1.75rem' }}
             />
             {filterSearch && (
               <button onClick={() => setFilterSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2">
