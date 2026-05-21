@@ -120,10 +120,30 @@ export function MultiSelect({
               />
             </div>
           </div>
+          {filtered.length > 0 && (() => {
+            const ids = filtered.map(o => String(o.id))
+            const allSelected = ids.every(id => value.includes(id))
+            return (
+              <button type="button"
+                onClick={() => allSelected
+                  ? onChange(value.filter(v => !ids.includes(v)))
+                  : onChange(Array.from(new Set([...value, ...ids])))}
+                className="w-full text-left px-3 py-2 text-xs font-semibold transition-colors flex items-center gap-2"
+                style={{ color: 'var(--primary)', borderBottom: '1px solid var(--border)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
+                <span className="w-3.5 h-3.5 rounded flex-shrink-0 flex items-center justify-center border"
+                  style={{ borderColor: 'var(--primary)', background: allSelected ? 'var(--primary)' : 'var(--surface)' }}>
+                  {allSelected && <Check size={9} color="var(--primary-fg)" strokeWidth={3} />}
+                </span>
+                {allSelected ? 'Desmarcar todos' : 'Selecionar todos'}{query ? ' (filtrados)' : ''}
+              </button>
+            )
+          })()}
           {value.length > 0 && (
             <button type="button" onClick={() => onChange([])}
               className="w-full text-left px-3 py-1.5 text-xs font-semibold transition-colors"
-              style={{ color: 'var(--primary)', borderBottom: '1px solid var(--border)' }}
+              style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}
               onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
               Limpar seleção
