@@ -219,7 +219,7 @@ export default function BankHoursMonthlyPage() {
   }, [user, selectedCustomer, isCliente])
 
   const fetchSummary = useCallback(() => {
-    if (!selectedProject && isAdmin) return
+    if (!selectedProject) return
     const now = new Date()
     const toM = refMonth ?? (dateTo ? Number(dateTo.split('-')[1]) : now.getMonth() + 1)
     const toY = refYear  ?? (dateTo ? Number(dateTo.split('-')[0]) : now.getFullYear())
@@ -255,7 +255,7 @@ export default function BankHoursMonthlyPage() {
   }, [selectedCustomer, selectedExecutive, selectedProject, dateFrom, dateTo, refMonth, refYear, isCliente, user?.customer_id])
 
   const fetchProjectsList = useCallback(() => {
-    if (!selectedProject && isAdmin) return
+    if (!selectedProject) return
     const params = buildParams()
     params.set('service_type_name', 'Projeto')
     setLoadingProjects(true)
@@ -266,7 +266,7 @@ export default function BankHoursMonthlyPage() {
   }, [buildParams, isAdmin])
 
   const fetchMaintList = useCallback(() => {
-    if (!selectedProject && isAdmin) return
+    if (!selectedProject) return
     const params = buildParams()
     params.set('service_type_name', 'Sustentação')
     setLoadingMaint(true)
@@ -281,7 +281,8 @@ export default function BankHoursMonthlyPage() {
   useEffect(() => { if (activeTab === 'maintenance') fetchMaintList()    }, [fetchMaintList, activeTab])
   useEffect(() => { setIndicatorParams(buildParams()) }, [buildParams])
 
-  const hasFilters = !isAdmin || !!selectedProject
+  // Exige PROJETO selecionado pra todos (sem projeto = estado vazio, não agrega o cliente).
+  const hasFilters = !!selectedProject
 
   // Legenda do "Consumo do Mês" — espelha o período efetivo do summary.
   const MONTH_NAMES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
