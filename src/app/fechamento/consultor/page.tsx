@@ -345,12 +345,13 @@ export default function FechamentoConsultorPage() {
   useEffect(() => { load() }, [load])
 
   async function sendReportEmail() {
-    if (!reportTarget || !reportHtml) return
+    if (!reportTarget) return
     setSendingEmail(true)
     try {
+      // O detalhamento (PDF + XLSX) é gerado no backend; não enviamos mais o HTML.
       const res = await api.post<{ success: boolean; message: string }>(
         `/fechamento-consultor/${reportTarget.userId}/${yearMonth}/enviar-email`,
-        { html: reportHtml },
+        {},
       )
       toast.success(res?.message ?? 'Fechamento enviado por e-mail.')
     } catch (err: unknown) {
