@@ -292,7 +292,7 @@ export default function OnDemandPage() {
             const sel = projects.find(p => p.id === selectedProject)
             if (!sel?.status) return null
             const variant = sel.status === 'cancelled' ? 'danger'
-              : sel.status === 'finished' ? 'neutral'
+              : sel.status === 'finished' ? 'danger'   // Encerrado em vermelho — chama atenção do cliente
               : sel.status === 'paused' ? 'warning'
               : (sel.status === 'started' || sel.status === 'awaiting_start') ? 'success'
               : 'info'
