@@ -660,6 +660,9 @@ export default function FechamentoConsultorPage() {
       ...data!.banco_horas,
       ...data!.fixos,
     ].sort((a, b) => a.nome.localeCompare(b.nome))
+    // Lista individual respeita os filtros (busca por nome + "com movimentos").
+    const todosFiltrados = applyFilters(todos as ConsultorBase[])
+    const totalFiltrado = todosFiltrados.reduce((s, c) => s + (c.total ?? 0), 0)
 
     return (
       <div className="space-y-6">
@@ -703,7 +706,7 @@ export default function FechamentoConsultorPage() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs text-zinc-500 uppercase tracking-wide font-medium">
-              Todos os consultores ({todos.length})
+              Todos os consultores ({todosFiltrados.length})
             </p>
             <button
               onClick={handlePrintTodos}
@@ -721,7 +724,7 @@ export default function FechamentoConsultorPage() {
               </tr>
             </Thead>
             <Tbody>
-              {todos.map(c => (
+              {todosFiltrados.map(c => (
                 <Tr key={c.user_id}>
                   <Td className="font-medium text-zinc-100">{c.nome}</Td>
                   <Td className="text-zinc-400">{c.email ?? '—'}</Td>
@@ -730,7 +733,7 @@ export default function FechamentoConsultorPage() {
               ))}
               <Tr className="border-t-2 border-zinc-600 bg-zinc-800/20">
                 <td colSpan={2} className="py-2 px-3 text-right font-semibold text-zinc-300 text-sm">Total</td>
-                <Td right className="font-bold text-violet-400">{formatBRL(t.total_geral)}</Td>
+                <Td right className="font-bold text-violet-400">{formatBRL(totalFiltrado)}</Td>
               </Tr>
             </Tbody>
           </Table>
