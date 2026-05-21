@@ -12,7 +12,7 @@ interface Tab {
 
 const TABS: Tab[] = [
   { label: 'Visão Geral', segment: 'visao-geral' },
-  { label: 'Etapas',      segment: 'etapas',      operationalOnly: true },
+  // Etapas (cronograma) removida de prod — rotina em teste só no dev. NÃO reativar em prod.
   { label: 'Horas',       segment: 'horas' },
   { label: 'Financeiro',  segment: 'financeiro' },
   { label: 'Arquivos',    segment: 'arquivos' },

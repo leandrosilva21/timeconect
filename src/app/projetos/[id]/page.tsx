@@ -8,7 +8,7 @@ export default function ProjectIndexPage() {
   const router = useRouter()
 
   useEffect(() => {
-    router.replace(`/projetos/${params.id}/etapas`)
+    router.replace(`/projetos/${params.id}/visao-geral`)
   }, [params.id, router])
 
   return null
