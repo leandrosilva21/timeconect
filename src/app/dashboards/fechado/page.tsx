@@ -12,7 +12,7 @@ import { KpiCard } from '@/components/ui/kpi-card'
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Customer  { id: number; name: string }
-interface Project   { id: number; name: string; code: string }
+interface Project   { id: number; name: string; code: string; status?: string; status_display?: string }
 interface Executive { id: number; name: string }
 
 interface ContributionItem {
@@ -167,6 +167,7 @@ export default function FechadoPage() {
   }, [selectedCustomer, selectedExecutive, selectedProject, refMonth, refYear, isCliente, user?.customer_id])
 
   const fetchSummary = useCallback(() => {
+    if (!selectedProject) { setSummary(null); return }
     setLoadingSummary(true)
     api.get<any>(`/dashboards/fechado?${buildParams()}`)
       .then(r => setSummary(r?.data ?? r ?? null))
@@ -175,6 +176,7 @@ export default function FechadoPage() {
   }, [buildParams])
 
   const fetchProjects = useCallback(() => {
+    if (!selectedProject) { setProjectRows([]); return }
     setLoadingProjects(true)
     api.get<any>(`/dashboards/fechado/projects?${buildParams()}`)
       .then(r => setProjectRows(Array.isArray(r?.data) ? r.data : []))
@@ -183,6 +185,7 @@ export default function FechadoPage() {
   }, [buildParams])
 
   const fetchExpenses = useCallback(() => {
+    if (!selectedProject) { setExpenseRows([]); return }
     setLoadingExpenses(true)
     api.get<any>(`/dashboards/fechado/expenses?${buildParams()}`)
       .then(r => setExpenseRows(Array.isArray(r?.data) ? r.data : []))
@@ -245,9 +248,29 @@ export default function FechadoPage() {
             value={String(selectedProject)}
             onChange={v => setSelectedProject(v === '' ? '' : Number(v))}
             options={projects.map(p => ({ id: p.id, name: `${p.code} — ${p.name}` }))}
-            placeholder="Todos os projetos"
+            placeholder="Selecione um projeto"
             wide
           />
+          {/* Status do projeto selecionado — em evidência, cores padrão (verde/vermelho/etc). */}
+          {(() => {
+            const sel = projects.find(p => String(p.id) === String(selectedProject))
+            if (!sel?.status) return null
+            const c = (sel.status === 'cancelled' || sel.status === 'finished')
+              ? { bg: 'var(--danger-bg)',  fg: 'var(--danger)',  bd: 'var(--danger-border)' }
+              : sel.status === 'paused'
+              ? { bg: 'var(--warning-bg)', fg: 'var(--warning)', bd: 'var(--warning-border)' }
+              : (sel.status === 'started' || sel.status === 'awaiting_start')
+              ? { bg: 'var(--success-bg)', fg: 'var(--success)', bd: 'var(--success-border)' }
+              : { bg: 'var(--info-bg)',    fg: 'var(--info)',    bd: 'var(--info-border)' }
+            return (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Status</label>
+                <span className="inline-flex items-center px-4 py-2 rounded-full text-sm font-bold w-fit" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.bd}` }}>
+                  {sel.status_display ?? sel.status}
+                </span>
+              </div>
+            )
+          })()}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Mês/Ano</label>
             <MonthYearPicker
@@ -261,6 +284,15 @@ export default function FechadoPage() {
           </div>
         </div>
 
+        {/* Sem projeto selecionado → não traz nada (estado vazio), igual aos outros contratos. */}
+        {!selectedProject && (
+          <div className="rounded-2xl p-16 flex flex-col items-center gap-4 text-center" style={{ border: '1px dashed var(--brand-border)' }}>
+            <p className="font-semibold" style={{ color: 'var(--brand-text)' }}>Nenhum projeto selecionado</p>
+            <p className="text-sm" style={{ color: 'var(--brand-muted)' }}>Selecione um projeto para visualizar os dados do contrato fechado.</p>
+          </div>
+        )}
+
+        {!!selectedProject && (<>
         {/* Tabs */}
         <div className="flex gap-1 p-1 rounded-2xl w-fit" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
           <Tab label="Visão Geral" active={activeTab === 'overview'}  onClick={() => setActiveTab('overview')} />
@@ -460,6 +492,7 @@ export default function FechadoPage() {
             )}
           </div>
         )}
+        </>)}
 
       </div>
     </AppLayout>
