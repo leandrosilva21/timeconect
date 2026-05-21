@@ -486,16 +486,17 @@ export default function BankHoursMonthlyPage() {
                     </div>
                     {/* Row 2 — 3 cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Sem valor/hora definido → os 3 cards ficam sem valor (—). */}
                       <KpiCard
                         label="Horas Excedentes"
-                        value={fmtH(summary.exceeded_hours ?? 0)}
-                        accent={(summary.exceeded_hours ?? 0) > 0 ? 'danger' : undefined}
+                        value={summary.hourly_rate != null ? fmtH(summary.exceeded_hours ?? 0) : '—'}
+                        accent={summary.hourly_rate != null && (summary.exceeded_hours ?? 0) > 0 ? 'danger' : undefined}
                       />
                       <KpiCard label="Valor Hora"   value={fmtBRL(summary.hourly_rate)} />
                       <KpiCard
                         label="Valor a Pagar"
-                        value={fmtBRL(summary.amount_to_pay)}
-                        accent={(summary.amount_to_pay ?? 0) > 0 ? 'danger' : undefined}
+                        value={summary.hourly_rate != null ? fmtBRL(summary.amount_to_pay) : '—'}
+                        accent={summary.hourly_rate != null && (summary.amount_to_pay ?? 0) > 0 ? 'danger' : undefined}
                       />
                     </div>
 
