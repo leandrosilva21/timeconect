@@ -728,19 +728,22 @@ export default function BankHoursFixedPage() {
                     {/* Row 2: 3 highlight cards (oculto em modo leaf) */}
                     {!isLeafProject && (
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Sem valor/hora definido → os 3 cards ficam sem valor (—): sem rate não
+                            faz sentido cobrar excedente. (Antes Valor a Pagar usava a média ponderada
+                            mesmo com Valor Hora vazio, mostrando R$ "fantasma".) */}
                         <KpiCard
                           label="Horas Excedentes"
-                          value={fmtH(summary.exceeded_hours)}
+                          value={summary.hourly_rate != null ? fmtH(summary.exceeded_hours) : '—'}
                           icon={AlertCircle}
-                          accent={summary.exceeded_hours > 0 ? 'danger' : 'default'}
+                          accent={summary.hourly_rate != null && summary.exceeded_hours > 0 ? 'danger' : 'default'}
                         />
                         <KpiCard label="Valor Hora"   value={fmtBRL(summary.hourly_rate)}   unit="" icon={DollarSign} />
                         <KpiCard
                           label="Valor a Pagar"
-                          value={fmtBRL(summary.amount_to_pay)}
+                          value={summary.hourly_rate != null ? fmtBRL(summary.amount_to_pay) : '—'}
                           unit=""
                           icon={DollarSign}
-                          accent={(summary.amount_to_pay ?? 0) > 0 ? 'danger' : 'default'}
+                          accent={summary.hourly_rate != null && (summary.amount_to_pay ?? 0) > 0 ? 'danger' : 'default'}
                         />
                       </div>
                     )}
