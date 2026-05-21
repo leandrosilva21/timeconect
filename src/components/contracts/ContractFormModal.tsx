@@ -288,6 +288,21 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
       .catch(() => setParentProjects([]))
   }, [form.customer_id])
 
+  // Subprojeto: pré-preenche "Valor da Hora" com o do projeto PAI (editável).
+  // Só preenche se o campo estiver vazio → não sobrescreve subprojeto já existente em edição.
+  useEffect(() => {
+    if (!form.is_subproject || !form.parent_project_id) return
+    let cancelled = false
+    api.get<any>(`/projects/${form.parent_project_id}`)
+      .then(r => {
+        if (cancelled) return
+        const hr = Number(r?.valor_hora ?? r?.hourly_rate ?? 0)
+        if (hr > 0) setForm(f => f.valor_hora ? f : { ...f, valor_hora: String(hr) })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [form.parent_project_id, form.is_subproject])
+
   // Derived: selected contract type for conditional fields
   const selectedContractType = useMemo(
     () => contractTypes.find(t => String(t.id) === String(form.contract_type_id)),
