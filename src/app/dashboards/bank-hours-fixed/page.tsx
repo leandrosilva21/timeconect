@@ -694,8 +694,12 @@ export default function BankHoursFixedPage() {
                   <>
                     {/* Row 1: 5 cards */}
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                      <KpiCard label="Horas Contratadas" value={fmtH(summary.contracted_hours)} icon={BarChart2} />
-                      <KpiCard label="Aporte de Horas"   value={fmtH(summary.contributed_hours)} icon={TrendingUp} />
+                      <KpiCard
+                        label="Horas Contratadas + Aporte"
+                        value={fmtH((summary.contracted_hours ?? 0) + (summary.contributed_hours ?? 0))}
+                        icon={BarChart2}
+                        hint={`Contratadas ${fmtH(summary.contracted_hours)} + Aporte ${fmtH(summary.contributed_hours)}`}
+                      />
                       {isLeafProject ? (
                         <KpiCard label="Consumo Acumulado" value={fmtH(summary.consumed_hours)} icon={Clock} accent="primary" />
                       ) : (
