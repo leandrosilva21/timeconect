@@ -225,7 +225,7 @@ export default function OnDemandPage() {
       Projeto: r.project?.name ?? '',
       Ticket: r.ticket ?? '',
       'Assunto Ticket': r.ticket_subject ?? '',
-      Descrição: r.description ?? '',
+      Descrição: previewText(r.description),
       Horas: Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
       Status: r.status_display ?? r.status ?? '',
     }))
