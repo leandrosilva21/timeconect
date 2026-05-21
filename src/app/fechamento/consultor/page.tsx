@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
-import { RefreshCw, Printer, FileText, Users, Search, X } from 'lucide-react'
+import { RefreshCw, Printer, FileText, Users, Search, X, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
@@ -322,7 +322,11 @@ export default function FechamentoConsultorPage() {
   const [loading, setLoading] = useState(false)
   const [printingUser, setPrintingUser] = useState<number | null>(null)
   const [reportHtml, setReportHtml] = useState<string | null>(null)
+  // Consultor alvo do relatório aberto (só pra relatório INDIVIDUAL — habilita o "Enviar e-mail").
+  const [reportTarget, setReportTarget] = useState<{ userId: number; name: string } | null>(null)
+  const [sendingEmail, setSendingEmail] = useState(false)
   const reportIframeRef = useRef<HTMLIFrameElement>(null)
+  const canSendEmail = user?.type === 'admin' || user?.type === 'administrativo'
   const [apenasComMovimento, setApenasComMovimento] = useState(true)
   const [filterNome, setFilterNome] = useState('')
 
@@ -340,6 +344,22 @@ export default function FechamentoConsultorPage() {
 
   useEffect(() => { load() }, [load])
 
+  async function sendReportEmail() {
+    if (!reportTarget || !reportHtml) return
+    setSendingEmail(true)
+    try {
+      const res = await api.post<{ success: boolean; message: string }>(
+        `/fechamento-consultor/${reportTarget.userId}/${yearMonth}/enviar-email`,
+        { html: reportHtml },
+      )
+      toast.success(res?.message ?? 'Fechamento enviado por e-mail.')
+    } catch (err: unknown) {
+      toast.error(`Erro ao enviar o fechamento: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setSendingEmail(false)
+    }
+  }
+
   async function handleRelatorio(consultor: ConsultorBase | ConsultorHorista | ConsultorBancoHoras | ConsultorFixo) {
     setPrintingUser(consultor.user_id)
     try {
@@ -348,6 +368,7 @@ export default function FechamentoConsultorPage() {
       )
       const html = buildReport(consultor, res.data ?? [], yearMonth)
       setReportHtml(buildFullHtml(html))
+      setReportTarget({ userId: consultor.user_id, name: consultor.nome })
     } catch (err: unknown) {
       toast.error(`Erro ao gerar relatório: ${err instanceof Error ? err.message : 'falha na API'}`)
     } finally {
@@ -390,6 +411,7 @@ export default function FechamentoConsultorPage() {
       </div>
     `
     setReportHtml(buildFullHtml(html))
+    setReportTarget(null) // consolidado — sem alvo individual, esconde "Enviar e-mail"
   }
 
   function handlePrintResumo() {
@@ -420,6 +442,7 @@ export default function FechamentoConsultorPage() {
       </div>
     `
     setReportHtml(buildFullHtml(html))
+    setReportTarget(null) // consolidado — sem alvo individual, esconde "Enviar e-mail"
   }
 
   const TABS: { key: Tab; label: string }[] = [
@@ -901,8 +924,19 @@ export default function FechamentoConsultorPage() {
               >
                 <Printer size={12} /> Imprimir
               </button>
+              {canSendEmail && reportTarget && (
+                <button
+                  onClick={sendReportEmail}
+                  disabled={sendingEmail}
+                  title={`Enviar para ${reportTarget.name} (cópia financeiro)`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                  style={{ background: 'var(--success)', color: 'var(--primary-fg)' }}
+                >
+                  <Mail size={12} /> {sendingEmail ? 'Enviando…' : 'Enviar e-mail'}
+                </button>
+              )}
               <button
-                onClick={() => setReportHtml(null)}
+                onClick={() => { setReportHtml(null); setReportTarget(null) }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-300 hover:bg-zinc-700 transition-colors"
                 style={{ border: '1px solid #3f3f46' }}
               >
