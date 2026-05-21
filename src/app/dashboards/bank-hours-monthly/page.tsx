@@ -534,11 +534,12 @@ export default function BankHoursMonthlyPage() {
 
             {/* Projects Tab */}
             {activeTab === 'projects' && (
+              // Aba Projetos IGNORA o filtro de data — lista todos os projetos com
+              // consumo acumulado (all-time). Card "Consumo do Mês" removido daqui.
               <div className="space-y-4">
                 {summary && (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4">
                     <KpiCard label="Consumo Acumulado" value={fmtH(summary.projects_consumed_hours ?? 0)} accent="primary" />
-                    <KpiCard label="Consumo do Mês"    value={fmtH(summary.projects_month_consumed_hours ?? 0)} hint={monthConsumptionHint} />
                   </div>
                 )}
                 <ProjectsTable items={projectsList} loading={loadingProjects} />

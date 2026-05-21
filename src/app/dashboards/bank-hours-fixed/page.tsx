@@ -783,19 +783,16 @@ export default function BankHoursFixedPage() {
 
             {/* ── PROJETOS ── */}
             {activeTab === 'projects' && (
+              // A aba Projetos IGNORA o filtro de data (mês/período) — sempre lista
+              // TODOS os projetos do contrato com seu consumo acumulado (all-time).
+              // O filtro de data continua valendo só nas outras abas (Total Geral etc).
               <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <KpiCard
                     label="Consumo Acumulado"
                     value={fmtH(summary?.projects_consumed_hours ?? summary?.consumed_hours ?? 0)}
                     icon={Clock}
                     accent="primary"
-                  />
-                  <KpiCard
-                    label="Consumo do Mês"
-                    value={fmtH(summary?.projects_month_consumed_hours ?? summary?.month_consumed_hours ?? 0)}
-                    icon={Clock}
-                    hint={monthConsumptionHint}
                   />
                 </div>
                 <ProjectsTable items={projectsList} loading={loadingProjects} />
