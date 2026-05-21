@@ -1299,7 +1299,7 @@ function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowCl
             </thead>
             <tbody>
               {rows.map(r => {
-                const desc = r.description ?? '—'
+                const desc = previewText(r.description) || '—'
                 const canReverse = onReverseApproved && String(r.status ?? '').toLowerCase() === 'approved'
                 return (
                   <tr key={r.id} className={onRowClick ? 'cursor-pointer' : ''} onClick={onRowClick ? () => onRowClick(r) : undefined} style={{ borderBottom: '1px solid var(--border)' }}>
