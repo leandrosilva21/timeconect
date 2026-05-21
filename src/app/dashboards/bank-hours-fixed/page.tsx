@@ -777,45 +777,22 @@ export default function BankHoursFixedPage() {
             )}
 
             {/* ── PROJETOS ── */}
-            {activeTab === 'projects' && (() => {
-              // Filtro local pela data de INÍCIO do projeto:
-              // - Sem filtro selecionado → lista todos
-              // - Modo Mês/Ano → projetos cujo start_date esteja naquele mês
-              // - Modo Período → projetos cujo start_date esteja dentro do range
-              const filteredProjects = (() => {
-                if (!projectsList || projectsList.length === 0) return projectsList
-                const hasMonthFilter = refMonth != null && refYear != null
-                const hasRangeFilter = !!dateFrom || !!dateTo
-                if (!hasMonthFilter && !hasRangeFilter) return projectsList
-                return projectsList.filter(p => {
-                  if (!p.start_date) return false
-                  // YYYY-MM-DD literal — comparação string-safe
-                  if (hasMonthFilter) {
-                    const [y, m] = p.start_date.split('-')
-                    return Number(y) === refYear && Number(m) === refMonth
-                  }
-                  if (hasRangeFilter) {
-                    if (dateFrom && p.start_date < dateFrom) return false
-                    if (dateTo   && p.start_date > dateTo)   return false
-                    return true
-                  }
-                  return true
-                })
-              })()
-              return (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 gap-4">
-                    <KpiCard
-                      label="Consumo Acumulado"
-                      value={fmtH(summary?.projects_consumed_hours ?? summary?.consumed_hours ?? 0)}
-                      icon={Clock}
-                      accent="primary"
-                    />
-                  </div>
-                  <ProjectsTable items={filteredProjects} loading={loadingProjects} />
+            {activeTab === 'projects' && (
+              // A aba Projetos IGNORA o filtro de data (mês/período) — sempre lista
+              // TODOS os projetos do contrato com seu consumo acumulado (all-time).
+              // O filtro de data continua valendo só nas outras abas (Total Geral etc).
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4">
+                  <KpiCard
+                    label="Consumo Acumulado"
+                    value={fmtH(summary?.projects_consumed_hours ?? summary?.consumed_hours ?? 0)}
+                    icon={Clock}
+                    accent="primary"
+                  />
                 </div>
-              )
-            })()}
+                <ProjectsTable items={projectsList} loading={loadingProjects} />
+              </div>
+            )}
 
             {/* ── ARQUITETURA ── */}
             {activeTab === 'architecture' && (
