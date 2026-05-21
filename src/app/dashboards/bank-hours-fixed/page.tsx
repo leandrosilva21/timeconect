@@ -417,7 +417,9 @@ export default function BankHoursFixedPage() {
 
   // Cliente sempre precisa selecionar projeto (mostrar agregado sem projeto não faz sentido pro cliente).
   // Admin pode ver agregado por cliente OU por projeto.
-  const hasFilters = isAdmin ? (!!selectedProject || !!selectedCustomer) : !!selectedProject
+  // Exige PROJETO selecionado pra todos (admin incluído) — sem projeto = estado vazio,
+  // não agrega o cliente inteiro. (Antes admin via o agregado do cliente sem escolher projeto.)
+  const hasFilters = !!selectedProject
 
   // Build base params
   const baseParams = useCallback(() => {
