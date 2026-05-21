@@ -492,9 +492,8 @@ export default function BankHoursMonthlyPage() {
                       />
                     </div>
 
-                    {/* Histórico de Aporte */}
-                    {(summary.contributed_hours_history?.length ?? 0) > 0 && (
-                      <div className="rounded-2xl overflow-x-auto overflow-y-clip" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+                    {/* Histórico de Aporte — sempre exibido (com estado vazio). */}
+                    <div className="rounded-2xl overflow-x-auto overflow-y-clip" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
                         <div className="px-5 py-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
                           <h3 className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>Histórico de Aporte de Horas</h3>
                         </div>
@@ -507,7 +506,13 @@ export default function BankHoursMonthlyPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {summary.contributed_hours_history!.map(item => (
+                              {(summary.contributed_hours_history?.length ?? 0) === 0 ? (
+                                <tr>
+                                  <td colSpan={7} className="px-5 py-8 text-center text-sm" style={{ color: 'var(--brand-subtle)' }}>
+                                    Nenhum aporte de horas registrado
+                                  </td>
+                                </tr>
+                              ) : summary.contributed_hours_history!.map(item => (
                                 <tr key={item.id} style={{ borderBottom: '1px solid var(--brand-border)' }}
                                   onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,245,255,0.03)')}
                                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -524,7 +529,6 @@ export default function BankHoursMonthlyPage() {
                             </tbody>
                           </table>
                       </div>
-                    )}
                   </>
                 ) : (
                   <p className="text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum dado disponível.</p>
