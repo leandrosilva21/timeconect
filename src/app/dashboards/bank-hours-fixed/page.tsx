@@ -4,6 +4,7 @@ import { formatBRL } from '@/lib/format'
 import { AppLayout } from '@/components/layout/app-layout'
 import React, { useEffect, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
+import { sanitizeHtml } from '@/lib/sanitize'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
 import { BarChart2, Clock, TrendingUp, TrendingDown, AlertCircle, DollarSign, ChevronDown, ArrowUp, MousePointerClick, Download, MoreVertical, Calendar, User as UserIcon, Building2, Folder, Paperclip, FileText, X as CloseIcon, Eye, Undo2 } from 'lucide-react'
@@ -1055,7 +1056,23 @@ function TimesheetDetailModal({ ts, onClose }: { ts: any; onClose: () => void })
                 <FileText size={14} style={{ color: 'var(--primary)' }} />
                 <span className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--text-muted)' }}>Observação</span>
               </div>
-              <p className="text-sm" style={{ color: 'var(--text)' }}>{ts.description}</p>
+              <div
+                className="text-sm leading-relaxed
+                  [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5
+                  [&_a]:underline [&_a]:text-[var(--primary)]
+                  [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:overflow-x-auto
+                  [&_code]:break-words
+                  [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse
+                  [&_th]:border [&_th]:border-[var(--border)] [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-semibold
+                  [&_td]:border [&_td]:border-[var(--border)] [&_td]:px-2 [&_td]:py-1.5 [&_td]:align-top
+                  [&_h1]:text-base [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1.5
+                  [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5
+                  [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1
+                  [&_hr]:my-3 [&_hr]:border-[var(--border)]
+                "
+                style={{ color: 'var(--text)' }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(ts.description) }}
+              />
             </div>
           )}
 
