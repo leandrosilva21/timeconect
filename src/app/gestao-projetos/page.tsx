@@ -1573,6 +1573,7 @@ export default function GestaoProjetosPage() {
   const [executivesList, setExecutivesList]     = useState<{ id: string; name: string }[]>([])
   const [customerExecutiveMap, setCustomerExecutiveMap] = useState<Record<number, number>>({})
   const [multiContratual, setMultiContratual] = useState(false)
+  const [multiShowClosed, setMultiShowClosed] = useState(false) // toggle: ver encerrados/cancelados na árvore multi-contratual
   const [rows, setRows] = useState<TreeRow[]>([])
   const [allCustomers, setAllCustomers] = useState<{ id: string; name: string }[]>([])
 
@@ -1859,7 +1860,8 @@ export default function GestaoProjetosPage() {
     const parentRows = rows.filter(r => r._level === 0)
     const filteredParents = parentRows.filter(p => {
       const isClosed = p.status === 'finished' || p.status === 'cancelled'
-      if (showClosed ? !isClosed : isClosed) return false
+      // Multi-contratual: encerrados/cancelados só aparecem com o toggle "Ver encerrados" ligado.
+      if (!multiShowClosed && isClosed) return false
       if (statusFilters.length > 0 && !statusFilters.includes(p.status ?? '')) return false
       if (clienteFilters.length > 0 && !clienteFilters.includes(String(p.customer_id))) return false
       if (filterCoordinators.length > 0) {
@@ -1885,10 +1887,15 @@ export default function GestaoProjetosPage() {
     for (const parent of filteredParents) {
       const live = rows.find(r => r.id === parent.id && r._level === 0) ?? parent
       result.push(live)
-      if (live._isExpanded) result.push(...rows.filter(r => r._parentId === live.id && r._level > 0))
+      if (live._isExpanded) result.push(...rows.filter(r => {
+        if (r._parentId !== live.id || r._level <= 0) return false
+        // Filhos encerrados/cancelados só aparecem com o toggle "Ver encerrados" ligado.
+        const childClosed = r.status === 'finished' || r.status === 'cancelled'
+        return multiShowClosed || !childClosed
+      }))
     }
     return result
-  }, [rows, multiContratual, statusFilters, clienteFilters, saudeFilter, search, filterCoordinators, filterExecutives, customerExecutiveMap, showClosed])
+  }, [rows, multiContratual, statusFilters, clienteFilters, saudeFilter, search, filterCoordinators, filterExecutives, customerExecutiveMap, multiShowClosed])
 
   // ── Métricas dos cards ──
   const stats = useMemo(() => {
@@ -2362,6 +2369,18 @@ export default function GestaoProjetosPage() {
           >
             ⬡ Multi-contratual
           </button>
+          {multiContratual && (
+            <label
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer select-none whitespace-nowrap"
+              style={multiShowClosed
+                ? { background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }
+                : { color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+              title="Mostra/oculta projetos encerrados e cancelados na árvore multi-contratual"
+            >
+              <input type="checkbox" checked={multiShowClosed} onChange={e => setMultiShowClosed(e.target.checked)} />
+              Ver encerrados
+            </label>
+          )}
           <div
             className="flex items-center gap-1 p-1 rounded-xl w-fit flex-wrap"
             style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}
