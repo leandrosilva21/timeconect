@@ -2931,12 +2931,12 @@ function ProjectExpensesModal({ projectId, projectName, onClose }: { projectId: 
 
 // ─── ProjectAportesModal ───────────────────────────────────────────────────────
 
-interface HourContrib { id: number; contributed_hours: number; hourly_rate: number; contributed_at: string; description?: string | null; contributed_by_user?: { name: string }; total_value?: number }
+interface HourContrib { id: number; contributed_hours: number; hourly_rate: number; contributed_at: string; description?: string | null; motivo?: string; contributed_by_user?: { name: string }; total_value?: number }
 
 function ProjectAportesModal({ projectId, projectName, onClose }: { projectId: number; projectName: string; onClose: () => void }) {
   const [items, setItems] = useState<HourContrib[]>([])
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '' })
+  const [form, setForm] = useState({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '', motivo: 'aporte' })
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<HourContrib | null>(null)
   const [saving, setSaving] = useState(false)
@@ -2958,14 +2958,14 @@ function ProjectAportesModal({ projectId, projectName, onClose }: { projectId: n
   }
   useEffect(() => { load() }, [projectId])
 
-  const openAdd = () => { setEditing(null); setForm({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '' }); setFormOpen(true) }
-  const openEdit = (c: HourContrib) => { setEditing(c); setForm({ contributed_hours: String(c.contributed_hours), hourly_rate: String(c.hourly_rate), contributed_at: c.contributed_at.slice(0,10), description: c.description ?? '' }); setFormOpen(true) }
+  const openAdd = () => { setEditing(null); setForm({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '', motivo: 'aporte' }); setFormOpen(true) }
+  const openEdit = (c: HourContrib) => { setEditing(c); setForm({ contributed_hours: String(c.contributed_hours), hourly_rate: String(c.hourly_rate), contributed_at: c.contributed_at.slice(0,10), description: c.description ?? '', motivo: c.motivo ?? 'aporte' }); setFormOpen(true) }
 
   const handleSave = async () => {
     if (!form.contributed_hours || !form.hourly_rate || !form.contributed_at) { toast.error('Preencha horas, valor/hora e data'); return }
     setSaving(true)
     try {
-      const payload = { contributed_hours: Number(form.contributed_hours), hourly_rate: Number(form.hourly_rate), contributed_at: form.contributed_at, description: form.description || null }
+      const payload = { contributed_hours: Number(form.contributed_hours), hourly_rate: Number(form.hourly_rate), contributed_at: form.contributed_at, description: form.description || null, motivo: form.motivo || 'aporte' }
       if (editing) await api.put(`/projects/${projectId}/hour-contributions/${editing.id}`, payload)
       else await api.post(`/projects/${projectId}/hour-contributions`, payload)
       toast.success(editing ? 'Aporte atualizado' : 'Aporte adicionado')
@@ -3001,7 +3001,8 @@ function ProjectAportesModal({ projectId, projectName, onClose }: { projectId: n
               <div><label className="block text-[10px] mb-1" style={{ color: 'var(--brand-subtle)' }}>Horas *</label><input type="number" value={form.contributed_hours} onChange={e => setForm(f => ({...f, contributed_hours: e.target.value}))} style={inputS} placeholder="0" /></div>
               <div><label className="block text-[10px] mb-1" style={{ color: 'var(--brand-subtle)' }}>Valor/Hora (R$) *</label><input type="number" value={form.hourly_rate} onChange={e => setForm(f => ({...f, hourly_rate: e.target.value}))} style={inputS} placeholder="0.00" step="0.01" /></div>
               <div><label className="block text-[10px] mb-1" style={{ color: 'var(--brand-subtle)' }}>Data *</label><input type="date" value={form.contributed_at} onChange={e => setForm(f => ({...f, contributed_at: e.target.value}))} style={inputS} /></div>
-              <div><label className="block text-[10px] mb-1" style={{ color: 'var(--brand-subtle)' }}>Descrição</label><input value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} style={inputS} placeholder="Motivo do aporte..." /></div>
+              <div><label className="block text-[10px] mb-1" style={{ color: 'var(--brand-subtle)' }}>Motivo *</label><select value={form.motivo} onChange={e => setForm(f => ({...f, motivo: e.target.value}))} style={inputS}><option value="aporte">Aporte</option><option value="excedentes">Excedentes</option><option value="absorvidas">Absorvidas</option></select></div>
+              <div><label className="block text-[10px] mb-1" style={{ color: 'var(--brand-subtle)' }}>Descrição</label><input value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} style={inputS} placeholder="Observação..." /></div>
             </div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setFormOpen(false)} className="px-3 py-1.5 rounded-lg text-xs" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
@@ -3022,13 +3023,14 @@ function ProjectAportesModal({ projectId, projectName, onClose }: { projectId: n
                   <div className="rounded-xl overflow-clip" style={{ border: '1px solid var(--brand-border)' }}>
                     <table className="w-full text-xs">
                       <thead className="sticky top-0 z-10" style={{ background: 'rgba(0,0,0,0.2)' }}><tr style={{ background: 'rgba(0,0,0,0.2)', borderBottom: '1px solid var(--brand-border)' }}>
-                        {['Data','Horas','Valor/h','Total','Descrição',''].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{h}</th>)}
+                        {['Data','Horas','Motivo','Valor/h','Total','Descrição',''].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{h}</th>)}
                       </tr></thead>
                       <tbody>
                         {items.map((c, i) => (
                           <tr key={c.id} style={{ borderBottom: i < items.length - 1 ? '1px solid var(--brand-border)' : undefined }}>
                             <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--brand-muted)' }}>{fmtDate(c.contributed_at)}</td>
                             <td className="px-3 py-2.5 tabular-nums font-semibold" style={{ color: '#a78bfa' }}>{c.contributed_hours.toLocaleString('pt-BR', { minimumFractionDigits: 1 })}h</td>
+                            <td className="px-3 py-2.5" style={{ color: 'var(--brand-muted)' }}>{({aporte:'Aporte',excedentes:'Excedentes',absorvidas:'Absorvidas'} as Record<string,string>)[c.motivo ?? 'aporte'] ?? 'Aporte'}</td>
                             <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--brand-muted)' }}>{fmtBRL(c.hourly_rate)}</td>
                             <td className="px-3 py-2.5 tabular-nums font-semibold" style={{ color: '#00F5FF' }}>{fmtBRL(c.total_value ?? 0)}</td>
                             <td className="px-3 py-2.5 max-w-[160px] truncate" style={{ color: 'var(--brand-muted)' }}>{c.description ?? '—'}</td>

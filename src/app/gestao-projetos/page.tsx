@@ -1704,7 +1704,7 @@ export default function GestaoProjetosPage() {
   const [contributions, setContributions]     = useState<HourContribution[]>([])
   const [contribLoading, setContribLoading]   = useState(false)
   const [contribModal, setContribModal]       = useState<{ open: boolean; item?: HourContribution }>({ open: false })
-  const [contribForm, setContribForm]         = useState({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '' })
+  const [contribForm, setContribForm]         = useState({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '', motivo: 'aporte' })
   const [contribSaving, setContribSaving]     = useState(false)
   const [contribDeleteConfirm, setContribDeleteConfirm] = useState<HourContribution | null>(null)
 
@@ -1927,6 +1927,7 @@ export default function GestaoProjetosPage() {
         hourly_rate: Number(contribForm.hourly_rate),
         contributed_at: contribForm.contributed_at,
         description: contribForm.description || null,
+        motivo: contribForm.motivo || 'aporte',
       }
       if (contribModal.item) {
         await api.put(`/projects/${aportesProject.id}/hour-contributions/${contribModal.item.id}`, payload)
@@ -2762,7 +2763,7 @@ export default function GestaoProjetosPage() {
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => {
-                  setContribForm({ contributed_hours: '', hourly_rate: '', contributed_at: new Date().toISOString().slice(0, 10), description: '' })
+                  setContribForm({ contributed_hours: '', hourly_rate: '', contributed_at: new Date().toISOString().slice(0, 10), description: '', motivo: 'aporte' })
                   setContribModal({ open: true })
                 }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors hover:opacity-90"
                   style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}>
@@ -2823,6 +2824,7 @@ export default function GestaoProjetosPage() {
                                       hourly_rate: String(c.hourly_rate),
                                       contributed_at: c.contributed_at?.slice(0, 10) ?? '',
                                       description: c.description ?? '',
+                                      motivo: (c as any).motivo ?? 'aporte',
                                     })
                                   }} className="p-1 rounded hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)' }}>
                                     <Pencil size={12} />
@@ -2858,7 +2860,7 @@ export default function GestaoProjetosPage() {
               </h3>
               <button onClick={() => {
                 setContribModal({ open: false })
-                setContribForm({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '' })
+                setContribForm({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '', motivo: 'aporte' })
               }} className="p-1 rounded hover:bg-[var(--surface-hover)]"><X size={14} style={{ color: 'var(--text-muted)' }} /></button>
             </div>
             <div className="px-5 py-4 space-y-3">
@@ -2888,6 +2890,17 @@ export default function GestaoProjetosPage() {
                   style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', colorScheme: 'dark' }} />
               </div>
               <div>
+                <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-light)' }}>Motivo *</label>
+                <select value={contribForm.motivo}
+                  onChange={e => setContribForm(f => ({ ...f, motivo: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg text-xs outline-none"
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+                  <option value="aporte">Aporte</option>
+                  <option value="excedentes">Excedentes</option>
+                  <option value="absorvidas">Absorvidas</option>
+                </select>
+              </div>
+              <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-light)' }}>Descrição</label>
                 <input type="text" value={contribForm.description}
                   onChange={e => setContribForm(f => ({ ...f, description: e.target.value }))}
@@ -2899,7 +2912,7 @@ export default function GestaoProjetosPage() {
             <div className="flex justify-end gap-2 px-5 py-4" style={{ borderTop: '1px solid var(--border)' }}>
               <button onClick={() => {
                 setContribModal({ open: false })
-                setContribForm({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '' })
+                setContribForm({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '', motivo: 'aporte' })
               }} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancelar</button>
               <button onClick={saveContrib} disabled={contribSaving}
                 className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:opacity-90 disabled:opacity-50"

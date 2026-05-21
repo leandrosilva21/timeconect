@@ -49,8 +49,15 @@ interface ContributionItem {
   hourly_rate?: number
   total_value?: number
   description?: string | null
+  motivo?: string
   changed_by: { name: string } | null
   created_at: string
+}
+
+const MOTIVO_LABEL: Record<string, string> = {
+  aporte: 'Aporte',
+  excedentes: 'Excedentes',
+  absorvidas: 'Absorvidas',
 }
 
 interface ProjectItem {
@@ -500,7 +507,7 @@ export default function BankHoursMonthlyPage() {
                           <table className="w-full text-sm">
                             <thead className="sticky top-0 z-10" style={{ borderBottom: '1px solid var(--brand-border)', background: 'rgba(255,255,255,0.02)' }}>
                               <tr>
-                                {['Projeto','Horas','Valor/h','Total','Descrição','Data','Por'].map(col => (
+                                {['Projeto','Horas','Motivo','Valor/h','Total','Descrição','Data','Por'].map(col => (
                                   <th key={col} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{col}</th>
                                 ))}
                               </tr>
@@ -508,7 +515,7 @@ export default function BankHoursMonthlyPage() {
                             <tbody>
                               {(summary.contributed_hours_history?.length ?? 0) === 0 ? (
                                 <tr>
-                                  <td colSpan={7} className="px-5 py-8 text-center text-sm" style={{ color: 'var(--brand-subtle)' }}>
+                                  <td colSpan={8} className="px-5 py-8 text-center text-sm" style={{ color: 'var(--brand-subtle)' }}>
                                     Nenhum aporte de horas registrado
                                   </td>
                                 </tr>
@@ -519,6 +526,7 @@ export default function BankHoursMonthlyPage() {
                                 >
                                   <td className="px-5 py-3" style={{ color: 'var(--brand-text)' }}>{item.project?.code} — {item.project?.name}</td>
                                   <td className="px-5 py-3 font-bold" style={{ color: '#00F5FF' }}>{Number(item.contributed_hours ?? item.difference ?? 0).toFixed(0)}h</td>
+                                  <td className="px-5 py-3" style={{ color: 'var(--brand-muted)' }}>{MOTIVO_LABEL[item.motivo ?? 'aporte'] ?? 'Aporte'}</td>
                                   <td className="px-5 py-3" style={{ color: 'var(--brand-muted)' }}>{fmtBRL(item.hourly_rate ?? null)}</td>
                                   <td className="px-5 py-3" style={{ color: 'var(--brand-muted)' }}>{fmtBRL(item.total_value ?? null)}</td>
                                   <td className="px-5 py-3 max-w-48 truncate" style={{ color: 'var(--brand-muted)' }}>{item.description || '—'}</td>
