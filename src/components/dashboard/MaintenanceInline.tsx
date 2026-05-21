@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
-import { sanitizeHtml } from '@/lib/sanitize'
+import { sanitizeHtml, previewText } from '@/lib/sanitize'
 import * as XLSX from 'xlsx'
 import {
   Clock, Eye, Download, Calendar, User as UserIcon, Building2, Folder,
@@ -87,7 +87,7 @@ export function exportMaintenanceToXLSX(kind: MaintenanceKind, rows: any[]) {
           Consultor: r.user?.name ?? '',
           Ticket: r.ticket ?? '',
           'Titulo do ticket': r.ticket_subject ?? '',
-          Descrição: r.description ?? '',
+          Descrição: previewText(r.description),
           Início: r.start_time ?? '',
           Fim: r.end_time ?? '',
           'Esforço (h)': Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
@@ -96,7 +96,7 @@ export function exportMaintenanceToXLSX(kind: MaintenanceKind, rows: any[]) {
       : rows.map(r => ({
           Data: r.date ? r.date.split('-').reverse().join('/') : '',
           Consultor: r.user?.name ?? '',
-          Descrição: r.description ?? '',
+          Descrição: previewText(r.description),
           'Esforço (h)': Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
         }))
   const ws = XLSX.utils.json_to_sheet(data)
@@ -213,7 +213,7 @@ export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', 
           ) : rows.length === 0 ? (
             <DataTableEmpty colSpan={colSpan} message="Sem apontamentos no período selecionado." />
           ) : rows.map(r => {
-            const desc = r.description ?? '—'
+            const desc = previewText(r.description) || '—'
             const canReverse = onReverseApproved && isActionAllowed(r.status, 'reverse_approval')
             const handleClick = onRowClick ? () => onRowClick(r) : undefined
             return isArch ? (

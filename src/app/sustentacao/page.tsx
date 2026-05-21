@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { sanitizeHtml, previewText } from '@/lib/sanitize'
 import { AppLayout } from '@/components/layout/app-layout'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/use-auth'
@@ -1839,7 +1840,7 @@ function RoutineTable({ kind, rows, total, loading, onRowClick }: {
                     {r.ticket ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-cyan-400 hover:underline" onClick={e => e.stopPropagation()}>#{r.ticket}</a> : <span className="text-zinc-500">—</span>}
                   </td>
                   <td className="px-3 py-2 max-w-xs truncate text-zinc-300" title={r.ticket_subject ?? ''}>{r.ticket_subject ?? '—'}</td>
-                  <td className="px-3 py-2 max-w-sm truncate text-zinc-300" title={r.description ?? ''}>{r.description ?? '—'}</td>
+                  <td className="px-3 py-2 max-w-sm truncate text-zinc-300" title={previewText(r.description)}>{previewText(r.description) || '—'}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{r.start_time ?? '—'}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{r.end_time ?? '—'}</td>
                   <td className="px-3 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}</td>
@@ -1901,7 +1902,22 @@ function RoutineDetailModal({ item, kind, onClose }: { item: any; kind: 'timeshe
           {item.description && (
             <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
               <div className="text-xs uppercase tracking-wider font-semibold mb-2 text-zinc-400">{isExp ? 'Descrição' : 'Observação'}</div>
-              <p className="text-sm">{item.description}</p>
+              <div
+                className="text-sm leading-relaxed
+                  [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5
+                  [&_a]:underline [&_a]:text-[var(--primary)]
+                  [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:overflow-x-auto
+                  [&_code]:break-words
+                  [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse
+                  [&_th]:border [&_th]:border-[var(--border)] [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-semibold
+                  [&_td]:border [&_td]:border-[var(--border)] [&_td]:px-2 [&_td]:py-1.5 [&_td]:align-top
+                  [&_h1]:text-base [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1.5
+                  [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5
+                  [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1
+                  [&_hr]:my-3 [&_hr]:border-[var(--border)]
+                "
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.description) }}
+              />
             </div>
           )}
           <div className="flex justify-end pt-2">

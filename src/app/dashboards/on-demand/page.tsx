@@ -1,6 +1,7 @@
 'use client'
 
 import { formatBRL } from '@/lib/format'
+import { previewText } from '@/lib/sanitize'
 import React, { useEffect, useState, useCallback } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
 import { api } from '@/lib/api'
@@ -499,7 +500,7 @@ function InlineTimesheetsTable({ rows, loading, onReverseApproved, onReverseSucc
                     ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline" style={{ color: 'var(--primary)' }} onClick={(e) => e.stopPropagation()}>#{r.ticket}</a>
                     : <span style={{ color: 'var(--text-light)' }}>—</span>}
                 </DataTableCell>
-                <DataTableCell wrap>{r.description ?? '—'}</DataTableCell>
+                <DataTableCell wrap>{previewText(r.description) || '—'}</DataTableCell>
                 <DataTableCell align="right" numeric muted={false}>{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</DataTableCell>
                 <DataTableCell>
                   <StatusBadge variant={getStatusVariant(r.status)}>{r.status_display ?? r.status}</StatusBadge>

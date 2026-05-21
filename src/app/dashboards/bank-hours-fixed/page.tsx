@@ -4,7 +4,7 @@ import { formatBRL } from '@/lib/format'
 import { AppLayout } from '@/components/layout/app-layout'
 import React, { useEffect, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
-import { sanitizeHtml } from '@/lib/sanitize'
+import { sanitizeHtml, previewText } from '@/lib/sanitize'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
 import { BarChart2, Clock, TrendingUp, TrendingDown, AlertCircle, DollarSign, ChevronDown, ArrowUp, MousePointerClick, Download, MoreVertical, Calendar, User as UserIcon, Building2, Folder, Paperclip, FileText, X as CloseIcon, Eye, Undo2 } from 'lucide-react'
@@ -341,7 +341,7 @@ export default function BankHoursFixedPage() {
         ? inlineRows.map(r => ({
             Data: r.date ? r.date.split('-').reverse().join('/') : '',
             Consultor: r.user?.name ?? '',
-            Descrição: r.description ?? '',
+            Descrição: previewText(r.description),
             Início: r.start_time ?? '',
             Fim: r.end_time ?? '',
             'Esforço (h)': Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
@@ -353,7 +353,7 @@ export default function BankHoursFixedPage() {
             Consultor: r.user?.name ?? '',
             Ticket: r.ticket ?? '',
             'Titulo do ticket': r.ticket_subject ?? '',
-            Descrição: r.description ?? '',
+            Descrição: previewText(r.description),
             Início: r.start_time ?? '',
             Fim: r.end_time ?? '',
             'Esforço (h)': Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
@@ -362,7 +362,7 @@ export default function BankHoursFixedPage() {
         : inlineRows.map(r => ({
             Data: r.date ? r.date.split('-').reverse().join('/') : '',
             Consultor: r.user?.name ?? '',
-            Descrição: r.description ?? '',
+            Descrição: previewText(r.description),
             'Esforço (h)': Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
           }))
     const ws = XLSX.utils.json_to_sheet(data)
@@ -922,7 +922,7 @@ export default function BankHoursFixedPage() {
                         <td className="px-3 py-2">{r.user?.name ?? '—'}</td>
                         <td className="px-3 py-2">{r.ticket ? <span className="font-mono text-xs">{r.ticket}</span> : '—'}</td>
                         <td className="px-3 py-2" style={{ color: 'var(--text-muted)' }}>{r.ticket_subject ?? '—'}</td>
-                        <td className="px-3 py-2 max-w-xs truncate" style={{ color: 'var(--text-muted)' }} title={r.description ?? ''}>{r.description ?? '—'}</td>
+                        <td className="px-3 py-2 max-w-xs truncate" style={{ color: 'var(--text-muted)' }} title={previewText(r.description)}>{previewText(r.description) || '—'}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{r.start_time ?? '—'}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{r.end_time ?? '—'}</td>
                         <td className="px-3 py-2 text-right font-mono">{((r.effort_minutes ?? 0) / 60).toFixed(2)}</td>
@@ -1230,7 +1230,7 @@ function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowCl
                 <tr key={r.id} className={onRowClick ? 'cursor-pointer' : ''} onClick={onRowClick ? () => onRowClick(r) : undefined} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td className="px-4 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
                   <td className="px-4 py-2">{r.user?.name ?? '—'}</td>
-                  <td className="px-4 py-2 max-w-2xl truncate" style={{ color: 'var(--text-muted)' }} title={r.description ?? '—'}>{r.description ?? '—'}</td>
+                  <td className="px-4 py-2 max-w-2xl truncate" style={{ color: 'var(--text-muted)' }} title={previewText(r.description) || '—'}>{previewText(r.description) || '—'}</td>
                   <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}h</td>
                   <td className="px-2 py-2 whitespace-nowrap text-right">
                     {canReverse && <ReverseApprovalBtn onClick={() => handleReverse(r.id)} busy={reversingId === r.id} />}
@@ -1262,7 +1262,7 @@ function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowCl
                 <tr key={r.id} className={onRowClick ? 'cursor-pointer' : ''} onClick={onRowClick ? () => onRowClick(r) : undefined} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td className="px-3 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
                   <td className="px-3 py-2">{r.user?.name ?? '—'}</td>
-                  <td className="px-3 py-2 max-w-xl truncate" style={{ color: 'var(--text-muted)' }} title={r.description ?? '—'}>{r.description ?? '—'}</td>
+                  <td className="px-3 py-2 max-w-xl truncate" style={{ color: 'var(--text-muted)' }} title={previewText(r.description) || '—'}>{previewText(r.description) || '—'}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{r.start_time ?? '—'}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{r.end_time ?? '—'}</td>
                   <td className="px-3 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}</td>
