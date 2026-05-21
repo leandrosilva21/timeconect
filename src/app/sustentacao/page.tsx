@@ -649,19 +649,41 @@ function MultiSelect({ label, options, selected, onChange, placeholder = 'Buscar
               style={{ background: '#27272a', color: '#e4e4e7', border: 'none' }} />
           </div>
           <div className="overflow-y-auto">
-            <button type="button" onClick={() => onChange([])}
-              className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-zinc-800"
-              style={{ color: selected.length === 0 ? '#00F5FF' : '#a1a1aa' }}>
-              {selected.length === 0 ? <Check size={12} /> : <span className="w-3 shrink-0" />}
-              Todos
-            </button>
+            {filtered.length > 0 && (() => {
+              const vals = filtered.map(o => o.value)
+              const allSel = vals.every(v => selected.includes(v))
+              return (
+                <button type="button"
+                  onClick={() => allSel
+                    ? onChange(selected.filter(v => !vals.includes(v)))
+                    : onChange(Array.from(new Set([...selected, ...vals])))}
+                  className="w-full text-left px-3 py-2 text-xs font-semibold flex items-center gap-2 hover:bg-zinc-800"
+                  style={{ color: 'var(--primary)', borderBottom: '1px solid var(--brand-border)' }}>
+                  <span className="w-3.5 h-3.5 rounded flex-shrink-0 flex items-center justify-center border"
+                    style={{ borderColor: 'var(--primary)', background: allSel ? 'var(--primary)' : 'var(--surface)' }}>
+                    {allSel && <Check size={9} color="var(--primary-fg)" strokeWidth={3} />}
+                  </span>
+                  {allSel ? 'Desmarcar todos' : 'Selecionar todos'}{search ? ' (filtrados)' : ''}
+                </button>
+              )
+            })()}
+            {selected.length > 0 && (
+              <button type="button" onClick={() => onChange([])}
+                className="w-full text-left px-3 py-1.5 text-xs font-semibold hover:bg-zinc-800"
+                style={{ color: '#a1a1aa', borderBottom: '1px solid var(--brand-border)' }}>
+                Limpar seleção
+              </button>
+            )}
             {filtered.map(opt => {
               const checked = selected.includes(opt.value)
               return (
                 <button type="button" key={opt.value} onClick={() => toggle(opt.value)}
                   className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-zinc-800"
-                  style={{ color: checked ? '#00F5FF' : '#e4e4e7' }}>
-                  {checked ? <Check size={12} className="shrink-0" /> : <span className="w-3 shrink-0" />}
+                  style={{ color: checked ? 'var(--primary)' : '#e4e4e7', fontWeight: checked ? 500 : 400 }}>
+                  <span className="w-3.5 h-3.5 rounded flex-shrink-0 flex items-center justify-center border"
+                    style={{ borderColor: checked ? 'var(--primary)' : 'var(--border-strong)', background: checked ? 'var(--primary)' : 'var(--surface)' }}>
+                    {checked && <Check size={9} color="var(--primary-fg)" strokeWidth={3} />}
+                  </span>
                   {opt.label}
                 </button>
               )
