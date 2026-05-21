@@ -32,7 +32,7 @@ import { SearchSelect } from '@/components/ui/search-select'
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Customer  { id: number; name: string }
-interface Project   { id: number; name: string; code: string }
+interface Project   { id: number; name: string; code: string; status?: string; status_display?: string }
 interface Executive { id: number; name: string }
 
 interface SummaryData {
@@ -166,7 +166,9 @@ export default function OnDemandPage() {
   }, [selectedCustomer, selectedExecutive, selectedProject, dateFrom, dateTo, refMonth, refYear, isCliente, user?.customer_id])
 
   const fetchSummary = useCallback(() => {
-    if (!selectedProject && isAdmin) return
+    // Sem projeto selecionado NÃO traz nada (nem pro cliente) — antes agregava todos os
+    // projetos do cliente, mostrando consumo + apontamentos que já migraram pra outro projeto.
+    if (!selectedProject) { setSummary(null); return }
     setLoadingSummary(true)
     api.get<any>(`/dashboards/on-demand?${buildParams()}`)
       .then(r => setSummary(r?.data ?? r ?? null))
@@ -193,7 +195,9 @@ export default function OnDemandPage() {
     return `Mês vigente — ${MONTH_NAMES_PT[now.getMonth()]} ${now.getFullYear()}`
   })()
 
-  const hasFilters = !isAdmin || !!selectedProject
+  // Exige projeto selecionado pra TODOS (cliente incluído) — sem projeto = estado vazio,
+  // não agrega/mostra dados de outros projetos.
+  const hasFilters = !!selectedProject
 
   // Lista inline de apontamentos do projeto + ticket summary (mesmo padrão do BH Fixo/Sustentação)
   useEffect(() => {
@@ -283,6 +287,24 @@ export default function OnDemandPage() {
             placeholder="Selecione um projeto"
             wide
           />
+          {/* Status do projeto selecionado — em evidência pro cliente (Encerrado/Cancelado/etc.) */}
+          {(() => {
+            const sel = projects.find(p => p.id === selectedProject)
+            if (!sel?.status) return null
+            const variant = sel.status === 'cancelled' ? 'danger'
+              : sel.status === 'finished' ? 'neutral'
+              : sel.status === 'paused' ? 'warning'
+              : (sel.status === 'started' || sel.status === 'awaiting_start') ? 'success'
+              : 'info'
+            return (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Status</label>
+                <div className="flex items-center" style={{ minHeight: 34 }}>
+                  <StatusBadge variant={variant} size="md">{sel.status_display ?? sel.status}</StatusBadge>
+                </div>
+              </div>
+            )
+          })()}
           {/* Filtro de data */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Data</label>
