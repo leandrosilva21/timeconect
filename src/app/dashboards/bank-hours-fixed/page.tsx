@@ -109,6 +109,33 @@ const MONTH_OPTIONS = buildMonthOptions()
 
 // ─── Breakdown Card ───────────────────────────────────────────────────────────
 
+function ContractedBreakdownCard({ contratadas, aporte }: { contratadas: number; aporte: number }) {
+  return (
+    <div className="rounded-2xl p-5 flex flex-col gap-3 min-w-0 overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface-hover)' }}>
+          <BarChart2 size={13} style={{ color: 'var(--brand-muted)' }} />
+        </div>
+        <span className="text-xs font-semibold uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Horas Contratadas + Aporte</span>
+      </div>
+      <div className="flex items-end gap-1.5">
+        <span className="text-4xl font-extrabold tracking-tight" style={{ color: 'var(--brand-text)', lineHeight: 1 }}>{fmtH(contratadas + aporte)}</span>
+        <span className="text-base font-medium mb-0.5" style={{ color: 'var(--brand-muted)' }}>h</span>
+      </div>
+      <div className="flex flex-col gap-1.5 pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+        <div className="flex items-baseline justify-between gap-2 min-w-0">
+          <span className="text-[10px] uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Contratadas</span>
+          <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{fmtH(contratadas)}h</span>
+        </div>
+        <div className="flex items-baseline justify-between gap-2 min-w-0">
+          <span className="text-[10px] uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Aporte</span>
+          <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{fmtH(aporte)}h</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ConsumedBreakdownCard({ total, projetos, sustentacao, arquitetura }: { total: number; projetos?: number; sustentacao?: number; arquitetura?: number }) {
   const showArq = arquitetura !== undefined && arquitetura > 0
   return (
@@ -694,11 +721,9 @@ export default function BankHoursFixedPage() {
                   <>
                     {/* Row 1: 5 cards */}
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                      <KpiCard
-                        label="Horas Contratadas + Aporte"
-                        value={fmtH((summary.contracted_hours ?? 0) + (summary.contributed_hours ?? 0))}
-                        icon={BarChart2}
-                        hint={`Contratadas ${fmtH(summary.contracted_hours)} + Aporte ${fmtH(summary.contributed_hours)}`}
+                      <ContractedBreakdownCard
+                        contratadas={summary.contracted_hours ?? 0}
+                        aporte={summary.contributed_hours ?? 0}
                       />
                       {isLeafProject ? (
                         <KpiCard label="Consumo Acumulado" value={fmtH(summary.consumed_hours)} icon={Clock} accent="primary" />
