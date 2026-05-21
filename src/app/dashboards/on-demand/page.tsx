@@ -291,17 +291,19 @@ export default function OnDemandPage() {
           {(() => {
             const sel = projects.find(p => p.id === selectedProject)
             if (!sel?.status) return null
-            const variant = sel.status === 'cancelled' ? 'danger'
-              : sel.status === 'finished' ? 'danger'   // Encerrado em vermelho — chama atenção do cliente
-              : sel.status === 'paused' ? 'warning'
-              : (sel.status === 'started' || sel.status === 'awaiting_start') ? 'success'
-              : 'info'
+            const c = (sel.status === 'cancelled' || sel.status === 'finished')
+              ? { bg: 'var(--danger-bg)',  fg: 'var(--danger)',  bd: 'var(--danger-border)' }
+              : sel.status === 'paused'
+              ? { bg: 'var(--warning-bg)', fg: 'var(--warning)', bd: 'var(--warning-border)' }
+              : (sel.status === 'started' || sel.status === 'awaiting_start')
+              ? { bg: 'var(--success-bg)', fg: 'var(--success)', bd: 'var(--success-border)' }
+              : { bg: 'var(--info-bg)',    fg: 'var(--info)',    bd: 'var(--info-border)' }
             return (
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Status</label>
-                <div className="flex items-center" style={{ minHeight: 34 }}>
-                  <StatusBadge variant={variant} size="md">{sel.status_display ?? sel.status}</StatusBadge>
-                </div>
+                <span className="inline-flex items-center px-4 py-2 rounded-full text-sm font-bold w-fit" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.bd}` }}>
+                  {sel.status_display ?? sel.status}
+                </span>
               </div>
             )
           })()}

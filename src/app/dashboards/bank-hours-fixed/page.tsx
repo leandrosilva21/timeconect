@@ -631,7 +631,7 @@ export default function BankHoursFixedPage() {
             return (
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Status</label>
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold w-fit" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.bd}`, minHeight: 34 }}>
+                <span className="inline-flex items-center px-4 py-2 rounded-full text-sm font-bold w-fit" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.bd}` }}>
                   {sel.status_display ?? sel.status}
                 </span>
               </div>
