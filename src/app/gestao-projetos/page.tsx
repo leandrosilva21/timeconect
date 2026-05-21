@@ -4,7 +4,6 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { api, ApiError } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
@@ -499,14 +498,13 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
             }
             <div>
               <div className="flex items-center gap-1.5">
-                <Link
-                  href={`/projetos/${project.id}`}
-                  className="text-sm font-semibold hover:underline"
+                {/* Nome sem link pro workspace /projetos/[id] — workspace é cronograma (em teste, fora de prod). */}
+                <span
+                  className="text-sm font-semibold"
                   style={{ color: isActive ? 'var(--primary)' : isParent ? 'var(--text-light)' : 'var(--text-muted)' }}
-                  onClick={(e) => e.stopPropagation()}
                 >
                   {project.name}
-                </Link>
+                </span>
                 {treeRow && isParent && (
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'var(--surface-hover)', color: 'var(--text-light)' }}>PAI</span>
                 )}
