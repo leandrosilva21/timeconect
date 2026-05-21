@@ -19,7 +19,7 @@ import { KpiCard } from '@/components/ui/kpi-card'
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Customer  { id: number; name: string }
-interface Project   { id: number; name: string; code: string }
+interface Project   { id: number; name: string; code: string; status?: string; status_display?: string }
 interface Executive { id: number; name: string }
 
 interface SummaryData {
@@ -622,6 +622,26 @@ export default function BankHoursFixedPage() {
             placeholder="Selecione um projeto"
             wide
           />
+          {/* Status do projeto selecionado — em evidência, cores padrão (verde/vermelho/etc). */}
+          {(() => {
+            const sel = projects.find(p => String(p.id) === String(selectedProject))
+            if (!sel?.status) return null
+            const c = (sel.status === 'cancelled' || sel.status === 'finished')
+              ? { bg: 'var(--danger-bg)',  fg: 'var(--danger)',  bd: 'var(--danger-border)' }
+              : sel.status === 'paused'
+              ? { bg: 'var(--warning-bg)', fg: 'var(--warning)', bd: 'var(--warning-border)' }
+              : (sel.status === 'started' || sel.status === 'awaiting_start')
+              ? { bg: 'var(--success-bg)', fg: 'var(--success)', bd: 'var(--success-border)' }
+              : { bg: 'var(--info-bg)',    fg: 'var(--info)',    bd: 'var(--info-border)' }
+            return (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Status</label>
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold w-fit" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.bd}`, minHeight: 34 }}>
+                  {sel.status_display ?? sel.status}
+                </span>
+              </div>
+            )
+          })()}
           {/* Filtro de data */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Data</label>
