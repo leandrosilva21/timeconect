@@ -3346,9 +3346,11 @@ export default function GestaoProjetosPage() {
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>Horas</p>
                       {/* Barra principal */}
                       {(() => {
-                        // Valores card-local (acumulado + aporte), iguais à linha da lista — não mexer nos consts compartilhados (consumed/totalAvail/pct/hs)
-                        const cardVendidas = (p.vendidas_projeto_hours ?? p.sold_hours ?? 0) + (p.vendidas_aporte_hours ?? 0)
-                        const cardConsumed = p.consumed_hours ?? consumed
+                        // Campos computados (acumulado/aporte/consumo dos filhos) vêm da LINHA DA LISTA
+                        // (viewProject); o fetch do modal (viewProjectFull / GET /projects/{id}) NÃO os calcula.
+                        const vp = viewProject
+                        const cardVendidas = ((vp?.vendidas_projeto_hours ?? p.sold_hours) ?? 0) + (vp?.vendidas_aporte_hours ?? 0)
+                        const cardConsumed = vp?.consumed_hours ?? p.consumed_hours ?? consumed
                         const cardTotal    = cardVendidas
                         const cardPct      = cardTotal > 0 ? (cardConsumed / cardTotal) * 100 : 0
                         return (
@@ -3358,10 +3360,10 @@ export default function GestaoProjetosPage() {
                           <div className="text-center flex flex-col items-center leading-tight">
                             <p className="text-[10px] mb-1" style={{ color: 'var(--text-light)' }}>Vendidas</p>
                             <p className="text-base font-bold tabular-nums" style={{ color: 'var(--text)' }}>{fmt(cardVendidas, 1) + 'h'}</p>
-                            {(p.vendidas_aporte_hours ?? 0) > 0 && (
+                            {(vp?.vendidas_aporte_hours ?? 0) > 0 && (
                               <>
-                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Projeto {fmt(p.vendidas_projeto_hours ?? 0, 1)}</span>
-                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Aporte {fmt(p.vendidas_aporte_hours ?? 0, 1)}</span>
+                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Projeto {fmt(vp?.vendidas_projeto_hours ?? 0, 1)}</span>
+                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Aporte {fmt(vp?.vendidas_aporte_hours ?? 0, 1)}</span>
                               </>
                             )}
                           </div>
@@ -3369,10 +3371,10 @@ export default function GestaoProjetosPage() {
                           <div className="text-center flex flex-col items-center leading-tight">
                             <p className="text-[10px] mb-1" style={{ color: 'var(--text-light)' }}>Consumidas</p>
                             <p className="text-base font-bold tabular-nums" style={{ color: 'var(--text-muted)' }}>{fmt(cardConsumed, 1) + 'h'}</p>
-                            {(p.children_consumed_hours ?? 0) > 0 && (
+                            {(vp?.children_consumed_hours ?? 0) > 0 && (
                               <>
-                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Pai {fmt(p.own_consumed_hours ?? 0, 1)}</span>
-                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Filhos {fmt(p.children_consumed_hours ?? 0, 1)}</span>
+                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Pai {fmt(vp?.own_consumed_hours ?? 0, 1)}</span>
+                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Filhos {fmt(vp?.children_consumed_hours ?? 0, 1)}</span>
                               </>
                             )}
                           </div>
