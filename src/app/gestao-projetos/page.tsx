@@ -376,6 +376,8 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
   }
 
   const teamCount = (project.consultants?.length ?? 0) + (project.coordinators?.length ?? 0)
+  const childConsumption = project.children_consumption_breakdown ?? []
+  const hasChildConsumption = childConsumption.length > 0
 
   // Tree visual
   const isChild           = treeRow ? treeRow._level > 0 : false
@@ -549,6 +551,9 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
               {contributions > 0 && (
                 <span style={{ fontSize: 10, color: 'var(--text-light)' }}>({fmt(contributions, 1)})</span>
               )}
+              {(project.hour_contribution ?? 0) > 0 && (
+                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Aporte {fmt(project.hour_contribution, 1)}</span>
+              )}
             </div>
           )}
         </td>
@@ -615,8 +620,8 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
         </td>
       </tr>
 
-      {/* Expansão: equipe */}
-      {expanded && teamCount > 0 && (
+      {/* Expansão: equipe + consumo dos filhos */}
+      {expanded && (teamCount > 0 || hasChildConsumption) && (
         <tr style={{ background: 'var(--surface-hover)' }}>
           <td /><td />
           <td colSpan={11} className="py-3 px-4">
@@ -667,6 +672,28 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
                         </div>
                       )
                     })}
+                  </div>
+                </div>
+              )}
+              {hasChildConsumption && (
+                <div className="basis-full">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--text-light)' }}>
+                    Consumo dos filhos no banco do pai
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    {childConsumption.map(c => (
+                      <div key={c.id} className="flex items-center gap-2 text-xs">
+                        <span className="font-mono" style={{ color: 'var(--text-light)' }}>{c.code}</span>
+                        <span style={{ color: 'var(--text-muted)' }}>—</span>
+                        <span style={{ color: 'var(--text-muted)' }}>{c.name}</span>
+                        {c.contract_type && (
+                          <span style={{ color: 'var(--text-light)' }}>({c.contract_type})</span>
+                        )}
+                        <span className="font-semibold tabular-nums" style={{ color: 'var(--text)' }}>
+                          {fmt(c.consumed_hours, 1)}h
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -2495,7 +2522,7 @@ export default function GestaoProjetosPage() {
                       onDelete={canDelete ? p => setDeleteProject(p) : undefined}
                       hasUnread={unreadProjectIds.has(project.id)}
                       treeRow={tr}
-                      onTreeToggle={tr ? () => toggleTree(tr) : undefined}
+                      onTreeToggle={tr ? () => { toggleTree(tr); toggleExpand(project.id) } : undefined}
                       isSelected={selectedProjectIds.has(project.id)}
                       onSelect={toggleProjectSelect}
                       onConsultantManualToggle={canEdit ? (userId, allow) => handleConsultantManualToggle(project.id, userId, allow) : undefined}

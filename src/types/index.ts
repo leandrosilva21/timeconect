@@ -37,6 +37,14 @@ export interface Customer {
   code_prefix?: string | null
 }
 
+export interface ChildConsumptionBreakdown {
+  id: number
+  code: string
+  name: string
+  contract_type?: string | null
+  consumed_hours: number
+}
+
 export interface Project {
   id: number
   name: string
@@ -57,6 +65,7 @@ export interface Project {
   total_contributions_hours?: number
   total_available_hours?: number | null
   hour_contribution?: number
+  children_consumption_breakdown?: ChildConsumptionBreakdown[]
   child_projects?: Project[]
   node_state?: 'ACTIVE' | 'DISABLED' | null
   proj_sequence?: number | null
