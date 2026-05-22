@@ -3350,27 +3350,53 @@ export default function GestaoProjetosPage() {
                     <div>
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>Horas</p>
                       {/* Barra principal */}
+                      {(() => {
+                        // Valores card-local (acumulado + aporte), iguais à linha da lista — não mexer nos consts compartilhados (consumed/totalAvail/pct/hs)
+                        const cardVendidas = (p.vendidas_projeto_hours ?? p.sold_hours ?? 0) + (p.vendidas_aporte_hours ?? 0)
+                        const cardConsumed = p.consumed_hours ?? consumed
+                        const cardTotal    = cardVendidas
+                        const cardPct      = cardTotal > 0 ? (cardConsumed / cardTotal) * 100 : 0
+                        return (
                       <div className="rounded-xl p-4 mb-3" style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
-                        <div className="grid grid-cols-3 gap-3 mb-4">
-                          {[
-                            { label: 'Vendidas',   value: fmt(p.sold_hours) + 'h',              color: 'var(--text)' },
-                            { label: 'Consumidas', value: fmt(consumed, 1) + 'h',               color: 'var(--text-muted)' },
-                            { label: 'Saldo',      value: fmt(p.general_hours_balance, 1) + 'h', color: (p.general_hours_balance ?? 0) < 0 ? 'var(--danger-border)' : 'var(--success-border)' },
-                          ].map(it => (
-                            <div key={it.label} className="text-center">
-                              <p className="text-[10px] mb-1" style={{ color: 'var(--text-light)' }}>{it.label}</p>
-                              <p className="text-base font-bold tabular-nums" style={{ color: it.color }}>{it.value}</p>
-                            </div>
-                          ))}
+                        <div className="grid grid-cols-3 gap-3 mb-4 items-start">
+                          {/* Vendidas */}
+                          <div className="text-center flex flex-col items-center leading-tight">
+                            <p className="text-[10px] mb-1" style={{ color: 'var(--text-light)' }}>Vendidas</p>
+                            <p className="text-base font-bold tabular-nums" style={{ color: 'var(--text)' }}>{fmt(cardVendidas, 1) + 'h'}</p>
+                            {(p.vendidas_aporte_hours ?? 0) > 0 && (
+                              <>
+                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Projeto {fmt(p.vendidas_projeto_hours ?? 0, 1)}</span>
+                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Aporte {fmt(p.vendidas_aporte_hours ?? 0, 1)}</span>
+                              </>
+                            )}
+                          </div>
+                          {/* Consumidas */}
+                          <div className="text-center flex flex-col items-center leading-tight">
+                            <p className="text-[10px] mb-1" style={{ color: 'var(--text-light)' }}>Consumidas</p>
+                            <p className="text-base font-bold tabular-nums" style={{ color: 'var(--text-muted)' }}>{fmt(cardConsumed, 1) + 'h'}</p>
+                            {(p.children_consumed_hours ?? 0) > 0 && (
+                              <>
+                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Pai {fmt(p.own_consumed_hours ?? 0, 1)}</span>
+                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Filhos {fmt(p.children_consumed_hours ?? 0, 1)}</span>
+                              </>
+                            )}
+                          </div>
+                          {/* Saldo */}
+                          <div className="text-center flex flex-col items-center leading-tight">
+                            <p className="text-[10px] mb-1" style={{ color: 'var(--text-light)' }}>Saldo</p>
+                            <p className="text-base font-bold tabular-nums" style={{ color: (p.general_hours_balance ?? 0) < 0 ? 'var(--danger-border)' : 'var(--success-border)' }}>{fmt(p.general_hours_balance, 1) + 'h'}</p>
+                          </div>
                         </div>
                         <div className="w-full h-2 rounded-full overflow-hidden mb-1" style={{ background: 'var(--surface-hover)' }}>
-                          <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, background: hs.bar }} />
+                          <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(cardPct, 100)}%`, background: hs.bar }} />
                         </div>
                         <div className="flex justify-between text-[10px]" style={{ color: hs.text }}>
-                          <span>{totalAvail > 0 ? `${Math.round(pct)}% consumido` : 'Sem horas'}</span>
-                          <span>{fmt(totalAvail, 1)}h disponíveis</span>
+                          <span>{cardTotal > 0 ? `${Math.round(cardPct)}% consumido` : 'Sem horas'}</span>
+                          <span>{fmt(p.general_hours_balance, 1)}h disponíveis</span>
                         </div>
                       </div>
+                        )
+                      })()}
                       {/* Detalhes de horas */}
                       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
                         <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
