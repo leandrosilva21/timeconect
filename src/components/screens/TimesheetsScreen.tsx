@@ -991,9 +991,11 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
   }
 
   const handleReverseApproval = async (id: number) => {
-    if (!confirm('Estornar a aprovação deste apontamento?')) return
+    const reason = window.prompt('Informe o motivo do estorno da aprovação:')
+    if (reason == null) return // cancelou
+    if (!reason.trim()) { toast.error('Informe um motivo para estornar a aprovação.'); return }
     try {
-      await api.post(`/timesheets/${id}/reverse-approval`, {})
+      await api.post(`/timesheets/${id}/reverse-approval`, { reason: reason.trim() })
       toast.success('Aprovação estornada!')
       refetch()
     } catch {
