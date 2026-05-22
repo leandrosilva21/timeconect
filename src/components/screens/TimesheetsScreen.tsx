@@ -439,8 +439,8 @@ function ExtraPctModal({ ids, initialClientPct, initialConsultantPct, isBillable
 
 interface RowMenuItem { label: string; icon: React.ReactNode; onClick: () => void; danger?: boolean }
 
-function RowActions({ id, onView, onDeleted, viewOnly, onExtraPct, onRelease, onReverseRelease, onReverseRejection, onShowLogs, onShowConflict }: {
-  id: number; onView: () => void; onDeleted: () => void; viewOnly?: boolean; onExtraPct?: () => void; onRelease?: () => void; onReverseRelease?: () => void; onReverseRejection?: () => void; onShowLogs?: () => void; onShowConflict?: () => void
+function RowActions({ id, onView, onDeleted, viewOnly, onExtraPct, onRelease, onReverseApproval, onReverseRelease, onReverseRejection, onShowLogs, onShowConflict }: {
+  id: number; onView: () => void; onDeleted: () => void; viewOnly?: boolean; onExtraPct?: () => void; onRelease?: () => void; onReverseApproval?: () => void; onReverseRelease?: () => void; onReverseRejection?: () => void; onShowLogs?: () => void; onShowConflict?: () => void
 }) {
   const [deleting, setDeleting] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
@@ -465,6 +465,7 @@ function RowActions({ id, onView, onDeleted, viewOnly, onExtraPct, onRelease, on
         ...(onShowConflict ? [{ label: 'Ver conflito', icon: <AlertTriangle size={12} />, onClick: onShowConflict }] : []),
         ...(onShowLogs ? [{ label: 'Ver histórico', icon: <FileText size={12} />, onClick: onShowLogs }] : []),
         ...(onRelease ? [{ label: 'Liberar', icon: <CheckCircle size={12} />, onClick: onRelease }] : []),
+        ...(onReverseApproval ? [{ label: 'Estornar aprovação', icon: <RotateCcw size={12} />, onClick: onReverseApproval }] : []),
         ...(onReverseRelease ? [{ label: 'Estornar liberação', icon: <X size={12} />, onClick: onReverseRelease }] : []),
         ...(onReverseRejection ? [{ label: 'Estornar rejeição', icon: <RotateCcw size={12} />, onClick: onReverseRejection }] : []),
         ...(onExtraPct ? [{ label: '% Extras', icon: <TrendingUp size={12} />, onClick: onExtraPct }] : []),
@@ -989,6 +990,17 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
     }
   }
 
+  const handleReverseApproval = async (id: number) => {
+    if (!confirm('Estornar a aprovação deste apontamento?')) return
+    try {
+      await api.post(`/timesheets/${id}/reverse-approval`, {})
+      toast.success('Aprovação estornada!')
+      refetch()
+    } catch {
+      toast.error('Erro ao estornar aprovação')
+    }
+  }
+
   const confirmReverseRejection = async () => {
     if (!reverseRejectionModal.tsId || !reverseRejectionReason.trim()) return
     setReverseRejecting(true)
@@ -1402,6 +1414,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
                       onShowConflict={ts.status === 'conflicted' ? () => setConflictItem(ts as unknown as ConflictTimesheet) : undefined}
                       onExtraPct={(isAdmin || isCoordenador) ? () => setExtraPctModalData({ ids: [ts.id], ts }) : undefined}
                       onRelease={(isAdmin || isCoordenador) && ts.is_internal_action && ts.status === 'internal' ? () => handleRelease(ts.id) : undefined}
+                      onReverseApproval={(isAdmin || isCoordenador) && ts.status === 'approved' ? () => handleReverseApproval(ts.id) : undefined}
                       onReverseRelease={(isAdmin || isCoordenador) && ts.is_internal_action && ts.status === 'released' ? () => handleReverseRelease(ts.id) : undefined}
                       onReverseRejection={(isAdmin || isCoordenador) && (ts.status === 'rejected' || ts.status === 'adjustment_requested') ? () => { setReverseRejectionModal({ open: true, tsId: ts.id }); setReverseRejectionReason('') } : undefined}
                     />
