@@ -1929,15 +1929,22 @@ export default function GestaoProjetosPage() {
 
   // ── Métricas dos cards ──
   const stats = useMemo(() => {
-    const ativos    = filtered.filter(p => ['active', 'started'].includes(p.status)).length
-    const vendidas  = filtered.reduce((s, p) => s + calcProjHours(p).displaySold, 0)
-    const consumidas = filtered.reduce((s, p) => s + calcProjHours(p).consumedHours, 0)
-    const saldo     = filtered.reduce((s, p) => s + (p.general_hours_balance ?? 0), 0)
-    const comPct    = filtered.filter(p => calcProjHours(p).displaySold > 0)
+    // Evita DUPLICAR horas de filho nos cards: se o PAI está no filtro, o consumo/vendidas do
+    // filho já estão agregados no banco do pai — só conta o filho quando o pai NÃO está no filtro.
+    const filteredIds = new Set(filtered.map(p => p.id))
+    const base = filtered.filter(p => {
+      const parentId = p.parent_project_id ?? p.parent_project?.id
+      return !(parentId && filteredIds.has(parentId))
+    })
+    const ativos    = base.filter(p => ['active', 'started'].includes(p.status)).length
+    const vendidas  = base.reduce((s, p) => s + calcProjHours(p).displaySold, 0)
+    const consumidas = base.reduce((s, p) => s + calcProjHours(p).consumedHours, 0)
+    const saldo     = base.reduce((s, p) => s + (p.general_hours_balance ?? 0), 0)
+    const comPct    = base.filter(p => calcProjHours(p).displaySold > 0)
     const avgPct    = comPct.length
       ? comPct.reduce((s, p) => s + (p.balance_percentage ?? 0), 0) / comPct.length
       : 0
-    const criticos  = filtered.filter(p => (p.balance_percentage ?? 0) >= 90).length
+    const criticos  = base.filter(p => (p.balance_percentage ?? 0) >= 90).length
     return { ativos, vendidas, consumidas, saldo, avgPct, criticos }
   }, [filtered])
 
