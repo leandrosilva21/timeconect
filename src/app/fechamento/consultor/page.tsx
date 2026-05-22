@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
-import { RefreshCw, Printer, FileText, Users, Search, X, Mail, Paperclip, Send, MessagesSquare, ChevronDown, AlertTriangle } from 'lucide-react'
+import { RefreshCw, Printer, FileText, Users, Search, X, Mail, Paperclip, Send, MessagesSquare, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { previewText } from '@/lib/sanitize'
 import {
@@ -336,10 +336,11 @@ function RelatorioBtn({ userId, printingUser, onClick }: {
 // ─── ConversaPanel (thread + continuação) ──────────────────────────────────────
 
 function ConversaPanel({
-  thread, loading, replyBody, onReplyBody, replyAttach, onReplyAttach, sending, onSend,
+  thread, loading, reportHtml, replyBody, onReplyBody, replyAttach, onReplyAttach, sending, onSend,
 }: {
   thread: ThreadMessage[]
   loading: boolean
+  reportHtml: string | null
   replyBody: string
   onReplyBody: (v: string) => void
   replyAttach: boolean
@@ -361,15 +362,28 @@ function ConversaPanel({
   const hasThread = thread.length > 0   // controla o box de resposta (envio já existiu)
   const hasVisible = visible.length > 0
 
-  // Acordeão: a linha clicada expande pra mostrar o corpo completo.
-  // Por padrão a mensagem mais recente visível já vem aberta (leitura imediata).
-  const latestVisibleId = hasVisible ? visible[visible.length - 1].id : null
-  const [expandedId, setExpandedId] = useState<number | null>(null)
-  const [seedId, setSeedId] = useState<number | null>(null)
-  if (seedId !== latestVisibleId) {
-    setSeedId(latestVisibleId)
-    setExpandedId(latestVisibleId)
-  }
+  // Reading pane estilo Outlook: clicar numa linha abre uma visão de leitura que
+  // desliza da direita cobrindo quase a tela inteira (sobre o modal do relatório).
+  const [openId, setOpenId] = useState<number | null>(null)
+  const openMsg = openId != null ? visible.find(m => m.id === openId) ?? null : null
+
+  // Esc fecha o reading pane.
+  useEffect(() => {
+    if (openId == null) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        setOpenId(null)
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [openId])
+
+  // Se a thread recarregar e a mensagem aberta sumir, fecha o reading pane.
+  useEffect(() => {
+    if (openId != null && !visible.some(m => m.id === openId)) setOpenId(null)
+  }, [openId, visible])
 
   return (
     <aside
@@ -413,19 +427,17 @@ function ConversaPanel({
               /* Container único — thread estilo Outlook, uma linha por mensagem */
               <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--bg)' }}>
                 {visible.map((m, idx) => {
-                  const expanded = expandedId === m.id
                   const bodyText = previewText(m.body)
                   return (
                     <div
                       key={m.id}
                       style={idx > 0 ? { borderTop: '1px solid var(--border)' } : undefined}
                     >
-                      {/* Cabeçalho clicável da linha */}
+                      {/* Linha clicável — abre o reading pane */}
                       <button
                         type="button"
-                        onClick={() => setExpandedId(expanded ? null : m.id)}
+                        onClick={() => setOpenId(m.id)}
                         className="w-full text-left px-3 py-2.5 transition-colors ds-row-hover"
-                        aria-expanded={expanded}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-xs font-semibold truncate" style={{ color: 'var(--text)' }}>
@@ -438,11 +450,6 @@ function ConversaPanel({
                             <span className="text-[11px]" style={{ color: 'var(--text-light)' }}>
                               {fmtDateTime(m.sent_at)}
                             </span>
-                            <ChevronDown
-                              size={13}
-                              className="transition-transform shrink-0"
-                              style={{ color: 'var(--text-muted)', transform: expanded ? 'rotate(180deg)' : 'none' }}
-                            />
                           </div>
                         </div>
                         <div className="mt-1 flex items-center gap-1.5">
@@ -453,22 +460,13 @@ function ConversaPanel({
                             <span className="text-[10px] shrink-0" style={{ color: 'var(--primary)' }}>· resposta</span>
                           )}
                         </div>
-                        {/* Snippet compacto (some quando expandido) */}
-                        {!expanded && bodyText && (
+                        {/* Snippet compacto */}
+                        {bodyText && (
                           <p className="mt-1 text-[11px] leading-relaxed line-clamp-1" style={{ color: 'var(--text-light)' }}>
                             {bodyText}
                           </p>
                         )}
                       </button>
-
-                      {/* Corpo completo (acordeão) */}
-                      {expanded && bodyText && (
-                        <div className="px-3 pb-3 -mt-0.5">
-                          <p className="text-xs leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text-muted)' }}>
-                            {bodyText}
-                          </p>
-                        </div>
-                      )}
                     </div>
                   )
                 })}
@@ -477,6 +475,92 @@ function ConversaPanel({
           </>
         )}
       </div>
+
+      {/* Reading pane (overlay) — desliza da direita cobrindo quase a tela.
+          z acima do modal do relatório (z-50). */}
+      {openMsg && (
+        <div className="fixed inset-0 z-[60] flex" style={{ paddingTop: 'var(--banner-h, 0px)' }}>
+          {/* Backdrop escurece o resto; clique fecha */}
+          <button
+            type="button"
+            aria-label="Fechar leitura"
+            onClick={() => setOpenId(null)}
+            className="flex-1 cursor-default"
+            style={{ background: 'rgba(0,0,0,0.55)', border: 'none' }}
+          />
+          {/* Painel ancorado à direita (~88vw) */}
+          <div
+            className="h-full flex flex-col min-h-0"
+            style={{
+              width: '88vw',
+              background: 'var(--surface)',
+              borderLeft: '1px solid var(--border)',
+              boxShadow: 'var(--shadow-overlay)',
+            }}
+          >
+            {/* Header do e-mail */}
+            <div className="flex items-start justify-between gap-3 px-5 py-4 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-semibold truncate" style={{ color: 'var(--text)' }}>
+                    {openMsg.subject}
+                  </h2>
+                  {openMsg.is_continuation && (
+                    <span className="text-[11px] shrink-0" style={{ color: 'var(--primary)' }}>· resposta</span>
+                  )}
+                  {openMsg.has_attachments && (
+                    <Paperclip size={14} className="shrink-0" style={{ color: 'var(--text-muted)' }} aria-label="Com anexos" />
+                  )}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  <span className="font-medium" style={{ color: 'var(--text)' }}>{openMsg.sender_name ?? 'Sistema'}</span>
+                  <span style={{ color: 'var(--text-light)' }}>{fmtDateTime(openMsg.sent_at)}</span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px]" style={{ color: 'var(--text-light)' }}>
+                  {openMsg.to_email && <span><span style={{ color: 'var(--text-muted)' }}>Para:</span> {openMsg.to_email}</span>}
+                  {openMsg.cc_email && <span><span style={{ color: 'var(--text-muted)' }}>Cc:</span> {openMsg.cc_email}</span>}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenId(null)}
+                title="Fechar (Esc)"
+                className="shrink-0 inline-flex items-center justify-center rounded-lg p-1.5 transition-colors ds-row-hover"
+                style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Corpo do e-mail */}
+            <div className="flex-1 min-h-0 overflow-hidden flex">
+              {openMsg.is_continuation ? (
+                <div className="flex-1 overflow-y-auto px-6 py-5">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text)' }}>
+                    {previewText(openMsg.body) || (
+                      <span style={{ color: 'var(--text-muted)' }}>(sem conteúdo)</span>
+                    )}
+                  </p>
+                </div>
+              ) : reportHtml ? (
+                // Original = o próprio relatório do fechamento (HTML com fundo branco).
+                <iframe
+                  srcDoc={reportHtml}
+                  title="E-mail original do fechamento"
+                  className="flex-1 h-full"
+                  style={{ background: '#fff', border: 'none' }}
+                />
+              ) : (
+                <div className="flex-1 overflow-y-auto px-6 py-5">
+                  <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                    E-mail original do fechamento (anexos PDF/XLSX).
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Continuar / Responder */}
       <div className="px-4 py-3 shrink-0 space-y-2" style={{ borderTop: '1px solid var(--border)' }}>
@@ -1216,6 +1300,7 @@ export default function FechamentoConsultorPage() {
               <ConversaPanel
                 thread={thread}
                 loading={threadLoading}
+                reportHtml={reportHtml}
                 replyBody={replyBody}
                 onReplyBody={setReplyBody}
                 replyAttach={replyAttach}
