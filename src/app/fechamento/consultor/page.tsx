@@ -6,8 +6,9 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
-import { RefreshCw, Printer, FileText, Users, Search, X, Mail, Paperclip, Send, MessagesSquare } from 'lucide-react'
+import { RefreshCw, Printer, FileText, Users, Search, X, Mail, Paperclip, Send, MessagesSquare, ChevronDown, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
+import { previewText } from '@/lib/sanitize'
 import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
   Button, SkeletonTable, EmptyState,
@@ -146,6 +147,11 @@ function balanceColor(val: number): string {
   if (val > 0) return 'text-emerald-400'
   if (val < 0) return 'text-red-400'
   return 'text-zinc-400'
+}
+
+// status pode chegar como 'sent'/'enviado', 'failed'/'falhou' ou 'pending'/'pendente'.
+function isFailed(status: string): boolean {
+  return status === 'failed' || status === 'falhou'
 }
 
 // ─── Print ────────────────────────────────────────────────────────────────────
@@ -341,7 +347,30 @@ function ConversaPanel({
   sending: boolean
   onSend: () => void
 }) {
-  const hasThread = thread.length > 0
+  // Ordena por data de envio (fallback id) pra identificar a mensagem mais recente.
+  const ordered = [...thread].sort((a, b) => {
+    const ta = a.sent_at ? new Date(a.sent_at).getTime() : 0
+    const tb = b.sent_at ? new Date(b.sent_at).getTime() : 0
+    if (ta !== tb) return ta - tb
+    return a.id - b.id
+  })
+  const latest = ordered.length > 0 ? ordered[ordered.length - 1] : null
+  const lastSendFailed = latest ? isFailed(latest.status) : false
+  // Esconde mensagens com falha da lista — o aviso da última falha vai no topo do container.
+  const visible = ordered.filter(m => !isFailed(m.status))
+  const hasThread = thread.length > 0   // controla o box de resposta (envio já existiu)
+  const hasVisible = visible.length > 0
+
+  // Acordeão: a linha clicada expande pra mostrar o corpo completo.
+  // Por padrão a mensagem mais recente visível já vem aberta (leitura imediata).
+  const latestVisibleId = hasVisible ? visible[visible.length - 1].id : null
+  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [seedId, setSeedId] = useState<number | null>(null)
+  if (seedId !== latestVisibleId) {
+    setSeedId(latestVisibleId)
+    setExpandedId(latestVisibleId)
+  }
+
   return (
     <aside
       className="w-full max-w-sm shrink-0 flex flex-col min-h-0"
@@ -353,8 +382,8 @@ function ConversaPanel({
         <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Conversa do fechamento</span>
       </div>
 
-      {/* Mensagens */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+      {/* Área de leitura */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0">
         {loading ? (
           <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
             <RefreshCw size={13} className="animate-spin" /> Carregando conversa…
@@ -364,43 +393,88 @@ function ConversaPanel({
             Nenhuma mensagem ainda. Envie o fechamento original pelo botão acima para iniciar a conversa.
           </p>
         ) : (
-          thread.map(m => (
-            <div
-              key={m.id}
-              className="rounded-lg px-3 py-2.5"
-              style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold truncate" style={{ color: 'var(--text)' }}>
-                  {m.sender_name ?? 'Sistema'}
-                </span>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {m.has_attachments && (
-                    <Paperclip size={12} style={{ color: 'var(--text-muted)' }} aria-label="Com anexos" />
-                  )}
-                  <span
-                    className={`ds-status ${m.status === 'enviado' ? 'ds-status-success' : 'ds-status-danger'}`}
-                  >
-                    {m.status === 'enviado' ? 'Enviado' : 'Falhou'}
-                  </span>
-                </div>
+          <>
+            {/* Aviso quando o último envio falhou (sem poluir a thread com cada falha) */}
+            {lastSendFailed && (
+              <div
+                className="flex items-center gap-1.5 mb-3 rounded-md px-2.5 py-1.5 text-[11px] font-medium"
+                style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}
+              >
+                <AlertTriangle size={13} className="shrink-0" />
+                Último envio falhou
               </div>
-              <div className="mt-1 text-[11px]" style={{ color: 'var(--text-light)' }}>
-                {fmtDateTime(m.sent_at)}
-                {m.is_continuation && (
-                  <span className="ml-2" style={{ color: 'var(--primary)' }}>· resposta</span>
-                )}
+            )}
+
+            {!hasVisible ? (
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                Nenhum envio bem-sucedido ainda.
+              </p>
+            ) : (
+              /* Container único — thread estilo Outlook, uma linha por mensagem */
+              <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--bg)' }}>
+                {visible.map((m, idx) => {
+                  const expanded = expandedId === m.id
+                  const bodyText = previewText(m.body)
+                  return (
+                    <div
+                      key={m.id}
+                      style={idx > 0 ? { borderTop: '1px solid var(--border)' } : undefined}
+                    >
+                      {/* Cabeçalho clicável da linha */}
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(expanded ? null : m.id)}
+                        className="w-full text-left px-3 py-2.5 transition-colors ds-row-hover"
+                        aria-expanded={expanded}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold truncate" style={{ color: 'var(--text)' }}>
+                            {m.sender_name ?? 'Sistema'}
+                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {m.has_attachments && (
+                              <Paperclip size={12} style={{ color: 'var(--text-muted)' }} aria-label="Com anexos" />
+                            )}
+                            <span className="text-[11px]" style={{ color: 'var(--text-light)' }}>
+                              {fmtDateTime(m.sent_at)}
+                            </span>
+                            <ChevronDown
+                              size={13}
+                              className="transition-transform shrink-0"
+                              style={{ color: 'var(--text-muted)', transform: expanded ? 'rotate(180deg)' : 'none' }}
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <span className="text-xs font-medium truncate" style={{ color: 'var(--text-muted)' }}>
+                            {m.subject}
+                          </span>
+                          {m.is_continuation && (
+                            <span className="text-[10px] shrink-0" style={{ color: 'var(--primary)' }}>· resposta</span>
+                          )}
+                        </div>
+                        {/* Snippet compacto (some quando expandido) */}
+                        {!expanded && bodyText && (
+                          <p className="mt-1 text-[11px] leading-relaxed line-clamp-1" style={{ color: 'var(--text-light)' }}>
+                            {bodyText}
+                          </p>
+                        )}
+                      </button>
+
+                      {/* Corpo completo (acordeão) */}
+                      {expanded && bodyText && (
+                        <div className="px-3 pb-3 -mt-0.5">
+                          <p className="text-xs leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text-muted)' }}>
+                            {bodyText}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
-              <div className="mt-1.5 text-xs font-medium truncate" style={{ color: 'var(--text-muted)' }}>
-                {m.subject}
-              </div>
-              {m.body && (
-                <p className="mt-1 text-xs leading-relaxed line-clamp-3 whitespace-pre-wrap" style={{ color: 'var(--text-muted)' }}>
-                  {m.body}
-                </p>
-              )}
-            </div>
-          ))
+            )}
+          </>
         )}
       </div>
 
