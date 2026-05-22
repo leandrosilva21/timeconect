@@ -9,6 +9,7 @@ import { Plus, Pencil, Eye, ChevronLeft, ChevronRight, LayoutGrid, Download, Fil
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { ContractFormModal } from '@/components/contracts/ContractFormModal'
+import { CustomerContactsSection } from '@/components/ui/customer-contacts-section'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -593,6 +594,11 @@ export default function ContratosPage() {
                       <p className="text-sm" style={{ color: 'var(--brand-text)' }}>{value}</p>
                     </div>
                   ))}
+                </div>
+
+                {/* Contatos do cliente */}
+                <div className="pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+                  <CustomerContactsSection customerId={vc.customer?.id ?? vc.customer_id} customerName={vc.customer?.name} />
                 </div>
 
                 {/* Attachments */}

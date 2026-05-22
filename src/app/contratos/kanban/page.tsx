@@ -14,6 +14,7 @@ import { ContractFormModal } from '@/components/contracts/ContractFormModal'
 import { ContractCreateModal } from '@/components/shared/ContractCreateModal'
 import { ContractMessages } from '@/components/shared/ContractMessages'
 import { ProjectDataModal } from '@/components/shared/ProjectDataModal'
+import { CustomerContactsSection } from '@/components/ui/customer-contacts-section'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -551,6 +552,9 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                     </div>
                   </div>
                 </div>
+
+                {/* Contatos do cliente */}
+                <CustomerContactsSection customerId={p.customer?.id} customerName={p.customer?.name} />
 
                 {/* Anexos */}
                 <div>
@@ -1138,6 +1142,9 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
               </div>
               <div><label style={lStyle}>Projeto Pai (Subprojeto)</label><select value={form.parent_project_id} onChange={setF('parent_project_id')} style={iStyle}><option value="">Nenhum</option>{optParentProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
               <div><label style={lStyle}>Descrição</label><textarea value={form.description} onChange={setF('description')} style={{ ...iStyle, resize: 'vertical', minHeight: '64px' }} /></div>
+
+              {/* Contatos do cliente */}
+              <CustomerContactsSection customerId={d.customer_id} customerName={d.customer?.name} />
 
               {/* Anexos */}
               <div>

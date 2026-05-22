@@ -17,6 +17,7 @@ import { ContractCreateModal } from '@/components/shared/ContractCreateModal'
 import { ProjectDataModal } from '@/components/shared/ProjectDataModal'
 import { ContractFormModal } from '@/components/contracts/ContractFormModal'
 import { MultiSelect } from '@/components/ui/multi-select'
+import { CustomerContactsSection } from '@/components/ui/customer-contacts-section'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -158,32 +159,36 @@ const TRANSITION_COL: Column = {
   id: 'inicio_autorizado', label: 'Início Autorizado', phase: 'transition',
 }
 
+// Fase Projeto enxuta (2026-05-21): andamento fino (planejamento/execução/homologação)
+// fica no CRONOGRAMA atrás do card → "Em Andamento" agrupa os status ativos.
+// Backend mantém todos os project.status; aqui é só reagrupamento do kanban.
+const ACTIVE_PROJECT_STATUSES = ['planning', 'awaiting_start', 'started', 'liberado_para_testes']
+
 const PROJECT_COLS: Column[] = [
   { id: 'proj_backlog',        label: 'Backlog',             phase: 'project', projectStatuses: ['backlog'],         color: '#94a3b8' },
-  { id: 'proj_planning',       label: 'Planejamento',        phase: 'project', projectStatuses: ['planning'],        color: '#60a5fa' },
-  { id: 'em_andamento',        label: 'Em Execução',         phase: 'project', projectStatuses: ['awaiting_start', 'started'] },
-  { id: 'liberado_para_testes',label: 'Homologação',         phase: 'project', projectStatuses: ['liberado_para_testes'] },
-  { id: 'encerrado',           label: 'Encerrado',           phase: 'project', projectStatuses: ['finished'],   color: '#22c55e' },
+  { id: 'em_andamento',        label: 'Em Andamento',        phase: 'project', projectStatuses: ACTIVE_PROJECT_STATUSES, color: '#60a5fa' },
   { id: 'pausado',             label: 'Pausado',             phase: 'project', projectStatuses: ['paused'],     color: '#eab308' },
+  { id: 'encerrado',           label: 'Encerrado',           phase: 'project', projectStatuses: ['finished'],   color: '#22c55e' },
   { id: 'cancelado',           label: 'Cancelado',           phase: 'project', projectStatuses: ['cancelled'],  color: '#ef4444' },
 ]
 
 const PROJECT_STATUS_TO_COL: Record<string, string> = {
-  awaiting_start:       'em_andamento',
   backlog:              'proj_backlog',
-  planning:             'proj_planning',
+  planning:             'em_andamento',
+  awaiting_start:       'em_andamento',
   started:              'em_andamento',
-  liberado_para_testes: 'liberado_para_testes',
+  liberado_para_testes: 'em_andamento',
   paused:               'pausado',
   cancelled:            'cancelado',
   finished:             'encerrado',
 }
 
+// Status setado ao SOLTAR numa coluna. Em "Em Andamento" usa-se 'started' como
+// default só quando o card vem de FORA dos status ativos (ver handleProjectMove,
+// que preserva o sub-status quando o card já está ativo — gerido pelo cronograma).
 const PROJECT_COL_TO_STATUS: Record<string, string> = {
   proj_backlog:         'backlog',
-  proj_planning:        'planning',
   em_andamento:         'started',
-  liberado_para_testes: 'liberado_para_testes',
   pausado:              'paused',
   cancelado:            'cancelled',
   encerrado:            'finished',
@@ -1239,6 +1244,8 @@ function ProjectDetailModal({ card, onClose, userRole, initialTab }: { card: Pro
                   </div>
                 ))}
               </div>
+              {/* Contatos do cliente */}
+              <CustomerContactsSection customerId={card.customer_id} customerName={card.customer_name} />
             </div>
             <div className="flex justify-end gap-3 px-6 py-4 border-t shrink-0" style={{ borderColor: 'rgba(99,102,241,0.2)' }}>
               <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm" style={{ color: 'var(--brand-muted)' }}>Fechar</button>
@@ -2325,6 +2332,9 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
                   </div>
                 </div>
 
+                {/* Contatos do cliente */}
+                <CustomerContactsSection customerId={p.customer?.id} customerName={p.customer?.name} />
+
                 {p.description && (
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Descrição</p>
@@ -2726,6 +2736,8 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 <label style={labelStyle}>Descrição</label>
                 <textarea value={form.description} onChange={setF('description')} style={{ ...inputStyle, resize: 'vertical', minHeight: '80px' }} placeholder="Descrição do projeto" />
               </div>
+              {/* Contatos do cliente */}
+              <CustomerContactsSection customerId={project.customer?.id} customerName={project.customer?.name} />
             </div>
           </div>
 
@@ -4176,6 +4188,10 @@ function KanbanContent() {
   }
 
   const handleProjectMove = async (cardId: number, toCol: string) => {
+    const card = projectCards.find(p => p.id === cardId)
+    // "Em Andamento" agrupa os status ativos: se o card já está num deles (sub-status
+    // gerido pelo cronograma), não sobrescreve — só aplica default ao entrar de fora.
+    if (toCol === 'em_andamento' && card && ACTIVE_PROJECT_STATUSES.includes(card.status)) return
     const newStatus = PROJECT_COL_TO_STATUS[toCol]
     if (!newStatus) return
     setProjectCards(prev => prev.map(p => p.id === cardId ? { ...p, status: newStatus } : p))

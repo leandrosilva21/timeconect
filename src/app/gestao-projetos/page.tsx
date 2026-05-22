@@ -17,6 +17,7 @@ import { ProjectDataModal } from '@/components/shared/ProjectDataModal'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { PageHeader } from '@/components/ds'
 import { RowMenu } from '@/components/ui/row-menu'
+import { CustomerContactsSection } from '@/components/ui/customer-contacts-section'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -1074,6 +1075,12 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                   portal={true}
                 />
               </div>
+
+              {/* Contatos do cliente */}
+              <CustomerContactsSection
+                customerId={form.customer_id ? Number(form.customer_id) : null}
+                customerName={selectedCustomerObj?.name}
+              />
 
               {/* Código do Projeto — builder */}
               <div>
@@ -3318,6 +3325,9 @@ export default function GestaoProjetosPage() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Contatos do cliente */}
+                    <CustomerContactsSection customerId={p.customer?.id ?? p.customer_id} customerName={p.customer?.name} />
 
                     {/* Descrição */}
                     {p.description && (
