@@ -1100,7 +1100,7 @@ export default function FechamentoConsultorPage() {
       </div>
       {/* Modal de visualização do relatório */}
       {reportHtml && (
-        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.85)' }}>
+        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.85)', paddingTop: 'var(--banner-h, 0px)' }}>
           <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ background: '#18181b', borderBottom: '1px solid #3f3f46' }}>
             <span className="text-sm font-semibold text-white">Relatório</span>
             <div className="flex items-center gap-2">

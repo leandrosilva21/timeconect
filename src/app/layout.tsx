@@ -25,7 +25,11 @@ const ENV_LABEL = process.env.NEXT_PUBLIC_ENV_LABEL ?? 'AMBIENTE LOCAL'
 const BANNER =
   APP_ENV === 'homolog' ? { label: 'HOMOLOG — AMBIENTE DE VALIDAÇÃO', bg: 'linear-gradient(90deg, #dc2626 0%, #ef4444 50%, #dc2626 100%)', pillFg: '#fca5a5' }
   : APP_ENV === 'dev'   ? { label: 'DESENV1 — DADOS COPIADOS DE PROD', bg: 'linear-gradient(90deg, #ea580c 0%, #f97316 50%, #ea580c 100%)', pillFg: '#fdba74' }
-  : APP_ENV === 'local' ? { label: `${ENV_LABEL} — DADOS COPIADOS DE PROD • NÃO É PRODUÇÃO`, bg: 'repeating-linear-gradient(45deg, #facc15 0px, #facc15 14px, #1a1a1a 14px, #1a1a1a 28px)', pillFg: '#fde047' }
+  // 'local' = desenv/replica. Cor por ENV_LABEL pra NÃO confundir as duas:
+  // DESENVOLVIMENTO = azul listrado, REPLICA (e demais) = amarelo listrado.
+  : APP_ENV === 'local' ? (ENV_LABEL === 'DESENVOLVIMENTO'
+      ? { label: `${ENV_LABEL} — DADOS COPIADOS DE PROD • NÃO É PRODUÇÃO`, bg: 'repeating-linear-gradient(45deg, #2563eb 0px, #2563eb 14px, #1a1a1a 14px, #1a1a1a 28px)', pillFg: '#93c5fd' }
+      : { label: `${ENV_LABEL} — DADOS COPIADOS DE PROD • NÃO É PRODUÇÃO`, bg: 'repeating-linear-gradient(45deg, #facc15 0px, #facc15 14px, #1a1a1a 14px, #1a1a1a 28px)', pillFg: '#fde047' })
   : null
 
 export const metadata: Metadata = {
@@ -46,7 +50,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className={`${inter.variable} ${geist.variable} h-full antialiased`} suppressHydrationWarning>
-      <body className="h-full">
+      <body className="h-full" style={{ '--banner-h': BANNER ? '28px' : '0px' } as React.CSSProperties}>
         {BANNER && (
           <div
             style={{
