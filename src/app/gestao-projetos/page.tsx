@@ -3357,6 +3357,9 @@ export default function GestaoProjetosPage() {
                         const cardVendidas = ((vp?.vendidas_projeto_hours ?? p.sold_hours) ?? 0) + (vp?.vendidas_aporte_hours ?? 0)
                         const cardConsumed = vp?.consumed_hours ?? p.consumed_hours ?? consumed
                         const cardTotal    = cardVendidas
+                        // Saldo também da linha da lista (vp); o p (viewProjectFull) calcula diferente p/ pai
+                        // BH Fixo com filhos Fechado e não batia (Vendidas − Consumidas ≠ Saldo). Fallback aritmético.
+                        const cardSaldo    = vp?.general_hours_balance ?? (cardVendidas - cardConsumed)
                         const cardPct      = cardTotal > 0 ? (cardConsumed / cardTotal) * 100 : 0
                         return (
                       <div className="rounded-xl p-4 mb-3" style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
@@ -3386,7 +3389,7 @@ export default function GestaoProjetosPage() {
                           {/* Saldo */}
                           <div className="text-center flex flex-col items-center leading-tight">
                             <p className="text-[10px] mb-1" style={{ color: 'var(--text-light)' }}>Saldo</p>
-                            <p className="text-base font-bold tabular-nums" style={{ color: (p.general_hours_balance ?? 0) < 0 ? 'var(--danger-border)' : 'var(--success-border)' }}>{fmt(p.general_hours_balance, 1) + 'h'}</p>
+                            <p className="text-base font-bold tabular-nums" style={{ color: cardSaldo < 0 ? 'var(--danger-border)' : 'var(--success-border)' }}>{fmt(cardSaldo, 1) + 'h'}</p>
                           </div>
                         </div>
                         <div className="w-full h-2 rounded-full overflow-hidden mb-1" style={{ background: 'var(--surface-hover)' }}>
@@ -3394,7 +3397,7 @@ export default function GestaoProjetosPage() {
                         </div>
                         <div className="flex justify-between text-[10px]" style={{ color: hs.text }}>
                           <span>{cardTotal > 0 ? `${Math.round(cardPct)}% consumido` : 'Sem horas'}</span>
-                          <span>{fmt(p.general_hours_balance, 1)}h disponíveis</span>
+                          <span>{fmt(cardSaldo, 1)}h disponíveis</span>
                         </div>
                       </div>
                         )
