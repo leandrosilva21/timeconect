@@ -51,6 +51,7 @@ interface RawTimesheet {
   ticket_solicitante?: { name?: string } | string | null
   observation?: string | null
   user?: { id: number; name: string } | null
+  project?: { id?: number; name?: string; code?: string; parent_project_id?: number | null } | null
   status?: string
 }
 
@@ -603,38 +604,61 @@ export default function RelatorioApontamentosPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((t, i) => {
-                      const bg = i % 2 === 0 ? '#fff' : '#faf9ff'
-                      return (
-                        <Fragment key={i}>
-                          <tr style={{ background: bg, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtDateBR(t.created_at)}</td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center">{parseRequester(t.ticket_solicitante) || '—'}</td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center">{t.user?.name ?? '—'}</td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-500 text-center">
-                              {t.ticket
-                                ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${t.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-500">#{t.ticket}</a>
-                                : '—'}
-                            </td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">
-                              {isVedamotors ? (vedaTitleValue(t) || '—') : (t.ticket_subject ?? '—')}
-                            </td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtTimeHM(t.start_time) || '—'}</td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtTimeHM(t.end_time) || '—'}</td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-center font-semibold text-gray-800 tabular-nums whitespace-nowrap">
-                              {t.effort_hours ?? minutesToHHMM(t.effort_minutes ?? 0)}
-                            </td>
-                            <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtDateBR(t.date)}</td>
+                    {(() => {
+                      // Agrupa por PROJETO — projetos filhos viram seções separadas (cada projeto = um bloco).
+                      const groups: { name: string; rows: RawTimesheet[]; mins: number }[] = []
+                      const idx: Record<string, number> = {}
+                      items.forEach(t => {
+                        const key = t.project?.name ?? 'Sem projeto'
+                        if (idx[key] === undefined) { idx[key] = groups.length; groups.push({ name: key, rows: [], mins: 0 }) }
+                        groups[idx[key]].rows.push(t)
+                        groups[idx[key]].mins += (t.effort_minutes ?? 0)
+                      })
+                      return groups.map((g, gi) => (
+                        <Fragment key={`grp-${gi}`}>
+                          <tr style={{ background: '#ede9fe', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
+                            <td colSpan={9} className="px-3 py-2 text-xs font-bold whitespace-nowrap" style={{ color: '#5b21b6' }}>Projeto: {g.name}</td>
                           </tr>
-                          <tr style={{ background: bg, borderBottom: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                            <td colSpan={9} className="description-cell px-3 pt-1 pb-3 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
-                              <span className="font-semibold text-gray-500 mr-1">Descrição:</span>
-                              {t.observation ? previewText(t.observation) : '—'}
-                            </td>
+                          {g.rows.map((t, i) => {
+                            const bg = i % 2 === 0 ? '#fff' : '#faf9ff'
+                            return (
+                              <Fragment key={`${gi}-${i}`}>
+                                <tr style={{ background: bg, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
+                                  <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtDateBR(t.created_at)}</td>
+                                  <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center">{parseRequester(t.ticket_solicitante) || '—'}</td>
+                                  <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center">{t.user?.name ?? '—'}</td>
+                                  <td className="px-3 pt-2 pb-1 text-xs text-gray-500 text-center">
+                                    {t.ticket
+                                      ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${t.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-500">#{t.ticket}</a>
+                                      : '—'}
+                                  </td>
+                                  <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">
+                                    {isVedamotors ? (vedaTitleValue(t) || '—') : (t.ticket_subject ?? '—')}
+                                  </td>
+                                  <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtTimeHM(t.start_time) || '—'}</td>
+                                  <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtTimeHM(t.end_time) || '—'}</td>
+                                  <td className="px-3 pt-2 pb-1 text-xs text-center font-semibold text-gray-800 tabular-nums whitespace-nowrap">
+                                    {t.effort_hours ?? minutesToHHMM(t.effort_minutes ?? 0)}
+                                  </td>
+                                  <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtDateBR(t.date)}</td>
+                                </tr>
+                                <tr style={{ background: bg, borderBottom: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
+                                  <td colSpan={9} className="description-cell px-3 pt-1 pb-3 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
+                                    <span className="font-semibold text-gray-500 mr-1">Descrição:</span>
+                                    {t.observation ? previewText(t.observation) : '—'}
+                                  </td>
+                                </tr>
+                              </Fragment>
+                            )
+                          })}
+                          <tr style={{ background: '#faf9ff', borderBottom: '2px solid #c4b5fd', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
+                            <td colSpan={7} className="px-3 py-1.5 text-right text-xs font-semibold text-gray-600">Subtotal — {g.name} ({g.rows.length} reg.)</td>
+                            <td className="px-3 py-1.5 text-right text-xs font-bold tabular-nums" style={{ color: '#5b21b6' }}>{minutesToHHMM(g.mins)}</td>
+                            <td />
                           </tr>
                         </Fragment>
-                      )
-                    })}
+                      ))
+                    })()}
                   </tbody>
                   <tfoot>
                     <tr style={{ background: '#ede9fe', borderTop: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
