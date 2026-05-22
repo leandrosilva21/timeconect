@@ -548,11 +548,11 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
           ) : (
             <div className="flex flex-col items-center leading-tight">
               <span>{fmt(displaySold)}</span>
-              {contributions > 0 && (
-                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>({fmt(contributions, 1)})</span>
-              )}
               {(project.hour_contribution ?? 0) > 0 && (
-                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Aporte {fmt(project.hour_contribution, 1)}</span>
+                <>
+                  <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Projeto {fmt((project.total_available_hours ?? 0) - (project.hour_contribution ?? 0), 1)}</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Aporte {fmt(project.hour_contribution, 1)}</span>
+                </>
               )}
             </div>
           )}
@@ -569,7 +569,15 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
 
         {/* HS Consumidas */}
         <td className="py-3 px-4 text-sm text-center tabular-nums" style={{ color: 'var(--text-muted)' }}>
-          {fmt(consumedHours, 1)}
+          {(project.children_consumed_hours ?? 0) > 0 ? (
+            <div className="flex flex-col items-center leading-tight">
+              <span>{fmt(consumedHours, 1)}</span>
+              <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Pai {fmt(project.own_consumed_hours, 1)}</span>
+              <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Filhos {fmt(project.children_consumed_hours, 1)}</span>
+            </div>
+          ) : (
+            fmt(consumedHours, 1)
+          )}
         </td>
 
         {/* Saldo */}

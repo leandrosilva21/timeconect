@@ -65,6 +65,8 @@ export interface Project {
   total_contributions_hours?: number
   total_available_hours?: number | null
   hour_contribution?: number
+  own_consumed_hours?: number
+  children_consumed_hours?: number
   children_consumption_breakdown?: ChildConsumptionBreakdown[]
   child_projects?: Project[]
   node_state?: 'ACTIVE' | 'DISABLED' | null
