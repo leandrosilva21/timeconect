@@ -13,6 +13,7 @@ import {
   Edit2, Trash2, Layers, Check, X,
 } from 'lucide-react'
 import { RowMenu } from '@/components/ui/row-menu'
+import { CustomerContactsSection } from '@/components/ui/customer-contacts-section'
 import { PageHeader } from '@/components/ds'
 import { ProjectMessages } from '@/components/shared/ProjectMessages'
 import { formatBRL } from '@/lib/format'
@@ -200,6 +201,9 @@ function ViewProjectModal({ project, onClose }: { project: SustProject; onClose:
               </div>
             ) : null)}
           </div>
+
+          {/* Contatos do cliente */}
+          <CustomerContactsSection customerId={project.customer?.id ?? project.customer_id} customerName={project.customer?.name} />
 
           {/* Equipe */}
           {((project.coordinators?.length ?? 0) > 0 || (project.consultants?.length ?? 0) > 0) && (
