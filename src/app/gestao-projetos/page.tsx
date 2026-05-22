@@ -550,10 +550,10 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
           ) : (
             <div className="flex flex-col items-center leading-tight">
               <span>{fmt(displaySold)}</span>
-              {(project.hour_contribution ?? 0) > 0 && (
+              {(project.vendidas_aporte_hours ?? 0) > 0 && (
                 <>
-                  <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Projeto {fmt((project.total_available_hours ?? 0) - (project.hour_contribution ?? 0), 1)}</span>
-                  <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Aporte {fmt(project.hour_contribution, 1)}</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Projeto {fmt(project.vendidas_projeto_hours ?? 0, 1)}</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Aporte {fmt(project.vendidas_aporte_hours ?? 0, 1)}</span>
                 </>
               )}
             </div>
