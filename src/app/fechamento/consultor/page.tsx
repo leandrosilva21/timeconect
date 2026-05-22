@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
-import { RefreshCw, Printer, FileText, Users, Search, X, Mail } from 'lucide-react'
+import { RefreshCw, Printer, FileText, Users, Search, X, Mail, Paperclip, Send, MessagesSquare } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
@@ -93,6 +93,19 @@ interface ApontamentoRow {
   valor_extra?: number | null // apenas horista/fixo
 }
 
+interface ThreadMessage {
+  id: number
+  subject: string
+  body: string | null
+  is_continuation: boolean
+  has_attachments: boolean
+  sender_name: string | null
+  to_email: string | null
+  cc_email: string | null
+  status: string
+  sent_at: string | null
+}
+
 type Tab = 'horistas' | 'banco_horas' | 'fixo' | 'resumo'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -109,6 +122,16 @@ function fmtDate(d: string): string {
   if (!d) return '—'
   const [y, m, day] = d.split('-')
   return `${day}/${m}/${y}`
+}
+
+function fmtDateTime(iso: string | null): string {
+  if (!iso) return '—'
+  const dt = new Date(iso)
+  if (Number.isNaN(dt.getTime())) return '—'
+  return dt.toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
 }
 
 function fmtH(h: number): string {
@@ -304,6 +327,119 @@ function RelatorioBtn({ userId, printingUser, onClick }: {
   )
 }
 
+// ─── ConversaPanel (thread + continuação) ──────────────────────────────────────
+
+function ConversaPanel({
+  thread, loading, replyBody, onReplyBody, replyAttach, onReplyAttach, sending, onSend,
+}: {
+  thread: ThreadMessage[]
+  loading: boolean
+  replyBody: string
+  onReplyBody: (v: string) => void
+  replyAttach: boolean
+  onReplyAttach: (v: boolean) => void
+  sending: boolean
+  onSend: () => void
+}) {
+  const hasThread = thread.length > 0
+  return (
+    <aside
+      className="w-full max-w-sm shrink-0 flex flex-col min-h-0"
+      style={{ background: 'var(--surface)', borderLeft: '1px solid var(--border)' }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 py-3 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+        <MessagesSquare size={15} style={{ color: 'var(--primary)' }} />
+        <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Conversa do fechamento</span>
+      </div>
+
+      {/* Mensagens */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+        {loading ? (
+          <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+            <RefreshCw size={13} className="animate-spin" /> Carregando conversa…
+          </div>
+        ) : !hasThread ? (
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+            Nenhuma mensagem ainda. Envie o fechamento original pelo botão acima para iniciar a conversa.
+          </p>
+        ) : (
+          thread.map(m => (
+            <div
+              key={m.id}
+              className="rounded-lg px-3 py-2.5"
+              style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold truncate" style={{ color: 'var(--text)' }}>
+                  {m.sender_name ?? 'Sistema'}
+                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {m.has_attachments && (
+                    <Paperclip size={12} style={{ color: 'var(--text-muted)' }} aria-label="Com anexos" />
+                  )}
+                  <span
+                    className={`ds-status ${m.status === 'enviado' ? 'ds-status-success' : 'ds-status-danger'}`}
+                  >
+                    {m.status === 'enviado' ? 'Enviado' : 'Falhou'}
+                  </span>
+                </div>
+              </div>
+              <div className="mt-1 text-[11px]" style={{ color: 'var(--text-light)' }}>
+                {fmtDateTime(m.sent_at)}
+                {m.is_continuation && (
+                  <span className="ml-2" style={{ color: 'var(--primary)' }}>· resposta</span>
+                )}
+              </div>
+              <div className="mt-1.5 text-xs font-medium truncate" style={{ color: 'var(--text-muted)' }}>
+                {m.subject}
+              </div>
+              {m.body && (
+                <p className="mt-1 text-xs leading-relaxed line-clamp-3 whitespace-pre-wrap" style={{ color: 'var(--text-muted)' }}>
+                  {m.body}
+                </p>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Continuar / Responder */}
+      <div className="px-4 py-3 shrink-0 space-y-2" style={{ borderTop: '1px solid var(--border)' }}>
+        <p className="text-xs font-semibold" style={{ color: 'var(--text)' }}>Continuar / Responder</p>
+        <textarea
+          value={replyBody}
+          onChange={e => onReplyBody(e.target.value)}
+          placeholder={hasThread ? 'Escreva sua mensagem…' : 'Envie o fechamento original antes de responder.'}
+          disabled={!hasThread || sending}
+          rows={3}
+          className="w-full rounded-lg px-3 py-2 text-xs focus:outline-none ds-input resize-none disabled:opacity-50"
+          style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}
+        />
+        <label className="flex items-center gap-2 text-xs cursor-pointer select-none" style={{ color: 'var(--text-muted)' }}>
+          <input
+            type="checkbox"
+            checked={replyAttach}
+            onChange={e => onReplyAttach(e.target.checked)}
+            disabled={!hasThread || sending}
+            className="accent-current"
+            style={{ accentColor: 'var(--primary)' }}
+          />
+          Anexar fechamento atualizado
+        </label>
+        <button
+          onClick={onSend}
+          disabled={!hasThread || sending || !replyBody.trim()}
+          className="w-full inline-flex items-center justify-center gap-1.5 ds-btn-primary disabled:opacity-50"
+        >
+          {sending ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
+          {sending ? 'Enviando…' : 'Enviar resposta'}
+        </button>
+      </div>
+    </aside>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function FechamentoConsultorPage() {
@@ -325,6 +461,12 @@ export default function FechamentoConsultorPage() {
   // Consultor alvo do relatório aberto (só pra relatório INDIVIDUAL — habilita o "Enviar e-mail").
   const [reportTarget, setReportTarget] = useState<{ userId: number; name: string } | null>(null)
   const [sendingEmail, setSendingEmail] = useState(false)
+  // Thread (conversa do fechamento) — só no relatório individual.
+  const [thread, setThread] = useState<ThreadMessage[]>([])
+  const [threadLoading, setThreadLoading] = useState(false)
+  const [replyBody, setReplyBody] = useState('')
+  const [replyAttach, setReplyAttach] = useState(true)
+  const [sendingReply, setSendingReply] = useState(false)
   const reportIframeRef = useRef<HTMLIFrameElement>(null)
   const canSendEmail = user?.type === 'admin' || user?.type === 'administrativo'
   const [apenasComMovimento, setApenasComMovimento] = useState(true)
@@ -344,6 +486,21 @@ export default function FechamentoConsultorPage() {
 
   useEffect(() => { load() }, [load])
 
+  const loadThread = useCallback(async (userId: number) => {
+    if (!yearMonth) return
+    setThreadLoading(true)
+    try {
+      const res = await api.get<{ data: ThreadMessage[] }>(
+        `/fechamento-consultor/${userId}/${yearMonth}/thread`,
+      )
+      setThread(res.data ?? [])
+    } catch {
+      setThread([])
+    } finally {
+      setThreadLoading(false)
+    }
+  }, [yearMonth])
+
   async function sendReportEmail() {
     if (!reportTarget) return
     setSendingEmail(true)
@@ -354,10 +511,33 @@ export default function FechamentoConsultorPage() {
         {},
       )
       toast.success(res?.message ?? 'Fechamento enviado por e-mail.')
+      await loadThread(reportTarget.userId)
     } catch (err: unknown) {
       toast.error(`Erro ao enviar o fechamento: ${err instanceof Error ? err.message : 'falha na API'}`)
     } finally {
       setSendingEmail(false)
+    }
+  }
+
+  async function sendContinuation() {
+    if (!reportTarget) return
+    if (!replyBody.trim()) {
+      toast.error('Escreva uma mensagem antes de enviar.')
+      return
+    }
+    setSendingReply(true)
+    try {
+      const res = await api.post<{ success: boolean; message: string }>(
+        `/fechamento-consultor/${reportTarget.userId}/${yearMonth}/continuar`,
+        { body: replyBody.trim(), attach_fechamento: replyAttach },
+      )
+      toast.success(res?.message ?? 'Resposta enviada.')
+      setReplyBody('')
+      await loadThread(reportTarget.userId)
+    } catch (err: unknown) {
+      toast.error(`Erro ao enviar a resposta: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setSendingReply(false)
     }
   }
 
@@ -370,6 +550,9 @@ export default function FechamentoConsultorPage() {
       const html = buildReport(consultor, res.data ?? [], yearMonth)
       setReportHtml(buildFullHtml(html))
       setReportTarget({ userId: consultor.user_id, name: consultor.nome })
+      setReplyBody('')
+      setReplyAttach(true)
+      if (canSendEmail) void loadThread(consultor.user_id)
     } catch (err: unknown) {
       toast.error(`Erro ao gerar relatório: ${err instanceof Error ? err.message : 'falha na API'}`)
     } finally {
@@ -940,20 +1123,34 @@ export default function FechamentoConsultorPage() {
                 </button>
               )}
               <button
-                onClick={() => { setReportHtml(null); setReportTarget(null) }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-300 hover:bg-zinc-700 transition-colors"
-                style={{ border: '1px solid #3f3f46' }}
+                onClick={() => { setReportHtml(null); setReportTarget(null); setThread([]); setReplyBody('') }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }}
               >
                 Fechar
               </button>
             </div>
           </div>
-          <iframe
-            ref={reportIframeRef}
-            srcDoc={reportHtml}
-            className="flex-1 w-full"
-            style={{ background: '#fff', border: 'none' }}
-          />
+          <div className="flex-1 flex min-h-0">
+            <iframe
+              ref={reportIframeRef}
+              srcDoc={reportHtml}
+              className="flex-1 h-full"
+              style={{ background: '#fff', border: 'none' }}
+            />
+            {canSendEmail && reportTarget && (
+              <ConversaPanel
+                thread={thread}
+                loading={threadLoading}
+                replyBody={replyBody}
+                onReplyBody={setReplyBody}
+                replyAttach={replyAttach}
+                onReplyAttach={setReplyAttach}
+                sending={sendingReply}
+                onSend={sendContinuation}
+              />
+            )}
+          </div>
         </div>
       )}
     </AppLayout>
