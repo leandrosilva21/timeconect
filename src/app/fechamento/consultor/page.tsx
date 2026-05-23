@@ -376,8 +376,12 @@ function ConversaPanel({
 
   // Reading pane estilo Outlook: clicar numa linha abre uma visão de leitura que
   // desliza da direita cobrindo quase a tela inteira (sobre o modal do relatório).
+  // O pane mostra a CONVERSA INTEIRA empilhada (não uma mensagem isolada); `openId`
+  // guarda qual mensagem foi clicada, pra rolar até ela e destacá-la.
   const [openId, setOpenId] = useState<number | null>(null)
-  const openMsg = openId != null ? visible.find(m => m.id === openId) ?? null : null
+  const paneOpen = openId != null
+  // Refs por mensagem pra scrollIntoView na mensagem clicada ao abrir o pane.
+  const sectionRefs = useRef<Record<number, HTMLElement | null>>({})
 
   // Caption do sync some sozinha após alguns segundos (limpa visualmente; o estado
   // real é resetado pelo container na próxima ação). 'error'/'disabled' ficam mais tempo.
@@ -407,6 +411,16 @@ function ConversaPanel({
   useEffect(() => {
     if (openId != null && !visible.some(m => m.id === openId)) setOpenId(null)
   }, [openId, visible])
+
+  // Ao abrir o pane, rola até a mensagem clicada (estilo "abrir a conversa naquele ponto").
+  useEffect(() => {
+    if (openId == null) return
+    // rAF garante que as seções já estão montadas antes do scroll.
+    const raf = requestAnimationFrame(() => {
+      sectionRefs.current[openId]?.scrollIntoView({ block: 'start', behavior: 'auto' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [openId])
 
   return (
     <aside
@@ -528,8 +542,9 @@ function ConversaPanel({
       </div>
 
       {/* Reading pane (overlay) — desliza da direita cobrindo quase a tela.
-          z acima do modal do relatório (z-50). */}
-      {openMsg && (
+          z acima do modal do relatório (z-50). Mostra a CONVERSA INTEIRA empilhada
+          em ordem cronológica (estilo Outlook: abrir a conversa, não uma mensagem). */}
+      {paneOpen && (
         <div className="fixed inset-0 z-[60] flex" style={{ paddingTop: 'var(--banner-h, 0px)' }}>
           {/* Backdrop escurece o resto; clique fecha */}
           <button
@@ -549,38 +564,16 @@ function ConversaPanel({
               boxShadow: 'var(--shadow-overlay)',
             }}
           >
-            {/* Header do e-mail */}
-            {(() => {
-              const openInbound = openMsg.is_inbound === true || openMsg.direction === 'inbound'
-              return (
-            <>
-            <div className="flex items-start justify-between gap-3 px-5 py-4 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-semibold truncate" style={{ color: 'var(--text)' }}>
-                    {openMsg.subject}
-                  </h2>
-                  {openInbound ? (
-                    <span className="inline-flex items-center gap-1 text-[11px] shrink-0" style={{ color: 'var(--primary)' }}>
-                      <CornerDownLeft size={13} aria-hidden /> Recebido
-                    </span>
-                  ) : openMsg.is_continuation && (
-                    <span className="text-[11px] shrink-0" style={{ color: 'var(--primary)' }}>· resposta</span>
-                  )}
-                  {openMsg.has_attachments && (
-                    <Paperclip size={14} className="shrink-0" style={{ color: 'var(--text-muted)' }} aria-label="Com anexos" />
-                  )}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-                  <span className="font-medium" style={{ color: 'var(--text)' }}>
-                    {openInbound ? (openMsg.from_email ?? 'Consultor') : (openMsg.sender_name ?? 'Sistema')}
-                  </span>
-                  <span style={{ color: 'var(--text-light)' }}>{fmtDateTime(openMsg.at ?? openMsg.sent_at ?? openMsg.received_at ?? null)}</span>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px]" style={{ color: 'var(--text-light)' }}>
-                  {openMsg.to_email && <span><span style={{ color: 'var(--text-muted)' }}>Para:</span> {openMsg.to_email}</span>}
-                  {openMsg.cc_email && <span><span style={{ color: 'var(--text-muted)' }}>Cc:</span> {openMsg.cc_email}</span>}
-                </div>
+            {/* Header do pane — título da conversa + fechar */}
+            <div className="flex items-center justify-between gap-3 px-5 py-3.5 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-2 min-w-0">
+                <MessagesSquare size={16} className="shrink-0" style={{ color: 'var(--primary)' }} />
+                <h2 className="text-base font-semibold truncate" style={{ color: 'var(--text)' }}>
+                  {latest?.subject ?? 'Conversa do fechamento'}
+                </h2>
+                <span className="text-[11px] shrink-0" style={{ color: 'var(--text-light)' }}>
+                  {visible.length} {visible.length === 1 ? 'mensagem' : 'mensagens'}
+                </span>
               </div>
               <button
                 type="button"
@@ -593,37 +586,89 @@ function ConversaPanel({
               </button>
             </div>
 
-            {/* Corpo do e-mail.
-                Inbound (resposta recebida) e continuações outbound renderizam o texto;
-                só o original outbound renderiza o iframe do relatório. */}
-            <div className="flex-1 min-h-0 overflow-hidden flex">
-              {openInbound || openMsg.is_continuation ? (
-                <div className="flex-1 overflow-y-auto px-6 py-5">
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text)' }}>
-                    {previewText(openMsg.body) || (
-                      <span style={{ color: 'var(--text-muted)' }}>(sem conteúdo)</span>
+            {/* Conversa empilhada — todas as mensagens em ordem cronológica, divididas
+                por uma linha sutil (não cards pesados). A mensagem clicada ganha borda
+                lateral primary e o scroll para até ela. */}
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {visible.map((m, idx) => {
+                const inbound = m.is_inbound === true || m.direction === 'inbound'
+                const isOriginal = !inbound && !m.is_continuation
+                const highlighted = m.id === openId
+                const when = fmtDateTime(m.at ?? m.sent_at ?? m.received_at ?? null)
+                return (
+                  <section
+                    key={m.id}
+                    ref={el => { sectionRefs.current[m.id] = el }}
+                    style={{
+                      borderTop: idx > 0 ? '1px solid var(--border)' : undefined,
+                      borderLeft: highlighted ? '3px solid var(--primary)' : '3px solid transparent',
+                      background: highlighted ? 'var(--primary-soft)' : undefined,
+                      scrollMarginTop: '0px',
+                    }}
+                  >
+                    {/* Header da mensagem */}
+                    <div className="px-5 pt-4 pb-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold truncate" style={{ color: inbound ? 'var(--primary)' : 'var(--text)' }}>
+                              {inbound ? `Resposta de ${m.from_email ?? 'consultor'}` : (m.sender_name ?? 'Sistema')}
+                            </span>
+                            {inbound && (
+                              <span className="inline-flex items-center gap-1 text-[11px] shrink-0" style={{ color: 'var(--primary)' }}>
+                                <CornerDownLeft size={12} aria-hidden /> Recebido
+                              </span>
+                            )}
+                            {!inbound && m.is_continuation && (
+                              <span className="text-[11px] shrink-0" style={{ color: 'var(--primary)' }}>· resposta</span>
+                            )}
+                            {m.has_attachments && (
+                              <Paperclip size={13} className="shrink-0" style={{ color: 'var(--text-muted)' }} aria-label="Com anexos" />
+                            )}
+                          </div>
+                          <p className="mt-0.5 text-xs font-medium truncate" style={{ color: 'var(--text-muted)' }}>
+                            {m.subject}
+                          </p>
+                        </div>
+                        <span className="text-[11px] shrink-0 whitespace-nowrap" style={{ color: 'var(--text-light)' }}>
+                          {when}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Corpo da mensagem.
+                        Original outbound → iframe do relatório (HTML, fundo branco).
+                        Continuação outbound / inbound → texto whitespace-pre-wrap. */}
+                    {isOriginal ? (
+                      reportHtml ? (
+                        <div className="px-5 pb-5">
+                          <iframe
+                            srcDoc={reportHtml}
+                            title="E-mail original do fechamento"
+                            className="w-full rounded-lg"
+                            style={{ background: '#fff', border: '1px solid var(--border)', height: '70vh' }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="px-5 pb-5">
+                          <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                            E-mail original do fechamento (anexos PDF/XLSX).
+                          </p>
+                        </div>
+                      )
+                    ) : (
+                      <div className="px-5 pb-5">
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text)' }}>
+                          {previewText(m.body) || (
+                            <span style={{ color: 'var(--text-muted)' }}>(sem conteúdo)</span>
+                          )}
+                        </p>
+                      </div>
                     )}
-                  </p>
-                </div>
-              ) : reportHtml ? (
-                // Original = o próprio relatório do fechamento (HTML com fundo branco).
-                <iframe
-                  srcDoc={reportHtml}
-                  title="E-mail original do fechamento"
-                  className="flex-1 h-full"
-                  style={{ background: '#fff', border: 'none' }}
-                />
-              ) : (
-                <div className="flex-1 overflow-y-auto px-6 py-5">
-                  <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-                    E-mail original do fechamento (anexos PDF/XLSX).
-                  </p>
-                </div>
-              )}
+                  </section>
+                )
+              })}
             </div>
-            </>
-              )
-            })()}
           </div>
         </div>
       )}
