@@ -367,7 +367,7 @@ export default function FechamentoParceiroPage() {
         return `
           <div style="margin-bottom:16px">
             <div class="section-header">
-              <div><span class="section-title" style="font-size:13px">${consultor}</span></div>
+              <div><span class="section-title" style="font-size:13px">${consultor}</span> <span style="font-size:12px;color:#7c3aed;font-weight:700">· ${horas.toFixed(2)}h</span></div>
               <div class="section-rate">Valor/hora: <b>${formatBRL(taxa)}/h</b></div>
             </div>
             <table>
