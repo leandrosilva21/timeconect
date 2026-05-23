@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
@@ -9,7 +9,7 @@ import { SearchSelect } from '@/components/ui/search-select'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { toast } from 'sonner'
-import { Lock, RefreshCw, Handshake, Printer, Filter } from 'lucide-react'
+import { Lock, RefreshCw, Handshake, Printer, Filter, Mail, FileSpreadsheet, Send, X, Save, Plus } from 'lucide-react'
 import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
   Badge, Button, SkeletonTable, EmptyState,
@@ -151,6 +151,29 @@ export default function FechamentoParceiroPage() {
   const [loadingFechar,  setLoadingFechar]    = useState(false)
   const [loadingReabrir, setLoadingReabrir]   = useState(false)
   const [consultorView, setConsultorView] = useState<'resumo' | 'tipo'>('resumo')
+
+  // ── Relatório (preview + ações) / envio de e-mail ──────────────────────────
+  const canSendEmail = (user as any)?.type === 'admin' || (user as any)?.type === 'administrativo'
+  const [downloadingExcel, setDownloadingExcel] = useState(false)
+  const reportIframeRef = useRef<HTMLIFrameElement>(null)
+
+  // Dialog de composição/preview do e-mail.
+  const [composeOpen, setComposeOpen] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailPreviewHtml, setEmailPreviewHtml] = useState<string | null>(null)
+  const [emailMensagem, setEmailMensagem] = useState('')
+  const [previewLoading, setPreviewLoading] = useState(false)
+  // Destinatários
+  const [adminEmails, setAdminEmails] = useState<string[]>([])          // fixos (parceiro admin) — sempre recebem
+  const [cadastradoInput, setCadastradoInput] = useState('')            // e-mails do parceiro (cadastrados), separados por vírgula
+  const [savingCadastro, setSavingCadastro] = useState(false)
+  const [cadastroSaved, setCadastroSaved] = useState(false)
+  const [avulsoEmails, setAvulsoEmails] = useState<string[]>([])        // e-mails avulsos (só deste envio)
+  const [avulsoDraft, setAvulsoDraft] = useState('')
+  // true só no primeiro fetch (sem mensagem) — usado pra semear o textarea com o padrão.
+  const previewSeededRef = useRef(false)
+  // True só quando o press (mousedown) começou no próprio backdrop do compose.
+  const composePressOnBackdrop = useRef(false)
 
   // ─── Carregamento de dados ────────────────────────────────────────────────
 
@@ -299,11 +322,10 @@ export default function FechamentoParceiroPage() {
     @media print { body { padding: 16px 20px; } }
   `
 
-  const handlePrint = () => {
-    if (!status || !apontamentos.length) {
-      toast.error('Carregue os apontamentos antes de imprimir.')
-      return
-    }
+  // Monta o HTML completo do relatório de serviços (usado tanto no preview em
+  // iframe quanto na janela de impressão). Retorna null se faltam dados.
+  const buildServicosHtml = (): string | null => {
+    if (!status || !apontamentos.length) return null
 
     const logoUrl = window.location.origin + '/logo.png'
     const competencia = yearMonth ? fmtYearMonth(yearMonth).replace('/', ' / ') : '—'
@@ -405,6 +427,15 @@ export default function FechamentoParceiroPage() {
 </body>
 </html>`
 
+    return html
+  }
+
+  const handlePrint = () => {
+    const html = buildServicosHtml()
+    if (!html) {
+      toast.error('Carregue os apontamentos antes de imprimir.')
+      return
+    }
     openPrintWindow(html)
   }
 
@@ -481,6 +512,154 @@ export default function FechamentoParceiroPage() {
 </html>`
 
     openPrintWindow(html)
+  }
+
+  // ─── Excel / E-mail ─────────────────────────────────────────────────────────
+
+  async function downloadExcel() {
+    if (!partnerId || !yearMonth) return
+    setDownloadingExcel(true)
+    try {
+      // O `api` helper sempre faz res.json(); pra blob usamos fetch direto no
+      // mesmo proxy /api/v1 (o middleware injeta o Authorization via cookie).
+      const res = await fetch(
+        `/api/v1/fechamento-parceiro/${partnerId}/${yearMonth}/excel`,
+        { credentials: 'same-origin', headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } },
+      )
+      if (!res.ok) throw new Error(`Erro ${res.status}`)
+      const cd = res.headers.get('Content-Disposition') ?? ''
+      const match = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
+      const fallback = `Fechamento_${yearMonth}_${status?.nome ?? 'parceiro'}.xlsx`
+      const filename = match ? decodeURIComponent(match[1]) : fallback
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err: unknown) {
+      toast.error(`Erro ao baixar o Excel: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setDownloadingExcel(false)
+    }
+  }
+
+  // Busca o HTML renderizado do e-mail. Sem `mensagem` → backend devolve o html
+  // padrão + `mensagem_padrao` (usado pra semear o textarea) + destinatários.
+  const fetchEmailPreview = useCallback(async (mensagem?: string) => {
+    if (!partnerId || !yearMonth) return
+    setPreviewLoading(true)
+    try {
+      const res = await api.post<{
+        html: string
+        mensagem_padrao: string
+        parceiro_admin_emails: string[]
+        fechamento_email: string | null
+      }>(
+        `/fechamento-parceiro/${partnerId}/${yearMonth}/email-preview`,
+        mensagem !== undefined ? { mensagem } : {},
+      )
+      setEmailPreviewHtml(res.html)
+      if (!previewSeededRef.current) {
+        previewSeededRef.current = true
+        setEmailMensagem(res.mensagem_padrao ?? '')
+        setAdminEmails(res.parceiro_admin_emails ?? [])
+        setCadastradoInput(res.fechamento_email ?? '')
+      }
+    } catch (err: unknown) {
+      toast.error(`Erro ao gerar a prévia do e-mail: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }, [partnerId, yearMonth])
+
+  function openCompose() {
+    if (!partnerId || !yearMonth) return
+    previewSeededRef.current = false
+    setEmailMensagem('')
+    setEmailPreviewHtml(null)
+    setAdminEmails([])
+    setCadastradoInput('')
+    setAvulsoEmails([])
+    setAvulsoDraft('')
+    setCadastroSaved(false)
+    setComposeOpen(true)
+    void fetchEmailPreview() // primeiro fetch: sem mensagem → html + mensagem_padrao + destinatários
+  }
+
+  function closeCompose() {
+    setComposeOpen(false)
+    setEmailPreviewHtml(null)
+    setEmailMensagem('')
+    setAdminEmails([])
+    setCadastradoInput('')
+    setAvulsoEmails([])
+    setAvulsoDraft('')
+    setCadastroSaved(false)
+    previewSeededRef.current = false
+  }
+
+  // Live update do preview: ao editar a mensagem, faz debounce (~450ms) e re-busca
+  // o html. Só dispara depois que o primeiro fetch semeou o textarea.
+  useEffect(() => {
+    if (!composeOpen || !previewSeededRef.current) return
+    const t = setTimeout(() => { void fetchEmailPreview(emailMensagem) }, 450)
+    return () => clearTimeout(t)
+  }, [emailMensagem, composeOpen, fetchEmailPreview])
+
+  // Adiciona um e-mail avulso (chip) só deste envio. Aceita Enter / vírgula.
+  function addAvulso() {
+    const v = avulsoDraft.trim().replace(/,$/, '').trim()
+    if (!v) return
+    setAvulsoEmails(prev => prev.includes(v) ? prev : [...prev, v])
+    setAvulsoDraft('')
+  }
+
+  function removeAvulso(email: string) {
+    setAvulsoEmails(prev => prev.filter(e => e !== email))
+  }
+
+  // Salva os e-mails cadastrados no parceiro (persiste no cadastro).
+  async function saveCadastro() {
+    if (!partnerId) return
+    setSavingCadastro(true)
+    setCadastroSaved(false)
+    try {
+      const res = await api.post<{ success: boolean; fechamento_email: string }>(
+        `/fechamento-parceiro/${partnerId}/fechamento-email`,
+        { fechamento_email: cadastradoInput },
+      )
+      setCadastradoInput(res.fechamento_email ?? cadastradoInput)
+      setCadastroSaved(true)
+      toast.success('E-mails salvos no cadastro do parceiro.')
+    } catch (err: unknown) {
+      toast.error(`Erro ao salvar os e-mails: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setSavingCadastro(false)
+    }
+  }
+
+  async function sendReportEmail() {
+    if (!partnerId || !yearMonth) return
+    // Destinatários = cadastrados (split por vírgula) + avulsos, trim + dedupe.
+    const cadastrados = cadastradoInput.split(',').map(e => e.trim()).filter(Boolean)
+    const emails = Array.from(new Set([...cadastrados, ...avulsoEmails]))
+    setSendingEmail(true)
+    try {
+      const res = await api.post<{ success: boolean; message: string }>(
+        `/fechamento-parceiro/${partnerId}/${yearMonth}/enviar-email`,
+        { mensagem: emailMensagem, emails },
+      )
+      toast.success(res?.message ?? 'Fechamento enviado por e-mail.')
+      closeCompose()
+    } catch (err: unknown) {
+      toast.error(`Erro ao enviar o fechamento: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setSendingEmail(false)
+    }
   }
 
   // ─── Derivados ────────────────────────────────────────────────────────────
@@ -939,133 +1118,294 @@ export default function FechamentoParceiroPage() {
 
               {/* ── Tab Relatório ── */}
               {tab === 'relatorio' && (
-                <div className="p-6">
-                  <div style={{ maxWidth: 800, margin: '0 auto' }}>
-                    {/* Cabeçalho preview */}
-                    <div className="flex justify-between items-start mb-6 pb-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
-                      <img src="/logo.png" alt="Logo" style={{ height: 48, objectFit: 'contain' }} />
-                      <div className="text-right">
-                        <div className="text-xl font-bold" style={{ color: 'var(--brand-text)' }}>Relatório de Fechamento</div>
-                        <div className="text-xs mt-0.5" style={{ color: 'var(--brand-muted)' }}>
-                          {isFixed ? `Precificação Fixa · Taxa: ${formatBRL(status?.hourly_rate ?? 0)}/h` : 'Precificação Variável'}
-                        </div>
-                        <div className="text-sm mt-1" style={{ color: 'var(--brand-text)' }}>
-                          <b>Parceiro:</b> {status?.nome}
-                        </div>
-                        <div className="text-sm" style={{ color: 'var(--brand-text)' }}>
-                          <b>Competência:</b> {yearMonth ? fmtYearMonth(yearMonth).replace('/', ' / ') : '—'}
-                        </div>
+                loadingAp ? (
+                  <div className="p-6"><SkeletonTable rows={4} cols={6} /></div>
+                ) : (() => {
+                  const reportHtml = buildServicosHtml()
+                  if (!reportHtml) {
+                    return (
+                      <EmptyState
+                        icon={Handshake}
+                        title="Sem dados para o relatório"
+                        description="Nenhum apontamento no período para gerar o relatório."
+                      />
+                    )
+                  }
+                  return (
+                    /* Split horizontal — preview à esquerda, painel de ações à direita */
+                    <div className="flex-1 flex min-h-0 flex-col md:flex-row">
+                      {/* LEFT — preview do documento, largura limitada e centralizada */}
+                      <div className="flex-1 min-h-0 overflow-auto flex justify-center p-3 md:p-6" style={{ background: 'var(--bg)' }}>
+                        <iframe
+                          ref={reportIframeRef}
+                          srcDoc={reportHtml}
+                          title="Relatório"
+                          className="w-full"
+                          style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, maxWidth: 820, minHeight: 640 }}
+                        />
                       </div>
+
+                      {/* RIGHT — painel de ações fixo */}
+                      <aside
+                        className="shrink-0 w-full md:w-[300px] flex flex-col gap-3 p-4 overflow-y-auto border-t md:border-t-0 md:border-l"
+                        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+                      >
+                        <div className="pb-3 mb-1" style={{ borderBottom: '1px solid var(--border)' }}>
+                          <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text)' }}>{status?.nome}</p>
+                          <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{yearMonth ? fmtYearMonth(yearMonth) : ''}</p>
+                          <p className="text-lg font-bold mt-2" style={{ color: 'var(--primary)' }}>{formatBRL(totalServicos)}</p>
+                        </div>
+
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          icon={Printer}
+                          className="w-full !justify-start"
+                          onClick={() => reportIframeRef.current?.contentWindow?.print()}
+                        >
+                          Imprimir
+                        </Button>
+
+                        {canSendEmail && (
+                          <Button
+                            size="sm"
+                            icon={Mail}
+                            className="w-full !justify-start"
+                            title={`Enviar fechamento de ${status?.nome ?? ''} por e-mail`}
+                            onClick={openCompose}
+                          >
+                            Enviar e-mail
+                          </Button>
+                        )}
+
+                        <Button
+                          size="sm"
+                          icon={FileSpreadsheet}
+                          loading={downloadingExcel}
+                          className="w-full !justify-start"
+                          onClick={downloadExcel}
+                        >
+                          {downloadingExcel ? 'Baixando…' : 'Baixar Excel'}
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={X}
+                          className="w-full !justify-start mt-auto"
+                          onClick={() => setTab('resumo')}
+                        >
+                          Fechar
+                        </Button>
+                      </aside>
                     </div>
-
-                    {/* Apontamentos por tipo de contrato → consultor */}
-                    {loadingAp ? <SkeletonTable rows={4} cols={6} /> : (() => {
-                      // tipo → consultor → rows
-                      const tipoMap = new Map<string, { nome: string; consultores: Map<number, { consultor: string; taxa: number; horas: number; total: number; rows: ApontamentoRow[] }> }>()
-                      apontamentos.forEach(a => {
-                        if (!tipoMap.has(a.tipo_contrato_code)) tipoMap.set(a.tipo_contrato_code, { nome: a.tipo_contrato_nome, consultores: new Map() })
-                        const tipo = tipoMap.get(a.tipo_contrato_code)!
-                        if (!tipo.consultores.has(a.user_id)) {
-                          const c = consultores.find(c => c.user_id === a.user_id)
-                          tipo.consultores.set(a.user_id, { consultor: a.consultor, taxa: c?.valor_hora ?? 0, horas: 0, total: 0, rows: [] })
-                        }
-                        const entry = tipo.consultores.get(a.user_id)!
-                        entry.rows.push(a)
-                        entry.horas += a.horas
-                        entry.total += a.horas * entry.taxa
-                      })
-
-                      return Array.from(tipoMap.entries()).map(([code, { nome, consultores: consMap }]) => {
-                        const tipoHoras = Array.from(consMap.values()).reduce((s, c) => s + c.horas, 0)
-                        const tipoTotal = Array.from(consMap.values()).reduce((s, c) => s + c.total, 0)
-                        return (
-                          <div key={code} className="mb-10">
-                            {/* Header do tipo */}
-                            <div className="flex items-center justify-between mb-4 pb-2 border-b-2" style={{ borderColor: 'var(--brand-primary)' }}>
-                              <div className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>{nome}</div>
-                              <div className="text-xs" style={{ color: 'var(--brand-muted)' }}>
-                                {tipoHoras.toFixed(2)}h · <b style={{ color: 'var(--brand-primary)' }}>{formatBRL(tipoTotal)}</b>
-                              </div>
-                            </div>
-
-                            {Array.from(consMap.values()).map(({ consultor, taxa, horas, total, rows }) => (
-                              <div key={consultor} className="mb-6">
-                                <div className="flex justify-between items-baseline mb-2">
-                                  <div className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>{consultor}</div>
-                                  <div className="text-xs" style={{ color: 'var(--brand-muted)' }}>
-                                    Valor/hora: <b style={{ color: 'var(--brand-text)' }}>{formatBRL(taxa)}/h</b>
-                                  </div>
-                                </div>
-                                <Table>
-                                  <Thead>
-                                    <tr>
-                                      <Th>Data</Th><Th>Projeto</Th><Th>Solicitante</Th>
-                                      <Th>Ticket</Th><Th>Título</Th><Th right>Horas</Th>
-                                    </tr>
-                                  </Thead>
-                                  <Tbody>
-                                    {rows.map(r => (
-                                      <Fragment key={r.id}>
-                                        <tr style={{ borderBottom: 'none' }}>
-                                          <Td className="text-xs tabular-nums whitespace-nowrap">{new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR')}</Td>
-                                          <Td className="text-xs">{r.projeto}</Td>
-                                          <Td className="text-xs">{r.solicitante ?? '—'}</Td>
-                                          <Td className="text-xs tabular-nums">{r.ticket ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300">#{r.ticket}</a> : '—'}</Td>
-                                          <Td className="text-xs">{r.titulo ?? '—'}</Td>
-                                          <Td right className="tabular-nums text-xs">{r.horas.toFixed(2)}h</Td>
-                                        </tr>
-                                        <tr style={{ borderBottom: '2px solid #7c3aed' }}>
-                                          <td colSpan={6} className="px-5 pt-1 pb-3 text-xs whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--brand-muted)' }}>
-                                            <span className="font-semibold mr-1" style={{ color: 'var(--brand-subtle)' }}>Descrição:</span>
-                                            {r.observacao ?? '—'}
-                                          </td>
-                                        </tr>
-                                      </Fragment>
-                                    ))}
-                                  </Tbody>
-                                </Table>
-                                <div className="flex justify-end px-3 py-2 text-xs font-semibold rounded-b"
-                                  style={{ background: 'rgba(124,58,237,0.1)', color: '#7c3aed' }}>
-                                  {horas.toFixed(2)}h × {formatBRL(taxa)}/h = <b className="ml-1">{formatBRL(Math.round(total * 100) / 100)}</b>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )
-                      })
-                    })()}
-
-                    {/* Totalizador */}
-                    <div className="flex justify-between items-center rounded-xl p-5 mt-4"
-                      style={{ background: '#7c3aed', color: '#fff' }}>
-                      <div>
-                        <div className="text-xs opacity-80 mb-1">Total de Horas</div>
-                        <div className="text-2xl font-bold tabular-nums">{totalHoras.toFixed(2)}h</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs opacity-80 mb-1">Total Serviços</div>
-                        <div className="text-2xl font-bold tabular-nums">{formatBRL(totalServicos)}</div>
-                      </div>
-                    </div>
-
-                    {isFixed && (
-                      <p className="mt-3 text-xs" style={{ color: 'var(--brand-subtle)' }}>
-                        * Taxa fixa do parceiro aplicada a todos os consultores.
-                      </p>
-                    )}
-
-                    <div className="flex justify-between mt-8 pt-3 text-xs border-t" style={{ color: 'var(--brand-muted)', borderColor: 'var(--brand-border)' }}>
-                      <span>ERPSERV Consultoria — Documento gerado pelo sistema Minutor</span>
-                      <span>Emitido em {new Date().toLocaleDateString('pt-BR')}</span>
-                    </div>
-                  </div>
-                </div>
+                  )
+                })()
               )}
 
             </div>
           </>
         )}
       </div>
+
+      {/* Dialog de composição/preview do e-mail */}
+      {composeOpen && partnerId && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.85)' }}
+          onMouseDown={e => { composePressOnBackdrop.current = e.target === e.currentTarget }}
+          onClick={e => { if (e.target === e.currentTarget && composePressOnBackdrop.current) closeCompose() }}
+        >
+          <div
+            className="ds-card flex flex-col w-full max-w-3xl max-h-[90vh] overflow-hidden"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Enviar fechamento por e-mail</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                  {status?.nome} · {yearMonth ? fmtYearMonth(yearMonth) : ''}
+                </p>
+              </div>
+              <button
+                onClick={closeCompose}
+                className="p-1 rounded transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+                title="Fechar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-5 flex flex-col gap-4">
+              {/* Destinatários */}
+              <div className="rounded-lg p-4 flex flex-col gap-4" style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-light)' }}>
+                  Destinatários
+                </span>
+
+                {/* Parceiro admin — chips fixos, não removíveis */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Parceiro admin</label>
+                    <span className="text-[10px]" style={{ color: 'var(--text-light)' }}>sempre recebe</span>
+                  </div>
+                  {adminEmails.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {adminEmails.map(em => (
+                        <span
+                          key={em}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs"
+                          style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--border)' }}
+                          title="Destinatário fixo (parceiro admin)"
+                        >
+                          <Lock size={10} /> {em}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs" style={{ color: 'var(--text-light)' }}>Nenhum admin do parceiro cadastrado.</p>
+                  )}
+                </div>
+
+                {/* E-mails do parceiro (cadastrados) — editável + salvar no cadastro */}
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                    E-mails do parceiro (cadastrados)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={cadastradoInput}
+                      onChange={e => { setCadastradoInput(e.target.value); setCadastroSaved(false) }}
+                      placeholder="email1@dominio.com, email2@dominio.com"
+                      className="flex-1 rounded-lg px-3 py-2 text-sm ds-input focus:outline-none"
+                      style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={Save}
+                      loading={savingCadastro}
+                      onClick={saveCadastro}
+                      title="Salvar estes e-mails no cadastro do parceiro"
+                    >
+                      Salvar
+                    </Button>
+                  </div>
+                  {cadastroSaved && (
+                    <p className="text-[11px] mt-1" style={{ color: 'var(--success)' }}>
+                      Salvo no cadastro do parceiro.
+                    </p>
+                  )}
+                  <p className="text-[10px] mt-1" style={{ color: 'var(--text-light)' }}>
+                    Separe vários e-mails por vírgula. Estes ficam salvos para os próximos fechamentos.
+                  </p>
+                </div>
+
+                {/* E-mail avulso (só deste envio) — chips add/remove */}
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                    E-mail avulso (só deste envio)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={avulsoDraft}
+                      onChange={e => setAvulsoDraft(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addAvulso() } }}
+                      placeholder="adicionar e-mail e pressionar Enter"
+                      className="flex-1 rounded-lg px-3 py-2 text-sm ds-input focus:outline-none"
+                      style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                    />
+                    <Button size="sm" variant="secondary" icon={Plus} onClick={addAvulso}>
+                      Adicionar
+                    </Button>
+                  </div>
+                  {avulsoEmails.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {avulsoEmails.map(em => (
+                        <span
+                          key={em}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs"
+                          style={{ background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)' }}
+                        >
+                          {em}
+                          <button
+                            onClick={() => removeAvulso(em)}
+                            className="transition-colors"
+                            style={{ color: 'var(--text-muted)' }}
+                            title="Remover"
+                          >
+                            <X size={11} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[10px] mt-1" style={{ color: 'var(--text-light)' }}>
+                    Não fica salvo — vale só para este envio.
+                  </p>
+                </div>
+              </div>
+
+              {/* Preview do e-mail (doc HTML claro — mantém o próprio fundo branco) */}
+              <div className="relative">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-light)' }}>
+                    Prévia do e-mail
+                  </span>
+                  {previewLoading && (
+                    <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <RefreshCw size={12} className="animate-spin" /> atualizando…
+                    </span>
+                  )}
+                </div>
+                <iframe
+                  srcDoc={emailPreviewHtml ?? ''}
+                  title="Prévia do e-mail"
+                  className="w-full"
+                  style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, height: 360 }}
+                />
+              </div>
+
+              {/* Mensagem editável (por envio — não persiste) */}
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-light)' }}>
+                  Mensagem do e-mail
+                </label>
+                <textarea
+                  value={emailMensagem}
+                  onChange={e => setEmailMensagem(e.target.value)}
+                  rows={5}
+                  placeholder="Mensagem que aparece no corpo do e-mail…"
+                  className="w-full rounded-lg px-3 py-2 text-sm resize-y ds-input focus:outline-none"
+                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+              <Button variant="ghost" size="sm" onClick={closeCompose} disabled={sendingEmail}>
+                Cancelar
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Send}
+                loading={sendingEmail}
+                onClick={sendReportEmail}
+              >
+                {sendingEmail ? 'Enviando…' : 'Enviar'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   )
 }
