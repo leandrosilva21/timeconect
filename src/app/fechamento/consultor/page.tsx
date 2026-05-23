@@ -334,6 +334,9 @@ export default function FechamentoConsultorPage() {
   // true só no primeiro fetch (sem mensagem) — usado pra semear o textarea com o padrão.
   const previewSeededRef = useRef(false)
   const reportIframeRef = useRef<HTMLIFrameElement>(null)
+  // True só quando o press (mousedown) começou no próprio backdrop do compose.
+  // Evita fechar o dialog quando uma seleção de texto no textarea termina (mouseup) sobre o backdrop.
+  const composePressOnBackdrop = useRef(false)
   const canSendEmail = user?.type === 'admin' || user?.type === 'administrativo'
   const [apenasComMovimento, setApenasComMovimento] = useState(true)
   const [filterNome, setFilterNome] = useState('')
@@ -1102,7 +1105,8 @@ export default function FechamentoConsultorPage() {
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.85)' }}
-          onClick={closeCompose}
+          onMouseDown={e => { composePressOnBackdrop.current = e.target === e.currentTarget }}
+          onClick={e => { if (e.target === e.currentTarget && composePressOnBackdrop.current) closeCompose() }}
         >
           <div
             className="ds-card flex flex-col w-full max-w-3xl max-h-[90vh] overflow-hidden"
