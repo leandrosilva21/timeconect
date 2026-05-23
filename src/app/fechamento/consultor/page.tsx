@@ -343,6 +343,7 @@ function RelatorioBtn({ userId, printingUser, onClick }: {
 
 function ConversaPanel({
   thread, loading, reportHtml, replyBody, onReplyBody, replyAttach, onReplyAttach, sending, onSend,
+  onSync, syncing, syncFeedback,
 }: {
   thread: ThreadMessage[]
   loading: boolean
@@ -353,6 +354,9 @@ function ConversaPanel({
   onReplyAttach: (v: boolean) => void
   sending: boolean
   onSend: () => void
+  onSync: () => void
+  syncing: boolean
+  syncFeedback: { kind: 'imported' | 'none' | 'disabled' | 'error'; text: string } | null
 }) {
   // Timestamp unificado: `at` (já cronológico no backend) com fallback p/ sent_at/received_at.
   const msgTs = (m: ThreadMessage): string | null => m.at ?? m.sent_at ?? m.received_at ?? null
@@ -374,6 +378,17 @@ function ConversaPanel({
   // desliza da direita cobrindo quase a tela inteira (sobre o modal do relatório).
   const [openId, setOpenId] = useState<number | null>(null)
   const openMsg = openId != null ? visible.find(m => m.id === openId) ?? null : null
+
+  // Caption do sync some sozinha após alguns segundos (limpa visualmente; o estado
+  // real é resetado pelo container na próxima ação). 'error'/'disabled' ficam mais tempo.
+  const [feedbackHidden, setFeedbackHidden] = useState(false)
+  useEffect(() => {
+    if (!syncFeedback) return
+    setFeedbackHidden(false)
+    const ms = syncFeedback.kind === 'imported' || syncFeedback.kind === 'none' ? 4000 : 6000
+    const t = setTimeout(() => setFeedbackHidden(true), ms)
+    return () => clearTimeout(t)
+  }, [syncFeedback])
 
   // Esc fecha o reading pane.
   useEffect(() => {
@@ -399,9 +414,29 @@ function ConversaPanel({
       style={{ background: 'var(--surface)', borderLeft: '1px solid var(--border)' }}
     >
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
-        <MessagesSquare size={15} style={{ color: 'var(--primary)' }} />
-        <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Conversa do fechamento</span>
+      <div className="px-4 py-3 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="flex items-center gap-2">
+          <MessagesSquare size={15} style={{ color: 'var(--primary)' }} />
+          <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Conversa do fechamento</span>
+          <button
+            type="button"
+            onClick={onSync}
+            disabled={syncing}
+            title="Buscar novas respostas do consultor"
+            className="ml-auto inline-flex items-center gap-1 text-xs disabled:opacity-50 transition-colors ds-link"
+          >
+            <RefreshCw size={13} className={syncing ? 'animate-spin' : undefined} />
+            Atualizar
+          </button>
+        </div>
+        {syncFeedback && !feedbackHidden && (
+          <p
+            className="mt-1.5 text-[11px]"
+            style={{ color: syncFeedback.kind === 'imported' ? 'var(--primary)' : 'var(--text-muted)' }}
+          >
+            {syncFeedback.text}
+          </p>
+        )}
       </div>
 
       {/* Área de leitura */}
@@ -656,6 +691,11 @@ export default function FechamentoConsultorPage() {
   const [replyBody, setReplyBody] = useState('')
   const [replyAttach, setReplyAttach] = useState(true)
   const [sendingReply, setSendingReply] = useState(false)
+  // Sync inbox (puxar respostas inbound sob demanda via Microsoft Graph).
+  const [syncingInbox, setSyncingInbox] = useState(false)
+  const [syncFeedback, setSyncFeedback] = useState<
+    { kind: 'imported' | 'none' | 'disabled' | 'error'; text: string } | null
+  >(null)
   const reportIframeRef = useRef<HTMLIFrameElement>(null)
   const canSendEmail = user?.type === 'admin' || user?.type === 'administrativo'
   const [apenasComMovimento, setApenasComMovimento] = useState(true)
@@ -730,6 +770,32 @@ export default function FechamentoConsultorPage() {
     }
   }
 
+  async function syncInbox() {
+    if (!reportTarget) return
+    setSyncingInbox(true)
+    setSyncFeedback(null)
+    try {
+      // Mesma base/auth dos demais calls (api → /api/v1, header injetado pelo middleware).
+      const res = await api.post<{ data: ThreadMessage[]; graph_enabled: boolean; imported: number }>(
+        `/fechamento-consultor/${reportTarget.userId}/${yearMonth}/sync-inbox`,
+        {},
+      )
+      // Atualiza a thread igual ao loadThread (consome json.data).
+      setThread(res.data ?? [])
+      if (res.graph_enabled === false) {
+        setSyncFeedback({ kind: 'disabled', text: 'Leitura de respostas não configurada' })
+      } else if (res.imported > 0) {
+        setSyncFeedback({ kind: 'imported', text: `${res.imported} nova(s) resposta(s)` })
+      } else {
+        setSyncFeedback({ kind: 'none', text: 'Nenhuma resposta nova' })
+      }
+    } catch {
+      setSyncFeedback({ kind: 'error', text: 'Falha ao atualizar' })
+    } finally {
+      setSyncingInbox(false)
+    }
+  }
+
   async function handleRelatorio(consultor: ConsultorBase | ConsultorHorista | ConsultorBancoHoras | ConsultorFixo) {
     setPrintingUser(consultor.user_id)
     try {
@@ -741,6 +807,7 @@ export default function FechamentoConsultorPage() {
       setReportTarget({ userId: consultor.user_id, name: consultor.nome })
       setReplyBody('')
       setReplyAttach(true)
+      setSyncFeedback(null)
       if (canSendEmail) void loadThread(consultor.user_id)
     } catch (err: unknown) {
       toast.error(`Erro ao gerar relatório: ${err instanceof Error ? err.message : 'falha na API'}`)
@@ -1338,6 +1405,9 @@ export default function FechamentoConsultorPage() {
                 onReplyAttach={setReplyAttach}
                 sending={sendingReply}
                 onSend={sendContinuation}
+                onSync={syncInbox}
+                syncing={syncingInbox}
+                syncFeedback={syncFeedback}
               />
             )}
           </div>
