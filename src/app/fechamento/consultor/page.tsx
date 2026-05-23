@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
-import { RefreshCw, Printer, FileText, Users, Search, X, Mail } from 'lucide-react'
+import { RefreshCw, Printer, FileText, Users, Search, X, Mail, FileSpreadsheet, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
@@ -149,9 +149,9 @@ const printStyles = `
   table { width: 100%; border-collapse: collapse; }
   th { background: #f3f4f6; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; padding: 5px 8px; text-align: left; color: #555; border-bottom: 1px solid #ddd; }
   td { font-size: 11px; padding: 4px 8px; border-bottom: 1px solid #f0f0f0; }
-  tbody tr.main-row td { padding-bottom: 2px; border-bottom: none; }
-  tbody tr.desc-row td { padding-top: 2px; padding-bottom: 7px; border-bottom: 2px solid #5b21b6; font-size: 11px; color: #374151; white-space: pre-wrap; }
-  tbody tr.desc-row td .label { font-weight: 600; color: #6b7280; margin-right: 4px; }
+  tbody tr.main-row td { padding: 8px 8px; border-bottom: 1px solid #ece9f5; vertical-align: middle; }
+  tbody tr.main-row:nth-child(even) td { background: #f7f6fc; }
+  tbody tr.main-row:hover td { background: #efeafc; }
   .right { text-align: right; }
   .center { text-align: center; }
   .total-box { background: #7c3aed; color: #fff; padding: 12px 18px; margin-top: 24px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
@@ -225,9 +225,6 @@ function buildReport(
             <td class="center">${r.start_time ? (r.start_time.includes('T') ? r.start_time.slice(11, 16) : r.start_time.slice(0, 5)) : '—'}</td>
             <td class="center">${r.end_time   ? (r.end_time.includes('T')   ? r.end_time.slice(11, 16)   : r.end_time.slice(0, 5))   : '—'}</td>
             <td class="right">${fmtH(r.horas)}${r.consultant_extra_pct ? (r.valor_extra != null ? `<span style="color:#16a34a;font-size:10px;margin-left:4px">+${r.consultant_extra_pct}% (${formatBRL(r.valor_extra)})</span>` : `<span style="color:#16a34a;font-size:10px;margin-left:4px">+${r.consultant_extra_pct}% base ${fmtH(r.horas_base ?? r.horas)}</span>`) : ''}</td>
-          </tr>
-          <tr class="desc-row">
-            <td colspan="8"><span class="label">Descrição:</span>${r.observacao ?? '—'}</td>
           </tr>
         `).join('')
         clienteBlocksHtml += `
@@ -325,7 +322,18 @@ export default function FechamentoConsultorPage() {
   // Consultor alvo do relatório aberto (só pra relatório INDIVIDUAL — habilita o "Enviar e-mail").
   const [reportTarget, setReportTarget] = useState<{ userId: number; name: string } | null>(null)
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [downloadingExcel, setDownloadingExcel] = useState(false)
+  // Dialog de composição/preview do e-mail (abre ao clicar "Enviar e-mail").
+  const [composeOpen, setComposeOpen] = useState(false)
+  const [emailPreviewHtml, setEmailPreviewHtml] = useState<string | null>(null)
+  const [emailMensagem, setEmailMensagem] = useState('')
+  const [previewLoading, setPreviewLoading] = useState(false)
+  // true só no primeiro fetch (sem mensagem) — usado pra semear o textarea com o padrão.
+  const previewSeededRef = useRef(false)
   const reportIframeRef = useRef<HTMLIFrameElement>(null)
+  // True só quando o press (mousedown) começou no próprio backdrop do compose.
+  // Evita fechar o dialog quando uma seleção de texto no textarea termina (mouseup) sobre o backdrop.
+  const composePressOnBackdrop = useRef(false)
   const canSendEmail = user?.type === 'admin' || user?.type === 'administrativo'
   const [apenasComMovimento, setApenasComMovimento] = useState(true)
   const [filterNome, setFilterNome] = useState('')
@@ -345,18 +353,100 @@ export default function FechamentoConsultorPage() {
   useEffect(() => { load() }, [load])
 
   async function sendReportEmail() {
-    if (!reportTarget || !reportHtml) return
+    if (!reportTarget) return
     setSendingEmail(true)
     try {
+      // O detalhamento (PDF + XLSX) é gerado no backend; não enviamos mais o HTML.
+      // `mensagem` é a versão editada (por envio) que o admin compôs no dialog.
       const res = await api.post<{ success: boolean; message: string }>(
         `/fechamento-consultor/${reportTarget.userId}/${yearMonth}/enviar-email`,
-        { html: reportHtml },
+        { mensagem: emailMensagem },
       )
       toast.success(res?.message ?? 'Fechamento enviado por e-mail.')
+      closeCompose()
     } catch (err: unknown) {
       toast.error(`Erro ao enviar o fechamento: ${err instanceof Error ? err.message : 'falha na API'}`)
     } finally {
       setSendingEmail(false)
+    }
+  }
+
+  // Busca o HTML renderizado do e-mail. Sem `mensagem` → backend devolve o html
+  // padrão + `mensagem_padrao` (usado pra semear o textarea no primeiro fetch).
+  const fetchEmailPreview = useCallback(async (mensagem?: string) => {
+    if (!reportTarget) return
+    setPreviewLoading(true)
+    try {
+      const res = await api.post<{ html: string; mensagem_padrao: string }>(
+        `/fechamento-consultor/${reportTarget.userId}/${yearMonth}/email-preview`,
+        mensagem !== undefined ? { mensagem } : {},
+      )
+      setEmailPreviewHtml(res.html)
+      if (!previewSeededRef.current) {
+        previewSeededRef.current = true
+        setEmailMensagem(res.mensagem_padrao ?? '')
+      }
+    } catch (err: unknown) {
+      toast.error(`Erro ao gerar a prévia do e-mail: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }, [reportTarget, yearMonth])
+
+  function openCompose() {
+    if (!reportTarget) return
+    previewSeededRef.current = false
+    setEmailMensagem('')
+    setEmailPreviewHtml(null)
+    setComposeOpen(true)
+    void fetchEmailPreview() // primeiro fetch: sem mensagem → html + mensagem_padrao
+  }
+
+  function closeCompose() {
+    setComposeOpen(false)
+    setEmailPreviewHtml(null)
+    setEmailMensagem('')
+    previewSeededRef.current = false
+  }
+
+  // Live update do preview: ao editar a mensagem, faz debounce (~450ms) e re-busca
+  // o html. Só dispara depois que o primeiro fetch semeou o textarea (evita refetch
+  // logo na abertura, quando o seed acabou de setar a mensagem).
+  useEffect(() => {
+    if (!composeOpen || !previewSeededRef.current) return
+    const t = setTimeout(() => { void fetchEmailPreview(emailMensagem) }, 450)
+    return () => clearTimeout(t)
+  }, [emailMensagem, composeOpen, fetchEmailPreview])
+
+  async function downloadExcel() {
+    if (!reportTarget) return
+    setDownloadingExcel(true)
+    try {
+      // O `api` helper sempre faz res.json(); pra blob usamos fetch direto no
+      // mesmo proxy /api/v1 (o middleware injeta o Authorization via cookie).
+      const res = await fetch(
+        `/api/v1/fechamento-consultor/${reportTarget.userId}/${yearMonth}/excel`,
+        { credentials: 'same-origin', headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } },
+      )
+      if (!res.ok) throw new Error(`Erro ${res.status}`)
+      // Nome do arquivo: tenta o Content-Disposition do backend, senão monta um.
+      const cd = res.headers.get('Content-Disposition') ?? ''
+      const match = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
+      const fallback = `Fechamento_${yearMonth}_${reportTarget.name ?? 'consultor'}.xlsx`
+      const filename = match ? decodeURIComponent(match[1]) : fallback
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err: unknown) {
+      toast.error(`Erro ao baixar o Excel: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setDownloadingExcel(false)
     }
   }
 
@@ -915,44 +1005,183 @@ export default function FechamentoConsultorPage() {
 
       </div>
       {/* Modal de visualização do relatório */}
-      {reportHtml && (
-        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.85)' }}>
-          <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ background: '#18181b', borderBottom: '1px solid #3f3f46' }}>
-            <span className="text-sm font-semibold text-white">Relatório</span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => reportIframeRef.current?.contentWindow?.print()}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
-                style={{ background: 'var(--brand-primary)', color: 'var(--primary-fg)' }}
-              >
-                <Printer size={12} /> Imprimir
-              </button>
-              {canSendEmail && reportTarget && (
-                <button
-                  onClick={sendReportEmail}
-                  disabled={sendingEmail}
-                  title={`Enviar para ${reportTarget.name} (cópia financeiro)`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
-                  style={{ background: 'var(--success)', color: 'var(--primary-fg)' }}
-                >
-                  <Mail size={12} /> {sendingEmail ? 'Enviando…' : 'Enviar e-mail'}
-                </button>
+      {reportHtml && (() => {
+        // Total do consultor alvo (lookup em `data` por user_id) — só pra exibir no header do painel.
+        const targetTotal = reportTarget
+          ? [...(data?.horistas ?? []), ...(data?.banco_horas ?? []), ...(data?.fixos ?? [])]
+              .find(c => c.user_id === reportTarget.userId)?.total
+          : undefined
+        const closeModal = () => { setReportHtml(null); setReportTarget(null) }
+        return (
+        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.85)', paddingTop: 'var(--banner-h, 0px)' }}>
+          {/* Barra de topo slim — só o título */}
+          <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+            <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Relatório</span>
+          </div>
+
+          {/* Corpo: split horizontal — preview à esquerda, painel de ações à direita */}
+          <div className="flex-1 flex min-h-0 flex-col md:flex-row">
+            {/* LEFT — preview do documento, largura limitada e centralizada */}
+            <div className="flex-1 min-h-0 overflow-auto flex justify-center p-3 md:p-6" style={{ background: 'var(--bg)' }}>
+              <iframe
+                ref={reportIframeRef}
+                srcDoc={reportHtml}
+                title="Relatório"
+                className="w-full h-full"
+                style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, maxWidth: 820 }}
+              />
+            </div>
+
+            {/* RIGHT — painel de ações fixo */}
+            <aside
+              className="shrink-0 w-full md:w-[300px] flex flex-col gap-3 p-4 overflow-y-auto border-t md:border-t-0 md:border-l"
+              style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+            >
+              {/* Header opcional — consultor + período + total */}
+              {reportTarget && (
+                <div className="pb-3 mb-1" style={{ borderBottom: '1px solid var(--border)' }}>
+                  <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text)' }}>{reportTarget.name}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{fmtYearMonth(yearMonth)}</p>
+                  {targetTotal != null && (
+                    <p className="text-lg font-bold mt-2" style={{ color: 'var(--primary)' }}>{formatBRL(targetTotal)}</p>
+                  )}
+                </div>
               )}
-              <button
-                onClick={() => { setReportHtml(null); setReportTarget(null) }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-300 hover:bg-zinc-700 transition-colors"
-                style={{ border: '1px solid #3f3f46' }}
+
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Printer}
+                className="w-full !justify-start"
+                onClick={() => reportIframeRef.current?.contentWindow?.print()}
+              >
+                Imprimir
+              </Button>
+
+              {canSendEmail && reportTarget && (
+                <Button
+                  size="sm"
+                  icon={Mail}
+                  className="w-full !justify-start"
+                  title={`Enviar para ${reportTarget.name} (cópia financeiro)`}
+                  onClick={openCompose}
+                >
+                  Enviar e-mail
+                </Button>
+              )}
+
+              {reportTarget && (
+                <Button
+                  size="sm"
+                  icon={FileSpreadsheet}
+                  loading={downloadingExcel}
+                  className="w-full !justify-start"
+                  onClick={downloadExcel}
+                >
+                  {downloadingExcel ? 'Baixando…' : 'Baixar Excel'}
+                </Button>
+              )}
+
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={X}
+                className="w-full !justify-start mt-auto"
+                onClick={closeModal}
               >
                 Fechar
+              </Button>
+            </aside>
+          </div>
+        </div>
+        )
+      })()}
+
+      {/* Dialog de composição/preview do e-mail */}
+      {composeOpen && reportTarget && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.85)' }}
+          onMouseDown={e => { composePressOnBackdrop.current = e.target === e.currentTarget }}
+          onClick={e => { if (e.target === e.currentTarget && composePressOnBackdrop.current) closeCompose() }}
+        >
+          <div
+            className="ds-card flex flex-col w-full max-w-3xl max-h-[90vh] overflow-hidden"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Enviar fechamento por e-mail</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                  {reportTarget.name} · {fmtYearMonth(yearMonth)}
+                </p>
+              </div>
+              <button
+                onClick={closeCompose}
+                className="p-1 rounded transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+                title="Fechar"
+              >
+                <X size={18} />
               </button>
             </div>
+
+            {/* Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-5 flex flex-col gap-4">
+              {/* Preview do e-mail (doc HTML claro — mantém o próprio fundo branco) */}
+              <div className="relative">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-light)' }}>
+                    Prévia do e-mail
+                  </span>
+                  {previewLoading && (
+                    <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <RefreshCw size={12} className="animate-spin" /> atualizando…
+                    </span>
+                  )}
+                </div>
+                <iframe
+                  srcDoc={emailPreviewHtml ?? ''}
+                  title="Prévia do e-mail"
+                  className="w-full"
+                  style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, height: 360 }}
+                />
+              </div>
+
+              {/* Mensagem editável (por envio — não persiste) */}
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-light)' }}>
+                  Mensagem do e-mail
+                </label>
+                <textarea
+                  value={emailMensagem}
+                  onChange={e => setEmailMensagem(e.target.value)}
+                  rows={5}
+                  placeholder="Mensagem que aparece no corpo do e-mail…"
+                  className="w-full rounded-lg px-3 py-2 text-sm resize-y ds-input focus:outline-none"
+                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+              <Button variant="ghost" size="sm" onClick={closeCompose} disabled={sendingEmail}>
+                Cancelar
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Send}
+                loading={sendingEmail}
+                onClick={sendReportEmail}
+              >
+                {sendingEmail ? 'Enviando…' : 'Enviar'}
+              </Button>
+            </div>
           </div>
-          <iframe
-            ref={reportIframeRef}
-            srcDoc={reportHtml}
-            className="flex-1 w-full"
-            style={{ background: '#fff', border: 'none' }}
-          />
         </div>
       )}
     </AppLayout>

@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
@@ -9,7 +9,7 @@ import { SearchSelect } from '@/components/ui/search-select'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { toast } from 'sonner'
-import { Lock, RefreshCw, Building2, Printer, FileText, Receipt, ChevronRight, ChevronDown } from 'lucide-react'
+import { Lock, RefreshCw, Building2, Printer, FileText, Receipt, ChevronRight, ChevronDown, Mail, FileSpreadsheet, Send, X, Save, Plus } from 'lucide-react'
 import {
   Table, Thead, Th, Tbody, Tr, Td,
   Badge, Button, SkeletonTable, EmptyState,
@@ -70,6 +70,15 @@ interface DespesaRow {
   valor: number
 }
 
+// Apuração por Ticket (Vedamotors) — espelha /timesheets/summary-by-ticket.
+interface TicketSummaryRow {
+  ticket: string
+  title: string | null
+  requester: string | null
+  period_minutes: number
+  lifetime_minutes: number
+}
+
 // Estrutura mínima do /fechamento-contrato (on_demand only)
 interface ProjetoGlobal { projeto_id: number; nome: string; codigo: string; horas: number; valor_hora: number; total_receita: number }
 interface ClienteGlobal  { customer_id: number; nome: string; projetos: ProjetoGlobal[]; total_horas: number; total_receita: number }
@@ -102,6 +111,13 @@ function fmtPeriodo(from: string, to: string): string {
 
 function fmtDate(d: string): string {
   return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR')
+}
+
+// minutos → "H:MM" (mesmo formato do relatório de apontamentos).
+function minutesToHHMM(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return `${h}:${String(m).padStart(2, '0')}`
 }
 
 const now = new Date()
@@ -150,11 +166,35 @@ export default function FechamentoClientePage() {
 
   const [dados,    setDados]    = useState<ApontamentosData | null>(null)
   const [despesas, setDespesas] = useState<DespesaRow[]>([])
+  // Apuração por Ticket — só preenchido para Vedamotors.
+  const [ticketSummary, setTicketSummary] = useState<TicketSummaryRow[]>([])
 
   const [loading,         setLoading]         = useState(false)
   const [loadingDespesas, setLoadingDespesas] = useState(false)
   const [loadingFechar,   setLoadingFechar]   = useState(false)
   const [loadingReabrir,  setLoadingReabrir]  = useState(false)
+
+  // ── Relatório (preview em iframe) / envio de e-mail ─────────────────────────
+  const canSendEmail = (user as any)?.type === 'admin' || (user as any)?.type === 'administrativo'
+  const [downloadingExcel, setDownloadingExcel] = useState(false)
+  const reportIframeRef = useRef<HTMLIFrameElement>(null)
+
+  // Dialog de composição/preview do e-mail.
+  const [composeOpen, setComposeOpen] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailPreviewHtml, setEmailPreviewHtml] = useState<string | null>(null)
+  const [emailMensagem, setEmailMensagem] = useState('')
+  const [previewLoading, setPreviewLoading] = useState(false)
+  // Destinatários — clientes não têm admin fixos, só cadastrados + avulsos.
+  const [cadastradoInput, setCadastradoInput] = useState('')            // e-mails do cliente (cadastrados), separados por vírgula
+  const [savingCadastro, setSavingCadastro] = useState(false)
+  const [cadastroSaved, setCadastroSaved] = useState(false)
+  const [avulsoEmails, setAvulsoEmails] = useState<string[]>([])        // e-mails avulsos (só deste envio)
+  const [avulsoDraft, setAvulsoDraft] = useState('')
+  // true só no primeiro fetch (sem mensagem) — usado pra semear o textarea com o padrão.
+  const previewSeededRef = useRef(false)
+  // True só quando o press (mousedown) começou no próprio backdrop do compose.
+  const composePressOnBackdrop = useRef(false)
 
   // ── Loaders ──
 
@@ -199,6 +239,35 @@ export default function FechamentoClientePage() {
       .finally(() => setLoadingDespesas(false))
   }, [customerId, fromYM, toYM])
 
+  // Apuração por Ticket — só Vedamotors. Espelha o relatório de apontamentos:
+  // GET /timesheets/summary-by-ticket com customer_id + start_date/end_date.
+  // O fechamento trabalha com ano-mês (fromYM/toYM); converte pra dia inicial
+  // do fromYM e dia final do toYM. Statuses pending+approved (escopo do relatório).
+  const loadTicketSummary = useCallback(() => {
+    if (!customerId || !fromYM || !toYM) { setTicketSummary([]); return }
+    const nome = clientes.find(c => c.customer_id === customerId)?.nome ?? ''
+    if (!nome.toUpperCase().includes('VEDAMOTORS')) { setTicketSummary([]); return }
+
+    const startDate = `${fromYM}-01`
+    const [ty, tm] = toYM.split('-').map(Number)
+    const lastDay = new Date(ty, tm, 0).getDate()
+    const endDate = `${toYM}-${String(lastDay).padStart(2, '0')}`
+
+    const p = new URLSearchParams()
+    p.set('customer_id', String(customerId))
+    p.set('start_date',  startDate)
+    p.set('end_date',    endDate)
+    ;['pending', 'approved'].forEach(s => p.append('status[]', s))
+
+    api.get<{ tickets?: TicketSummaryRow[] }>(`/timesheets/summary-by-ticket?${p}`)
+      .then(r => {
+        const tickets = Array.isArray(r?.tickets) ? r.tickets : []
+        tickets.sort((a, b) => a.ticket.localeCompare(b.ticket, 'pt-BR', { numeric: true }))
+        setTicketSummary(tickets)
+      })
+      .catch(() => setTicketSummary([]))
+  }, [customerId, fromYM, toYM, clientes])
+
   // ── Efeitos ──
 
   useEffect(() => {
@@ -206,24 +275,28 @@ export default function FechamentoClientePage() {
     loadGlobal()
     setDados(null)
     setDespesas([])
+    setTicketSummary([])
     setProjetoFilter(null)
   }, [fromYM, toYM])
 
   useEffect(() => {
-    if (!customerId) { setStatus(null); setDados(null); setDespesas([]); return }
+    if (!customerId) { setStatus(null); setDados(null); setDespesas([]); setTicketSummary([]); return }
     setStatus(clientes.find(c => c.customer_id === customerId) ?? null)
     setDados(null)
     setDespesas([])
+    setTicketSummary([])
     setProjetoFilter(null)
-    setTab('servicos')
+    // NÃO troca de aba ao mudar o cliente — o seletor filtra a Visão Global; o usuário
+    // escolhe a aba (Relatório/Apontamentos) quando quiser.
   }, [customerId, clientes])
 
   useEffect(() => {
     if (customerId && fromYM && toYM) {
       loadServicos()
       loadDespesas()
+      loadTicketSummary()
     }
-  }, [customerId, fromYM, toYM])
+  }, [customerId, fromYM, toYM, clientes])
 
   // ── Fechar / Reabrir ──
 
@@ -260,6 +333,151 @@ export default function FechamentoClientePage() {
     setTimeout(() => document.body.removeAttribute('data-print'), 500)
   }
 
+  // ── Excel / E-mail ──────────────────────────────────────────────────────────
+
+  async function downloadExcel() {
+    if (!customerId || !toYM) return
+    setDownloadingExcel(true)
+    try {
+      // O `api` helper sempre faz res.json(); pra blob usamos fetch direto no
+      // mesmo proxy /api/v1 (o middleware injeta o Authorization via cookie).
+      const res = await fetch(
+        `/api/v1/fechamento-cliente/${customerId}/${toYM}/excel`,
+        { credentials: 'same-origin', headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } },
+      )
+      if (!res.ok) throw new Error(`Erro ${res.status}`)
+      const cd = res.headers.get('Content-Disposition') ?? ''
+      const match = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
+      const fallback = `Fechamento_${toYM}_${clienteNome || 'cliente'}.xlsx`
+      const filename = match ? decodeURIComponent(match[1]) : fallback
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err: unknown) {
+      toast.error(`Erro ao baixar o Excel: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setDownloadingExcel(false)
+    }
+  }
+
+  // Busca o HTML renderizado do e-mail. Sem `mensagem` → backend devolve o html
+  // padrão + `mensagem_padrao` (semeia o textarea) + e-mails cadastrados.
+  // Clientes não têm admin fixos, então não há lista de e-mails fixos.
+  const fetchEmailPreview = useCallback(async (mensagem?: string) => {
+    if (!customerId || !toYM) return
+    setPreviewLoading(true)
+    try {
+      const res = await api.post<{
+        html: string
+        mensagem_padrao: string
+        fechamento_email: string | null
+      }>(
+        `/fechamento-cliente/${customerId}/${toYM}/email-preview`,
+        mensagem !== undefined ? { mensagem } : {},
+      )
+      setEmailPreviewHtml(res.html)
+      if (!previewSeededRef.current) {
+        previewSeededRef.current = true
+        setEmailMensagem(res.mensagem_padrao ?? '')
+        setCadastradoInput(res.fechamento_email ?? '')
+      }
+    } catch (err: unknown) {
+      toast.error(`Erro ao gerar a prévia do e-mail: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }, [customerId, toYM])
+
+  function openCompose() {
+    if (!customerId || !toYM) return
+    previewSeededRef.current = false
+    setEmailMensagem('')
+    setEmailPreviewHtml(null)
+    setCadastradoInput('')
+    setAvulsoEmails([])
+    setAvulsoDraft('')
+    setCadastroSaved(false)
+    setComposeOpen(true)
+    void fetchEmailPreview() // primeiro fetch: sem mensagem → html + mensagem_padrao + e-mails
+  }
+
+  function closeCompose() {
+    setComposeOpen(false)
+    setEmailPreviewHtml(null)
+    setEmailMensagem('')
+    setCadastradoInput('')
+    setAvulsoEmails([])
+    setAvulsoDraft('')
+    setCadastroSaved(false)
+    previewSeededRef.current = false
+  }
+
+  // Live update do preview: ao editar a mensagem, faz debounce (~450ms) e re-busca
+  // o html. Só dispara depois que o primeiro fetch semeou o textarea.
+  useEffect(() => {
+    if (!composeOpen || !previewSeededRef.current) return
+    const t = setTimeout(() => { void fetchEmailPreview(emailMensagem) }, 450)
+    return () => clearTimeout(t)
+  }, [emailMensagem, composeOpen, fetchEmailPreview])
+
+  // Adiciona um e-mail avulso (chip) só deste envio. Aceita Enter / vírgula.
+  function addAvulso() {
+    const v = avulsoDraft.trim().replace(/,$/, '').trim()
+    if (!v) return
+    setAvulsoEmails(prev => prev.includes(v) ? prev : [...prev, v])
+    setAvulsoDraft('')
+  }
+
+  function removeAvulso(email: string) {
+    setAvulsoEmails(prev => prev.filter(e => e !== email))
+  }
+
+  // Salva os e-mails cadastrados no cliente (persiste no cadastro).
+  async function saveCadastro() {
+    if (!customerId) return
+    setSavingCadastro(true)
+    setCadastroSaved(false)
+    try {
+      const res = await api.post<{ success: boolean; fechamento_email: string }>(
+        `/fechamento-cliente/${customerId}/fechamento-email`,
+        { fechamento_email: cadastradoInput },
+      )
+      setCadastradoInput(res.fechamento_email ?? cadastradoInput)
+      setCadastroSaved(true)
+      toast.success('E-mails salvos no cadastro do cliente.')
+    } catch (err: unknown) {
+      toast.error(`Erro ao salvar os e-mails: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setSavingCadastro(false)
+    }
+  }
+
+  async function sendReportEmail() {
+    if (!customerId || !toYM) return
+    // Destinatários = cadastrados (split por vírgula) + avulsos, trim + dedupe.
+    const cadastrados = cadastradoInput.split(',').map(e => e.trim()).filter(Boolean)
+    const emails = Array.from(new Set([...cadastrados, ...avulsoEmails]))
+    setSendingEmail(true)
+    try {
+      const res = await api.post<{ success: boolean; message: string }>(
+        `/fechamento-cliente/${customerId}/${toYM}/enviar-email`,
+        { mensagem: emailMensagem, emails },
+      )
+      toast.success(res?.message ?? 'Fechamento enviado por e-mail.')
+      closeCompose()
+    } catch (err: unknown) {
+      toast.error(`Erro ao enviar o fechamento: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setSendingEmail(false)
+    }
+  }
+
   // ── Toggle expansão de cliente na visão global ──
   const toggleClient = (id: number) => setExpandedClients(prev => {
     const next = new Set(prev)
@@ -279,6 +497,213 @@ export default function FechamentoClientePage() {
   const totalDespesas  = despesas.reduce((s, d) => s + d.valor, 0)
   const clienteNome    = clientes.find(c => c.customer_id === customerId)?.nome ?? ''
   const periodo        = fmtPeriodo(fromYM, toYM)
+
+  // ── VEDAMOTORS (regra especial) ─────────────────────────────────────────────
+  // Para a Vedamotors as colunas viram "Ticket ERPSERV" (ticket normal) e
+  // "Ticket Vedamotors" (extraído do título/assunto via /\d{4}-\d{6}/, ex:
+  // "0326-000007", senão "Sem ticket"). Demais clientes mantêm Ticket / Título.
+  const isVedamotors = clienteNome.toUpperCase().includes('VEDAMOTORS')
+  const VEDAMOTORS_PATTERN = /\d{4}-\d{6}/
+  const vedaTicket = (titulo?: string): string => {
+    const m = (titulo ?? '').match(VEDAMOTORS_PATTERN)
+    return m ? m[0] : 'Sem ticket'
+  }
+
+  // ── HTML do relatório (preview em iframe + impressão) ────────────────────────
+  // Documento HTML autossuficiente (claro), agrupado por PROJETO com subtotal de
+  // horas por projeto. O "Valor a pagar" (fechamento do cliente) aparece no topo
+  // e no rodapé. Sem coluna de valor por linha e sem linhas de descrição (a
+  // descrição vai só no Excel). Retorna null se não há dados.
+  const escapeHtml = (s: string): string =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+  const reportStyles = `
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; background: #fff; padding: 28px 32px; }
+    .page-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; margin-bottom: 18px; border-bottom: 2px solid #5b21b6; }
+    .page-header-left img { width: 150px; }
+    .page-header-right { text-align: right; }
+    .page-header-right h1 { font-size: 20px; font-weight: 700; color: #1f2937; margin-bottom: 2px; }
+    .page-header-right .subtitle { font-size: 11px; color: #6b7280; margin-bottom: 6px; }
+    .page-header-right .meta { font-size: 12px; color: #374151; }
+    .page-header-right .meta b { font-weight: 700; }
+    .valor-topo { display: flex; justify-content: space-between; align-items: center; background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 8px; padding: 12px 18px; margin-bottom: 22px; }
+    .valor-topo .label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
+    .valor-topo .horas { font-size: 13px; color: #374151; font-weight: 600; }
+    .valor-topo .valor { font-size: 22px; font-weight: 700; color: #5b21b6; }
+    .section { margin-bottom: 26px; }
+    .section-header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #5b21b6; padding-bottom: 6px; margin-bottom: 8px; }
+    .section-title { font-size: 14px; font-weight: 700; color: #1f2937; }
+    .section-code { font-size: 11px; font-weight: 400; color: #9ca3af; margin-left: 6px; }
+    .section-sub { font-size: 11px; color: #6b7280; }
+    .section-sub b { color: #5b21b6; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { background: #f5f3ff; padding: 7px 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; color: #6b7280; text-align: left; border-bottom: 1px solid #ede9fe; }
+    tbody td { padding: 6px 10px; font-size: 11px; color: #374151; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+    tbody tr:nth-child(even) td { background: #faf9ff; }
+    .right { text-align: right; }
+    .nowrap { white-space: nowrap; }
+    .section-footer { background: #faf9ff; padding: 7px 12px; text-align: right; font-size: 12px; color: #5b21b6; font-weight: 600; border-top: 2px solid #c4b5fd; }
+    a.ticket { color: #0891b2; text-decoration: none; }
+    /* Apuração por Ticket (Vedamotors) */
+    .ticket-section { margin-top: 26px; margin-bottom: 26px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .ticket-section h2 { font-size: 14px; font-weight: 700; color: #1f2937; margin-bottom: 4px; }
+    .ticket-section .ticket-sub { font-size: 11px; color: #6b7280; margin-bottom: 8px; }
+    .ticket-table thead th { background: #f5f3ff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .ticket-table tbody tr:nth-child(even) td { background: #faf9ff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .ticket-table td.veda-life, .ticket-table th.veda-life { color: #5b21b6; }
+    .ticket-table tfoot td { background: #ede9fe; border-top: 2px solid #5b21b6; padding: 8px 10px; font-size: 12px; font-weight: 700; color: #374151; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .ticket-table tfoot td.veda-life { color: #5b21b6; }
+    .total-box { background: #5b21b6; border-radius: 8px; padding: 16px 24px; display: flex; justify-content: space-between; margin-top: 24px; color: #fff; }
+    .total-box-label { font-size: 11px; opacity: 0.85; margin-bottom: 4px; }
+    .total-box-value { font-size: 26px; font-weight: 700; }
+    .page-footer { margin-top: 30px; display: flex; justify-content: space-between; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 10px; }
+    @media print { body { padding: 16px 20px; } thead { display: table-header-group; } tr { page-break-inside: avoid; } }
+  `
+
+  const buildReportHtml = (): string | null => {
+    if (!customerId || projetos.length === 0) return null
+
+    const logoUrl = typeof window !== 'undefined' ? window.location.origin + '/logo.png' : '/logo.png'
+    const competencia = fromYM === toYM ? fmtYMFull(toYM) : `${fmtYM(fromYM)} a ${fmtYM(toYM)}`
+    const ticketHeader = isVedamotors ? 'Ticket ERPSERV' : 'Ticket'
+    const tituloHeader = isVedamotors ? 'Ticket Vedamotors' : 'Título'
+
+    const sectionsHtml = projetos.map(p => {
+      const rowsHtml = (p.apontamentos ?? []).map(ts => {
+        const ticketCell = ts.ticket
+          ? `<a class="ticket" href="https://erpserv.movidesk.com/Ticket/Edit/${escapeHtml(ts.ticket)}" target="_blank" rel="noopener noreferrer">#${escapeHtml(ts.ticket)}</a>`
+          : '—'
+        const tituloCell = isVedamotors ? escapeHtml(vedaTicket(ts.titulo)) : escapeHtml(ts.titulo ?? '—')
+        return `
+          <tr>
+            <td class="nowrap">${fmtDate(ts.data)}</td>
+            <td>${escapeHtml(ts.colaborador ?? '—')}</td>
+            <td>${escapeHtml(ts.solicitante ?? '—')}</td>
+            <td class="nowrap">${ticketCell}</td>
+            <td>${tituloCell}</td>
+            <td class="right nowrap">${ts.horas.toFixed(2)}h</td>
+          </tr>`
+      }).join('')
+
+      return `
+        <div class="section">
+          <div class="section-header">
+            <div><span class="section-title">${escapeHtml(p.projeto_nome)}</span><span class="section-code">${escapeHtml(p.projeto_codigo)}</span></div>
+            <div class="section-sub">${p.horas.toFixed(2)}h</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Colaborador</th>
+                <th>Solicitante</th>
+                <th>${ticketHeader}</th>
+                <th>${tituloHeader}</th>
+                <th class="right">Horas</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+          <div class="section-footer">Subtotal — ${escapeHtml(p.projeto_nome)} (${(p.apontamentos ?? []).length} reg.) = <b>${p.horas.toFixed(2)}h</b></div>
+        </div>`
+    }).join('')
+
+    // Apuração por Ticket — só Vedamotors e só se houver tickets no período.
+    // Espelha a 2ª tabela do relatório de apontamentos (total no período +
+    // histórico acumulado por ticket). "Ticket Vedamotors" extrai NNNN-NNNNNN
+    // do título via VEDAMOTORS_PATTERN, senão "Sem ticket".
+    let ticketSectionHtml = ''
+    if (isVedamotors && ticketSummary.length > 0) {
+      const totPeriod = ticketSummary.reduce((acc, t) => acc + t.period_minutes, 0)
+      const totLife   = ticketSummary.reduce((acc, t) => acc + t.lifetime_minutes, 0)
+      const rows = ticketSummary.map((tk, i) => {
+        const bg = i % 2 === 0 ? '#fff' : '#faf9ff'
+        const ticketCell = `<a class="ticket" href="https://erpserv.movidesk.com/Ticket/Edit/${escapeHtml(tk.ticket)}" target="_blank" rel="noopener noreferrer">#${escapeHtml(tk.ticket)}</a>`
+        const vedaCell = escapeHtml(vedaTicket(tk.title ?? undefined))
+        return `
+          <tr style="background:${bg}">
+            <td class="nowrap">${ticketCell}</td>
+            <td class="nowrap">${vedaCell}</td>
+            <td>${escapeHtml(tk.requester ?? '—')}</td>
+            <td class="right nowrap">${minutesToHHMM(tk.period_minutes)}</td>
+            <td class="right nowrap veda-life">${minutesToHHMM(tk.lifetime_minutes)}</td>
+          </tr>`
+      }).join('')
+
+      ticketSectionHtml = `
+        <div class="ticket-section">
+          <h2>Apuração por Ticket</h2>
+          <p class="ticket-sub">Tickets com apontamento dentro do período, mostrando o total no período selecionado e o total acumulado desde o primeiro apontamento no sistema (mesmo cliente).</p>
+          <table class="ticket-table">
+            <thead>
+              <tr>
+                <th>Ticket</th>
+                <th>Ticket Vedamotors</th>
+                <th>Solicitante</th>
+                <th class="right">Total no período</th>
+                <th class="right veda-life">Total histórico</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+            <tfoot>
+              <tr>
+                <td colspan="3" class="right">Totais (${ticketSummary.length} ticket${ticketSummary.length === 1 ? '' : 's'})</td>
+                <td class="right nowrap">${minutesToHHMM(totPeriod)}</td>
+                <td class="right nowrap veda-life">${minutesToHHMM(totLife)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>`
+    }
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"/>
+<title>Relatório de Fechamento — ${escapeHtml(clienteNome)} — ${competencia}</title>
+<style>${reportStyles}</style>
+</head>
+<body>
+  <div class="page-header">
+    <div class="page-header-left"><img src="${logoUrl}" alt="ERPSERV"/></div>
+    <div class="page-header-right">
+      <h1>Relatório de Fechamento</h1>
+      <div class="subtitle">On Demand — Serviços</div>
+      <div class="meta"><b>Cliente:</b> ${escapeHtml(clienteNome)}</div>
+      <div class="meta"><b>Competência:</b> ${competencia}</div>
+    </div>
+  </div>
+
+  <div class="valor-topo">
+    <div>
+      <div class="label">Valor a pagar</div>
+      <div class="horas">${totalHoras.toFixed(2)}h trabalhadas</div>
+    </div>
+    <div class="valor">${formatBRL(totalGeral)}</div>
+  </div>
+
+  ${sectionsHtml}
+
+  ${ticketSectionHtml}
+
+  <div class="total-box">
+    <div>
+      <div class="total-box-label">Total de Horas</div>
+      <div class="total-box-value">${totalHoras.toFixed(2)}h</div>
+    </div>
+    <div style="text-align:right">
+      <div class="total-box-label">Valor a pagar</div>
+      <div class="total-box-value">${formatBRL(totalGeral)}</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>ERPSERV Consultoria — Documento gerado pelo sistema Minutor</span>
+    <span>Emitido em ${new Date().toLocaleDateString('pt-BR')}</span>
+  </div>
+</body>
+</html>`
+  }
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -450,6 +875,7 @@ export default function FechamentoClientePage() {
             })
             const lista = Array.from(clientMap.values())
               .filter(c => c.total_receita > 0)
+              .filter(c => !customerId || c.customer_id === customerId) // seletor filtra a Visão Global
               .sort((a, b) => a.nome.localeCompare(b.nome))
 
             if (lista.length === 0) {
@@ -504,9 +930,9 @@ export default function FechamentoClientePage() {
                           {/* Linha do cliente */}
                           <tr
                             key={c.customer_id}
-                            style={{ cursor: 'pointer' }}
+                            style={{ cursor: hasMult ? 'pointer' : 'default' }}
                             className="border-b transition-colors hover:bg-white/5"
-                            onClick={() => hasMult ? toggleClient(c.customer_id) : (setCustomerId(c.customer_id), setTab('servicos'))}
+                            onClick={hasMult ? () => toggleClient(c.customer_id) : undefined}
                           >
                             <td className="px-5 py-3 text-sm font-medium" style={{ color: 'var(--brand-text)' }}>
                               <div className="flex items-center gap-2">
@@ -539,12 +965,10 @@ export default function FechamentoClientePage() {
                             </td>
                           </tr>
                           {/* Linhas dos projetos (expandido ou multi-projeto) */}
-                          {(expanded || hasMult) && hasMult && c.projetos.map(p => (
+                          {expanded && hasMult && c.projetos.map(p => (
                             <tr
                               key={`${c.customer_id}-${p.projeto_id}`}
-                              style={{ cursor: 'pointer' }}
-                              className="border-b transition-colors hover:bg-white/5"
-                              onClick={() => { setCustomerId(c.customer_id); setTab('servicos') }}
+                              className="border-b"
                             >
                               <td className="py-2.5 text-xs" style={{ color: 'var(--brand-muted)', paddingLeft: '2.75rem' }}>
                                 {p.nome}
@@ -631,7 +1055,6 @@ export default function FechamentoClientePage() {
                               <Th>Solicitante</Th>
                               <Th>Ticket</Th>
                               <Th>Título</Th>
-                              <Th>Descrição</Th>
                               <Th right>Horas</Th>
                             </tr>
                           </Thead>
@@ -643,7 +1066,6 @@ export default function FechamentoClientePage() {
                                 <Td muted className="text-xs">{ts.solicitante ?? '—'}</Td>
                                 <Td muted className="text-xs">{ts.ticket ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${ts.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-500 hover:text-cyan-400">#{ts.ticket}</a> : '—'}</Td>
                                 <Td muted className="text-xs">{ts.titulo ?? '—'}</Td>
-                                <Td muted className="text-xs">{ts.observacao ?? '—'}</Td>
                                 <Td right className="tabular-nums text-xs font-medium">
                                   {ts.horas.toFixed(2)}h
                                   {ts.client_extra_pct ? (
@@ -696,145 +1118,87 @@ export default function FechamentoClientePage() {
               {/* ── Tab Relatório Serviços ── */}
               {tab === 'relatorio' && (
                 loading ? <SkeletonTable rows={6} cols={4} /> :
-                projetos.length === 0 ? (
-                  <EmptyState icon={FileText} title="Sem dados para relatório"
-                    description="Nenhum apontamento encontrado no período selecionado." />
-                ) : (
-                  <>
-                    <div className="flex justify-end mb-4">
-                      <Button size="sm" onClick={() => handlePrint('servicos')}
-                        style={{ background: 'var(--brand-primary)', color: '#000' }}>
-                        <Printer size={13} />
-                        <span className="ml-1.5">Imprimir / Salvar PDF</span>
-                      </Button>
-                    </div>
-                    <div id="print-servicos">
-                      <div className="bg-white text-gray-900 rounded-2xl shadow-lg mx-auto"
-                        style={{ maxWidth: 800, fontFamily: 'Arial, sans-serif' }}>
-                        <div className="flex items-start justify-between px-10 pt-8 pb-6"
-                          style={{ borderBottom: '2px solid #5b21b6' }}>
-                          <Image src="/logo.png" alt="ERPSERV" width={180} height={72}
-                            style={{ objectFit: 'contain' }} />
-                          <div className="text-right">
-                            <div className="text-xl font-bold text-gray-800 mb-1">Relatório de Fechamento</div>
-                            <div className="text-sm text-gray-500">On Demand — Serviços</div>
-                            <div className="mt-2 text-sm text-gray-700">
-                              <span className="font-semibold">Cliente:</span> {clienteNome}
-                            </div>
-                            <div className="text-sm text-gray-700">
-                              <span className="font-semibold">Competência:</span>{' '}
-                              {fromYM === toYM ? fmtYMFull(toYM) : `${fmtYM(fromYM)} a ${fmtYM(toYM)}`}
-                            </div>
-                            {isClosed && isSingleMonth && status?.closed_at && (
-                              <div className="text-xs text-gray-400 mt-1">
-                                Fechado em {new Date(status.closed_at).toLocaleDateString('pt-BR')}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="px-10 py-6 space-y-8">
-                          {projetos.map((p, idx) => (
-                            <div key={p.projeto_id}>
-                              <div className="flex items-baseline justify-between mb-3">
-                                <div>
-                                  <span className="text-base font-bold text-gray-800">{p.projeto_nome}</span>
-                                  <span className="ml-2 text-xs text-gray-400">{p.projeto_codigo}</span>
-                                </div>
-                                <span className="text-sm text-gray-500">
-                                  Valor/hora: <b>{formatBRL(p.valor_hora)}</b>
-                                </span>
-                              </div>
-                              <table className="w-full text-sm border-collapse">
-                                <thead className="sticky top-0 z-10" style={{ background: '#f5f3ff' }}>
-                                  <tr style={{ background: '#f5f3ff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Data</th>
-                                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Colaborador</th>
-                                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Solicitante</th>
-                                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Ticket</th>
-                                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Título</th>
-                                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">Horas</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {(p.apontamentos ?? []).map((ts, i) => {
-                                    const bg = i % 2 === 0 ? '#fff' : '#faf9ff'
-                                    return (
-                                      <Fragment key={ts.id}>
-                                        <tr style={{ background: bg, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                                          <td className="px-3 pt-2 pb-1 text-xs text-gray-600 whitespace-nowrap">{fmtDate(ts.data)}</td>
-                                          <td className="px-3 pt-2 pb-1 text-xs text-gray-800">{ts.colaborador}</td>
-                                          <td className="px-3 pt-2 pb-1 text-xs text-gray-500">{ts.solicitante ?? '—'}</td>
-                                          <td className="px-3 pt-2 pb-1 text-xs text-gray-500">{ts.ticket ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${ts.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-500">#{ts.ticket}</a> : '—'}</td>
-                                          <td className="px-3 pt-2 pb-1 text-xs text-gray-500">{ts.titulo ?? '—'}</td>
-                                          <td className="px-3 pt-2 pb-1 text-xs text-right font-medium text-gray-800 tabular-nums">
-                                            {ts.horas.toFixed(2)}h
-                                            {ts.client_extra_pct ? (
-                                              <span className="block text-[10px] font-semibold" style={{ color: '#d97706' }}>
-                                                +{ts.client_extra_pct}%{ts.valor_extra ? ` (+${formatBRL(ts.valor_extra)})` : ''}
-                                              </span>
-                                            ) : null}
-                                          </td>
-                                        </tr>
-                                        <tr style={{ background: bg, borderBottom: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                                          <td colSpan={6} className="px-3 pt-1 pb-3 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
-                                            <span className="font-semibold text-gray-500 mr-1">Descrição:</span>
-                                            {ts.observacao ?? '—'}
-                                          </td>
-                                        </tr>
-                                      </Fragment>
-                                    )
-                                  })}
-                                </tbody>
-                                <tfoot>
-                                  {p.extra_receita != null && p.extra_receita > 0 && (
-                                    <tr style={{ background: '#fffbeb', borderTop: '1px solid #fde68a', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                                      <td colSpan={5} className="px-3 py-1.5 text-right text-xs font-semibold" style={{ color: '#92400e' }}>
-                                        Acréscimo % ({p.apontamentos.filter(a => a.client_extra_pct).map(a => `+${Number(a.client_extra_pct)}%`).filter((v, i, s) => s.indexOf(v) === i).join(', ')}) =
-                                      </td>
-                                      <td className="px-3 py-1.5 text-right text-xs font-bold tabular-nums" style={{ color: '#d97706' }}>
-                                        +{formatBRL(p.extra_receita)}
-                                      </td>
-                                    </tr>
-                                  )}
-                                  <tr style={{ background: '#ede9fe', borderTop: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                                    <td colSpan={5} className="px-3 py-2 text-right text-sm font-semibold text-gray-700">
-                                      {p.horas.toFixed(2)}h × {formatBRL(p.valor_hora)}/h{p.extra_receita && p.extra_receita > 0 ? ' + acréscimo' : ''} =
-                                    </td>
-                                    <td className="px-3 py-2 text-right text-sm font-bold tabular-nums"
-                                      style={{ color: '#5b21b6' }}>
-                                      {formatBRL(p.total_receita)}
-                                    </td>
-                                  </tr>
-                                </tfoot>
-                              </table>
-                              {idx < projetos.length - 1 && (
-                                <div className="mt-6 border-t border-dashed border-gray-200" />
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        <div className="px-10 py-6 mx-10 mb-10 rounded-xl"
-                          style={{ background: '#5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                          <div className="flex items-center justify-between">
-                            <div style={{ color: '#fff' }}>
-                              <div className="text-sm font-medium" style={{ opacity: 0.8 }}>Total de Horas</div>
-                              <div className="text-2xl font-bold">{totalHoras.toFixed(2)}h</div>
-                            </div>
-                            <div className="text-right" style={{ color: '#fff' }}>
-                              <div className="text-sm font-medium" style={{ opacity: 0.8 }}>Total Serviços</div>
-                              <div className="text-3xl font-bold tabular-nums">{formatBRL(totalGeral)}</div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="px-10 pb-8 flex justify-between items-center text-xs text-gray-400"
-                          style={{ borderTop: '1px solid #e5e7eb', paddingTop: 16 }}>
-                          <span>ERPSERV Consultoria — Documento gerado pelo sistema Minutor</span>
-                          <span>Emitido em {new Date().toLocaleDateString('pt-BR')}</span>
-                        </div>
+                (() => {
+                  const reportHtml = buildReportHtml()
+                  if (!reportHtml) {
+                    return (
+                      <EmptyState icon={FileText} title="Sem dados para relatório"
+                        description="Nenhum apontamento encontrado no período selecionado." />
+                    )
+                  }
+                  return (
+                    /* Split horizontal — preview à esquerda, painel de ações à direita */
+                    <div className="flex-1 flex min-h-0 flex-col md:flex-row -m-6">
+                      {/* LEFT — preview do documento, largura limitada e centralizada */}
+                      <div className="flex-1 min-h-0 overflow-auto flex justify-center p-3 md:p-6" style={{ background: 'var(--bg)' }}>
+                        <iframe
+                          ref={reportIframeRef}
+                          srcDoc={reportHtml}
+                          title="Relatório"
+                          className="w-full"
+                          style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, maxWidth: 820, minHeight: 640 }}
+                        />
                       </div>
+
+                      {/* RIGHT — painel de ações fixo */}
+                      <aside
+                        className="shrink-0 w-full md:w-[300px] flex flex-col gap-3 p-4 overflow-y-auto border-t md:border-t-0 md:border-l"
+                        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+                      >
+                        <div className="pb-3 mb-1" style={{ borderBottom: '1px solid var(--border)' }}>
+                          <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text)' }}>{clienteNome}</p>
+                          <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                            {fromYM === toYM ? fmtYM(toYM) : `${fmtYM(fromYM)} — ${fmtYM(toYM)}`}
+                          </p>
+                          <p className="text-[11px] mt-2 uppercase tracking-wide" style={{ color: 'var(--text-light)' }}>Valor a pagar</p>
+                          <p className="text-lg font-bold" style={{ color: 'var(--primary)' }}>{formatBRL(totalGeral)}</p>
+                        </div>
+
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          icon={Printer}
+                          className="w-full !justify-start"
+                          onClick={() => reportIframeRef.current?.contentWindow?.print()}
+                        >
+                          Imprimir
+                        </Button>
+
+                        {canSendEmail && (
+                          <Button
+                            size="sm"
+                            icon={Mail}
+                            className="w-full !justify-start"
+                            title={`Enviar fechamento de ${clienteNome} por e-mail`}
+                            onClick={openCompose}
+                          >
+                            Enviar e-mail
+                          </Button>
+                        )}
+
+                        <Button
+                          size="sm"
+                          icon={FileSpreadsheet}
+                          loading={downloadingExcel}
+                          className="w-full !justify-start"
+                          onClick={downloadExcel}
+                        >
+                          {downloadingExcel ? 'Baixando…' : 'Baixar Excel'}
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={X}
+                          className="w-full !justify-start mt-auto"
+                          onClick={() => setTab('servicos')}
+                        >
+                          Fechar
+                        </Button>
+                      </aside>
                     </div>
-                  </>
-                )
+                  )
+                })()
               )}
 
               {/* ── Tab Despesas ── */}
@@ -966,6 +1330,181 @@ export default function FechamentoClientePage() {
 
         </div>
       </div>
+
+      {/* Dialog de composição/preview do e-mail */}
+      {composeOpen && customerId && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.85)' }}
+          onMouseDown={e => { composePressOnBackdrop.current = e.target === e.currentTarget }}
+          onClick={e => { if (e.target === e.currentTarget && composePressOnBackdrop.current) closeCompose() }}
+        >
+          <div
+            className="ds-card flex flex-col w-full max-w-3xl max-h-[90vh] overflow-hidden"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Enviar fechamento por e-mail</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                  {clienteNome} · {fromYM === toYM ? fmtYM(toYM) : `${fmtYM(fromYM)} — ${fmtYM(toYM)}`}
+                </p>
+              </div>
+              <button
+                onClick={closeCompose}
+                className="p-1 rounded transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+                title="Fechar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-5 flex flex-col gap-4">
+              {/* Destinatários */}
+              <div className="rounded-lg p-4 flex flex-col gap-4" style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-light)' }}>
+                  Destinatários
+                </span>
+
+                {/* E-mails do cliente (cadastrados) — editável + salvar no cadastro */}
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                    E-mails do cliente (cadastrados)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={cadastradoInput}
+                      onChange={e => { setCadastradoInput(e.target.value); setCadastroSaved(false) }}
+                      placeholder="email1@dominio.com, email2@dominio.com"
+                      className="flex-1 rounded-lg px-3 py-2 text-sm ds-input focus:outline-none"
+                      style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={Save}
+                      loading={savingCadastro}
+                      onClick={saveCadastro}
+                      title="Salvar estes e-mails no cadastro do cliente"
+                    >
+                      Salvar no cadastro
+                    </Button>
+                  </div>
+                  {cadastroSaved && (
+                    <p className="text-[11px] mt-1" style={{ color: 'var(--success)' }}>
+                      Salvo no cadastro do cliente.
+                    </p>
+                  )}
+                  <p className="text-[10px] mt-1" style={{ color: 'var(--text-light)' }}>
+                    Separe vários e-mails por vírgula. Estes ficam salvos para os próximos fechamentos.
+                  </p>
+                </div>
+
+                {/* E-mail avulso (só deste envio) — chips add/remove */}
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                    E-mail avulso (só deste envio)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={avulsoDraft}
+                      onChange={e => setAvulsoDraft(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addAvulso() } }}
+                      placeholder="adicionar e-mail e pressionar Enter"
+                      className="flex-1 rounded-lg px-3 py-2 text-sm ds-input focus:outline-none"
+                      style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                    />
+                    <Button size="sm" variant="secondary" icon={Plus} onClick={addAvulso}>
+                      Adicionar
+                    </Button>
+                  </div>
+                  {avulsoEmails.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {avulsoEmails.map(em => (
+                        <span
+                          key={em}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs"
+                          style={{ background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)' }}
+                        >
+                          {em}
+                          <button
+                            onClick={() => removeAvulso(em)}
+                            className="transition-colors"
+                            style={{ color: 'var(--text-muted)' }}
+                            title="Remover"
+                          >
+                            <X size={11} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[10px] mt-1" style={{ color: 'var(--text-light)' }}>
+                    Não fica salvo — vale só para este envio.
+                  </p>
+                </div>
+              </div>
+
+              {/* Preview do e-mail (doc HTML claro — mantém o próprio fundo branco) */}
+              <div className="relative">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-light)' }}>
+                    Prévia do e-mail
+                  </span>
+                  {previewLoading && (
+                    <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <RefreshCw size={12} className="animate-spin" /> atualizando…
+                    </span>
+                  )}
+                </div>
+                <iframe
+                  srcDoc={emailPreviewHtml ?? ''}
+                  title="Prévia do e-mail"
+                  className="w-full"
+                  style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, height: 360 }}
+                />
+              </div>
+
+              {/* Mensagem editável (por envio — não persiste) */}
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-light)' }}>
+                  Mensagem do e-mail
+                </label>
+                <textarea
+                  value={emailMensagem}
+                  onChange={e => setEmailMensagem(e.target.value)}
+                  rows={5}
+                  placeholder="Mensagem que aparece no corpo do e-mail…"
+                  className="w-full rounded-lg px-3 py-2 text-sm resize-y ds-input focus:outline-none"
+                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+              <Button variant="ghost" size="sm" onClick={closeCompose} disabled={sendingEmail}>
+                Cancelar
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Send}
+                loading={sendingEmail}
+                onClick={sendReportEmail}
+              >
+                {sendingEmail ? 'Enviando…' : 'Enviar'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   )
 }
