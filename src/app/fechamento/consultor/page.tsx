@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
-import { RefreshCw, Printer, FileText, Users, Search, X, Mail } from 'lucide-react'
+import { RefreshCw, Printer, FileText, Users, Search, X, Mail, FileSpreadsheet } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
@@ -325,6 +325,7 @@ export default function FechamentoConsultorPage() {
   // Consultor alvo do relatório aberto (só pra relatório INDIVIDUAL — habilita o "Enviar e-mail").
   const [reportTarget, setReportTarget] = useState<{ userId: number; name: string } | null>(null)
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [downloadingExcel, setDownloadingExcel] = useState(false)
   const reportIframeRef = useRef<HTMLIFrameElement>(null)
   const canSendEmail = user?.type === 'admin' || user?.type === 'administrativo'
   const [apenasComMovimento, setApenasComMovimento] = useState(true)
@@ -358,6 +359,38 @@ export default function FechamentoConsultorPage() {
       toast.error(`Erro ao enviar o fechamento: ${err instanceof Error ? err.message : 'falha na API'}`)
     } finally {
       setSendingEmail(false)
+    }
+  }
+
+  async function downloadExcel() {
+    if (!reportTarget) return
+    setDownloadingExcel(true)
+    try {
+      // O `api` helper sempre faz res.json(); pra blob usamos fetch direto no
+      // mesmo proxy /api/v1 (o middleware injeta o Authorization via cookie).
+      const res = await fetch(
+        `/api/v1/fechamento-consultor/${reportTarget.userId}/${yearMonth}/excel`,
+        { credentials: 'same-origin', headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } },
+      )
+      if (!res.ok) throw new Error(`Erro ${res.status}`)
+      // Nome do arquivo: tenta o Content-Disposition do backend, senão monta um.
+      const cd = res.headers.get('Content-Disposition') ?? ''
+      const match = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
+      const fallback = `Fechamento_${yearMonth}_${reportTarget.name ?? 'consultor'}.xlsx`
+      const filename = match ? decodeURIComponent(match[1]) : fallback
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err: unknown) {
+      toast.error(`Erro ao baixar o Excel: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setDownloadingExcel(false)
     }
   }
 
@@ -916,48 +949,98 @@ export default function FechamentoConsultorPage() {
 
       </div>
       {/* Modal de visualização do relatório */}
-      {reportHtml && (
+      {reportHtml && (() => {
+        // Total do consultor alvo (lookup em `data` por user_id) — só pra exibir no header do painel.
+        const targetTotal = reportTarget
+          ? [...(data?.horistas ?? []), ...(data?.banco_horas ?? []), ...(data?.fixos ?? [])]
+              .find(c => c.user_id === reportTarget.userId)?.total
+          : undefined
+        const closeModal = () => { setReportHtml(null); setReportTarget(null) }
+        return (
         <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.85)', paddingTop: 'var(--banner-h, 0px)' }}>
-          <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ background: '#18181b', borderBottom: '1px solid #3f3f46' }}>
-            <span className="text-sm font-semibold text-white">Relatório</span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => reportIframeRef.current?.contentWindow?.print()}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
-                style={{ background: 'var(--brand-primary)', color: 'var(--primary-fg)' }}
-              >
-                <Printer size={12} /> Imprimir
-              </button>
-              {canSendEmail && reportTarget && (
-                <button
-                  onClick={sendReportEmail}
-                  disabled={sendingEmail}
-                  title={`Enviar para ${reportTarget.name} (cópia financeiro)`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
-                  style={{ background: 'var(--success)', color: 'var(--primary-fg)' }}
-                >
-                  <Mail size={12} /> {sendingEmail ? 'Enviando…' : 'Enviar e-mail'}
-                </button>
+          {/* Barra de topo slim — só o título */}
+          <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+            <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Relatório</span>
+          </div>
+
+          {/* Corpo: split horizontal — preview à esquerda, painel de ações à direita */}
+          <div className="flex-1 flex min-h-0 flex-col md:flex-row">
+            {/* LEFT — preview do documento, largura limitada e centralizada */}
+            <div className="flex-1 min-h-0 overflow-auto flex justify-center p-3 md:p-6" style={{ background: 'var(--bg)' }}>
+              <iframe
+                ref={reportIframeRef}
+                srcDoc={reportHtml}
+                title="Relatório"
+                className="w-full h-full"
+                style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, maxWidth: 820 }}
+              />
+            </div>
+
+            {/* RIGHT — painel de ações fixo */}
+            <aside
+              className="shrink-0 w-full md:w-[300px] flex flex-col gap-3 p-4 overflow-y-auto border-t md:border-t-0 md:border-l"
+              style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+            >
+              {/* Header opcional — consultor + período + total */}
+              {reportTarget && (
+                <div className="pb-3 mb-1" style={{ borderBottom: '1px solid var(--border)' }}>
+                  <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text)' }}>{reportTarget.name}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{fmtYearMonth(yearMonth)}</p>
+                  {targetTotal != null && (
+                    <p className="text-lg font-bold mt-2" style={{ color: 'var(--primary)' }}>{formatBRL(targetTotal)}</p>
+                  )}
+                </div>
               )}
-              <button
-                onClick={() => { setReportHtml(null); setReportTarget(null) }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
-                style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }}
+
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Printer}
+                className="w-full !justify-start"
+                onClick={() => reportIframeRef.current?.contentWindow?.print()}
+              >
+                Imprimir
+              </Button>
+
+              {canSendEmail && reportTarget && (
+                <Button
+                  size="sm"
+                  icon={Mail}
+                  loading={sendingEmail}
+                  className="w-full !justify-start"
+                  title={`Enviar para ${reportTarget.name} (cópia financeiro)`}
+                  onClick={sendReportEmail}
+                >
+                  {sendingEmail ? 'Enviando…' : 'Enviar e-mail'}
+                </Button>
+              )}
+
+              {reportTarget && (
+                <Button
+                  size="sm"
+                  icon={FileSpreadsheet}
+                  loading={downloadingExcel}
+                  className="w-full !justify-start"
+                  onClick={downloadExcel}
+                >
+                  {downloadingExcel ? 'Baixando…' : 'Baixar Excel'}
+                </Button>
+              )}
+
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={X}
+                className="w-full !justify-start mt-auto"
+                onClick={closeModal}
               >
                 Fechar
-              </button>
-            </div>
-          </div>
-          <div className="flex-1 flex min-h-0">
-            <iframe
-              ref={reportIframeRef}
-              srcDoc={reportHtml}
-              className="flex-1 h-full"
-              style={{ background: '#fff', border: 'none' }}
-            />
+              </Button>
+            </aside>
           </div>
         </div>
-      )}
+        )
+      })()}
     </AppLayout>
   )
 }
