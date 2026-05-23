@@ -70,6 +70,15 @@ interface DespesaRow {
   valor: number
 }
 
+// Apuração por Ticket (Vedamotors) — espelha /timesheets/summary-by-ticket.
+interface TicketSummaryRow {
+  ticket: string
+  title: string | null
+  requester: string | null
+  period_minutes: number
+  lifetime_minutes: number
+}
+
 // Estrutura mínima do /fechamento-contrato (on_demand only)
 interface ProjetoGlobal { projeto_id: number; nome: string; codigo: string; horas: number; valor_hora: number; total_receita: number }
 interface ClienteGlobal  { customer_id: number; nome: string; projetos: ProjetoGlobal[]; total_horas: number; total_receita: number }
@@ -102,6 +111,13 @@ function fmtPeriodo(from: string, to: string): string {
 
 function fmtDate(d: string): string {
   return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR')
+}
+
+// minutos → "H:MM" (mesmo formato do relatório de apontamentos).
+function minutesToHHMM(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return `${h}:${String(m).padStart(2, '0')}`
 }
 
 const now = new Date()
@@ -150,6 +166,8 @@ export default function FechamentoClientePage() {
 
   const [dados,    setDados]    = useState<ApontamentosData | null>(null)
   const [despesas, setDespesas] = useState<DespesaRow[]>([])
+  // Apuração por Ticket — só preenchido para Vedamotors.
+  const [ticketSummary, setTicketSummary] = useState<TicketSummaryRow[]>([])
 
   const [loading,         setLoading]         = useState(false)
   const [loadingDespesas, setLoadingDespesas] = useState(false)
@@ -221,6 +239,35 @@ export default function FechamentoClientePage() {
       .finally(() => setLoadingDespesas(false))
   }, [customerId, fromYM, toYM])
 
+  // Apuração por Ticket — só Vedamotors. Espelha o relatório de apontamentos:
+  // GET /timesheets/summary-by-ticket com customer_id + start_date/end_date.
+  // O fechamento trabalha com ano-mês (fromYM/toYM); converte pra dia inicial
+  // do fromYM e dia final do toYM. Statuses pending+approved (escopo do relatório).
+  const loadTicketSummary = useCallback(() => {
+    if (!customerId || !fromYM || !toYM) { setTicketSummary([]); return }
+    const nome = clientes.find(c => c.customer_id === customerId)?.nome ?? ''
+    if (!nome.toUpperCase().includes('VEDAMOTORS')) { setTicketSummary([]); return }
+
+    const startDate = `${fromYM}-01`
+    const [ty, tm] = toYM.split('-').map(Number)
+    const lastDay = new Date(ty, tm, 0).getDate()
+    const endDate = `${toYM}-${String(lastDay).padStart(2, '0')}`
+
+    const p = new URLSearchParams()
+    p.set('customer_id', String(customerId))
+    p.set('start_date',  startDate)
+    p.set('end_date',    endDate)
+    ;['pending', 'approved'].forEach(s => p.append('status[]', s))
+
+    api.get<{ tickets?: TicketSummaryRow[] }>(`/timesheets/summary-by-ticket?${p}`)
+      .then(r => {
+        const tickets = Array.isArray(r?.tickets) ? r.tickets : []
+        tickets.sort((a, b) => a.ticket.localeCompare(b.ticket, 'pt-BR', { numeric: true }))
+        setTicketSummary(tickets)
+      })
+      .catch(() => setTicketSummary([]))
+  }, [customerId, fromYM, toYM, clientes])
+
   // ── Efeitos ──
 
   useEffect(() => {
@@ -228,14 +275,16 @@ export default function FechamentoClientePage() {
     loadGlobal()
     setDados(null)
     setDespesas([])
+    setTicketSummary([])
     setProjetoFilter(null)
   }, [fromYM, toYM])
 
   useEffect(() => {
-    if (!customerId) { setStatus(null); setDados(null); setDespesas([]); return }
+    if (!customerId) { setStatus(null); setDados(null); setDespesas([]); setTicketSummary([]); return }
     setStatus(clientes.find(c => c.customer_id === customerId) ?? null)
     setDados(null)
     setDespesas([])
+    setTicketSummary([])
     setProjetoFilter(null)
     setTab('servicos')
   }, [customerId, clientes])
@@ -244,8 +293,9 @@ export default function FechamentoClientePage() {
     if (customerId && fromYM && toYM) {
       loadServicos()
       loadDespesas()
+      loadTicketSummary()
     }
-  }, [customerId, fromYM, toYM])
+  }, [customerId, fromYM, toYM, clientes])
 
   // ── Fechar / Reabrir ──
 
@@ -494,6 +544,15 @@ export default function FechamentoClientePage() {
     .nowrap { white-space: nowrap; }
     .section-footer { background: #faf9ff; padding: 7px 12px; text-align: right; font-size: 12px; color: #5b21b6; font-weight: 600; border-top: 2px solid #c4b5fd; }
     a.ticket { color: #0891b2; text-decoration: none; }
+    /* Apuração por Ticket (Vedamotors) */
+    .ticket-section { margin-top: 26px; margin-bottom: 26px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .ticket-section h2 { font-size: 14px; font-weight: 700; color: #1f2937; margin-bottom: 4px; }
+    .ticket-section .ticket-sub { font-size: 11px; color: #6b7280; margin-bottom: 8px; }
+    .ticket-table thead th { background: #f5f3ff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .ticket-table tbody tr:nth-child(even) td { background: #faf9ff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .ticket-table td.veda-life, .ticket-table th.veda-life { color: #5b21b6; }
+    .ticket-table tfoot td { background: #ede9fe; border-top: 2px solid #5b21b6; padding: 8px 10px; font-size: 12px; font-weight: 700; color: #374151; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .ticket-table tfoot td.veda-life { color: #5b21b6; }
     .total-box { background: #5b21b6; border-radius: 8px; padding: 16px 24px; display: flex; justify-content: space-between; margin-top: 24px; color: #fff; }
     .total-box-label { font-size: 11px; opacity: 0.85; margin-bottom: 4px; }
     .total-box-value { font-size: 26px; font-weight: 700; }
@@ -549,6 +608,54 @@ export default function FechamentoClientePage() {
         </div>`
     }).join('')
 
+    // Apuração por Ticket — só Vedamotors e só se houver tickets no período.
+    // Espelha a 2ª tabela do relatório de apontamentos (total no período +
+    // histórico acumulado por ticket). "Ticket Vedamotors" extrai NNNN-NNNNNN
+    // do título via VEDAMOTORS_PATTERN, senão "Sem ticket".
+    let ticketSectionHtml = ''
+    if (isVedamotors && ticketSummary.length > 0) {
+      const totPeriod = ticketSummary.reduce((acc, t) => acc + t.period_minutes, 0)
+      const totLife   = ticketSummary.reduce((acc, t) => acc + t.lifetime_minutes, 0)
+      const rows = ticketSummary.map((tk, i) => {
+        const bg = i % 2 === 0 ? '#fff' : '#faf9ff'
+        const ticketCell = `<a class="ticket" href="https://erpserv.movidesk.com/Ticket/Edit/${escapeHtml(tk.ticket)}" target="_blank" rel="noopener noreferrer">#${escapeHtml(tk.ticket)}</a>`
+        const vedaCell = escapeHtml(vedaTicket(tk.title ?? undefined))
+        return `
+          <tr style="background:${bg}">
+            <td class="nowrap">${ticketCell}</td>
+            <td class="nowrap">${vedaCell}</td>
+            <td>${escapeHtml(tk.requester ?? '—')}</td>
+            <td class="right nowrap">${minutesToHHMM(tk.period_minutes)}</td>
+            <td class="right nowrap veda-life">${minutesToHHMM(tk.lifetime_minutes)}</td>
+          </tr>`
+      }).join('')
+
+      ticketSectionHtml = `
+        <div class="ticket-section">
+          <h2>Apuração por Ticket</h2>
+          <p class="ticket-sub">Tickets com apontamento dentro do período, mostrando o total no período selecionado e o total acumulado desde o primeiro apontamento no sistema (mesmo cliente).</p>
+          <table class="ticket-table">
+            <thead>
+              <tr>
+                <th>Ticket</th>
+                <th>Ticket Vedamotors</th>
+                <th>Solicitante</th>
+                <th class="right">Total no período</th>
+                <th class="right veda-life">Total histórico</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+            <tfoot>
+              <tr>
+                <td colspan="3" class="right">Totais (${ticketSummary.length} ticket${ticketSummary.length === 1 ? '' : 's'})</td>
+                <td class="right nowrap">${minutesToHHMM(totPeriod)}</td>
+                <td class="right nowrap veda-life">${minutesToHHMM(totLife)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>`
+    }
+
     return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="UTF-8"/>
@@ -575,6 +682,8 @@ export default function FechamentoClientePage() {
   </div>
 
   ${sectionsHtml}
+
+  ${ticketSectionHtml}
 
   <div class="total-box">
     <div>
@@ -946,7 +1055,6 @@ export default function FechamentoClientePage() {
                               <Th>Solicitante</Th>
                               <Th>Ticket</Th>
                               <Th>Título</Th>
-                              <Th>Descrição</Th>
                               <Th right>Horas</Th>
                             </tr>
                           </Thead>
@@ -958,7 +1066,6 @@ export default function FechamentoClientePage() {
                                 <Td muted className="text-xs">{ts.solicitante ?? '—'}</Td>
                                 <Td muted className="text-xs">{ts.ticket ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${ts.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-500 hover:text-cyan-400">#{ts.ticket}</a> : '—'}</Td>
                                 <Td muted className="text-xs">{ts.titulo ?? '—'}</Td>
-                                <Td muted className="text-xs">{ts.observacao ?? '—'}</Td>
                                 <Td right className="tabular-nums text-xs font-medium">
                                   {ts.horas.toFixed(2)}h
                                   {ts.client_extra_pct ? (
