@@ -286,7 +286,8 @@ export default function FechamentoClientePage() {
     setDespesas([])
     setTicketSummary([])
     setProjetoFilter(null)
-    setTab('servicos')
+    // NÃO troca de aba ao mudar o cliente — o seletor filtra a Visão Global; o usuário
+    // escolhe a aba (Relatório/Apontamentos) quando quiser.
   }, [customerId, clientes])
 
   useEffect(() => {
@@ -874,6 +875,7 @@ export default function FechamentoClientePage() {
             })
             const lista = Array.from(clientMap.values())
               .filter(c => c.total_receita > 0)
+              .filter(c => !customerId || c.customer_id === customerId) // seletor filtra a Visão Global
               .sort((a, b) => a.nome.localeCompare(b.nome))
 
             if (lista.length === 0) {
@@ -928,9 +930,9 @@ export default function FechamentoClientePage() {
                           {/* Linha do cliente */}
                           <tr
                             key={c.customer_id}
-                            style={{ cursor: 'pointer' }}
+                            style={{ cursor: hasMult ? 'pointer' : 'default' }}
                             className="border-b transition-colors hover:bg-white/5"
-                            onClick={() => hasMult ? toggleClient(c.customer_id) : (setCustomerId(c.customer_id), setTab('servicos'))}
+                            onClick={hasMult ? () => toggleClient(c.customer_id) : undefined}
                           >
                             <td className="px-5 py-3 text-sm font-medium" style={{ color: 'var(--brand-text)' }}>
                               <div className="flex items-center gap-2">
@@ -963,12 +965,10 @@ export default function FechamentoClientePage() {
                             </td>
                           </tr>
                           {/* Linhas dos projetos (expandido ou multi-projeto) */}
-                          {(expanded || hasMult) && hasMult && c.projetos.map(p => (
+                          {expanded && hasMult && c.projetos.map(p => (
                             <tr
                               key={`${c.customer_id}-${p.projeto_id}`}
-                              style={{ cursor: 'pointer' }}
-                              className="border-b transition-colors hover:bg-white/5"
-                              onClick={() => { setCustomerId(c.customer_id); setTab('servicos') }}
+                              className="border-b"
                             >
                               <td className="py-2.5 text-xs" style={{ color: 'var(--brand-muted)', paddingLeft: '2.75rem' }}>
                                 {p.nome}
