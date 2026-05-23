@@ -308,9 +308,9 @@ export default function FechamentoParceiroPage() {
     table { width: 100%; border-collapse: collapse; }
     thead th { background: #f3f4f6; padding: 7px 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; color: #6b7280; text-align: left; border-bottom: 1px solid #e5e7eb; }
     tbody td { padding: 7px 10px; font-size: 11px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
-    tbody tr.main-row td { padding-bottom: 2px; border-bottom: none; }
-    tbody tr.desc-row td { padding-top: 2px; padding-bottom: 8px; border-bottom: 2px solid #5b21b6; font-size: 11px; color: #374151; white-space: pre-wrap; }
-    tbody tr.desc-row td .label { font-weight: 600; color: #6b7280; margin-right: 4px; }
+    tbody tr.main-row td { padding: 8px 8px; border-bottom: 1px solid #ece9f5; vertical-align: middle; }
+    tbody tr.main-row:nth-child(even) td { background: #f7f6fc; }
+    tbody tr.main-row:hover td { background: #efeafc; }
     .right { text-align: right; }
     .section-footer { background: #f5f3ff; padding: 8px 12px; text-align: right; font-size: 12px; color: #7c3aed; font-weight: 600; border-radius: 0 0 6px 6px; margin-top: -1px; }
     .divider { border: none; border-top: 1px dashed #d1d5db; margin: 20px 0; }
@@ -346,6 +346,29 @@ export default function FechamentoParceiroPage() {
       entry.total += a.horas * entry.taxa
     })
 
+    // Resumo por consultor (horas + valor), agregado entre todos os tipos de contrato
+    const resumoMap = new Map<number, { consultor: string; taxa: number; horas: number; total: number }>()
+    apontamentos.forEach(a => {
+      if (!resumoMap.has(a.user_id)) {
+        const c = consultores.find(c => c.user_id === a.user_id)
+        resumoMap.set(a.user_id, { consultor: a.consultor, taxa: c?.valor_hora ?? 0, horas: 0, total: 0 })
+      }
+      const e = resumoMap.get(a.user_id)!
+      e.horas += a.horas
+      e.total += a.horas * e.taxa
+    })
+    const resumoHtml = `
+      <div class="section" style="margin-top:8px">
+        <div style="font-size:14px;font-weight:700;color:#111;border-bottom:2px solid #7c3aed;padding-bottom:6px;margin-bottom:8px">Resumo por consultor</div>
+        <table>
+          <thead><tr><th>Consultor</th><th class="right">Horas</th><th class="right">Valor</th></tr></thead>
+          <tbody>
+            ${Array.from(resumoMap.values()).map(c => `
+              <tr class="main-row"><td>${c.consultor}</td><td class="right">${c.horas.toFixed(2)}h</td><td class="right">${formatBRL(Math.round(c.total * 100) / 100)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`
+
     const sectionsHtml = Array.from(tipoMapPrint.entries()).map(([, { nome, consultores: consMap }]) => {
       const tipoHoras = Array.from(consMap.values()).reduce((s, c) => s + c.horas, 0)
       const tipoTotal = Array.from(consMap.values()).reduce((s, c) => s + c.total, 0)
@@ -360,9 +383,6 @@ export default function FechamentoParceiroPage() {
             <td>${r.ticket ?? '0'}</td>
             <td>${r.titulo ?? '—'}</td>
             <td class="right">${r.horas.toFixed(2)}h</td>
-          </tr>
-          <tr class="desc-row">
-            <td colspan="7"><span class="label">Descrição:</span>${r.observacao ?? '—'}</td>
           </tr>`).join('')
         return `
           <div style="margin-bottom:16px">
@@ -407,6 +427,8 @@ export default function FechamentoParceiroPage() {
   </div>
 
   ${sectionsHtml}
+
+  ${resumoHtml}
 
   <div class="total-box">
     <div class="total-box-block">
