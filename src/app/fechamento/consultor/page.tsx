@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
-import { RefreshCw, Printer, FileText, Users, Search, X, Mail, Paperclip, Send, MessagesSquare, AlertTriangle } from 'lucide-react'
+import { RefreshCw, Printer, FileText, Users, Search, X, Mail, Paperclip, Send, MessagesSquare, AlertTriangle, CornerDownLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { previewText } from '@/lib/sanitize'
 import {
@@ -105,6 +105,12 @@ interface ThreadMessage {
   cc_email: string | null
   status: string
   sent_at: string | null
+  // Fase 2 — respostas inbound lidas via Microsoft Graph (opcionais p/ retrocompat).
+  direction?: 'outbound' | 'inbound'
+  is_inbound?: boolean
+  from_email?: string | null
+  received_at?: string | null
+  at?: string | null // timestamp unificado (sent_at p/ outbound, received_at p/ inbound)
 }
 
 type Tab = 'horistas' | 'banco_horas' | 'fixo' | 'resumo'
@@ -348,10 +354,12 @@ function ConversaPanel({
   sending: boolean
   onSend: () => void
 }) {
-  // Ordena por data de envio (fallback id) pra identificar a mensagem mais recente.
+  // Timestamp unificado: `at` (já cronológico no backend) com fallback p/ sent_at/received_at.
+  const msgTs = (m: ThreadMessage): string | null => m.at ?? m.sent_at ?? m.received_at ?? null
+  // Ordena por data (fallback id) pra identificar a mensagem mais recente.
   const ordered = [...thread].sort((a, b) => {
-    const ta = a.sent_at ? new Date(a.sent_at).getTime() : 0
-    const tb = b.sent_at ? new Date(b.sent_at).getTime() : 0
+    const ta = msgTs(a) ? new Date(msgTs(a) as string).getTime() : 0
+    const tb = msgTs(b) ? new Date(msgTs(b) as string).getTime() : 0
     if (ta !== tb) return ta - tb
     return a.id - b.id
   })
@@ -428,27 +436,35 @@ function ConversaPanel({
               <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--bg)' }}>
                 {visible.map((m, idx) => {
                   const bodyText = previewText(m.body)
+                  const inbound = m.is_inbound === true || m.direction === 'inbound'
                   return (
                     <div
                       key={m.id}
                       style={idx > 0 ? { borderTop: '1px solid var(--border)' } : undefined}
                     >
-                      {/* Linha clicável — abre o reading pane */}
+                      {/* Linha clicável — abre o reading pane.
+                          Inbound (resposta recebida) ganha borda lateral primary + leve indent. */}
                       <button
                         type="button"
                         onClick={() => setOpenId(m.id)}
                         className="w-full text-left px-3 py-2.5 transition-colors ds-row-hover"
+                        style={inbound ? { borderLeft: '2px solid var(--primary)', paddingLeft: '1.25rem' } : undefined}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-semibold truncate" style={{ color: 'var(--text)' }}>
-                            {m.sender_name ?? 'Sistema'}
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            {inbound && (
+                              <CornerDownLeft size={12} className="shrink-0" style={{ color: 'var(--primary)' }} aria-label="Resposta recebida" />
+                            )}
+                            <span className="text-xs font-semibold truncate" style={{ color: inbound ? 'var(--primary)' : 'var(--text)' }}>
+                              {inbound ? `Resposta de ${m.from_email ?? 'consultor'}` : (m.sender_name ?? 'Sistema')}
+                            </span>
                           </span>
                           <div className="flex items-center gap-1.5 shrink-0">
                             {m.has_attachments && (
                               <Paperclip size={12} style={{ color: 'var(--text-muted)' }} aria-label="Com anexos" />
                             )}
                             <span className="text-[11px]" style={{ color: 'var(--text-light)' }}>
-                              {fmtDateTime(m.sent_at)}
+                              {fmtDateTime(m.at ?? m.sent_at ?? m.received_at ?? null)}
                             </span>
                           </div>
                         </div>
@@ -456,7 +472,7 @@ function ConversaPanel({
                           <span className="text-xs font-medium truncate" style={{ color: 'var(--text-muted)' }}>
                             {m.subject}
                           </span>
-                          {m.is_continuation && (
+                          {m.is_continuation && !inbound && (
                             <span className="text-[10px] shrink-0" style={{ color: 'var(--primary)' }}>· resposta</span>
                           )}
                         </div>
@@ -499,13 +515,21 @@ function ConversaPanel({
             }}
           >
             {/* Header do e-mail */}
+            {(() => {
+              const openInbound = openMsg.is_inbound === true || openMsg.direction === 'inbound'
+              return (
+            <>
             <div className="flex items-start justify-between gap-3 px-5 py-4 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h2 className="text-base font-semibold truncate" style={{ color: 'var(--text)' }}>
                     {openMsg.subject}
                   </h2>
-                  {openMsg.is_continuation && (
+                  {openInbound ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] shrink-0" style={{ color: 'var(--primary)' }}>
+                      <CornerDownLeft size={13} aria-hidden /> Recebido
+                    </span>
+                  ) : openMsg.is_continuation && (
                     <span className="text-[11px] shrink-0" style={{ color: 'var(--primary)' }}>· resposta</span>
                   )}
                   {openMsg.has_attachments && (
@@ -513,8 +537,10 @@ function ConversaPanel({
                   )}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-                  <span className="font-medium" style={{ color: 'var(--text)' }}>{openMsg.sender_name ?? 'Sistema'}</span>
-                  <span style={{ color: 'var(--text-light)' }}>{fmtDateTime(openMsg.sent_at)}</span>
+                  <span className="font-medium" style={{ color: 'var(--text)' }}>
+                    {openInbound ? (openMsg.from_email ?? 'Consultor') : (openMsg.sender_name ?? 'Sistema')}
+                  </span>
+                  <span style={{ color: 'var(--text-light)' }}>{fmtDateTime(openMsg.at ?? openMsg.sent_at ?? openMsg.received_at ?? null)}</span>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px]" style={{ color: 'var(--text-light)' }}>
                   {openMsg.to_email && <span><span style={{ color: 'var(--text-muted)' }}>Para:</span> {openMsg.to_email}</span>}
@@ -532,9 +558,11 @@ function ConversaPanel({
               </button>
             </div>
 
-            {/* Corpo do e-mail */}
+            {/* Corpo do e-mail.
+                Inbound (resposta recebida) e continuações outbound renderizam o texto;
+                só o original outbound renderiza o iframe do relatório. */}
             <div className="flex-1 min-h-0 overflow-hidden flex">
-              {openMsg.is_continuation ? (
+              {openInbound || openMsg.is_continuation ? (
                 <div className="flex-1 overflow-y-auto px-6 py-5">
                   <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text)' }}>
                     {previewText(openMsg.body) || (
@@ -558,6 +586,9 @@ function ConversaPanel({
                 </div>
               )}
             </div>
+            </>
+              )
+            })()}
           </div>
         </div>
       )}
