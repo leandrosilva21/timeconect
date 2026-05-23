@@ -149,9 +149,9 @@ const printStyles = `
   table { width: 100%; border-collapse: collapse; }
   th { background: #f3f4f6; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; padding: 5px 8px; text-align: left; color: #555; border-bottom: 1px solid #ddd; }
   td { font-size: 11px; padding: 4px 8px; border-bottom: 1px solid #f0f0f0; }
-  tbody tr.main-row td { padding-bottom: 2px; border-bottom: none; }
-  tbody tr.desc-row td { padding-top: 2px; padding-bottom: 7px; border-bottom: 2px solid #5b21b6; font-size: 11px; color: #374151; white-space: pre-wrap; }
-  tbody tr.desc-row td .label { font-weight: 600; color: #6b7280; margin-right: 4px; }
+  tbody tr.main-row td { padding: 8px 8px; border-bottom: 1px solid #ece9f5; vertical-align: middle; }
+  tbody tr.main-row:nth-child(even) td { background: #f7f6fc; }
+  tbody tr.main-row:hover td { background: #efeafc; }
   .right { text-align: right; }
   .center { text-align: center; }
   .total-box { background: #7c3aed; color: #fff; padding: 12px 18px; margin-top: 24px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
