@@ -270,6 +270,15 @@ export default function FechamentoClientePage() {
 
   // ── Efeitos ──
 
+  // "Até" vazio mas "De" preenchido → default "Até" = "De" (fechamento de mês único).
+  // Sem isso, as listas que dependem de toYM (clientes, visão global) ficam vazias.
+  useEffect(() => {
+    if (fromMonth && fromYear && (toMonth == null || toYear == null)) {
+      setToMonth(fromMonth)
+      setToYear(fromYear)
+    }
+  }, [fromMonth, fromYear, toMonth, toYear])
+
   useEffect(() => {
     loadClientes()
     loadGlobal()
