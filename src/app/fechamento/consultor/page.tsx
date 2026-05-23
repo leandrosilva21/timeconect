@@ -6,9 +6,8 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
-import { RefreshCw, Printer, FileText, Users, Search, X, Mail, Paperclip, Send, MessagesSquare, AlertTriangle, CornerDownLeft } from 'lucide-react'
+import { RefreshCw, Printer, FileText, Users, Search, X, Mail } from 'lucide-react'
 import { toast } from 'sonner'
-import { previewText } from '@/lib/sanitize'
 import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
   Button, SkeletonTable, EmptyState,
@@ -94,25 +93,6 @@ interface ApontamentoRow {
   valor_extra?: number | null // apenas horista/fixo
 }
 
-interface ThreadMessage {
-  id: number
-  subject: string
-  body: string | null
-  is_continuation: boolean
-  has_attachments: boolean
-  sender_name: string | null
-  to_email: string | null
-  cc_email: string | null
-  status: string
-  sent_at: string | null
-  // Fase 2 — respostas inbound lidas via Microsoft Graph (opcionais p/ retrocompat).
-  direction?: 'outbound' | 'inbound'
-  is_inbound?: boolean
-  from_email?: string | null
-  received_at?: string | null
-  at?: string | null // timestamp unificado (sent_at p/ outbound, received_at p/ inbound)
-}
-
 type Tab = 'horistas' | 'banco_horas' | 'fixo' | 'resumo'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -131,16 +111,6 @@ function fmtDate(d: string): string {
   return `${day}/${m}/${y}`
 }
 
-function fmtDateTime(iso: string | null): string {
-  if (!iso) return '—'
-  const dt = new Date(iso)
-  if (Number.isNaN(dt.getTime())) return '—'
-  return dt.toLocaleString('pt-BR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
-}
-
 function fmtH(h: number): string {
   const sign     = h < 0 ? '-' : ''
   const totalMins = Math.abs(Math.round(h * 60))
@@ -153,11 +123,6 @@ function balanceColor(val: number): string {
   if (val > 0) return 'text-emerald-400'
   if (val < 0) return 'text-red-400'
   return 'text-zinc-400'
-}
-
-// status pode chegar como 'sent'/'enviado', 'failed'/'falhou' ou 'pending'/'pendente'.
-function isFailed(status: string): boolean {
-  return status === 'failed' || status === 'falhou'
 }
 
 // ─── Print ────────────────────────────────────────────────────────────────────
@@ -339,376 +304,6 @@ function RelatorioBtn({ userId, printingUser, onClick }: {
   )
 }
 
-// ─── ConversaPanel (thread + continuação) ──────────────────────────────────────
-
-function ConversaPanel({
-  thread, loading, reportHtml, replyBody, onReplyBody, replyAttach, onReplyAttach, sending, onSend,
-  onSync, syncing, syncFeedback,
-}: {
-  thread: ThreadMessage[]
-  loading: boolean
-  reportHtml: string | null
-  replyBody: string
-  onReplyBody: (v: string) => void
-  replyAttach: boolean
-  onReplyAttach: (v: boolean) => void
-  sending: boolean
-  onSend: () => void
-  onSync: () => void
-  syncing: boolean
-  syncFeedback: { kind: 'imported' | 'none' | 'disabled' | 'error'; text: string } | null
-}) {
-  // Timestamp unificado: `at` (já cronológico no backend) com fallback p/ sent_at/received_at.
-  const msgTs = (m: ThreadMessage): string | null => m.at ?? m.sent_at ?? m.received_at ?? null
-  // Ordena por data (fallback id) pra identificar a mensagem mais recente.
-  const ordered = [...thread].sort((a, b) => {
-    const ta = msgTs(a) ? new Date(msgTs(a) as string).getTime() : 0
-    const tb = msgTs(b) ? new Date(msgTs(b) as string).getTime() : 0
-    if (ta !== tb) return ta - tb
-    return a.id - b.id
-  })
-  const latest = ordered.length > 0 ? ordered[ordered.length - 1] : null
-  const lastSendFailed = latest ? isFailed(latest.status) : false
-  // Esconde mensagens com falha da lista — o aviso da última falha vai no topo do container.
-  const visible = ordered.filter(m => !isFailed(m.status))
-  const hasThread = thread.length > 0   // controla o box de resposta (envio já existiu)
-  const hasVisible = visible.length > 0
-
-  // Reading pane estilo Outlook: clicar numa linha abre uma visão de leitura que
-  // desliza da direita cobrindo quase a tela inteira (sobre o modal do relatório).
-  // O pane mostra a CONVERSA INTEIRA empilhada (não uma mensagem isolada); `openId`
-  // guarda qual mensagem foi clicada, pra rolar até ela e destacá-la.
-  const [openId, setOpenId] = useState<number | null>(null)
-  const paneOpen = openId != null
-  // Refs por mensagem pra scrollIntoView na mensagem clicada ao abrir o pane.
-  const sectionRefs = useRef<Record<number, HTMLElement | null>>({})
-
-  // Caption do sync some sozinha após alguns segundos (limpa visualmente; o estado
-  // real é resetado pelo container na próxima ação). 'error'/'disabled' ficam mais tempo.
-  const [feedbackHidden, setFeedbackHidden] = useState(false)
-  useEffect(() => {
-    if (!syncFeedback) return
-    setFeedbackHidden(false)
-    const ms = syncFeedback.kind === 'imported' || syncFeedback.kind === 'none' ? 4000 : 6000
-    const t = setTimeout(() => setFeedbackHidden(true), ms)
-    return () => clearTimeout(t)
-  }, [syncFeedback])
-
-  // Esc fecha o reading pane.
-  useEffect(() => {
-    if (openId == null) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        e.stopPropagation()
-        setOpenId(null)
-      }
-    }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [openId])
-
-  // Se a thread recarregar e a mensagem aberta sumir, fecha o reading pane.
-  useEffect(() => {
-    if (openId != null && !visible.some(m => m.id === openId)) setOpenId(null)
-  }, [openId, visible])
-
-  // Ao abrir o pane, rola até a mensagem clicada (estilo "abrir a conversa naquele ponto").
-  useEffect(() => {
-    if (openId == null) return
-    // rAF garante que as seções já estão montadas antes do scroll.
-    const raf = requestAnimationFrame(() => {
-      sectionRefs.current[openId]?.scrollIntoView({ block: 'start', behavior: 'auto' })
-    })
-    return () => cancelAnimationFrame(raf)
-  }, [openId])
-
-  return (
-    <aside
-      className="w-full max-w-sm shrink-0 flex flex-col min-h-0"
-      style={{ background: 'var(--surface)', borderLeft: '1px solid var(--border)' }}
-    >
-      {/* Header */}
-      <div className="px-4 py-3 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-2">
-          <MessagesSquare size={15} style={{ color: 'var(--primary)' }} />
-          <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Conversa do fechamento</span>
-          <button
-            type="button"
-            onClick={onSync}
-            disabled={syncing}
-            title="Buscar novas respostas do consultor"
-            className="ml-auto inline-flex items-center gap-1 text-xs disabled:opacity-50 transition-colors ds-link"
-          >
-            <RefreshCw size={13} className={syncing ? 'animate-spin' : undefined} />
-            Atualizar
-          </button>
-        </div>
-        {syncFeedback && !feedbackHidden && (
-          <p
-            className="mt-1.5 text-[11px]"
-            style={{ color: syncFeedback.kind === 'imported' ? 'var(--primary)' : 'var(--text-muted)' }}
-          >
-            {syncFeedback.text}
-          </p>
-        )}
-      </div>
-
-      {/* Área de leitura */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0">
-        {loading ? (
-          <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-            <RefreshCw size={13} className="animate-spin" /> Carregando conversa…
-          </div>
-        ) : !hasThread ? (
-          <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-            Nenhuma mensagem ainda. Envie o fechamento original pelo botão acima para iniciar a conversa.
-          </p>
-        ) : (
-          <>
-            {/* Aviso quando o último envio falhou (sem poluir a thread com cada falha) */}
-            {lastSendFailed && (
-              <div
-                className="flex items-center gap-1.5 mb-3 rounded-md px-2.5 py-1.5 text-[11px] font-medium"
-                style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}
-              >
-                <AlertTriangle size={13} className="shrink-0" />
-                Último envio falhou
-              </div>
-            )}
-
-            {!hasVisible ? (
-              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-                Nenhum envio bem-sucedido ainda.
-              </p>
-            ) : (
-              /* Container único — thread estilo Outlook, uma linha por mensagem */
-              <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--bg)' }}>
-                {visible.map((m, idx) => {
-                  const bodyText = previewText(m.body)
-                  const inbound = m.is_inbound === true || m.direction === 'inbound'
-                  return (
-                    <div
-                      key={m.id}
-                      style={idx > 0 ? { borderTop: '1px solid var(--border)' } : undefined}
-                    >
-                      {/* Linha clicável — abre o reading pane.
-                          Inbound (resposta recebida) ganha borda lateral primary + leve indent. */}
-                      <button
-                        type="button"
-                        onClick={() => setOpenId(m.id)}
-                        className="w-full text-left px-3 py-2.5 transition-colors ds-row-hover"
-                        style={inbound ? { borderLeft: '2px solid var(--primary)', paddingLeft: '1.25rem' } : undefined}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="flex items-center gap-1.5 min-w-0">
-                            {inbound && (
-                              <CornerDownLeft size={12} className="shrink-0" style={{ color: 'var(--primary)' }} aria-label="Resposta recebida" />
-                            )}
-                            <span className="text-xs font-semibold truncate" style={{ color: inbound ? 'var(--primary)' : 'var(--text)' }}>
-                              {inbound ? `Resposta de ${m.from_email ?? 'consultor'}` : (m.sender_name ?? 'Sistema')}
-                            </span>
-                          </span>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {m.has_attachments && (
-                              <Paperclip size={12} style={{ color: 'var(--text-muted)' }} aria-label="Com anexos" />
-                            )}
-                            <span className="text-[11px]" style={{ color: 'var(--text-light)' }}>
-                              {fmtDateTime(m.at ?? m.sent_at ?? m.received_at ?? null)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="mt-1 flex items-center gap-1.5">
-                          <span className="text-xs font-medium truncate" style={{ color: 'var(--text-muted)' }}>
-                            {m.subject}
-                          </span>
-                          {m.is_continuation && !inbound && (
-                            <span className="text-[10px] shrink-0" style={{ color: 'var(--primary)' }}>· resposta</span>
-                          )}
-                        </div>
-                        {/* Snippet compacto */}
-                        {bodyText && (
-                          <p className="mt-1 text-[11px] leading-relaxed line-clamp-1" style={{ color: 'var(--text-light)' }}>
-                            {bodyText}
-                          </p>
-                        )}
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Reading pane (overlay) — desliza da direita cobrindo quase a tela.
-          z acima do modal do relatório (z-50). Mostra a CONVERSA INTEIRA empilhada
-          em ordem cronológica (estilo Outlook: abrir a conversa, não uma mensagem). */}
-      {paneOpen && (
-        <div className="fixed inset-0 z-[60] flex" style={{ paddingTop: 'var(--banner-h, 0px)' }}>
-          {/* Backdrop escurece o resto; clique fecha */}
-          <button
-            type="button"
-            aria-label="Fechar leitura"
-            onClick={() => setOpenId(null)}
-            className="flex-1 cursor-default"
-            style={{ background: 'rgba(0,0,0,0.55)', border: 'none' }}
-          />
-          {/* Painel ancorado à direita (~88vw) */}
-          <div
-            className="h-full flex flex-col min-h-0"
-            style={{
-              width: '88vw',
-              background: 'var(--surface)',
-              borderLeft: '1px solid var(--border)',
-              boxShadow: 'var(--shadow-overlay)',
-            }}
-          >
-            {/* Header do pane — título da conversa + fechar */}
-            <div className="flex items-center justify-between gap-3 px-5 py-3.5 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
-              <div className="flex items-center gap-2 min-w-0">
-                <MessagesSquare size={16} className="shrink-0" style={{ color: 'var(--primary)' }} />
-                <h2 className="text-base font-semibold truncate" style={{ color: 'var(--text)' }}>
-                  {latest?.subject ?? 'Conversa do fechamento'}
-                </h2>
-                <span className="text-[11px] shrink-0" style={{ color: 'var(--text-light)' }}>
-                  {visible.length} {visible.length === 1 ? 'mensagem' : 'mensagens'}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpenId(null)}
-                title="Fechar (Esc)"
-                className="shrink-0 inline-flex items-center justify-center rounded-lg p-1.5 transition-colors ds-row-hover"
-                style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Conversa empilhada — todas as mensagens em ordem cronológica, divididas
-                por uma linha sutil (não cards pesados). A mensagem clicada ganha borda
-                lateral primary e o scroll para até ela. */}
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              {visible.map((m, idx) => {
-                const inbound = m.is_inbound === true || m.direction === 'inbound'
-                const isOriginal = !inbound && !m.is_continuation
-                const highlighted = m.id === openId
-                const when = fmtDateTime(m.at ?? m.sent_at ?? m.received_at ?? null)
-                return (
-                  <section
-                    key={m.id}
-                    ref={el => { sectionRefs.current[m.id] = el }}
-                    style={{
-                      borderTop: idx > 0 ? '1px solid var(--border)' : undefined,
-                      borderLeft: highlighted ? '3px solid var(--primary)' : '3px solid transparent',
-                      background: highlighted ? 'var(--primary-soft)' : undefined,
-                      scrollMarginTop: '0px',
-                    }}
-                  >
-                    {/* Header da mensagem */}
-                    <div className="px-5 pt-4 pb-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold truncate" style={{ color: inbound ? 'var(--primary)' : 'var(--text)' }}>
-                              {inbound ? `Resposta de ${m.from_email ?? 'consultor'}` : (m.sender_name ?? 'Sistema')}
-                            </span>
-                            {inbound && (
-                              <span className="inline-flex items-center gap-1 text-[11px] shrink-0" style={{ color: 'var(--primary)' }}>
-                                <CornerDownLeft size={12} aria-hidden /> Recebido
-                              </span>
-                            )}
-                            {!inbound && m.is_continuation && (
-                              <span className="text-[11px] shrink-0" style={{ color: 'var(--primary)' }}>· resposta</span>
-                            )}
-                            {m.has_attachments && (
-                              <Paperclip size={13} className="shrink-0" style={{ color: 'var(--text-muted)' }} aria-label="Com anexos" />
-                            )}
-                          </div>
-                          <p className="mt-0.5 text-xs font-medium truncate" style={{ color: 'var(--text-muted)' }}>
-                            {m.subject}
-                          </p>
-                        </div>
-                        <span className="text-[11px] shrink-0 whitespace-nowrap" style={{ color: 'var(--text-light)' }}>
-                          {when}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Corpo da mensagem.
-                        Original outbound → iframe do relatório (HTML, fundo branco).
-                        Continuação outbound / inbound → texto whitespace-pre-wrap. */}
-                    {isOriginal ? (
-                      reportHtml ? (
-                        <div className="px-5 pb-5">
-                          <iframe
-                            srcDoc={reportHtml}
-                            title="E-mail original do fechamento"
-                            className="w-full rounded-lg"
-                            style={{ background: '#fff', border: '1px solid var(--border)', height: '70vh' }}
-                          />
-                        </div>
-                      ) : (
-                        <div className="px-5 pb-5">
-                          <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-                            E-mail original do fechamento (anexos PDF/XLSX).
-                          </p>
-                        </div>
-                      )
-                    ) : (
-                      <div className="px-5 pb-5">
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text)' }}>
-                          {previewText(m.body) || (
-                            <span style={{ color: 'var(--text-muted)' }}>(sem conteúdo)</span>
-                          )}
-                        </p>
-                      </div>
-                    )}
-                  </section>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Continuar / Responder */}
-      <div className="px-4 py-3 shrink-0 space-y-2" style={{ borderTop: '1px solid var(--border)' }}>
-        <p className="text-xs font-semibold" style={{ color: 'var(--text)' }}>Continuar / Responder</p>
-        <textarea
-          value={replyBody}
-          onChange={e => onReplyBody(e.target.value)}
-          placeholder={hasThread ? 'Escreva sua mensagem…' : 'Envie o fechamento original antes de responder.'}
-          disabled={!hasThread || sending}
-          rows={3}
-          className="w-full rounded-lg px-3 py-2 text-xs focus:outline-none ds-input resize-none disabled:opacity-50"
-          style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}
-        />
-        <label className="flex items-center gap-2 text-xs cursor-pointer select-none" style={{ color: 'var(--text-muted)' }}>
-          <input
-            type="checkbox"
-            checked={replyAttach}
-            onChange={e => onReplyAttach(e.target.checked)}
-            disabled={!hasThread || sending}
-            className="accent-current"
-            style={{ accentColor: 'var(--primary)' }}
-          />
-          Anexar fechamento atualizado
-        </label>
-        <button
-          onClick={onSend}
-          disabled={!hasThread || sending || !replyBody.trim()}
-          className="w-full inline-flex items-center justify-center gap-1.5 ds-btn-primary disabled:opacity-50"
-        >
-          {sending ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
-          {sending ? 'Enviando…' : 'Enviar resposta'}
-        </button>
-      </div>
-    </aside>
-  )
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function FechamentoConsultorPage() {
@@ -730,17 +325,6 @@ export default function FechamentoConsultorPage() {
   // Consultor alvo do relatório aberto (só pra relatório INDIVIDUAL — habilita o "Enviar e-mail").
   const [reportTarget, setReportTarget] = useState<{ userId: number; name: string } | null>(null)
   const [sendingEmail, setSendingEmail] = useState(false)
-  // Thread (conversa do fechamento) — só no relatório individual.
-  const [thread, setThread] = useState<ThreadMessage[]>([])
-  const [threadLoading, setThreadLoading] = useState(false)
-  const [replyBody, setReplyBody] = useState('')
-  const [replyAttach, setReplyAttach] = useState(true)
-  const [sendingReply, setSendingReply] = useState(false)
-  // Sync inbox (puxar respostas inbound sob demanda via Microsoft Graph).
-  const [syncingInbox, setSyncingInbox] = useState(false)
-  const [syncFeedback, setSyncFeedback] = useState<
-    { kind: 'imported' | 'none' | 'disabled' | 'error'; text: string } | null
-  >(null)
   const reportIframeRef = useRef<HTMLIFrameElement>(null)
   const canSendEmail = user?.type === 'admin' || user?.type === 'administrativo'
   const [apenasComMovimento, setApenasComMovimento] = useState(true)
@@ -760,21 +344,6 @@ export default function FechamentoConsultorPage() {
 
   useEffect(() => { load() }, [load])
 
-  const loadThread = useCallback(async (userId: number) => {
-    if (!yearMonth) return
-    setThreadLoading(true)
-    try {
-      const res = await api.get<{ data: ThreadMessage[] }>(
-        `/fechamento-consultor/${userId}/${yearMonth}/thread`,
-      )
-      setThread(res.data ?? [])
-    } catch {
-      setThread([])
-    } finally {
-      setThreadLoading(false)
-    }
-  }, [yearMonth])
-
   async function sendReportEmail() {
     if (!reportTarget) return
     setSendingEmail(true)
@@ -785,59 +354,10 @@ export default function FechamentoConsultorPage() {
         {},
       )
       toast.success(res?.message ?? 'Fechamento enviado por e-mail.')
-      await loadThread(reportTarget.userId)
     } catch (err: unknown) {
       toast.error(`Erro ao enviar o fechamento: ${err instanceof Error ? err.message : 'falha na API'}`)
     } finally {
       setSendingEmail(false)
-    }
-  }
-
-  async function sendContinuation() {
-    if (!reportTarget) return
-    if (!replyBody.trim()) {
-      toast.error('Escreva uma mensagem antes de enviar.')
-      return
-    }
-    setSendingReply(true)
-    try {
-      const res = await api.post<{ success: boolean; message: string }>(
-        `/fechamento-consultor/${reportTarget.userId}/${yearMonth}/continuar`,
-        { body: replyBody.trim(), attach_fechamento: replyAttach },
-      )
-      toast.success(res?.message ?? 'Resposta enviada.')
-      setReplyBody('')
-      await loadThread(reportTarget.userId)
-    } catch (err: unknown) {
-      toast.error(`Erro ao enviar a resposta: ${err instanceof Error ? err.message : 'falha na API'}`)
-    } finally {
-      setSendingReply(false)
-    }
-  }
-
-  async function syncInbox() {
-    if (!reportTarget) return
-    setSyncingInbox(true)
-    setSyncFeedback(null)
-    try {
-      // Mesma base/auth dos demais calls (api → /api/v1, header injetado pelo middleware).
-      const res = await api.post<{ data: ThreadMessage[]; graph_enabled: boolean; imported: number }>(
-        `/fechamento-consultor/${reportTarget.userId}/${yearMonth}/sync-inbox`,
-        {},
-      )
-      // Atualiza a thread igual ao loadThread (consome json.data).
-      setThread(res.data ?? [])
-      if (res.graph_enabled === false) {
-        setSyncFeedback({ kind: 'disabled', text: 'Leitura de respostas não configurada' })
-      } else if (res.imported > 0) {
-        setSyncFeedback({ kind: 'imported', text: `${res.imported} nova(s) resposta(s)` })
-      } else {
-        setSyncFeedback({ kind: 'none', text: 'Nenhuma resposta nova' })
-      }
-    } catch {
-      setSyncFeedback({ kind: 'error', text: 'Falha ao atualizar' })
-    } finally {
-      setSyncingInbox(false)
     }
   }
 
@@ -850,10 +370,6 @@ export default function FechamentoConsultorPage() {
       const html = buildReport(consultor, res.data ?? [], yearMonth)
       setReportHtml(buildFullHtml(html))
       setReportTarget({ userId: consultor.user_id, name: consultor.nome })
-      setReplyBody('')
-      setReplyAttach(true)
-      setSyncFeedback(null)
-      if (canSendEmail) void loadThread(consultor.user_id)
     } catch (err: unknown) {
       toast.error(`Erro ao gerar relatório: ${err instanceof Error ? err.message : 'falha na API'}`)
     } finally {
@@ -1424,7 +940,7 @@ export default function FechamentoConsultorPage() {
                 </button>
               )}
               <button
-                onClick={() => { setReportHtml(null); setReportTarget(null); setThread([]); setReplyBody('') }}
+                onClick={() => { setReportHtml(null); setReportTarget(null) }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
                 style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }}
               >
@@ -1439,22 +955,6 @@ export default function FechamentoConsultorPage() {
               className="flex-1 h-full"
               style={{ background: '#fff', border: 'none' }}
             />
-            {canSendEmail && reportTarget && (
-              <ConversaPanel
-                thread={thread}
-                loading={threadLoading}
-                reportHtml={reportHtml}
-                replyBody={replyBody}
-                onReplyBody={setReplyBody}
-                replyAttach={replyAttach}
-                onReplyAttach={setReplyAttach}
-                sending={sendingReply}
-                onSend={sendContinuation}
-                onSync={syncInbox}
-                syncing={syncingInbox}
-                syncFeedback={syncFeedback}
-              />
-            )}
           </div>
         </div>
       )}
