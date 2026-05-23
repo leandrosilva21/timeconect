@@ -226,9 +226,6 @@ function buildReport(
             <td class="center">${r.end_time   ? (r.end_time.includes('T')   ? r.end_time.slice(11, 16)   : r.end_time.slice(0, 5))   : '—'}</td>
             <td class="right">${fmtH(r.horas)}${r.consultant_extra_pct ? (r.valor_extra != null ? `<span style="color:#16a34a;font-size:10px;margin-left:4px">+${r.consultant_extra_pct}% (${formatBRL(r.valor_extra)})</span>` : `<span style="color:#16a34a;font-size:10px;margin-left:4px">+${r.consultant_extra_pct}% base ${fmtH(r.horas_base ?? r.horas)}</span>`) : ''}</td>
           </tr>
-          <tr class="desc-row">
-            <td colspan="8"><span class="label">Descrição:</span>${r.observacao ?? '—'}</td>
-          </tr>
         `).join('')
         clienteBlocksHtml += `
           <div class="client-header">
