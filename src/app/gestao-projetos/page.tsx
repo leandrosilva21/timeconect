@@ -877,6 +877,10 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
   const [movideskStep, setMovideskStep] = useState<'confirm' | 'migrate' | 'processing'>('confirm')
   const [movideskMigrating, setMovideskMigrating] = useState(false)
 
+  // Vigência do novo valor-hora: quando o hourly_rate muda, perguntamos a partir de qual mês passa a valer.
+  const [rateModalOpen, setRateModalOpen] = useState(false)
+  const [rateEffectiveMonth, setRateEffectiveMonth] = useState<string>(() => new Date().toISOString().slice(0, 7))
+
   const selectedCustomerObj = useMemo(() => optCustomers.find(c => String(c.id) === form.customer_id), [optCustomers, form.customer_id])
   // Use prefix from selected customer, or fall back to original code prefix
   const codePrefix  = selectedCustomerObj?.code_prefix?.toUpperCase() ?? (d.code ?? '').match(/^([A-Za-z]+)/)?.[1]?.toUpperCase() ?? ''
@@ -912,7 +916,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
   const setF = (key: keyof ProjectEditForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [key]: e.target.value }))
 
-  const handleSave = async () => {
+  const handleSave = async (hourlyRateEffectiveFrom?: string) => {
     if (!form.name.trim()) { toast.error('Nome obrigatório'); return }
     if (codeExists) { toast.error('Código já existe em outro projeto. Altere o código antes de salvar.'); return }
     setSaving(true)
@@ -957,6 +961,10 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       payload.kanban_coordinator_override_id = form.kanban_coordinator_override_id === ''
         ? null
         : Number(form.kanban_coordinator_override_id)
+      // Mudou o valor-hora? Abre o modal de vigência antes de enviar (fechamentos passados não mudam).
+      const rateChanged = form.hourly_rate !== '' && Number(form.hourly_rate) !== Number(d.hourly_rate ?? 0)
+      if (rateChanged && !hourlyRateEffectiveFrom) { setSaving(false); setRateModalOpen(true); return }
+      if (rateChanged && hourlyRateEffectiveFrom) { payload.hourly_rate_effective_from = hourlyRateEffectiveFrom }
       try {
         await api.put(`/projects/${project.id}`, payload)
       } catch (err: any) {
@@ -1482,7 +1490,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t shrink-0" style={{ borderColor: 'var(--border)' }}>
           <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancelar</button>
-          <button onClick={handleSave} disabled={saving} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: saving ? 'var(--primary-soft)' : 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)', opacity: saving ? 0.6 : 1 }}>
+          <button onClick={() => handleSave()} disabled={saving} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: saving ? 'var(--primary-soft)' : 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)', opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Salvando...' : 'Salvar Alterações'}
           </button>
         </div>
@@ -1527,6 +1535,37 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 <style>{`@keyframes mvProgress{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}`}</style>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Vigência do novo valor-hora */}
+      {rateModalOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="w-full max-w-md rounded-2xl p-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <p className="text-sm font-semibold mb-3" style={{ color: 'var(--brand-text)' }}>Vigência do valor hora</p>
+            <p className="text-[13px] leading-relaxed mb-4" style={{ color: 'var(--brand-muted)' }}>
+              A partir de qual mês esse novo valor hora passa a valer? Meses anteriores (fechamentos já feitos) não mudam.
+            </p>
+            <div className="mb-5">
+              <label style={lStyle}>Mês de vigência</label>
+              <input
+                type="month"
+                value={rateEffectiveMonth}
+                min={new Date().toISOString().slice(0, 7)}
+                onChange={e => setRateEffectiveMonth(e.target.value)}
+                style={iStyle}
+              />
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button onClick={() => setRateModalOpen(false)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancelar</button>
+              <button
+                onClick={() => { setRateModalOpen(false); handleSave(`${rateEffectiveMonth}-01`) }}
+                disabled={!rateEffectiveMonth}
+                className="px-5 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+                style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}
+              >Confirmar</button>
+            </div>
           </div>
         </div>
       )}
