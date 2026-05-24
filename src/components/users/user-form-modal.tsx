@@ -493,10 +493,17 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
       if (!isEdit && form.password) payload.password = form.password
 
       if (isEdit && editItem) {
-        // Mudou o valor-hora? Abre o modal de vigência antes de enviar (fechamentos passados não mudam).
+        // Mudou o valor-hora OU o tipo do consultor (rate_type/consultant_type)? Abre o modal de
+        // vigência antes de enviar — a alteração vale a partir do mês escolhido (passado não muda).
+        const isConsultorEdit = form.profiles.includes('consultor')
         const rateChanged = form.hourly_rate !== '' && Number(form.hourly_rate) !== Number(editItem.hourly_rate ?? 0)
-        if (rateChanged && !hourlyRateEffectiveFrom) { setSaving(false); setRateModalOpen(true); return }
-        if (rateChanged && hourlyRateEffectiveFrom) { payload.hourly_rate_effective_from = hourlyRateEffectiveFrom }
+        const typeChanged = isConsultorEdit && (
+          form.consultant_type !== ((editItem.consultant_type as string | undefined) ?? (editItem.rate_type === 'hourly' ? 'horista' : ''))
+          || form.rate_type !== ((editItem.rate_type as string | undefined) ?? 'hourly')
+        )
+        const vigenciaChanged = rateChanged || typeChanged
+        if (vigenciaChanged && !hourlyRateEffectiveFrom) { setSaving(false); setRateModalOpen(true); return }
+        if (vigenciaChanged && hourlyRateEffectiveFrom) { payload.hourly_rate_effective_from = hourlyRateEffectiveFrom }
         await api.put(`/users/${editItem.id}`, payload)
         toast.success('Usuário atualizado')
       } else {
@@ -941,9 +948,9 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
       {rateModalOpen && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl">
-            <p className="text-sm font-semibold text-white mb-3">Vigência do valor hora</p>
+            <p className="text-sm font-semibold text-white mb-3">Vigência da alteração</p>
             <p className="text-[13px] leading-relaxed text-zinc-400 mb-4">
-              A partir de qual mês esse novo valor hora passa a valer? Meses anteriores (fechamentos já feitos) não mudam.
+              A partir de qual mês essa alteração (valor hora / tipo) passa a valer? Meses anteriores (fechamentos já feitos) não mudam.
             </p>
             <div className="mb-5">
               <Label className="text-xs text-zinc-400 mb-1 block">Mês de vigência</Label>
