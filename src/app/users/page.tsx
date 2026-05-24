@@ -31,6 +31,7 @@ interface UserItem {
   daily_hours?: number
   bank_hours_start_date?: string | null
   consultant_type?: string | null
+  contract_type?: 'cooperado' | 'clt' | 'pj' | null
   coordinator_type?: 'projetos' | 'sustentacao' | null
   guaranteed_hours?: number | null
   customer_id?: number | null
@@ -41,6 +42,11 @@ interface UserItem {
   type?: string | null
   extra_permissions?: string[]
   can_timesheet_sustentacao?: boolean
+  // Folha de pagamento
+  full_name?: string | null
+  cpf?: string | null
+  matricula?: string | null
+  payroll_status?: string | null
   created_at: string
 }
 
@@ -60,6 +66,7 @@ interface PartnerOption  { id: number; name: string; pricing_type?: 'fixed' | 'v
 
 type ProfileType    = 'cliente' | 'consultor' | 'coordenador' | 'parceiro_adm' | 'administrator' | 'administrativo'
 type ConsultantType = 'horista' | 'banco_de_horas' | 'fixo'
+type ContractType   = 'cooperado' | 'clt' | 'pj'
 
 const PROFILE_OPTIONS: { value: ProfileType; label: string }[] = [
   { value: 'cliente',        label: 'Cliente' },
@@ -75,6 +82,32 @@ const CONSULTANT_OPTIONS: { value: ConsultantType; label: string; desc: string }
   { value: 'banco_de_horas', label: 'Banco de Horas', desc: 'Valor mensal — banco de horas' },
   { value: 'fixo',           label: 'Fixo',           desc: 'Valor fixo mensal — sem banco de horas' },
 ]
+
+const CONTRACT_OPTIONS: { value: ContractType; label: string }[] = [
+  { value: 'cooperado', label: 'Cooperado' },
+  { value: 'clt',       label: 'CLT' },
+  { value: 'pj',        label: 'PJ' },
+]
+
+const contractLabel = (v: string | null | undefined): string =>
+  CONTRACT_OPTIONS.find(o => o.value === v)?.label ?? '—'
+
+// ─── Folha de pagamento ────────────────────────────────────────────────────────
+// Lista FIXA de status — usado para gerar planilha de importação da folha.
+const PAYROLL_STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Contratado',     label: 'Contratado' },
+  { value: 'Em Afastamento', label: 'Em Afastamento' },
+]
+const PAYROLL_STATUS_DEFAULT = 'Contratado'
+
+// Máscara de CPF 000.000.000-00 — sem dependência externa, só agrupa dígitos.
+const formatCpf = (raw: string): string => {
+  const d = raw.replace(/\D/g, '').slice(0, 11)
+  return d
+    .replace(/^(\d{3})(\d)/, '$1.$2')
+    .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4')
+}
 
 function resolveTypeForBackend(profile: ProfileType): string {
   if (profile === 'administrator') return 'admin'
@@ -319,6 +352,7 @@ const EMPTY_FORM = {
   guaranteed_hours: '',
   profiles: [] as ProfileType[],
   consultant_type: 'horista' as ConsultantType | '',
+  contract_type: '' as ContractType | '',
   coordinator_type: '' as 'projetos' | 'sustentacao' | '',
   is_partner_consultor: false,
   is_partner_adm: false,
@@ -326,6 +360,11 @@ const EMPTY_FORM = {
   partner_id: '' as number | '',
   extra_permissions: [] as string[],
   can_timesheet_sustentacao: false,
+  // Folha de pagamento
+  full_name: '',
+  cpf: '',
+  matricula: '',
+  payroll_status: PAYROLL_STATUS_DEFAULT,
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -398,6 +437,8 @@ export default function UsersPage() {
   const [bulkResending,  setBulkResending]  = useState(false)
   const [bulkDeleting,   setBulkDeleting]   = useState(false)
   const [bulkSustLoading, setBulkSustLoading] = useState(false)
+  const [bulkContractLoading, setBulkContractLoading] = useState(false)
+  const [bulkContractType, setBulkContractType] = useState<ContractType | ''>('')
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
   const [resendPwd,      setResendPwd]      = useState('')
   const [resendingModal, setResendingModal] = useState(false)
@@ -457,6 +498,7 @@ export default function UsersPage() {
       guaranteed_hours:       item.guaranteed_hours != null ? String(item.guaranteed_hours) : '',
       profiles,
       consultant_type:      consultant_type as ConsultantType | '',
+      contract_type:        (item.contract_type as ContractType | undefined) ?? '',
       coordinator_type:     (item.coordinator_type as 'projetos' | 'sustentacao' | undefined) ?? '',
       is_partner_consultor: false,
       is_partner_adm:       item.is_executive ?? false,
@@ -464,6 +506,10 @@ export default function UsersPage() {
       partner_id:           item.partner_id  ?? '',
       extra_permissions:          item.extra_permissions ?? [],
       can_timesheet_sustentacao:  item.can_timesheet_sustentacao ?? false,
+      full_name:                  item.full_name ?? '',
+      cpf:                        item.cpf ?? '',
+      matricula:                  item.matricula ?? '',
+      payroll_status:             item.payroll_status ?? PAYROLL_STATUS_DEFAULT,
     })
     setModal({ open: true, item })
   }
@@ -494,6 +540,14 @@ export default function UsersPage() {
           payload.guaranteed_hours = form.guaranteed_hours ? parseFloat(form.guaranteed_hours) : null
         }
       }
+      // Tipo de contrato: consultor envia só quando NÃO vinculado a parceiro
+      // (vinculado herda do parceiro — BE ignora); parceiro sempre define.
+      if (form.profiles.includes('consultor') && !form.partner_id) {
+        payload.contract_type = form.contract_type || null
+      }
+      if (form.profiles.includes('parceiro_adm')) {
+        payload.contract_type = form.contract_type || null
+      }
       if (form.profiles.includes('coordenador')) {
         payload.coordinator_type  = form.coordinator_type || null
         // extra_permissions agora é gerenciado via Grupos de Permissões — sempre limpa aqui
@@ -501,6 +555,14 @@ export default function UsersPage() {
       }
       if (form.profiles.includes('consultor') || form.profiles.includes('parceiro_adm')) {
         payload.can_timesheet_sustentacao = form.can_timesheet_sustentacao
+      }
+      // Folha de pagamento — vale para perfis internos (todos exceto Cliente e Parceiro).
+      const payrollProfile = !form.profiles.includes('cliente') && !form.profiles.includes('parceiro_adm')
+      if (payrollProfile) {
+        payload.full_name      = form.full_name || null
+        payload.cpf            = form.cpf || null
+        payload.matricula      = form.matricula || null
+        payload.payroll_status = form.payroll_status || PAYROLL_STATUS_DEFAULT
       }
       if (!modal.item && form.password) payload.password = form.password
 
@@ -627,6 +689,23 @@ export default function UsersPage() {
     finally { setBulkSustLoading(false) }
   }
 
+  const bulkSetContractType = async () => {
+    if (selectedIds.size === 0) return
+    setBulkContractLoading(true)
+    try {
+      const r = await api.post<{ applied: number; skipped: number }>(
+        '/users/bulk-contract-type',
+        { user_ids: [...selectedIds], contract_type: bulkContractType || null },
+      )
+      const skippedMsg = r.skipped > 0 ? ` ${r.skipped} ignorado(s) (vinculados a parceiro)` : ''
+      toast.success(`${r.applied} aplicado(s).${skippedMsg}`)
+      setSelectedIds(new Set())
+      setBulkContractType('')
+      load()
+    } catch (e) { toast.error(e instanceof ApiError ? e.message : 'Erro ao aplicar tipo de contrato') }
+    finally { setBulkContractLoading(false) }
+  }
+
   const toggleSelect = (id: number) => {
     setSelectedIds(prev => {
       const next = new Set(prev)
@@ -649,6 +728,17 @@ export default function UsersPage() {
   const selectedPartner = partners.find(p => p.id === Number(form.partner_id))
   const partnerIsFixed  = selectedPartner?.pricing_type === 'fixed'
 
+  // Trava: consultor vinculado a parceiro herda o contract_type do parceiro (read-only).
+  // O form não gerencia o partner_id de consultor, então usamos o vínculo do user em edição.
+  const consultorPartnerBound = isConsultor && !!(modal.item?.partner_id ?? modal.item?.partner?.id)
+  const inheritedPartnerName  = modal.item?.partner?.name ?? null
+  // Mostra o campo de contrato para Consultor OU Parceiro.
+  const showContract = isConsultor || isParceiroAdm
+
+  // Folha de pagamento: perfis internos/funcionários — todos exceto Cliente e Parceiro
+  // (Consultor, Coordenador, Administrativo, Administrador).
+  const showPayroll = form.profiles.length > 0 && !isCliente && !isParceiroAdm
+
   const canSave = !!form.name && !!form.email && form.profiles.length > 0
     && (!isCliente     || !!form.customer_id)
     && (!isConsultor   || !!form.consultant_type)
@@ -663,6 +753,7 @@ export default function UsersPage() {
         ...f,
         profiles,
         consultant_type:  profiles.includes('consultor')    ? f.consultant_type  : '',
+        contract_type:    (profiles.includes('consultor') || profiles.includes('parceiro_adm')) ? f.contract_type : '',
         coordinator_type: profiles.includes('coordenador')  ? f.coordinator_type : '',
         customer_id:      profiles.includes('cliente')      ? f.customer_id : '',
         partner_id:       profiles.includes('parceiro_adm') ? f.partner_id  : '',
@@ -759,6 +850,28 @@ export default function UsersPage() {
                 <X size={12} />
                 {bulkSustLoading ? 'Salvando...' : 'Bloquear sustentação'}
               </button>
+
+              {/* ── Tipo de contrato em massa ── */}
+              <div className="flex items-center gap-1.5 pl-3 border-l border-zinc-700/50">
+                <span className="text-[11px] text-zinc-500">Tipo de contrato:</span>
+                <select
+                  value={bulkContractType}
+                  onChange={e => setBulkContractType(e.target.value as ContractType | '')}
+                  className="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded-md h-7 px-2"
+                >
+                  <option value="">—</option>
+                  {CONTRACT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                <button
+                  type="button"
+                  onClick={bulkSetContractType}
+                  disabled={bulkContractLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
+                >
+                  <Check size={12} />
+                  {bulkContractLoading ? 'Aplicando...' : 'Aplicar'}
+                </button>
+              </div>
             </>
           )}
           {canDelete && (
@@ -808,13 +921,14 @@ export default function UsersPage() {
                 <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Cliente</th>
               )}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Perfil</th>
+              <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Contrato</th>
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Sustentação</th>
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Status</th>
             </tr>
           </thead>
           <tbody>
             {loading ? <TableSkeleton /> : users.length === 0 ? (
-              <tr><td colSpan={(canResetPwd ? 7 : 6) + ((filterRole === 'parceiro_admin' || filterRole === 'cliente') ? 1 : 0)} className="px-3 py-8 text-center text-zinc-500">Nenhum usuário encontrado</td></tr>
+              <tr><td colSpan={(canResetPwd ? 8 : 7) + ((filterRole === 'parceiro_admin' || filterRole === 'cliente') ? 1 : 0)} className="px-3 py-8 text-center text-zinc-500">Nenhum usuário encontrado</td></tr>
             ) : users.map(user => (
               <tr key={user.id} className={`border-b border-zinc-800 hover:bg-zinc-800/40 transition-colors ${selectedIds.has(user.id) ? 'bg-cyan-500/5' : ''}`}>
                 {canResetPwd && (
@@ -871,6 +985,11 @@ export default function UsersPage() {
                       </span>
                     )}
                   </div>
+                </td>
+                <td className="px-3 py-2.5 hidden lg:table-cell">
+                  {(user.type === 'consultor' || user.type === 'parceiro_admin') && user.contract_type
+                    ? <span className="text-[10px] text-zinc-300">{contractLabel(user.contract_type)}</span>
+                    : <span className="text-[10px] text-zinc-700">—</span>}
                 </td>
                 <td className="px-3 py-2.5 hidden lg:table-cell">
                   {(user.type === 'consultor' || user.type === 'parceiro_admin') ? (
@@ -1179,6 +1298,72 @@ export default function UsersPage() {
                   </div>
                 )}
 
+                {/* ── Tipo de Contrato (Consultor ou Parceiro) ── */}
+                {showContract && (
+                  consultorPartnerBound ? (
+                    // Consultor vinculado a parceiro: herdado, somente leitura.
+                    <div>
+                      <Label className="text-xs text-zinc-400 mb-1 block">Tipo de Contrato</Label>
+                      <div className="flex items-center justify-between gap-2 rounded-md border border-zinc-700 bg-zinc-800/60 h-9 px-3">
+                        <span className="text-xs text-zinc-400">
+                          {contractLabel(modal.item?.contract_type)}
+                        </span>
+                        <span className="text-[10px] text-zinc-500">
+                          Herdado do parceiro{inheritedPartnerName ? ` (${inheritedPartnerName})` : ''}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <FieldSelect
+                        label="Tipo de Contrato"
+                        value={form.contract_type}
+                        onChange={v => setForm(f => ({ ...f, contract_type: v === '' ? '' : (v as ContractType) }))}
+                        options={CONTRACT_OPTIONS}
+                        placeholder="—"
+                      />
+                      {isParceiroAdm && (
+                        <p className="text-[10px] text-zinc-500 mt-1">
+                          Define o tipo de contrato de todos os consultores deste parceiro.
+                        </p>
+                      )}
+                    </div>
+                  )
+                )}
+
+                {/* ── Folha de pagamento (perfis internos: exceto Cliente/Parceiro) ── */}
+                {showPayroll && (
+                  <div className="border border-zinc-700/50 rounded-lg p-3 bg-zinc-800/40 space-y-3">
+                    <p className="text-xs font-semibold text-zinc-300">Folha de pagamento</p>
+                    <div>
+                      <Label className="text-xs text-zinc-400">Nome Completo</Label>
+                      <Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
+                        placeholder="Nome completo conforme documento"
+                        className="mt-1 bg-zinc-800 border-zinc-700 text-white h-9 text-xs" />
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <Label className="text-xs text-zinc-400">CPF</Label>
+                        <Input value={form.cpf} onChange={e => setForm(f => ({ ...f, cpf: formatCpf(e.target.value) }))}
+                          placeholder="000.000.000-00" inputMode="numeric"
+                          className="mt-1 bg-zinc-800 border-zinc-700 text-white h-9 text-xs" />
+                      </div>
+                      <div className="w-32">
+                        <Label className="text-xs text-zinc-400">Matrícula</Label>
+                        <Input value={form.matricula} onChange={e => setForm(f => ({ ...f, matricula: e.target.value }))}
+                          placeholder="Ex: 26434"
+                          className="mt-1 bg-zinc-800 border-zinc-700 text-white h-9 text-xs" />
+                      </div>
+                    </div>
+                    <FieldSelect
+                      label="Status"
+                      value={form.payroll_status}
+                      onChange={v => setForm(f => ({ ...f, payroll_status: v }))}
+                      options={PAYROLL_STATUS_OPTIONS}
+                    />
+                  </div>
+                )}
+
                 {/* ── Sustentação: apontamento manual ── */}
                 {(isConsultor || isParceiroAdm) && (
                   <Toggle
@@ -1286,6 +1471,13 @@ export default function UsersPage() {
               ? <span className="text-green-400 text-xs font-medium">Ativo</span>
               : <span className="text-zinc-400 text-xs">Inativo</span> },
         ]
+        if ((u.type === 'consultor' || u.type === 'parceiro_admin') && u.contract_type) rows.push({ label: 'Tipo de Contrato', value: contractLabel(u.contract_type) })
+        // Folha de pagamento — perfis internos (todos exceto cliente/parceiro_admin)
+        const showPayrollView = u.type !== 'cliente' && u.type !== 'parceiro_admin'
+        if (showPayrollView && u.full_name)      rows.push({ label: 'Nome Completo', value: u.full_name })
+        if (showPayrollView && u.cpf)            rows.push({ label: 'CPF', value: u.cpf })
+        if (showPayrollView && u.matricula)      rows.push({ label: 'Matrícula', value: u.matricula })
+        if (showPayrollView && u.payroll_status) rows.push({ label: 'Status (folha)', value: u.payroll_status })
         if (u.hourly_rate != null) rows.push({ label: 'Remuneração', value: `${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(u.hourly_rate))} ${u.rate_type === 'monthly' ? '/ mês' : '/ hora'}` })
         if (u.daily_hours != null) rows.push({ label: 'Horas/dia útil', value: `${u.daily_hours}h` })
         if (u.guaranteed_hours != null && u.consultant_type === 'horista') rows.push({

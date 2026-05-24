@@ -15,12 +15,15 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type ContractType = 'cooperado' | 'clt' | 'pj'
+
 interface ConsultorBase {
   user_id: number
   nome: string
   email: string
   type: string
   consultant_type: string
+  contract_type: ContractType | null
   horas_trabalhadas: number
   valor_hora: number
   rate_type: string
@@ -123,6 +126,17 @@ function balanceColor(val: number): string {
   if (val > 0) return 'text-emerald-400'
   if (val < 0) return 'text-red-400'
   return 'text-zinc-400'
+}
+
+// Rótulos do tipo de contrato (dimensão "Tipo de Contrato").
+const CONTRACT_LABELS: Record<ContractType, string> = {
+  cooperado: 'Cooperado',
+  clt:       'CLT',
+  pj:        'PJ',
+}
+const CONTRACT_ORDER: ContractType[] = ['cooperado', 'clt', 'pj']
+function contractLabel(ct: ContractType | null): string {
+  return ct ? CONTRACT_LABELS[ct] : '— (sem tipo)'
 }
 
 // ─── Print ────────────────────────────────────────────────────────────────────
@@ -337,6 +351,9 @@ export default function FechamentoConsultorPage() {
   const canSendEmail = user?.type === 'admin' || user?.type === 'administrativo'
   const [apenasComMovimento, setApenasComMovimento] = useState(true)
   const [filterNome, setFilterNome] = useState('')
+  // Filtro por Tipo de Contrato (null = "Todos").
+  const [contractType, setContractType] = useState<ContractType | null>(null)
+  const [downloadingAllExcel, setDownloadingAllExcel] = useState(false)
 
   const load = useCallback(async () => {
     if (!yearMonth) return
@@ -450,6 +467,41 @@ export default function FechamentoConsultorPage() {
     }
   }
 
+  // Export consolidado (todos os consultores do período). Quando o filtro de
+  // Tipo de Contrato está ativo, passa `?contract_type=` pro backend filtrar.
+  // Mesmo mecanismo de download dos demais excel desta página: fetch no proxy
+  // /api/v1 (o middleware injeta o Authorization via cookie) → blob → <a download>.
+  async function downloadAllExcel() {
+    if (!yearMonth) return
+    setDownloadingAllExcel(true)
+    try {
+      const qs = contractType ? `?contract_type=${contractType}` : ''
+      const res = await fetch(
+        `/api/v1/fechamento-consultor/${yearMonth}/export-excel${qs}`,
+        { credentials: 'same-origin', headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } },
+      )
+      if (!res.ok) throw new Error(`Erro ${res.status}`)
+      const cd = res.headers.get('Content-Disposition') ?? ''
+      const match = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
+      const sufixo = contractType ? `_${CONTRACT_LABELS[contractType]}` : ''
+      const fallback = `Fechamento_Consultores_${yearMonth}${sufixo}.xlsx`
+      const filename = match ? decodeURIComponent(match[1]) : fallback
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err: unknown) {
+      toast.error(`Erro ao baixar o Excel: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setDownloadingAllExcel(false)
+    }
+  }
+
   async function handleRelatorio(consultor: ConsultorBase | ConsultorHorista | ConsultorBancoHoras | ConsultorFixo) {
     setPrintingUser(consultor.user_id)
     try {
@@ -547,6 +599,7 @@ export default function FechamentoConsultorPage() {
   function applyFilters<T extends ConsultorBase>(rows: T[]): T[] {
     let r = rows
     if (apenasComMovimento) r = r.filter(c => c.total > 0 || c.horas_trabalhadas > 0)
+    if (contractType) r = r.filter(c => c.contract_type === contractType)
     if (filterNome.trim()) {
       const q = filterNome.trim().toLowerCase()
       r = r.filter(c => c.nome.toLowerCase().includes(q))
@@ -754,6 +807,32 @@ export default function FechamentoConsultorPage() {
     const todosFiltrados = applyFilters(todos as ConsultorBase[])
     const totalFiltrado = todosFiltrados.reduce((s, c) => s + (c.total ?? 0), 0)
 
+    // Breakdown por Tipo de Contrato — sempre mostra os 3 tipos (+ "sem tipo" se
+    // houver) pra ler como rateio do período. Respeita "com movimentos" + busca
+    // por nome (pra bater com as abas), mas IGNORA o filtro de Tipo de Contrato:
+    // esta tabela É a quebra por contrato, então mostra todos os tipos sempre.
+    const baseSemFiltroContrato = (todos as ConsultorBase[]).filter(c => {
+      if (apenasComMovimento && !(c.total > 0 || c.horas_trabalhadas > 0)) return false
+      if (filterNome.trim() && !c.nome.toLowerCase().includes(filterNome.trim().toLowerCase())) return false
+      return true
+    })
+    const contratoBuckets: { key: string; label: string; count: number; total: number }[] =
+      CONTRACT_ORDER.map(ct => {
+        const rows = baseSemFiltroContrato.filter(c => c.contract_type === ct)
+        return { key: ct, label: CONTRACT_LABELS[ct], count: rows.length, total: rows.reduce((s, c) => s + (c.total ?? 0), 0) }
+      })
+    const semTipo = baseSemFiltroContrato.filter(c => c.contract_type == null)
+    if (semTipo.length > 0) {
+      contratoBuckets.push({
+        key: 'null',
+        label: contractLabel(null),
+        count: semTipo.length,
+        total: semTipo.reduce((s, c) => s + (c.total ?? 0), 0),
+      })
+    }
+    const contratoTotalCount = contratoBuckets.reduce((s, b) => s + b.count, 0)
+    const contratoTotalValor = contratoBuckets.reduce((s, b) => s + b.total, 0)
+
     return (
       <div className="space-y-6">
         {/* Tabela por tipo */}
@@ -787,6 +866,45 @@ export default function FechamentoConsultorPage() {
                 <Td style={{ color: '#6D28D9', fontWeight: 700 }}>Total Geral</Td>
                 <Td right style={{ color: '#6D28D9', fontWeight: 600 }}>{todos.length}</Td>
                 <Td right className="text-base" style={{ color: '#6D28D9', fontWeight: 700 }}>{formatBRL(t.total_geral)}</Td>
+              </Tr>
+            </Tbody>
+          </Table>
+        </div>
+
+        {/* Tabela por tipo de contrato */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-zinc-500 uppercase tracking-wide font-medium">Por tipo de contrato</p>
+            <button
+              onClick={downloadAllExcel}
+              disabled={downloadingAllExcel}
+              className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-300 transition-colors disabled:opacity-50"
+              title={contractType ? `Exportar ${CONTRACT_LABELS[contractType]} para Excel` : 'Exportar todos para Excel'}
+            >
+              {downloadingAllExcel ? <RefreshCw size={12} className="animate-spin" /> : <FileSpreadsheet size={12} />}
+              {downloadingAllExcel ? 'Baixando…' : 'Exportar Excel'}
+            </button>
+          </div>
+          <Table>
+            <Thead>
+              <tr>
+                <Th>Tipo de Contrato</Th>
+                <Th right>Consultores</Th>
+                <Th right>Total</Th>
+              </tr>
+            </Thead>
+            <Tbody>
+              {contratoBuckets.map(r => (
+                <Tr key={r.key}>
+                  <Td>{r.label}</Td>
+                  <Td right className="text-zinc-400">{r.count}</Td>
+                  <Td right className="font-mono text-zinc-200">{formatBRL(r.total)}</Td>
+                </Tr>
+              ))}
+              <Tr className="border-t-2 border-[#7C3AED]" baseBackground="rgba(124,58,237,0.06)">
+                <Td style={{ color: '#6D28D9', fontWeight: 700 }}>Total Geral</Td>
+                <Td right style={{ color: '#6D28D9', fontWeight: 600 }}>{contratoTotalCount}</Td>
+                <Td right className="text-base" style={{ color: '#6D28D9', fontWeight: 700 }}>{formatBRL(contratoTotalValor)}</Td>
               </Tr>
             </Tbody>
           </Table>
@@ -967,6 +1085,32 @@ export default function FechamentoConsultorPage() {
               Todos
             </button>
           </div>
+
+          {/* Filtro: Tipo de Contrato (Todos / Cooperado / CLT / PJ) */}
+          <div className="flex rounded-lg overflow-hidden border text-xs font-semibold" style={{ borderColor: 'var(--border)' }}>
+            <button
+              onClick={() => setContractType(null)}
+              className="px-3 py-1.5 transition-colors"
+              style={contractType === null
+                ? { background: 'var(--primary)', color: 'var(--primary-fg)' }
+                : { background: 'var(--surface)', color: 'var(--text-muted)' }}
+            >
+              Todos
+            </button>
+            {CONTRACT_ORDER.map(ct => (
+              <button
+                key={ct}
+                onClick={() => setContractType(ct)}
+                className="px-3 py-1.5 transition-colors border-l"
+                style={contractType === ct
+                  ? { background: 'var(--primary)', color: 'var(--primary-fg)', borderColor: 'var(--border)' }
+                  : { background: 'var(--surface)', color: 'var(--text-muted)', borderColor: 'var(--border)' }}
+              >
+                {CONTRACT_LABELS[ct]}
+              </button>
+            ))}
+          </div>
+
           <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
             <input
