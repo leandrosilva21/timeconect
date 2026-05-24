@@ -546,6 +546,10 @@ export default function FechamentoClientePage() {
     .valor-topo .label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
     .valor-topo .horas { font-size: 13px; color: #374151; font-weight: 600; }
     .valor-topo .valor { font-size: 22px; font-weight: 700; color: #5b21b6; }
+    .projetos-destaque { background: #ecfeff; border: 1px solid #a5f0f7; border-radius: 8px; padding: 12px 18px; margin-bottom: 14px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .projetos-destaque .pd-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #0e7490; font-weight: 700; }
+    .projetos-destaque .pd-item { margin-top: 5px; font-size: 14px; font-weight: 700; color: #0f3a42; }
+    .projetos-destaque .pd-cod { color: #0e7490; }
     .section { margin-bottom: 26px; }
     .section-header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #5b21b6; padding-bottom: 6px; margin-bottom: 8px; }
     .section-title { font-size: 14px; font-weight: 700; color: #1f2937; }
@@ -728,6 +732,11 @@ export default function FechamentoClientePage() {
       <div class="meta"><b>Cliente:</b> ${escapeHtml(clienteNome)}</div>
       <div class="meta"><b>Competência:</b> ${competencia}</div>
     </div>
+  </div>
+
+  <div class="projetos-destaque">
+    <div class="pd-label">${projetos.length > 1 ? 'Projetos' : 'Projeto'}</div>
+    ${projetos.map(p => `<div class="pd-item"><span class="pd-cod">${escapeHtml(p.projeto_codigo)}</span> &mdash; ${escapeHtml(p.projeto_nome)}</div>`).join('')}
   </div>
 
   <div class="valor-topo">
