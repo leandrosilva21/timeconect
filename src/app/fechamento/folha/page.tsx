@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
-import { RefreshCw, FileSpreadsheet, Save, FileText, Users, Plus, UserPlus, Rows3, Trash2, EyeOff, RotateCcw } from 'lucide-react'
+import { RefreshCw, FileSpreadsheet, Save, FileText, Users, Plus, UserPlus, Rows3, Trash2, EyeOff, RotateCcw, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   PageHeader, Th, Tbody, Tr, Td,
@@ -14,6 +14,7 @@ import {
 } from '@/components/ds'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { UserFormModal } from '@/components/users/user-form-modal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -178,6 +179,13 @@ export default function FechamentoFolhaPage() {
   ) {
     setNewUser(prev => ({ ...prev, [key]: value }))
   }
+
+  // ─── Modal "Editar usuário" (cadastro completo, compartilhado) ──────────────
+  // A pencil de cada linha abre o MESMO modal de cadastro da tela de Usuários
+  // (UserFormModal), inline na folha — sem sair da página. Em sucesso (onSaved),
+  // recarrega a grade (load); o usuário pode entrar/sair da folha conforme o tipo.
+  // Só linhas com user_id numérico (não sócio/manual). null = modal fechado.
+  const [editUserId, setEditUserId] = useState<number | null>(null)
 
   // Fecha o menu "+ Incluir" ao clicar fora ou apertar Esc.
   useEffect(() => {
@@ -991,6 +999,21 @@ export default function FechamentoFolhaPage() {
 
                         {/* ── Ações da linha ── */}
                         <Td>
+                          <div className="inline-flex items-center gap-1">
+                          {/* Editar usuário: só linhas com user_id numérico (regular/inativo);
+                              sócio/manual (user_id null) não têm. */}
+                          {!socio && r.user_id != null && (
+                            <button
+                              type="button"
+                              onClick={() => setEditUserId(r.user_id as number)}
+                              title="Editar usuário"
+                              aria-label="Editar usuário"
+                              className="inline-flex items-center justify-center rounded-md p-1.5 transition-colors ds-row-hover"
+                              style={{ color: 'var(--text-muted)' }}
+                            >
+                              <Pencil size={15} />
+                            </button>
+                          )}
                           {r.cancelado ? (
                             // Aba Canceladas → Reativar (volta p/ Ativos).
                             <button
@@ -1047,6 +1070,7 @@ export default function FechamentoFolhaPage() {
                               Cancelar
                             </button>
                           )}
+                          </div>
                         </Td>
                       </Tr>
                     )
@@ -1249,6 +1273,15 @@ export default function FechamentoFolhaPage() {
             </Button>
           </ModalFooter>
         </Modal>
+
+        {/* ── Modal: Editar usuário (cadastro completo, compartilhado) ── */}
+        {/* Mesmo modal da tela de Usuários — abre inline, sem sair da folha. */}
+        <UserFormModal
+          open={editUserId != null}
+          userId={editUserId}
+          onClose={() => setEditUserId(null)}
+          onSaved={() => load()}
+        />
 
       </div>
     </AppLayout>
