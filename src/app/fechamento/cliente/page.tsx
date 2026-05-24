@@ -40,6 +40,12 @@ interface ApontamentoRow {
   observacao?: string
   client_extra_pct?: number | null
   valor_extra?: number | null
+  // Sub-projeto real do apontamento. Quando um contrato On Demand pai consolida
+  // projetos-filho, as linhas do pai trazem o código do pai e as do filho o
+  // código do filho (ex: VDM004-23-01) — usado para separar em sub-blocos.
+  sub_projeto_id?: number
+  sub_projeto_codigo?: string
+  sub_projeto_nome?: string
 }
 
 interface ProjetoRow {
@@ -553,6 +559,11 @@ export default function FechamentoClientePage() {
     .right { text-align: right; }
     .nowrap { white-space: nowrap; }
     .section-footer { background: #faf9ff; padding: 7px 12px; text-align: right; font-size: 12px; color: #5b21b6; font-weight: 600; border-top: 2px solid #c4b5fd; }
+    /* Sub-blocos por sub-projeto (contrato pai que consolida filhos) */
+    .subproj-header { background: #f5f3ff; padding: 6px 12px; font-size: 11px; font-weight: 700; color: #5b21b6; text-transform: uppercase; letter-spacing: .03em; border-left: 3px solid #5b21b6; margin-top: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .subproj-header:first-child { margin-top: 0; }
+    .subproj-header .subproj-nome { font-weight: 400; text-transform: none; color: #6b7280; }
+    .subproj-footer { padding: 5px 12px; text-align: right; font-size: 11px; color: #6b7280; font-style: italic; border-bottom: 1px dashed #ddd6fe; }
     a.ticket { color: #0891b2; text-decoration: none; }
     /* Apuração por Ticket (Vedamotors) */
     .ticket-section { margin-top: 26px; margin-bottom: 26px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -578,13 +589,13 @@ export default function FechamentoClientePage() {
     const ticketHeader = isVedamotors ? 'Ticket ERPSERV' : 'Ticket'
     const tituloHeader = isVedamotors ? 'Ticket Vedamotors' : 'Título'
 
-    const sectionsHtml = projetos.map(p => {
-      const rowsHtml = (p.apontamentos ?? []).map(ts => {
-        const ticketCell = ts.ticket
-          ? `<a class="ticket" href="https://erpserv.movidesk.com/Ticket/Edit/${escapeHtml(ts.ticket)}" target="_blank" rel="noopener noreferrer">#${escapeHtml(ts.ticket)}</a>`
-          : '—'
-        const tituloCell = isVedamotors ? escapeHtml(vedaTicket(ts.titulo)) : escapeHtml(ts.titulo ?? '—')
-        return `
+    // Renderiza a <tr> de um apontamento (mesma estrutura de colunas em todos os casos).
+    const apontamentoRow = (ts: ApontamentoRow): string => {
+      const ticketCell = ts.ticket
+        ? `<a class="ticket" href="https://erpserv.movidesk.com/Ticket/Edit/${escapeHtml(ts.ticket)}" target="_blank" rel="noopener noreferrer">#${escapeHtml(ts.ticket)}</a>`
+        : '—'
+      const tituloCell = isVedamotors ? escapeHtml(vedaTicket(ts.titulo)) : escapeHtml(ts.titulo ?? '—')
+      return `
           <tr>
             <td class="nowrap">${fmtDate(ts.data)}</td>
             <td>${escapeHtml(ts.colaborador ?? '—')}</td>
@@ -593,7 +604,43 @@ export default function FechamentoClientePage() {
             <td>${tituloCell}</td>
             <td class="right nowrap">${ts.horas.toFixed(2)}h</td>
           </tr>`
-      }).join('')
+    }
+
+    const sectionsHtml = projetos.map(p => {
+      const aps = p.apontamentos ?? []
+
+      // Sub-projetos distintos presentes no contrato (preserva a ordem de aparição:
+      // como o backend ordena por data, o pai costuma vir primeiro; aqui mantemos
+      // a 1ª ocorrência de cada código). Contrato sem filhos consolidados → 1 só.
+      const subOrder: string[] = []
+      const subMap = new Map<string, { codigo: string; nome: string; aps: ApontamentoRow[]; horas: number }>()
+      for (const ts of aps) {
+        const codigo = ts.sub_projeto_codigo ?? p.projeto_codigo
+        const nome   = ts.sub_projeto_nome ?? p.projeto_nome
+        let entry = subMap.get(codigo)
+        if (!entry) {
+          entry = { codigo, nome, aps: [], horas: 0 }
+          subMap.set(codigo, entry)
+          subOrder.push(codigo)
+        }
+        entry.aps.push(ts)
+        entry.horas += ts.horas
+      }
+
+      // > 1 sub-projeto distinto = contrato pai consolidando filhos → sub-blocos.
+      // Caso normal (1 sub-projeto) → render plano, sem cabeçalhos (sem mudança).
+      const hasSubProjetos = subOrder.length > 1
+
+      const bodyHtml = hasSubProjetos
+        ? subOrder.map(codigo => {
+            const sub = subMap.get(codigo)!
+            const subRows = sub.aps.map(apontamentoRow).join('')
+            return `
+              <tr><td colspan="6" class="subproj-header">${escapeHtml(sub.codigo)}<span class="subproj-nome"> — ${escapeHtml(sub.nome)}</span></td></tr>
+              ${subRows}
+              <tr><td colspan="6" class="subproj-footer">Subtotal ${escapeHtml(sub.codigo)} (${sub.aps.length} reg.): <b>${sub.horas.toFixed(2)}h</b></td></tr>`
+          }).join('')
+        : aps.map(apontamentoRow).join('')
 
       return `
         <div class="section">
@@ -612,9 +659,9 @@ export default function FechamentoClientePage() {
                 <th class="right">Horas</th>
               </tr>
             </thead>
-            <tbody>${rowsHtml}</tbody>
+            <tbody>${bodyHtml}</tbody>
           </table>
-          <div class="section-footer">Subtotal — ${escapeHtml(p.projeto_nome)} (${(p.apontamentos ?? []).length} reg.) = <b>${p.horas.toFixed(2)}h</b></div>
+          <div class="section-footer">Subtotal — ${escapeHtml(p.projeto_nome)} (${aps.length} reg.) = <b>${p.horas.toFixed(2)}h</b></div>
         </div>`
     }).join('')
 
