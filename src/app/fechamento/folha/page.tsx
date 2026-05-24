@@ -1,0 +1,1256 @@
+'use client'
+
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { AppLayout } from '@/components/layout/app-layout'
+import { useAuth } from '@/hooks/use-auth'
+import { usePersistedFilters } from '@/hooks/use-persisted-filters'
+import { api } from '@/lib/api'
+import { formatBRL } from '@/lib/format'
+import { RefreshCw, FileSpreadsheet, Save, FileText, Users, Plus, UserPlus, Rows3, Trash2, EyeOff, RotateCcw } from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  PageHeader, Th, Tbody, Tr, Td,
+  Button, SkeletonTable, EmptyState,
+} from '@/components/ds'
+import { MultiSelect } from '@/components/ui/multi-select'
+import { Modal, ModalHeader, ModalBody, ModalFooter } from '@/components/ui/modal'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+// Linha vinda do backend (GET). Campos "auto" são read-only; os editáveis são
+// semeados a partir destes valores e mantidos em estado local até o Salvar.
+// Linhas de sócio (is_socio) são destacadas e têm TODAS as colunas editáveis.
+interface FolhaRow {
+  // Chave única da linha. É a chave de React E a chave do estado de edição,
+  // substituindo user_id (que é null nas linhas de sócio).
+  row_key: string
+  is_socio: boolean
+  // Cooperado desativado no cadastro (ainda aparece em "Ativos", em cor âmbar).
+  inativo: boolean
+  // Linha ocultada da folha do mês. cancelado=true some de "Ativos" e vai p/ "Canceladas".
+  cancelado: boolean
+  socio_key: string | null
+  user_id: number | null
+  cpf: string
+  matricula: string
+  status: string
+  nome: string
+  dias: number
+  horas: number
+  horas_apontamentos: number
+  valor_hora: number
+  producao: number
+  variavel: number
+  reemb: number
+  descontos: number
+  adiantamento: number
+  horista_mensalista: string
+  total_rend: number
+  total_debitos: number
+  liquido: number
+}
+
+// Valores editáveis mantidos em estado local, por row_key.
+// Para linhas normais: Horas/CPF/Matrícula/Status/Nome/Valor Hora/Produção são
+// somente-leitura (Horas = horas dos apontamentos). Para sócios, TODOS os campos
+// abaixo são editáveis — por isso o estado carrega o conjunto completo sempre, e a
+// UI decide quais são editáveis com base em is_socio.
+interface EditState {
+  // Editáveis em qualquer linha
+  dias: number
+  variavel: number
+  reemb: number
+  descontos: number
+  adiantamento: number
+  horista_mensalista: string
+  // Editáveis APENAS em linhas de sócio (semeados em todas para tipagem simples)
+  cpf: string
+  matricula: string
+  status: string
+  nome: string
+  horas: number
+  valor_hora: number
+  producao: number
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtYearMonth(ym: string): string {
+  if (!ym) return ''
+  const [year, month] = ym.split('-')
+  const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+  return `${months[parseInt(month) - 1]} de ${year}`
+}
+
+// Número pt-BR sem símbolo de moeda (para Valor Hora com 4 casas).
+function fmtNum(value: number, decimals = 2): string {
+  return value.toLocaleString('pt-BR', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
+}
+
+// Converte entrada de input numérico (string) para número, tratando vazio como 0.
+function toNum(v: string): number {
+  if (v === '' || v == null) return 0
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+// ─── Estilo dos inputs editáveis da grade ──────────────────────────────────────
+// Mesma linguagem dos outros fechamentos: superfície/borda/texto via tokens.
+const cellInputStyle: React.CSSProperties = {
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  color: 'var(--text)',
+}
+const cellInputClass =
+  'w-24 rounded-md px-2 py-1 text-xs text-right tabular-nums ds-input focus:outline-none'
+// Variante de texto (esquerda) para os campos editáveis textuais dos sócios.
+const cellInputClassText =
+  'w-32 rounded-md px-2 py-1 text-xs ds-input focus:outline-none'
+// Cabeçalho fixo (sticky) no topo do container de rolagem. Background sólido via
+// token DS para as linhas não vazarem por trás (o Thead tem fundo translúcido).
+const stickyTh = 'sticky top-0 z-20 bg-[var(--surface)]'
+// Estilo dos inputs/selects do modal "Novo usuário" — superfície/borda/texto via
+// tokens DS (mesma linguagem dos inputs da grade, porém em tamanho de formulário).
+const modalInputStyle: React.CSSProperties = {
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  color: 'var(--text)',
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function FechamentoFolhaPage() {
+  const { user } = useAuth()
+  const now = new Date()
+  const defaultYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const { filters: flt, set: setFilter } = usePersistedFilters(
+    'fechamento_folha',
+    user?.id,
+    { yearMonth: defaultYearMonth },
+  )
+  const { yearMonth } = flt
+  const setYearMonth = (v: string) => setFilter('yearMonth', v)
+
+  const [rows, setRows] = useState<FolhaRow[]>([])
+  // Estado de edição keyed por row_key (sócios têm user_id null).
+  const [edits, setEdits] = useState<Record<string, EditState>>({})
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  // Filtro de consultores (somente visual / client-side): user_ids selecionados.
+  // Vazio = mostra todos (comportamento atual).
+  const [filterUserIds, setFilterUserIds] = useState<string[]>([])
+  // Menu "+ Incluir": escolha entre novo usuário e nova linha editável.
+  const [incluirOpen, setIncluirOpen] = useState(false)
+  const incluirRef = useRef<HTMLDivElement>(null)
+  // Remoção em andamento de uma linha manual (por socio_key) — desabilita o botão.
+  const [removingKey, setRemovingKey] = useState<string | null>(null)
+  // Aba ativa: "ativos" (cancelado=false) ou "canceladas" (cancelado=true).
+  const [tab, setTab] = useState<'ativos' | 'canceladas'>('ativos')
+  // Cancelar/Reativar em andamento (por row_key) — desabilita a ação da linha.
+  const [togglingKey, setTogglingKey] = useState<string | null>(null)
+
+  // ─── Modal "Novo usuário" (cadastro inline de cooperado) ────────────────────
+  // Cria um consultor cooperado direto no cadastro (POST /users), sem sair da
+  // página. Em caso de sucesso, recarrega a grade (load) — o novo cooperado
+  // aparece na folha do mês corrente.
+  const [novoUserOpen, setNovoUserOpen] = useState(false)
+  const [creatingUser, setCreatingUser] = useState(false)
+  const newUserDefaults = {
+    name: '',
+    full_name: '',
+    email: '',
+    cpf: '',
+    matricula: '',
+    payroll_status: 'Contratado' as 'Contratado' | 'Em Afastamento',
+    consultant_type: 'horista' as 'horista' | 'banco_de_horas' | 'fixo',
+    hourly_rate: '',
+    rate_type: 'hourly' as 'hourly' | 'monthly',
+  }
+  const [newUser, setNewUser] = useState(newUserDefaults)
+  function setNewUserField<K extends keyof typeof newUserDefaults>(
+    key: K,
+    value: (typeof newUserDefaults)[K],
+  ) {
+    setNewUser(prev => ({ ...prev, [key]: value }))
+  }
+
+  // Fecha o menu "+ Incluir" ao clicar fora ou apertar Esc.
+  useEffect(() => {
+    if (!incluirOpen) return
+    function onDown(ev: MouseEvent) {
+      if (incluirRef.current && !incluirRef.current.contains(ev.target as Node)) {
+        setIncluirOpen(false)
+      }
+    }
+    function onKey(ev: KeyboardEvent) {
+      if (ev.key === 'Escape') setIncluirOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [incluirOpen])
+
+  const load = useCallback(async () => {
+    if (!yearMonth) return
+    setLoading(true)
+    setRows([])
+    setEdits({})
+    try {
+      const res = await api.get<{ data: FolhaRow[] }>(`/fechamento-folha/${yearMonth}`)
+      const data = res.data ?? []
+      setRows(data)
+      // Semeia o estado editável a partir dos valores vindos do backend, por row_key.
+      // Carrega o conjunto completo de campos (sócios usam todos; linhas normais
+      // ignoram os campos extras, que permanecem read-only na UI).
+      const seed: Record<string, EditState> = {}
+      for (const r of data) {
+        seed[r.row_key] = {
+          dias: r.dias,
+          variavel: r.variavel,
+          reemb: r.reemb,
+          descontos: r.descontos,
+          adiantamento: r.adiantamento,
+          horista_mensalista: r.horista_mensalista,
+          cpf: r.cpf,
+          matricula: r.matricula,
+          status: r.status,
+          nome: r.nome,
+          horas: r.horas,
+          valor_hora: r.valor_hora,
+          producao: r.producao,
+        }
+      }
+      setEdits(seed)
+    } catch (err: unknown) {
+      toast.error(`Erro ao carregar a folha: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setLoading(false)
+    }
+  }, [yearMonth])
+
+  useEffect(() => { load() }, [load])
+
+  // Opções do filtro de consultor — derivadas das linhas carregadas (nome).
+  // Sócios não são consultores e não entram nas opções (user_id null).
+  const consultorOptions = useMemo(
+    () => rows
+      .filter(r => !r.is_socio && r.user_id != null)
+      .map(r => ({ id: String(r.user_id), name: r.nome })),
+    [rows],
+  )
+
+  // Contagem por aba (independe do filtro de consultor) p/ os badges das abas.
+  const ativosCount = useMemo(() => rows.filter(r => !r.cancelado).length, [rows])
+  const canceladasCount = useMemo(() => rows.filter(r => r.cancelado).length, [rows])
+
+  // Linhas exibidas na grade: filtra pela ABA (cancelado) + filtro de consultor
+  // (client-side) e fixa o grupo VERDE (is_socio) no topo. Sem seleção de
+  // consultor → todas as linhas da aba. Linhas de sócio são SEMPRE exibidas (são
+  // especiais e não fazem parte do filtro de consultor). Salvar/exportar
+  // continuam usando o mês cheio.
+  const visibleRows = useMemo(() => {
+    const set = filterUserIds.length > 0 ? new Set(filterUserIds) : null
+    const filtered = rows.filter(r => {
+      if (r.cancelado !== (tab === 'canceladas')) return false
+      if (!set) return true
+      // Com filtro ativo, traz SOMENTE os consultores selecionados (sócios não são forçados).
+      return r.user_id != null && set.has(String(r.user_id))
+    })
+    // Partição estável: sócios (verde) primeiro, demais depois — cada grupo
+    // mantém a ordem atual (que já reflete o prepend das linhas manuais).
+    const socios = filtered.filter(r => r.is_socio)
+    const outros = filtered.filter(r => !r.is_socio)
+    return [...socios, ...outros]
+  }, [rows, filterUserIds, tab])
+
+  // Atualiza um campo editável de uma linha no estado local (keyed por row_key).
+  function setEdit<K extends keyof EditState>(rowKey: string, key: K, value: EditState[K]) {
+    setEdits(prev => ({
+      ...prev,
+      [rowKey]: { ...prev[rowKey], [key]: value },
+    }))
+  }
+
+  // ─── Incluir → Novo usuário ─────────────────────────────────────────────────
+  // Abre o modal inline de cadastro de cooperado (sem sair da página). O envio
+  // (POST /users) está em createNewUser; o sucesso fecha o modal e recarrega a
+  // grade para o novo cooperado aparecer.
+  function openNewUser() {
+    setIncluirOpen(false)
+    setNewUser(newUserDefaults)
+    setNovoUserOpen(true)
+  }
+
+  // POST /users criando um consultor COOPERADO. Tipo/contrato são fixos (não
+  // editáveis no form): type=consultor, contract_type=cooperado, enabled=true.
+  // O backend gera senha + envia o e-mail de boas-vindas (não enviamos senha).
+  // Sucesso → toast, fecha o modal, reseta o form e recarrega a folha (load).
+  async function createNewUser() {
+    const name = newUser.name.trim()
+    const email = newUser.email.trim()
+    if (!name || !email) {
+      toast.error('Preencha Nome e E-mail.')
+      return
+    }
+    setCreatingUser(true)
+    try {
+      const payload: Record<string, unknown> = {
+        // Valores fixos: este cadastro é da folha cooperativa.
+        type: 'consultor',
+        contract_type: 'cooperado',
+        enabled: true,
+        // Campos do formulário.
+        name,
+        email,
+        full_name: newUser.full_name.trim() || null,
+        cpf: newUser.cpf.trim() || null,
+        matricula: newUser.matricula.trim() || null,
+        payroll_status: newUser.payroll_status,
+        consultant_type: newUser.consultant_type,
+        rate_type: newUser.rate_type,
+      }
+      const hourly = newUser.hourly_rate.trim()
+      if (hourly) payload.hourly_rate = parseFloat(hourly)
+      await api.post('/users', payload)
+      toast.success('Usuário cadastrado')
+      setNovoUserOpen(false)
+      setNewUser(newUserDefaults)
+      await load()
+    } catch (err: unknown) {
+      toast.error(`Erro ao cadastrar usuário: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setCreatingUser(false)
+    }
+  }
+
+  // ─── Incluir → Nova linha editável ──────────────────────────────────────────
+  // Cria uma linha manual que se comporta como sócio (is_socio, todas as colunas
+  // editáveis, destacada). socio_key começa com 'manual_' para podermos identificar
+  // e oferecer a remoção. user_id null → sempre visível (ignora o filtro de consultor).
+  // O estado de edição é semeado já com todos os campos para os inputs funcionarem.
+  function addManualRow() {
+    setIncluirOpen(false)
+    const socioKey = 'manual_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)
+    const rowKey = 's:' + socioKey
+    const newRow: FolhaRow = {
+      row_key: rowKey,
+      is_socio: true,
+      inativo: false,
+      cancelado: false,
+      socio_key: socioKey,
+      user_id: null,
+      cpf: '',
+      matricula: '',
+      status: 'Contratado',
+      nome: '',
+      dias: 0,
+      horas: 180,
+      horas_apontamentos: 0,
+      valor_hora: 0,
+      producao: 0,
+      variavel: 0,
+      reemb: 0,
+      descontos: 0,
+      adiantamento: 0,
+      horista_mensalista: 'Mensalista',
+      total_rend: 0,
+      total_debitos: 0,
+      liquido: 0,
+    }
+    setEdits(prev => ({
+      ...prev,
+      [rowKey]: {
+        dias: 0,
+        variavel: 0,
+        reemb: 0,
+        descontos: 0,
+        adiantamento: 0,
+        horista_mensalista: 'Mensalista',
+        cpf: '',
+        matricula: '',
+        status: 'Contratado',
+        nome: '',
+        horas: 180,
+        valor_hora: 0,
+        producao: 0,
+      },
+    }))
+    // Nova linha manual entra no TOPO (à frente do grupo verde de sócios).
+    setRows(prev => [newRow, ...prev])
+    // Garante que a linha recém-criada (cancelado=false) seja visível.
+    setTab('ativos')
+  }
+
+  // ─── Remover linha manual ───────────────────────────────────────────────────
+  // Só linhas manuais (socio_key começa com 'manual_') podem ser removidas. O
+  // DELETE é idempotente no backend (seguro mesmo que a linha nunca tenha sido
+  // salva). Após o DELETE, limpamos a linha e o seu estado de edição localmente.
+  async function removeManualRow(r: FolhaRow) {
+    if (!r.socio_key || !r.socio_key.startsWith('manual_')) return
+    if (!window.confirm('Remover esta linha manual? Esta ação não pode ser desfeita.')) return
+    setRemovingKey(r.socio_key)
+    try {
+      await api.delete(`/fechamento-folha/${yearMonth}/manual/${r.socio_key}`)
+      setRows(prev => prev.filter(x => x.row_key !== r.row_key))
+      setEdits(prev => {
+        const next = { ...prev }
+        delete next[r.row_key]
+        return next
+      })
+      toast.success('Linha removida')
+    } catch (err: unknown) {
+      toast.error(`Erro ao remover: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setRemovingKey(null)
+    }
+  }
+
+  // ─── Cancelar / Reativar linha ──────────────────────────────────────────────
+  // POST /fechamento-folha/{ym}/cancel com { user_id|socio_key, cancelado }.
+  // Linhas de sócio identificam-se por socio_key; linhas normais por user_id.
+  // Sucesso → atualiza cancelado localmente (some de "Ativos" ↔ vai p/ "Canceladas").
+  async function setCancelado(r: FolhaRow, cancelado: boolean) {
+    setTogglingKey(r.row_key)
+    try {
+      const body = r.is_socio
+        ? { socio_key: r.socio_key, cancelado }
+        : { user_id: r.user_id, cancelado }
+      await api.post(`/fechamento-folha/${yearMonth}/cancel`, body)
+      setRows(prev => prev.map(x => x.row_key === r.row_key ? { ...x, cancelado } : x))
+      toast.success(cancelado ? 'Linha cancelada' : 'Linha reativada')
+    } catch (err: unknown) {
+      toast.error(`Erro ao ${cancelado ? 'cancelar' : 'reativar'}: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setTogglingKey(null)
+    }
+  }
+
+  // Colunas calculadas — recomputadas ao vivo a partir do estado editável + auto.
+  // Espelha as fórmulas que o .xls vai produzir (lá são vermelhas / não importadas).
+  // Produção: nas linhas normais é auto (r.producao); nas de sócio é editável (e.producao).
+  function calc(r: FolhaRow, e: EditState) {
+    const producao = r.is_socio ? e.producao : r.producao
+    const totalRend = producao + e.variavel + e.reemb
+    const totalDebitos = e.descontos + e.adiantamento
+    const liquido = totalRend - totalDebitos
+    return { totalRend, totalDebitos, liquido }
+  }
+
+  // ─── Salvar ───────────────────────────────────────────────────────────────
+  // POST de todas as linhas, mapeando os nomes da grade para o contrato da API.
+  async function save() {
+    if (rows.length === 0) return
+    setSaving(true)
+    try {
+      // O contrato da API muda conforme o tipo da linha: o backend faz switch em
+      // socio_key vs user_id. Linhas normais mandam o subset atual; sócios mandam
+      // TODOS os campos manuais (inclusive horas, que neles é editável).
+      // Linhas canceladas (ocultadas) NÃO entram no save.
+      const entries = rows.filter(r => !r.cancelado).map(r => {
+        const e = edits[r.row_key]
+        if (r.is_socio) {
+          return {
+            socio_key: r.socio_key,
+            cpf: e.cpf,
+            matricula: e.matricula,
+            nome: e.nome,
+            status: e.status,
+            valor_hora: e.valor_hora,
+            producao: e.producao,
+            dias_trabalhados: e.dias,
+            horas_trabalhadas: e.horas,
+            variavel: e.variavel,
+            reemb: e.reemb,
+            descontos_diversos: e.descontos,
+            adiantamento: e.adiantamento,
+            horista_mensalista: e.horista_mensalista,
+          }
+        }
+        return {
+          user_id: r.user_id,
+          dias_trabalhados: e.dias,
+          // Horas é somente-leitura na grade: enviamos null para que o backend
+          // use as horas dos apontamentos do período (o contrato aceita null).
+          horas_trabalhadas: null,
+          variavel: e.variavel,
+          reemb: e.reemb,
+          descontos_diversos: e.descontos,
+          adiantamento: e.adiantamento,
+          horista_mensalista: e.horista_mensalista,
+        }
+      })
+      const res = await api.post<{ saved: number }>(`/fechamento-folha/${yearMonth}`, { entries })
+      // Atualização otimista: reflete os valores salvos nas linhas sem refetch.
+      // Para sócios também refletimos os campos manuais (cpf/nome/valor_hora/etc).
+      setRows(prev => prev.map(r => {
+        const e = edits[r.row_key]
+        if (!e) return r
+        const { totalRend, totalDebitos, liquido } = calc(r, e)
+        const base = {
+          ...r,
+          dias: e.dias,
+          variavel: e.variavel,
+          reemb: e.reemb,
+          descontos: e.descontos,
+          adiantamento: e.adiantamento,
+          horista_mensalista: e.horista_mensalista,
+          total_rend: totalRend,
+          total_debitos: totalDebitos,
+          liquido,
+        }
+        if (!r.is_socio) return base
+        return {
+          ...base,
+          cpf: e.cpf,
+          matricula: e.matricula,
+          status: e.status,
+          nome: e.nome,
+          horas: e.horas,
+          valor_hora: e.valor_hora,
+          producao: e.producao,
+        }
+      }))
+      toast.success(`${res?.saved ?? entries.length} salvos`)
+    } catch (err: unknown) {
+      toast.error(`Erro ao salvar: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ─── Gerar planilha (.xls) ──────────────────────────────────────────────────
+  // Mesmo mecanismo de download dos excel do fechamento/consultor: fetch direto no
+  // proxy /api/v1 (o middleware injeta o Authorization via cookie) → blob →
+  // <a download>. Nome do arquivo vem do Content-Disposition do backend.
+  async function exportXls() {
+    if (!yearMonth) return
+    setExporting(true)
+    try {
+      const res = await fetch(
+        `/api/v1/fechamento-folha/${yearMonth}/export`,
+        { credentials: 'same-origin', headers: { Accept: 'application/vnd.ms-excel' } },
+      )
+      if (!res.ok) throw new Error(`Erro ${res.status}`)
+      const cd = res.headers.get('Content-Disposition') ?? ''
+      const match = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
+      const fallback = `Folha_${yearMonth}.xls`
+      const filename = match ? decodeURIComponent(match[1]) : fallback
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err: unknown) {
+      toast.error(`Erro ao gerar a planilha: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+
+  return (
+    <AppLayout title="Fechamento — Folha Cooperativa">
+      <div className="space-y-6">
+
+        <PageHeader
+          icon={FileSpreadsheet}
+          title="Folha Cooperativa"
+          subtitle={`Valores por consultor — ${fmtYearMonth(yearMonth)}`}
+          actions={
+            <div className="flex items-center gap-3">
+              <input
+                type="month"
+                value={yearMonth}
+                onChange={e => setYearMonth(e.target.value)}
+                className="bg-zinc-800 border border-zinc-700 text-zinc-100 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
+              />
+              <MultiSelect
+                value={filterUserIds}
+                onChange={setFilterUserIds}
+                options={consultorOptions}
+                placeholder="Todos os consultores"
+                disabled={rows.length === 0}
+                wide
+              />
+              {/* ── Incluir: novo usuário ou nova linha editável ── */}
+              <div className="relative" ref={incluirRef}>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={Plus}
+                  onClick={() => setIncluirOpen(o => !o)}
+                  aria-haspopup="menu"
+                  aria-expanded={incluirOpen}
+                >
+                  Incluir
+                </Button>
+                {incluirOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-xl py-1 text-sm"
+                    style={{
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      boxShadow: 'var(--shadow-lg)',
+                      color: 'var(--text)',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={openNewUser}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors ds-row-hover"
+                    >
+                      <UserPlus size={15} style={{ color: 'var(--text-muted)' }} className="shrink-0" />
+                      Novo usuário
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={addManualRow}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors ds-row-hover"
+                    >
+                      <Rows3 size={15} style={{ color: 'var(--text-muted)' }} className="shrink-0" />
+                      Nova linha editável
+                    </button>
+                  </div>
+                )}
+              </div>
+              <Button size="sm" variant="secondary" onClick={load} disabled={loading} icon={RefreshCw} loading={loading}>
+                Atualizar
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={FileSpreadsheet}
+                loading={exporting}
+                disabled={exporting || rows.length === 0}
+                onClick={exportXls}
+              >
+                {exporting ? 'Gerando…' : 'Gerar planilha (.xls)'}
+              </Button>
+              <Button
+                size="sm"
+                variant="primary"
+                icon={Save}
+                loading={saving}
+                disabled={saving || rows.length === 0}
+                onClick={save}
+              >
+                {saving ? 'Salvando…' : 'Salvar'}
+              </Button>
+            </div>
+          }
+        />
+
+        {/* Legenda dos grupos de coluna */}
+        {!loading && rows.length > 0 && (
+          <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-muted)' }}>
+            <span>
+              {visibleRows.length} consultor{visibleRows.length !== 1 ? 'es' : ''}
+              {filterUserIds.length > 0 ? ` de ${rows.length}` : ''}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--surface-hover)' }} />
+              Automático (somente leitura)
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--primary-soft)' }} />
+              Editável
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--warning-bg)' }} />
+              Calculado (prévia — vermelho no .xls)
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="inline-block w-2.5 h-2.5 rounded-sm"
+                style={{ background: 'var(--success-bg)', border: '1px solid var(--success-border)' }}
+              />
+              Sócio (linha destacada — todas as colunas editáveis)
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="inline-block w-2.5 h-2.5 rounded-sm"
+                style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning-border)' }}
+              />
+              Cooperado inativo
+            </span>
+          </div>
+        )}
+
+        {/* Abas: Ativos / Canceladas */}
+        {!loading && rows.length > 0 && (
+          <div
+            className="flex items-center gap-1 border-b"
+            style={{ borderColor: 'var(--border)' }}
+            role="tablist"
+            aria-label="Filtro de linhas"
+          >
+            {([
+              { key: 'ativos' as const, label: 'Ativos', count: ativosCount },
+              { key: 'canceladas' as const, label: 'Canceladas', count: canceladasCount },
+            ]).map(t => {
+              const active = tab === t.key
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTab(t.key)}
+                  className="-mb-px flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors"
+                  style={{
+                    borderColor: active ? 'var(--primary)' : 'transparent',
+                    color: active ? 'var(--primary)' : 'var(--text-muted)',
+                  }}
+                >
+                  {t.label}
+                  <span
+                    className="inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold"
+                    style={{
+                      background: active ? 'var(--primary-soft)' : 'var(--surface-hover)',
+                      color: active ? 'var(--primary)' : 'var(--text-muted)',
+                    }}
+                  >
+                    {t.count}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Grade */}
+        <div className="min-h-[200px]">
+          {loading ? (
+            <SkeletonTable rows={6} cols={17} />
+          ) : rows.length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="Nenhum consultor no período"
+              description="Selecione um mês com consultores ativos para editar a folha."
+            />
+          ) : visibleRows.length === 0 ? (
+            tab === 'canceladas' ? (
+              <EmptyState
+                icon={Users}
+                title="Nenhuma linha cancelada"
+                description="Linhas canceladas/ocultadas neste mês aparecem aqui."
+              />
+            ) : (
+              <EmptyState
+                icon={Users}
+                title="Nenhum consultor no filtro"
+                description="Nenhum dos consultores selecionados está no período. Ajuste o filtro."
+              />
+            )
+          ) : (
+            <div className="max-h-[70vh] overflow-auto rounded-2xl" style={{ border: '1px solid var(--brand-border)' }}>
+              <table className="w-full text-sm" style={{ background: 'var(--brand-surface)' }}>
+                <thead>
+                  <tr>
+                    <Th className={stickyTh}>CPF</Th>
+                    <Th className={stickyTh}>Matrícula</Th>
+                    <Th className={stickyTh}>Status</Th>
+                    <Th className={stickyTh}>Nome</Th>
+                    <Th right className={stickyTh}>Dias</Th>
+                    <Th right className={stickyTh}>Horas</Th>
+                    <Th right className={stickyTh}>Valor Hora</Th>
+                    <Th right className={stickyTh}>Produção</Th>
+                    <Th right className={stickyTh}>Variável</Th>
+                    <Th right className={stickyTh}>Reemb</Th>
+                    <Th right className={stickyTh}>Total Rend</Th>
+                    <Th right className={stickyTh}>Descontos</Th>
+                    <Th right className={stickyTh}>Adiantamento</Th>
+                    <Th right className={stickyTh}>Total Débitos</Th>
+                    <Th right className={stickyTh}>Líquido</Th>
+                    <Th className={stickyTh}>Horista/Mensalista</Th>
+                    <Th className={stickyTh}>Ações</Th>
+                  </tr>
+                </thead>
+                <Tbody>
+                  {visibleRows.map(r => {
+                    const e = edits[r.row_key]
+                    if (!e) return null
+                    const { totalRend, totalDebitos, liquido } = calc(r, e)
+                    const socio = r.is_socio
+                    // Linha manual pode ser excluída; sócio fixo não.
+                    const manual = !!r.socio_key && r.socio_key.startsWith('manual_')
+                    // Cor da linha via token DS (restaurada no leave pelo Tr.baseBackground):
+                    //  • Canceladas (aba) → danger/muted
+                    //  • Sócio (verde) → success-bg
+                    //  • Cooperado inativo → warning-bg (âmbar)
+                    //  • demais → padrão (transparente)
+                    const rowBg = r.cancelado
+                      ? 'var(--danger-bg)'
+                      : socio
+                        ? 'var(--success-bg)'
+                        : r.inativo
+                          ? 'var(--warning-bg)'
+                          : undefined
+                    const busy = togglingKey === r.row_key
+                    return (
+                      <Tr key={r.row_key} baseBackground={rowBg}>
+                        {/* ── CPF: editável p/ sócio, read-only normal ── */}
+                        <Td mono className={socio ? undefined : 'text-zinc-300'}>
+                          {socio ? (
+                            <input
+                              type="text"
+                              value={e.cpf}
+                              onChange={ev => setEdit(r.row_key, 'cpf', ev.target.value)}
+                              className={cellInputClassText}
+                              style={cellInputStyle}
+                            />
+                          ) : (r.cpf || '—')}
+                        </Td>
+
+                        {/* ── Matrícula: editável p/ sócio, read-only normal ── */}
+                        <Td mono className={socio ? undefined : 'text-zinc-300'}>
+                          {socio ? (
+                            <input
+                              type="text"
+                              value={e.matricula}
+                              onChange={ev => setEdit(r.row_key, 'matricula', ev.target.value)}
+                              className={`${cellInputClassText} w-24`}
+                              style={cellInputStyle}
+                            />
+                          ) : (r.matricula || '—')}
+                        </Td>
+
+                        {/* ── Status: editável p/ sócio, read-only normal ── */}
+                        <Td className={socio ? undefined : 'text-zinc-400'}>
+                          {socio ? (
+                            <input
+                              type="text"
+                              value={e.status}
+                              onChange={ev => setEdit(r.row_key, 'status', ev.target.value)}
+                              className={`${cellInputClassText} w-24`}
+                              style={cellInputStyle}
+                            />
+                          ) : (r.status || '—')}
+                        </Td>
+
+                        {/* ── Nome: editável p/ sócio, read-only normal ── */}
+                        <Td className={socio ? undefined : 'font-medium text-zinc-100 whitespace-nowrap'}>
+                          {socio ? (
+                            <input
+                              type="text"
+                              value={e.nome}
+                              onChange={ev => setEdit(r.row_key, 'nome', ev.target.value)}
+                              className={`${cellInputClassText} w-44`}
+                              style={cellInputStyle}
+                            />
+                          ) : r.nome}
+                        </Td>
+
+                        {/* ── Editável (sempre): Dias ── */}
+                        <Td right>
+                          <input
+                            type="number"
+                            value={e.dias}
+                            min={0}
+                            onChange={ev => setEdit(r.row_key, 'dias', toNum(ev.target.value))}
+                            className={`${cellInputClass} w-16`}
+                            style={cellInputStyle}
+                          />
+                        </Td>
+
+                        {/* ── Horas: editável p/ sócio; normal = 180 fixo (não via apontamento) ── */}
+                        <Td right mono className={socio ? undefined : 'text-zinc-300 tabular-nums'}>
+                          {socio ? (
+                            <input
+                              type="number"
+                              value={e.horas}
+                              step="0.01"
+                              min={0}
+                              onChange={ev => setEdit(r.row_key, 'horas', toNum(ev.target.value))}
+                              className={cellInputClass}
+                              style={cellInputStyle}
+                            />
+                          ) : fmtNum(r.horas)}
+                        </Td>
+
+                        {/* ── Valor Hora: editável p/ sócio (4 casas); read-only normal ── */}
+                        <Td right mono className={socio ? undefined : 'text-zinc-400'}>
+                          {socio ? (
+                            <input
+                              type="number"
+                              value={e.valor_hora}
+                              step="0.0001"
+                              min={0}
+                              onChange={ev => setEdit(r.row_key, 'valor_hora', toNum(ev.target.value))}
+                              className={cellInputClass}
+                              style={cellInputStyle}
+                            />
+                          ) : fmtNum(r.valor_hora, 2)}
+                        </Td>
+
+                        {/* ── Produção: editável p/ sócio; read-only normal ── */}
+                        <Td right className={socio ? undefined : 'text-zinc-300'}>
+                          {socio ? (
+                            <input
+                              type="number"
+                              value={e.producao}
+                              step="0.01"
+                              onChange={ev => setEdit(r.row_key, 'producao', toNum(ev.target.value))}
+                              className={cellInputClass}
+                              style={cellInputStyle}
+                            />
+                          ) : formatBRL(r.producao)}
+                        </Td>
+
+                        {/* ── Editável (sempre): Variável ── */}
+                        <Td right>
+                          <input
+                            type="number"
+                            value={e.variavel}
+                            step="0.01"
+                            onChange={ev => setEdit(r.row_key, 'variavel', toNum(ev.target.value))}
+                            className={cellInputClass}
+                            style={cellInputStyle}
+                          />
+                        </Td>
+
+                        {/* ── Editável (sempre): Reemb ── */}
+                        <Td right>
+                          <input
+                            type="number"
+                            value={e.reemb}
+                            step="0.01"
+                            onChange={ev => setEdit(r.row_key, 'reemb', toNum(ev.target.value))}
+                            className={cellInputClass}
+                            style={cellInputStyle}
+                          />
+                        </Td>
+
+                        {/* ── Calculado: Total Rend ── */}
+                        <Td right className="font-semibold" style={{ color: 'var(--text)' }}>
+                          {formatBRL(totalRend)}
+                        </Td>
+
+                        {/* ── Editável (sempre): Descontos Diversos ── */}
+                        <Td right>
+                          <input
+                            type="number"
+                            value={e.descontos}
+                            step="0.01"
+                            onChange={ev => setEdit(r.row_key, 'descontos', toNum(ev.target.value))}
+                            className={cellInputClass}
+                            style={cellInputStyle}
+                          />
+                        </Td>
+
+                        {/* ── Editável (sempre): Adiantamento ── */}
+                        <Td right>
+                          <input
+                            type="number"
+                            value={e.adiantamento}
+                            step="0.01"
+                            onChange={ev => setEdit(r.row_key, 'adiantamento', toNum(ev.target.value))}
+                            className={cellInputClass}
+                            style={cellInputStyle}
+                          />
+                        </Td>
+
+                        {/* ── Calculado: Total Débitos ── */}
+                        <Td right className="font-semibold" style={{ color: 'var(--text)' }}>
+                          {formatBRL(totalDebitos)}
+                        </Td>
+
+                        {/* ── Calculado: Líquido ── */}
+                        <Td right className="font-bold" style={{ color: 'var(--primary)' }}>
+                          {formatBRL(liquido)}
+                        </Td>
+
+                        {/* ── Editável (sempre): Horista/Mensalista ── */}
+                        <Td>
+                          <select
+                            value={e.horista_mensalista}
+                            onChange={ev => setEdit(r.row_key, 'horista_mensalista', ev.target.value)}
+                            className="rounded-md px-2 py-1 text-xs cursor-pointer appearance-none ds-input focus:outline-none"
+                            style={cellInputStyle}
+                          >
+                            <option value="Horista">Horista</option>
+                            <option value="Mensalista">Mensalista</option>
+                          </select>
+                        </Td>
+
+                        {/* ── Ações da linha ── */}
+                        <Td>
+                          {r.cancelado ? (
+                            // Aba Canceladas → Reativar (volta p/ Ativos).
+                            <button
+                              type="button"
+                              onClick={() => setCancelado(r, false)}
+                              disabled={busy}
+                              title="Reativar linha"
+                              aria-label="Reativar linha"
+                              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ds-row-hover"
+                              style={{ color: 'var(--success)' }}
+                            >
+                              <RotateCcw size={14} />
+                              Reativar
+                            </button>
+                          ) : socio ? (
+                            // Linha verde (sócio/manual) → Desativar (oculta na aba Canceladas) + Excluir (sócio fixo não exclui).
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setCancelado(r, true)}
+                                disabled={busy}
+                                title="Desativar / ocultar linha"
+                                aria-label="Desativar linha"
+                                className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ds-row-hover"
+                                style={{ color: 'var(--text-muted)' }}
+                              >
+                                <EyeOff size={14} />
+                                Desativar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { if (manual) removeManualRow(r) }}
+                                disabled={!manual || removingKey === r.socio_key}
+                                title={manual ? 'Excluir linha manual' : 'Sócio fixo — não pode excluir'}
+                                aria-label={manual ? 'Excluir linha manual' : 'Sócio fixo — não pode excluir'}
+                                className="inline-flex items-center justify-center rounded-md p-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ds-row-hover"
+                                style={{ color: 'var(--danger)' }}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          ) : (
+                            // Linha normal/inativa → Cancelar (oculta da folha do mês).
+                            <button
+                              type="button"
+                              onClick={() => setCancelado(r, true)}
+                              disabled={busy || r.user_id == null}
+                              title="Cancelar / ocultar linha"
+                              aria-label="Cancelar / ocultar linha"
+                              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ds-row-hover"
+                              style={{ color: r.inativo ? 'var(--warning)' : 'var(--text-muted)' }}
+                            >
+                              <EyeOff size={14} />
+                              Cancelar
+                            </button>
+                          )}
+                        </Td>
+                      </Tr>
+                    )
+                  })}
+                </Tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* ── Modal: Novo usuário (cooperado) ── */}
+        <Modal
+          open={novoUserOpen}
+          onClose={() => { if (!creatingUser) setNovoUserOpen(false) }}
+          size="md"
+          closeOnOverlay={!creatingUser}
+          closeOnEscape={!creatingUser}
+        >
+          <ModalHeader
+            icon={UserPlus}
+            title="Novo usuário"
+            subtitle="Será cadastrado como Cooperado (consultor)."
+            onClose={() => { if (!creatingUser) setNovoUserOpen(false) }}
+          />
+          <ModalBody>
+            <form
+              id="novo-usuario-form"
+              onSubmit={ev => { ev.preventDefault(); createNewUser() }}
+              className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+            >
+              {/* Nome* */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+                  Nome <span style={{ color: 'var(--danger)' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newUser.name}
+                  onChange={ev => setNewUserField('name', ev.target.value)}
+                  className="rounded-md px-3 py-2 text-sm ds-input focus:outline-none"
+                  style={modalInputStyle}
+                />
+              </div>
+
+              {/* Nome Completo */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+                  Nome Completo
+                </label>
+                <input
+                  type="text"
+                  value={newUser.full_name}
+                  onChange={ev => setNewUserField('full_name', ev.target.value)}
+                  className="rounded-md px-3 py-2 text-sm ds-input focus:outline-none"
+                  style={modalInputStyle}
+                />
+              </div>
+
+              {/* E-mail* */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+                  E-mail <span style={{ color: 'var(--danger)' }}>*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={newUser.email}
+                  onChange={ev => setNewUserField('email', ev.target.value)}
+                  className="rounded-md px-3 py-2 text-sm ds-input focus:outline-none"
+                  style={modalInputStyle}
+                />
+              </div>
+
+              {/* CPF */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+                  CPF
+                </label>
+                <input
+                  type="text"
+                  value={newUser.cpf}
+                  onChange={ev => setNewUserField('cpf', ev.target.value)}
+                  className="rounded-md px-3 py-2 text-sm ds-input focus:outline-none"
+                  style={modalInputStyle}
+                />
+              </div>
+
+              {/* Matrícula */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+                  Matrícula
+                </label>
+                <input
+                  type="text"
+                  value={newUser.matricula}
+                  onChange={ev => setNewUserField('matricula', ev.target.value)}
+                  className="rounded-md px-3 py-2 text-sm ds-input focus:outline-none"
+                  style={modalInputStyle}
+                />
+              </div>
+
+              {/* Status (payroll_status) */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+                  Status
+                </label>
+                <select
+                  value={newUser.payroll_status}
+                  onChange={ev => setNewUserField('payroll_status', ev.target.value as typeof newUser.payroll_status)}
+                  className="rounded-md px-3 py-2 text-sm cursor-pointer ds-input focus:outline-none"
+                  style={modalInputStyle}
+                >
+                  <option value="Contratado">Contratado</option>
+                  <option value="Em Afastamento">Em Afastamento</option>
+                </select>
+              </div>
+
+              {/* Tipo de vínculo (consultant_type) */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+                  Tipo de vínculo
+                </label>
+                <select
+                  value={newUser.consultant_type}
+                  onChange={ev => setNewUserField('consultant_type', ev.target.value as typeof newUser.consultant_type)}
+                  className="rounded-md px-3 py-2 text-sm cursor-pointer ds-input focus:outline-none"
+                  style={modalInputStyle}
+                >
+                  <option value="horista">Horista</option>
+                  <option value="banco_de_horas">Banco de Horas</option>
+                  <option value="fixo">Fixo</option>
+                </select>
+              </div>
+
+              {/* Valor hora / salário (hourly_rate) */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+                  Valor hora / salário
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={newUser.hourly_rate}
+                  onChange={ev => setNewUserField('hourly_rate', ev.target.value)}
+                  className="rounded-md px-3 py-2 text-sm ds-input focus:outline-none"
+                  style={modalInputStyle}
+                />
+              </div>
+
+              {/* Tipo de valor (rate_type) */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+                  Tipo de valor
+                </label>
+                <select
+                  value={newUser.rate_type}
+                  onChange={ev => setNewUserField('rate_type', ev.target.value as typeof newUser.rate_type)}
+                  className="rounded-md px-3 py-2 text-sm cursor-pointer ds-input focus:outline-none"
+                  style={modalInputStyle}
+                >
+                  <option value="hourly">Por hora</option>
+                  <option value="monthly">Mensal</option>
+                </select>
+              </div>
+
+              {/* Vínculo fixo (read-only / informativo) */}
+              <div
+                className="sm:col-span-2 rounded-md px-3 py-2 text-xs"
+                style={{
+                  background: 'var(--success-bg)',
+                  border: '1px solid var(--success-border)',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                Cadastrado como <strong style={{ color: 'var(--text)' }}>Cooperado (consultor)</strong>.
+                Uma senha será gerada e o e-mail de boas-vindas enviado automaticamente.
+              </div>
+            </form>
+          </ModalBody>
+          <ModalFooter>
+            <button
+              type="button"
+              className="ds-btn-secondary"
+              onClick={() => { if (!creatingUser) setNovoUserOpen(false) }}
+              disabled={creatingUser}
+            >
+              Cancelar
+            </button>
+            <Button
+              type="submit"
+              form="novo-usuario-form"
+              variant="primary"
+              icon={UserPlus}
+              loading={creatingUser}
+              disabled={creatingUser}
+            >
+              {creatingUser ? 'Cadastrando…' : 'Cadastrar'}
+            </Button>
+          </ModalFooter>
+        </Modal>
+
+      </div>
+    </AppLayout>
+  )
+}
