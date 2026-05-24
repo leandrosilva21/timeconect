@@ -119,13 +119,6 @@ function fmtDate(d: string): string {
   return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR')
 }
 
-// minutos → "H:MM" (mesmo formato do relatório de apontamentos).
-function minutesToHHMM(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return `${h}:${String(m).padStart(2, '0')}`
-}
-
 const now = new Date()
 
 // ─── Página principal ─────────────────────────────────────────────────────────
@@ -173,7 +166,10 @@ export default function FechamentoClientePage() {
   const [dados,    setDados]    = useState<ApontamentosData | null>(null)
   const [despesas, setDespesas] = useState<DespesaRow[]>([])
   // Apuração por Ticket — só preenchido para Vedamotors.
-  const [ticketSummary, setTicketSummary] = useState<TicketSummaryRow[]>([])
+  // O valor (ticketSummary) só era lido pelo HTML client-side do relatório, que agora
+  // vem do backend; o setter segue alimentado pelos loaders/efeitos para não mexer
+  // na máquina de carregamento existente.
+  const [, setTicketSummary] = useState<TicketSummaryRow[]>([])
 
   const [loading,         setLoading]         = useState(false)
   const [loadingDespesas, setLoadingDespesas] = useState(false)
@@ -184,6 +180,11 @@ export default function FechamentoClientePage() {
   const canSendEmail = (user as any)?.type === 'admin' || (user as any)?.type === 'administrativo'
   const [downloadingExcel, setDownloadingExcel] = useState(false)
   const reportIframeRef = useRef<HTMLIFrameElement>(null)
+
+  // HTML do relatório vem do backend (mesma Blade do PDF enviado por e-mail) — o
+  // preview na tela e o PDF anexado ficam byte-idênticos pois nascem da mesma fonte.
+  const [reportHtml, setReportHtml] = useState<string | null>(null)
+  const [reportHtmlLoading, setReportHtmlLoading] = useState(false)
 
   // Dialog de composição/preview do e-mail.
   const [composeOpen, setComposeOpen] = useState(false)
@@ -513,266 +514,28 @@ export default function FechamentoClientePage() {
   const clienteNome    = clientes.find(c => c.customer_id === customerId)?.nome ?? ''
   const periodo        = fmtPeriodo(fromYM, toYM)
 
-  // ── VEDAMOTORS (regra especial) ─────────────────────────────────────────────
-  // Para a Vedamotors as colunas viram "Ticket ERPSERV" (ticket normal) e
-  // "Ticket Vedamotors" (extraído do título/assunto via /\d{4}-\d{6}/, ex:
-  // "0326-000007", senão "Sem ticket"). Demais clientes mantêm Ticket / Título.
-  const isVedamotors = clienteNome.toUpperCase().includes('VEDAMOTORS')
-  const VEDAMOTORS_PATTERN = /\d{4}-\d{6}/
-  const vedaTicket = (titulo?: string): string => {
-    const m = (titulo ?? '').match(VEDAMOTORS_PATTERN)
-    return m ? m[0] : 'Sem ticket'
-  }
-
-  // ── HTML do relatório (preview em iframe + impressão) ────────────────────────
-  // Documento HTML autossuficiente (claro), agrupado por PROJETO com subtotal de
-  // horas por projeto. O "Valor a pagar" (fechamento do cliente) aparece no topo
-  // e no rodapé. Sem coluna de valor por linha e sem linhas de descrição (a
-  // descrição vai só no Excel). Retorna null se não há dados.
-  const escapeHtml = (s: string): string =>
-    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-
-  const reportStyles = `
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; background: #fff; padding: 28px 32px; }
-    .page-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; margin-bottom: 18px; border-bottom: 2px solid #5b21b6; }
-    .page-header-left img { width: 150px; }
-    .page-header-right { text-align: right; }
-    .page-header-right h1 { font-size: 20px; font-weight: 700; color: #1f2937; margin-bottom: 2px; }
-    .page-header-right .subtitle { font-size: 11px; color: #6b7280; margin-bottom: 6px; }
-    .page-header-right .meta { font-size: 12px; color: #374151; }
-    .page-header-right .meta b { font-weight: 700; }
-    .valor-topo { display: flex; justify-content: space-between; align-items: center; background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 8px; padding: 12px 18px; margin-bottom: 22px; }
-    .valor-topo .label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
-    .valor-topo .horas { font-size: 13px; color: #374151; font-weight: 600; }
-    .valor-topo .valor { font-size: 22px; font-weight: 700; color: #5b21b6; }
-    .projetos-destaque { background: #ecfeff; border: 1px solid #a5f0f7; border-radius: 8px; padding: 12px 18px; margin-bottom: 14px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .projetos-destaque .pd-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #0e7490; font-weight: 700; }
-    .projetos-destaque .pd-item { margin-top: 5px; font-size: 14px; font-weight: 700; color: #0f3a42; }
-    .projetos-destaque .pd-cod { color: #0e7490; }
-    .section { margin-bottom: 26px; }
-    .section-header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #5b21b6; padding-bottom: 6px; margin-bottom: 8px; }
-    .section-title { font-size: 14px; font-weight: 700; color: #1f2937; }
-    .section-code { font-size: 11px; font-weight: 400; color: #9ca3af; margin-left: 6px; }
-    .section-sub { font-size: 11px; color: #6b7280; }
-    .section-sub b { color: #5b21b6; }
-    table { width: 100%; border-collapse: collapse; }
-    thead th { background: #f5f3ff; padding: 7px 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; color: #6b7280; text-align: left; border-bottom: 1px solid #ede9fe; }
-    tbody td { padding: 6px 10px; font-size: 11px; color: #374151; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
-    tbody tr:nth-child(even) td { background: #faf9ff; }
-    .right { text-align: right; }
-    .nowrap { white-space: nowrap; }
-    .section-footer { background: #faf9ff; padding: 7px 12px; text-align: right; font-size: 12px; color: #5b21b6; font-weight: 600; border-top: 2px solid #c4b5fd; }
-    /* Sub-blocos por sub-projeto (contrato pai que consolida filhos) */
-    .subproj-header { background: #f5f3ff; padding: 6px 12px; font-size: 11px; font-weight: 700; color: #5b21b6; text-transform: uppercase; letter-spacing: .03em; border-left: 3px solid #5b21b6; margin-top: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .subproj-header:first-child { margin-top: 0; }
-    .subproj-header .subproj-nome { font-weight: 400; text-transform: none; color: #6b7280; }
-    .subproj-footer { padding: 5px 12px; text-align: right; font-size: 11px; color: #6b7280; font-style: italic; border-bottom: 1px dashed #ddd6fe; }
-    a.ticket { color: #0891b2; text-decoration: none; }
-    /* Apuração por Ticket (Vedamotors) */
-    .ticket-section { margin-top: 26px; margin-bottom: 26px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .ticket-section h2 { font-size: 14px; font-weight: 700; color: #1f2937; margin-bottom: 4px; }
-    .ticket-section .ticket-sub { font-size: 11px; color: #6b7280; margin-bottom: 8px; }
-    .ticket-table thead th { background: #f5f3ff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .ticket-table tbody tr:nth-child(even) td { background: #faf9ff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .ticket-table td.veda-life, .ticket-table th.veda-life { color: #5b21b6; }
-    .ticket-table tfoot td { background: #ede9fe; border-top: 2px solid #5b21b6; padding: 8px 10px; font-size: 12px; font-weight: 700; color: #374151; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .ticket-table tfoot td.veda-life { color: #5b21b6; }
-    .total-box { background: #5b21b6; border-radius: 8px; padding: 16px 24px; display: flex; justify-content: space-between; margin-top: 24px; color: #fff; }
-    .total-box-label { font-size: 11px; opacity: 0.85; margin-bottom: 4px; }
-    .total-box-value { font-size: 26px; font-weight: 700; }
-    .page-footer { margin-top: 30px; display: flex; justify-content: space-between; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 10px; }
-    @media print { body { padding: 16px 20px; } thead { display: table-header-group; } tr { page-break-inside: avoid; } }
-  `
-
-  const buildReportHtml = (): string | null => {
-    if (!customerId || projetos.length === 0) return null
-
-    // Valor hora p/ a faixa "Valor a pagar": só quando há uma única taxa entre os projetos.
-    const ratesUnicas = [...new Set(projetos.map(p => p.valor_hora).filter(v => v > 0))]
-    const valorHoraTopo = ratesUnicas.length === 1 ? formatBRL(ratesUnicas[0]) : null
-
-    const logoUrl = typeof window !== 'undefined' ? window.location.origin + '/logo.png' : '/logo.png'
-    const competencia = fromYM === toYM ? fmtYMFull(toYM) : `${fmtYM(fromYM)} a ${fmtYM(toYM)}`
-    const ticketHeader = isVedamotors ? 'Ticket ERPSERV' : 'Ticket'
-    const tituloHeader = isVedamotors ? 'Ticket Vedamotors' : 'Título'
-
-    // Renderiza a <tr> de um apontamento (mesma estrutura de colunas em todos os casos).
-    const apontamentoRow = (ts: ApontamentoRow): string => {
-      const ticketCell = ts.ticket
-        ? `<a class="ticket" href="https://erpserv.movidesk.com/Ticket/Edit/${escapeHtml(ts.ticket)}" target="_blank" rel="noopener noreferrer">#${escapeHtml(ts.ticket)}</a>`
-        : '—'
-      const tituloCell = isVedamotors ? escapeHtml(vedaTicket(ts.titulo)) : escapeHtml(ts.titulo ?? '—')
-      return `
-          <tr>
-            <td class="nowrap">${fmtDate(ts.data)}</td>
-            <td>${escapeHtml(ts.colaborador ?? '—')}</td>
-            <td>${escapeHtml(ts.solicitante ?? '—')}</td>
-            <td class="nowrap">${ticketCell}</td>
-            <td>${tituloCell}</td>
-            <td class="right nowrap">${ts.horas.toFixed(2)}h</td>
-          </tr>`
-    }
-
-    const sectionsHtml = projetos.map(p => {
-      const aps = p.apontamentos ?? []
-
-      // Sub-projetos distintos presentes no contrato (preserva a ordem de aparição:
-      // como o backend ordena por data, o pai costuma vir primeiro; aqui mantemos
-      // a 1ª ocorrência de cada código). Contrato sem filhos consolidados → 1 só.
-      const subOrder: string[] = []
-      const subMap = new Map<string, { codigo: string; nome: string; aps: ApontamentoRow[]; horas: number }>()
-      for (const ts of aps) {
-        const codigo = ts.sub_projeto_codigo ?? p.projeto_codigo
-        const nome   = ts.sub_projeto_nome ?? p.projeto_nome
-        let entry = subMap.get(codigo)
-        if (!entry) {
-          entry = { codigo, nome, aps: [], horas: 0 }
-          subMap.set(codigo, entry)
-          subOrder.push(codigo)
-        }
-        entry.aps.push(ts)
-        entry.horas += ts.horas
+  // Relatório — busca o HTML standalone do backend (mesma Blade do PDF). Reseta ao
+  // trocar cliente/competência pra não exibir um relatório defasado durante o fetch.
+  // As escritas de estado ficam dentro do fluxo async (não no corpo síncrono do
+  // efeito) e são guardadas por `cancelled` para corridas entre cliente/competência.
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      setReportHtml(null)
+      if (tab !== 'relatorio' || !customerId || projetos.length === 0) return
+      setReportHtmlLoading(true)
+      try {
+        const res = await api.get<{ html: string }>(`/fechamento-cliente/${customerId}/${toYM}/report-html`)
+        if (!cancelled) setReportHtml(res.html)
+      } catch {
+        if (!cancelled) { setReportHtml(null); toast.error('Erro ao gerar o relatório') }
+      } finally {
+        if (!cancelled) setReportHtmlLoading(false)
       }
-
-      // > 1 sub-projeto distinto = contrato pai consolidando filhos → sub-blocos.
-      // Caso normal (1 sub-projeto) → render plano, sem cabeçalhos (sem mudança).
-      const hasSubProjetos = subOrder.length > 1
-
-      const bodyHtml = hasSubProjetos
-        ? subOrder.map(codigo => {
-            const sub = subMap.get(codigo)!
-            const subRows = sub.aps.map(apontamentoRow).join('')
-            return `
-              <tr><td colspan="6" class="subproj-header">${escapeHtml(sub.codigo)}<span class="subproj-nome"> — ${escapeHtml(sub.nome)}</span></td></tr>
-              ${subRows}
-              <tr><td colspan="6" class="subproj-footer">Subtotal ${escapeHtml(sub.codigo)} (${sub.aps.length} reg.): <b>${sub.horas.toFixed(2)}h</b></td></tr>`
-          }).join('')
-        : aps.map(apontamentoRow).join('')
-
-      return `
-        <div class="section">
-          <div class="section-header">
-            <div><span class="section-title">${escapeHtml(p.projeto_nome)}</span><span class="section-code">${escapeHtml(p.projeto_codigo)}</span></div>
-            <div class="section-sub">${p.horas.toFixed(2)}h &nbsp;·&nbsp; Valor hora: ${formatBRL(p.valor_hora)}</div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Colaborador</th>
-                <th>Solicitante</th>
-                <th>${ticketHeader}</th>
-                <th>${tituloHeader}</th>
-                <th class="right">Horas</th>
-              </tr>
-            </thead>
-            <tbody>${bodyHtml}</tbody>
-          </table>
-          <div class="section-footer">Subtotal — ${escapeHtml(p.projeto_nome)} (${aps.length} reg.) = <b>${p.horas.toFixed(2)}h</b></div>
-        </div>`
-    }).join('')
-
-    // Apuração por Ticket — só Vedamotors e só se houver tickets no período.
-    // Espelha a 2ª tabela do relatório de apontamentos (total no período +
-    // histórico acumulado por ticket). "Ticket Vedamotors" extrai NNNN-NNNNNN
-    // do título via VEDAMOTORS_PATTERN, senão "Sem ticket".
-    let ticketSectionHtml = ''
-    if (isVedamotors && ticketSummary.length > 0) {
-      const totPeriod = ticketSummary.reduce((acc, t) => acc + t.period_minutes, 0)
-      const totLife   = ticketSummary.reduce((acc, t) => acc + t.lifetime_minutes, 0)
-      const rows = ticketSummary.map((tk, i) => {
-        const bg = i % 2 === 0 ? '#fff' : '#faf9ff'
-        const ticketCell = `<a class="ticket" href="https://erpserv.movidesk.com/Ticket/Edit/${escapeHtml(tk.ticket)}" target="_blank" rel="noopener noreferrer">#${escapeHtml(tk.ticket)}</a>`
-        const vedaCell = escapeHtml(vedaTicket(tk.title ?? undefined))
-        return `
-          <tr style="background:${bg}">
-            <td class="nowrap">${ticketCell}</td>
-            <td class="nowrap">${vedaCell}</td>
-            <td>${escapeHtml(tk.requester ?? '—')}</td>
-            <td class="right nowrap">${minutesToHHMM(tk.period_minutes)}</td>
-            <td class="right nowrap veda-life">${minutesToHHMM(tk.lifetime_minutes)}</td>
-          </tr>`
-      }).join('')
-
-      ticketSectionHtml = `
-        <div class="ticket-section">
-          <h2>Apuração por Ticket</h2>
-          <p class="ticket-sub">Tickets com apontamento dentro do período, mostrando o total no período selecionado e o total acumulado desde o primeiro apontamento no sistema (mesmo cliente).</p>
-          <table class="ticket-table">
-            <thead>
-              <tr>
-                <th>Ticket</th>
-                <th>Ticket Vedamotors</th>
-                <th>Solicitante</th>
-                <th class="right">Total no período</th>
-                <th class="right veda-life">Total histórico</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-            <tfoot>
-              <tr>
-                <td colspan="3" class="right">Totais (${ticketSummary.length} ticket${ticketSummary.length === 1 ? '' : 's'})</td>
-                <td class="right nowrap">${minutesToHHMM(totPeriod)}</td>
-                <td class="right nowrap veda-life">${minutesToHHMM(totLife)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>`
     }
-
-    return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head><meta charset="UTF-8"/>
-<title>Relatório de Fechamento — ${escapeHtml(clienteNome)} — ${competencia}</title>
-<style>${reportStyles}</style>
-</head>
-<body>
-  <div class="page-header">
-    <div class="page-header-left"><img src="${logoUrl}" alt="ERPSERV"/></div>
-    <div class="page-header-right">
-      <h1>Relatório de Fechamento</h1>
-      <div class="subtitle">On Demand — Serviços</div>
-      <div class="meta"><b>Cliente:</b> ${escapeHtml(clienteNome)}</div>
-      <div class="meta"><b>Competência:</b> ${competencia}</div>
-    </div>
-  </div>
-
-  <div class="projetos-destaque">
-    <div class="pd-label">${projetos.length > 1 ? 'Projetos' : 'Projeto'}</div>
-    ${projetos.map(p => `<div class="pd-item"><span class="pd-cod">${escapeHtml(p.projeto_codigo)}</span> &mdash; ${escapeHtml(p.projeto_nome)}</div>`).join('')}
-  </div>
-
-  <div class="valor-topo">
-    <div>
-      <div class="label">Valor a pagar</div>
-      <div class="horas">${totalHoras.toFixed(2)}h trabalhadas${valorHoraTopo ? ` &nbsp;·&nbsp; Valor hora: ${valorHoraTopo}` : ''}</div>
-    </div>
-    <div class="valor">${formatBRL(totalGeral)}</div>
-  </div>
-
-  ${sectionsHtml}
-
-  ${ticketSectionHtml}
-
-  <div class="total-box">
-    <div>
-      <div class="total-box-label">Total de Horas</div>
-      <div class="total-box-value">${totalHoras.toFixed(2)}h</div>
-    </div>
-    <div style="text-align:right">
-      <div class="total-box-label">Valor a pagar</div>
-      <div class="total-box-value">${formatBRL(totalGeral)}</div>
-    </div>
-  </div>
-
-  <div class="page-footer">
-    <span>ERPSERV Consultoria — Documento gerado pelo sistema Minutor</span>
-    <span>Emitido em ${new Date().toLocaleDateString('pt-BR')}</span>
-  </div>
-</body>
-</html>`
-  }
+    void run()
+    return () => { cancelled = true }
+  }, [tab, customerId, toYM, projetos.length])
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -1186,16 +949,12 @@ export default function FechamentoClientePage() {
 
               {/* ── Tab Relatório Serviços ── */}
               {tab === 'relatorio' && (
-                loading ? <SkeletonTable rows={6} cols={4} /> :
-                (() => {
-                  const reportHtml = buildReportHtml()
-                  if (!reportHtml) {
-                    return (
-                      <EmptyState icon={FileText} title="Sem dados para relatório"
-                        description="Nenhum apontamento encontrado no período selecionado." />
-                    )
-                  }
-                  return (
+                projetos.length === 0 ? (
+                  <EmptyState icon={FileText} title="Sem dados para relatório"
+                    description="Nenhum apontamento encontrado no período selecionado." />
+                ) : (loading || reportHtmlLoading || reportHtml === null) ? (
+                  <SkeletonTable rows={6} cols={4} />
+                ) : (
                     /* Split horizontal — preview à esquerda, painel de ações à direita */
                     <div className="flex-1 flex min-h-0 flex-col md:flex-row -m-6">
                       {/* LEFT — preview do documento, largura limitada e centralizada */}
@@ -1266,8 +1025,7 @@ export default function FechamentoClientePage() {
                         </Button>
                       </aside>
                     </div>
-                  )
-                })()
+                )
               )}
 
               {/* ── Tab Despesas ── */}
