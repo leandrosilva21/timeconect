@@ -881,6 +881,24 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
   const [rateModalOpen, setRateModalOpen] = useState(false)
   const [rateEffectiveMonth, setRateEffectiveMonth] = useState<string>(() => new Date().toISOString().slice(0, 7))
 
+  // Histórico de valores-hora (somente leitura) — GET /projects/{id}/change-history?field_name=hourly_rate
+  const [rateHistoryOpen, setRateHistoryOpen] = useState(false)
+  const [rateHistory, setRateHistory] = useState<any[]>([])
+  const [rateHistoryLoading, setRateHistoryLoading] = useState(false)
+  const openRateHistory = async () => {
+    setRateHistoryOpen(true)
+    setRateHistoryLoading(true)
+    try {
+      const res = await api.get<{ hasNext: boolean; items: any[] }>(`/projects/${project.id}/change-history?field_name=hourly_rate&pageSize=100`)
+      setRateHistory(Array.isArray(res?.items) ? res.items : [])
+    } catch {
+      setRateHistory([])
+      toast.error('Erro ao carregar histórico de valores')
+    } finally {
+      setRateHistoryLoading(false)
+    }
+  }
+
   const selectedCustomerObj = useMemo(() => optCustomers.find(c => String(c.id) === form.customer_id), [optCustomers, form.customer_id])
   // Use prefix from selected customer, or fall back to original code prefix
   const codePrefix  = selectedCustomerObj?.code_prefix?.toUpperCase() ?? (d.code ?? '').match(/^([A-Za-z]+)/)?.[1]?.toUpperCase() ?? ''
@@ -1264,15 +1282,26 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                     }))
                   }} style={iStyle} placeholder="0.00" step="0.01" /></div>
                 )}
-                <div><label style={lStyle}>Valor da Hora (R$)</label><input type="number" value={form.hourly_rate} onChange={e => {
-                  const hr = e.target.value
-                  const hrs = Number(form.sold_hours)
-                  setForm(prev => ({
-                    ...prev,
-                    hourly_rate: hr,
-                    project_value: hrs > 0 && hr !== '' ? String(+(Number(hr) * hrs).toFixed(2)) : prev.project_value,
-                  }))
-                }} style={iStyle} placeholder="0.00" step="0.01" /></div>
+                <div>
+                  <div className="flex items-center justify-between" style={{ marginBottom: '0.375rem' }}>
+                    <label style={{ ...lStyle, marginBottom: 0 }}>Valor da Hora (R$)</label>
+                    {d.id != null && (
+                      <button type="button" onClick={openRateHistory}
+                        className="text-[10px] font-medium hover:underline" style={{ color: 'var(--primary)' }}>
+                        Histórico de valores
+                      </button>
+                    )}
+                  </div>
+                  <input type="number" value={form.hourly_rate} onChange={e => {
+                    const hr = e.target.value
+                    const hrs = Number(form.sold_hours)
+                    setForm(prev => ({
+                      ...prev,
+                      hourly_rate: hr,
+                      project_value: hrs > 0 && hr !== '' ? String(+(Number(hr) * hrs).toFixed(2)) : prev.project_value,
+                    }))
+                  }} style={iStyle} placeholder="0.00" step="0.01" />
+                </div>
                 {!isOnDemandForm && (
                   <div><label style={lStyle}>Hora Adicional (R$)</label><input type="number" value={form.additional_hourly_rate} onChange={setF('additional_hourly_rate')} style={iStyle} placeholder="0.00" step="0.01" /></div>
                 )}
@@ -1565,6 +1594,59 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 className="px-5 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
                 style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}
               >Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Histórico de valores-hora (somente leitura) */}
+      {rateHistoryOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="w-full max-w-lg rounded-2xl p-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Histórico de valores</p>
+              <button onClick={() => setRateHistoryOpen(false)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] transition-colors"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
+            </div>
+            {rateHistoryLoading ? (
+              <p className="text-sm py-6 text-center animate-pulse" style={{ color: 'var(--text-light)' }}>Carregando...</p>
+            ) : rateHistory.length === 0 ? (
+              <p className="text-sm py-6 text-center" style={{ color: 'var(--text-light)' }}>Nenhuma alteração registrada.</p>
+            ) : (
+              <div className="max-h-[60vh] overflow-y-auto rounded-xl" style={{ border: '1px solid var(--border)' }}>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr style={{ background: 'var(--surface-hover)', color: 'var(--text-light)' }}>
+                      <th className="text-left font-semibold px-3 py-2">Vigência</th>
+                      <th className="text-left font-semibold px-3 py-2">Valor</th>
+                      <th className="text-left font-semibold px-3 py-2">Alterado por</th>
+                      <th className="text-left font-semibold px-3 py-2">Em</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rateHistory.map((h, i) => (
+                      <tr key={h.id ?? i} style={{ borderTop: '1px solid var(--border)', color: 'var(--text)' }}>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {h.effective_from
+                            ? (() => { const [y, m] = String(h.effective_from).slice(0, 7).split('-'); return `${m}/${y}` })()
+                            : <span title="vigência não informada (legado)" style={{ color: 'var(--text-light)' }}>—</span>}
+                        </td>
+                        <td className="px-3 py-2 tabular-nums whitespace-nowrap">
+                          {h.old_value != null ? formatBRL(Number(h.old_value)) : '—'}
+                          <span style={{ color: 'var(--text-light)' }}> → </span>
+                          {h.new_value != null ? formatBRL(Number(h.new_value)) : '—'}
+                        </td>
+                        <td className="px-3 py-2">{h.changed_by_user?.name ?? '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
+                          {h.created_at ? new Date(h.created_at).toLocaleDateString('pt-BR') : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex items-center justify-end mt-5">
+              <button onClick={() => setRateHistoryOpen(false)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Fechar</button>
             </div>
           </div>
         </div>

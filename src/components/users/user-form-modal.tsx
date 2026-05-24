@@ -357,6 +357,25 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
   const [rateModalOpen, setRateModalOpen] = useState(false)
   const [rateEffectiveMonth, setRateEffectiveMonth] = useState<string>(() => new Date().toISOString().slice(0, 7))
 
+  // Histórico de valores-hora (somente leitura) — GET /users/{id}/hourly-rate-history
+  const [rateHistoryOpen, setRateHistoryOpen] = useState(false)
+  const [rateHistory, setRateHistory] = useState<any[]>([])
+  const [rateHistoryLoading, setRateHistoryLoading] = useState(false)
+  const openRateHistory = async () => {
+    if (userId == null) return
+    setRateHistoryOpen(true)
+    setRateHistoryLoading(true)
+    try {
+      const res = await api.get<{ hasNext: boolean; items: any[] }>(`/users/${userId}/hourly-rate-history?pageSize=100`)
+      setRateHistory(Array.isArray(res?.items) ? res.items : [])
+    } catch {
+      setRateHistory([])
+      toast.error('Erro ao carregar histórico de valores')
+    } finally {
+      setRateHistoryLoading(false)
+    }
+  }
+
   // Carrega clientes + parceiros uma vez ao abrir.
   useEffect(() => {
     if (!open) return
@@ -666,7 +685,15 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
               </div>
             ) : hasRate && (
               <div>
-                <Label className="text-xs text-zinc-400 mb-1 block">Remuneração</Label>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-xs text-zinc-400">Remuneração</Label>
+                  {isEdit && (
+                    <button type="button" onClick={openRateHistory}
+                      className="text-[10px] font-medium text-blue-400 hover:underline">
+                      Histórico de valores
+                    </button>
+                  )}
+                </div>
                 <div className="flex gap-2 items-center">
                   {/* Consultor: tipo fixado pelo tipo de consultor; outros: toggle manual */}
                   {isConsultor ? (
@@ -937,6 +964,62 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
                 className="h-8 text-xs bg-blue-600 hover:bg-blue-500 text-white">
                 Confirmar
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Histórico de valores-hora (somente leitura) */}
+      {rateHistoryOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-lg rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-semibold text-white">Histórico de valores</p>
+              <button onClick={() => setRateHistoryOpen(false)} className="text-zinc-500 hover:text-zinc-300">
+                <X size={16} />
+              </button>
+            </div>
+            {rateHistoryLoading ? (
+              <p className="text-xs text-zinc-500 py-6 text-center">Carregando…</p>
+            ) : rateHistory.length === 0 ? (
+              <p className="text-xs text-zinc-500 py-6 text-center">Nenhuma alteração registrada.</p>
+            ) : (
+              <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-zinc-800">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-zinc-800/60 text-zinc-400">
+                      <th className="text-left font-semibold px-3 py-2">Vigência</th>
+                      <th className="text-left font-semibold px-3 py-2">Valor</th>
+                      <th className="text-left font-semibold px-3 py-2">Alterado por</th>
+                      <th className="text-left font-semibold px-3 py-2">Em</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rateHistory.map((h, i) => (
+                      <tr key={h.id ?? i} className="border-t border-zinc-800 text-zinc-200">
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {h.effective_from
+                            ? (() => { const [y, m] = String(h.effective_from).slice(0, 7).split('-'); return `${m}/${y}` })()
+                            : <span title="vigência não informada (legado)" className="text-zinc-500">—</span>}
+                        </td>
+                        <td className="px-3 py-2 tabular-nums whitespace-nowrap">
+                          {h.old_hourly_rate != null ? Number(h.old_hourly_rate).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+                          <span className="text-zinc-500"> → </span>
+                          {h.new_hourly_rate != null ? Number(h.new_hourly_rate).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+                        </td>
+                        <td className="px-3 py-2">{h.changed_by_user?.name ?? '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-zinc-400">
+                          {h.created_at ? new Date(h.created_at).toLocaleDateString('pt-BR') : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex items-center justify-end mt-5">
+              <Button variant="outline" onClick={() => setRateHistoryOpen(false)}
+                className="h-8 text-xs border-zinc-700 text-zinc-300">Fechar</Button>
             </div>
           </div>
         </div>
