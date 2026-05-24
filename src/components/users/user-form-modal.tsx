@@ -353,6 +353,9 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
   const [saving,  setSaving]  = useState(false)
   const [resendPwd,      setResendPwd]      = useState('')
   const [resendingModal, setResendingModal] = useState(false)
+  // Vigência do novo valor-hora: quando o hourly_rate muda, perguntamos a partir de qual mês passa a valer.
+  const [rateModalOpen, setRateModalOpen] = useState(false)
+  const [rateEffectiveMonth, setRateEffectiveMonth] = useState<string>(() => new Date().toISOString().slice(0, 7))
 
   // Carrega clientes + parceiros uma vez ao abrir.
   useEffect(() => {
@@ -420,7 +423,7 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
     return () => { cancelled = true }
   }, [open, userId])
 
-  const save = async () => {
+  const save = async (hourlyRateEffectiveFrom?: string) => {
     if (form.profiles.length === 0) { toast.error('Selecione ao menos um perfil de acesso'); return }
 
     const needsPartnerField = form.profiles.includes('parceiro_adm')
@@ -471,6 +474,10 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
       if (!isEdit && form.password) payload.password = form.password
 
       if (isEdit && editItem) {
+        // Mudou o valor-hora? Abre o modal de vigência antes de enviar (fechamentos passados não mudam).
+        const rateChanged = form.hourly_rate !== '' && Number(form.hourly_rate) !== Number(editItem.hourly_rate ?? 0)
+        if (rateChanged && !hourlyRateEffectiveFrom) { setSaving(false); setRateModalOpen(true); return }
+        if (rateChanged && hourlyRateEffectiveFrom) { payload.hourly_rate_effective_from = hourlyRateEffectiveFrom }
         await api.put(`/users/${editItem.id}`, payload)
         toast.success('Usuário atualizado')
       } else {
@@ -894,7 +901,7 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
         <div className="flex gap-2 pt-1 justify-end">
           <Button variant="outline" onClick={onClose}
             className="h-8 text-xs border-zinc-700 text-zinc-300">Cancelar</Button>
-          <Button onClick={save} disabled={saving || !canSave}
+          <Button onClick={() => save()} disabled={saving || !canSave}
             className="h-8 text-xs bg-blue-600 hover:bg-blue-500 text-white">
             {saving ? 'Salvando...' : 'Salvar'}
           </Button>
@@ -902,6 +909,38 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
         </>
         )}
       </div>
+
+      {/* Vigência do novo valor-hora */}
+      {rateModalOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl">
+            <p className="text-sm font-semibold text-white mb-3">Vigência do valor hora</p>
+            <p className="text-[13px] leading-relaxed text-zinc-400 mb-4">
+              A partir de qual mês esse novo valor hora passa a valer? Meses anteriores (fechamentos já feitos) não mudam.
+            </p>
+            <div className="mb-5">
+              <Label className="text-xs text-zinc-400 mb-1 block">Mês de vigência</Label>
+              <Input
+                type="month"
+                value={rateEffectiveMonth}
+                min={new Date().toISOString().slice(0, 7)}
+                onChange={e => setRateEffectiveMonth(e.target.value)}
+                className="bg-zinc-800 border-zinc-700 text-white h-9 text-xs"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="outline" onClick={() => setRateModalOpen(false)}
+                className="h-8 text-xs border-zinc-700 text-zinc-300">Cancelar</Button>
+              <Button
+                onClick={() => { setRateModalOpen(false); save(`${rateEffectiveMonth}-01`) }}
+                disabled={!rateEffectiveMonth}
+                className="h-8 text-xs bg-blue-600 hover:bg-blue-500 text-white">
+                Confirmar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </ModalOverlay>
   )
 }
