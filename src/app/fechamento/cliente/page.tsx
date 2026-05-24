@@ -588,6 +588,10 @@ export default function FechamentoClientePage() {
   const buildReportHtml = (): string | null => {
     if (!customerId || projetos.length === 0) return null
 
+    // Valor hora p/ a faixa "Valor a pagar": só quando há uma única taxa entre os projetos.
+    const ratesUnicas = [...new Set(projetos.map(p => p.valor_hora).filter(v => v > 0))]
+    const valorHoraTopo = ratesUnicas.length === 1 ? formatBRL(ratesUnicas[0]) : null
+
     const logoUrl = typeof window !== 'undefined' ? window.location.origin + '/logo.png' : '/logo.png'
     const competencia = fromYM === toYM ? fmtYMFull(toYM) : `${fmtYM(fromYM)} a ${fmtYM(toYM)}`
     const ticketHeader = isVedamotors ? 'Ticket ERPSERV' : 'Ticket'
@@ -650,7 +654,7 @@ export default function FechamentoClientePage() {
         <div class="section">
           <div class="section-header">
             <div><span class="section-title">${escapeHtml(p.projeto_nome)}</span><span class="section-code">${escapeHtml(p.projeto_codigo)}</span></div>
-            <div class="section-sub">${p.horas.toFixed(2)}h</div>
+            <div class="section-sub">${p.horas.toFixed(2)}h &nbsp;·&nbsp; Valor hora: ${formatBRL(p.valor_hora)}</div>
           </div>
           <table>
             <thead>
@@ -742,7 +746,7 @@ export default function FechamentoClientePage() {
   <div class="valor-topo">
     <div>
       <div class="label">Valor a pagar</div>
-      <div class="horas">${totalHoras.toFixed(2)}h trabalhadas</div>
+      <div class="horas">${totalHoras.toFixed(2)}h trabalhadas${valorHoraTopo ? ` &nbsp;·&nbsp; Valor hora: ${valorHoraTopo}` : ''}</div>
     </div>
     <div class="valor">${formatBRL(totalGeral)}</div>
   </div>
