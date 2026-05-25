@@ -237,11 +237,13 @@ export default function PagamentoDespesasPage() {
   useEffect(() => { fetchData() }, [fetchData])
 
   // ── Totals ──
-  const totalAmount   = useMemo(() => items.reduce((a, e) => a + (e.amount ?? 0), 0), [items])
+  // amount vem como string do backend (cast decimal:2 do Laravel) → coagir p/ número,
+  // senão o reduce concatena strings em vez de somar (ex.: 0 + "180.00" = "0180.00").
+  const totalAmount   = useMemo(() => items.reduce((a, e) => a + (Number(e.amount) || 0), 0), [items])
   const paidItems     = useMemo(() => items.filter(e => e.is_paid), [items])
   const pendingItems  = useMemo(() => items.filter(e => !e.is_paid), [items])
-  const paidAmount    = useMemo(() => paidItems.reduce((a, e) => a + (e.amount ?? 0), 0), [paidItems])
-  const pendingAmount = useMemo(() => pendingItems.reduce((a, e) => a + (e.amount ?? 0), 0), [pendingItems])
+  const paidAmount    = useMemo(() => paidItems.reduce((a, e) => a + (Number(e.amount) || 0), 0), [paidItems])
+  const pendingAmount = useMemo(() => pendingItems.reduce((a, e) => a + (Number(e.amount) || 0), 0), [pendingItems])
 
   // ── Toggle paid ──
   const togglePaid = useCallback(async (exp: Expense, forcePaid?: boolean) => {
