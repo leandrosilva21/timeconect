@@ -1623,7 +1623,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                     </tr>
                   </thead>
                   <tbody>
-                    {rateHistory.map((h, i) => (
+                    {rateHistory.filter((h: any, i: number, a: any[]) => a.findIndex((x: any) => String(x.created_at ?? '').slice(0, 10) === String(h.created_at ?? '').slice(0, 10)) === i).map((h, i) => (
                       <tr key={h.id ?? i} style={{ borderTop: '1px solid var(--border)', color: 'var(--text)' }}>
                         <td className="px-3 py-2 whitespace-nowrap">
                           {h.effective_from
@@ -3676,7 +3676,7 @@ export default function GestaoProjetosPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rateHistory.map((h, i) => (
+                    {rateHistory.filter((h: any, i: number, a: any[]) => a.findIndex((x: any) => String(x.created_at ?? '').slice(0, 10) === String(h.created_at ?? '').slice(0, 10)) === i).map((h, i) => (
                       <tr key={h.id ?? i} style={{ borderTop: '1px solid var(--border)', color: 'var(--text)' }}>
                         <td className="px-3 py-2 whitespace-nowrap">
                           {h.effective_from

@@ -1002,7 +1002,7 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
                     </tr>
                   </thead>
                   <tbody>
-                    {rateHistory.map((h, i) => (
+                    {rateHistory.filter((h: any, i: number, a: any[]) => a.findIndex((x: any) => String(x.created_at ?? '').slice(0, 10) === String(h.created_at ?? '').slice(0, 10)) === i).map((h, i) => (
                       <tr key={h.id ?? i} className="border-t border-zinc-800 text-zinc-200">
                         <td className="px-3 py-2 whitespace-nowrap">
                           {h.effective_from

@@ -790,7 +790,7 @@ export default function UsersPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {rateHistory.flatMap((h: any, i: number) => {
+                        {rateHistory.filter((h: any, i: number, a: any[]) => a.findIndex((x: any) => String(x.created_at ?? '').slice(0, 10) === String(h.created_at ?? '').slice(0, 10)) === i).flatMap((h: any, i: number) => {
                           const date = h.created_at ? new Date(h.created_at).toLocaleDateString('pt-BR') : '—'
                           const by   = h.changed_by_user?.name ?? h.changed_by_name ?? '—'
                           const rows = []
