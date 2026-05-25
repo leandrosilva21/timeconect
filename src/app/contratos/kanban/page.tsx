@@ -2358,23 +2358,31 @@ function KanbanContent() {
   }
 
   const handleProjectMove = async (cardId: number, toCol: string, currentCoordId?: number) => {
-    // Mover projeto sust de volta para fila de sustentação
-    if (toCol.startsWith('sust_')) {
-      const proj = projectCards.find(p => p.id === cardId)
-      if (!proj?.contract_id) return
-      setProjectCards(prev => prev.filter(p => p.id !== cardId))
-      try {
-        await api.patch(`/contracts/${proj.contract_id}/sustentacao-move`, { to_column: toCol })
-        toast.success('Projeto movido para fila de sustentação')
-        await load()
-      } catch (e: any) { toast.error(e?.message ?? 'Erro ao mover'); load() }
-      return
-    }
+    // O card pode estar nos cards de projeto OU nas filas de sustentação (card_type='project')
+    const card = projectCards.find(p => p.id === cardId)
+      ?? (Object.values(sustGroups).flat().find((c: any) => c.id === cardId && c.card_type === 'project') as ProjectCard | undefined)
+    const svL = (card?.service_type ?? '').toLowerCase()
+    const ctL = (card?.contract_type ?? '').toLowerCase()
+    const isSustProject = svL.includes('sustent') || svL.includes('cloud') || svL.includes('bizify')
+      || ctL.includes('banco de horas') || ctL.includes('on demand') || ctL.includes('cloud') || ctL.includes('bizify')
+
+    // ── Coluna de coordenador
     if (toCol.startsWith('coordinator:')) {
       const newCoordId = Number(toCol.split(':')[1])
-      const card = projectCards.find(p => p.id === cardId)
+      // Sustentação: o override (kanban_coordinator_override_id) é o controle. Setá-lo faz
+      // o card migrar pra fila daquele coordenador (e o BE sincroniza o contrato, se houver).
+      if (isSustProject) {
+        setProjectCards(prev => prev.map(p => p.id === cardId ? { ...p, kanban_coordinator_override_id: newCoordId } : p))
+        try {
+          await api.patch(`/projects/${cardId}`, { kanban_coordinator_override_id: newCoordId })
+          toast.success('Coordenador responsável definido')
+          await load()
+        } catch (e: any) { toast.error(e?.message ?? 'Erro ao mover projeto'); load() }
+        return
+      }
+      // Projeto (não-sustentação): relação M2M de coordenadores (comportamento legado)
       const fromCoordId = currentCoordId ?? card?.coordinator_ids?.[0]
-      const isTerminal = card && ['paused', 'cancelled', 'finished'].includes(card.status)
+      const isTerminal = !!card && ['paused', 'cancelled', 'finished'].includes(card.status)
       setProjectCards(prev => prev.map(p => {
         if (p.id !== cardId) return p
         const ids = (p.coordinator_ids ?? []).filter(id => id !== fromCoordId)
@@ -2394,6 +2402,31 @@ function KanbanContent() {
       }
       return
     }
+
+    // ── Coluna de sustentação
+    if (toCol.startsWith('sust_')) {
+      if (card?.contract_id) {
+        // Projeto contratado: move entre filas via contrato (mantém sustentacao_column)
+        setProjectCards(prev => prev.filter(p => p.id !== cardId))
+        try {
+          await api.patch(`/contracts/${card.contract_id}/sustentacao-move`, { to_column: toCol })
+          toast.success('Projeto movido para fila de sustentação')
+          await load()
+        } catch (e: any) { toast.error(e?.message ?? 'Erro ao mover'); load() }
+        return
+      }
+      if (!isSustProject) return // projeto não-sustentação não pertence à fila de sustentação
+      // Projeto de sustentação sem contrato: a coluna vem do tipo de contrato; aqui só
+      // limpamos o override (devolve da fila de um coordenador para a fila de sustentação).
+      setProjectCards(prev => prev.map(p => p.id === cardId ? { ...p, kanban_coordinator_override_id: null } : p))
+      try {
+        await api.patch(`/projects/${cardId}`, { kanban_coordinator_override_id: null })
+        toast.success('Projeto devolvido à fila de sustentação')
+        await load()
+      } catch (e: any) { toast.error(e?.message ?? 'Erro ao mover'); load() }
+      return
+    }
+
     const newStatus = COL_TO_PROJECT_STATUS[toCol]
     if (!newStatus) return
     setProjectCards(prev => prev.map(p => p.id === cardId ? { ...p, status: newStatus } : p))
