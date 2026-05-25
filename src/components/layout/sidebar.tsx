@@ -168,7 +168,8 @@ const NAV: NavEntry[] = [
         icon: Handshake,
         items: [
           { label: 'Painel do Parceiro',  href: '/partner-dashboard',   icon: Handshake },
-          { label: 'Fechamento Parceiro', href: '/fechamento/parceiro', icon: DollarSign },
+          // 'Fechamento Parceiro' removido: era duplicata de Fechamento → Parceiros
+          // (mesma rota /fechamento/parceiro), causava 2 itens acesos ao mesmo tempo.
         ],
       },
     ],
