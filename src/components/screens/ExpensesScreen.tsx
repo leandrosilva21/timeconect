@@ -441,7 +441,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
     {
       page:            1,
       status:          '',
-      isPaidFilter:    '' as '' | 'false' | 'true',
+      isPaidFilter:    '' as '' | 'false' | 'true' | 'no_fechamento',
       dateFrom:        '',
       dateTo:          '',
       refMonth:        null as number | null,
@@ -459,7 +459,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
   const { page, status, isPaidFilter, dateFrom, dateTo, refMonth, refYear, filterMode, customerIds, projectId, userIds, coordinatorIds, executiveIds, contractTypeId, categoriaServico } = flt
   const setPage           = (v: number)                     => setFilter('page', v)
   const setStatus         = (v: string)                     => setFilter('status', v)
-  const setIsPaidFilter   = (v: '' | 'false' | 'true')      => setFilter('isPaidFilter', v)
+  const setIsPaidFilter   = (v: '' | 'false' | 'true' | 'no_fechamento') => setFilter('isPaidFilter', v)
   const setDateFrom       = (v: string)                     => setFilter('dateFrom', v)
   const setDateTo         = (v: string)                     => setFilter('dateTo', v)
   const setRefMonth       = (v: number | null)              => setFilter('refMonth', v)
@@ -517,7 +517,9 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
   const params = useMemo(() => {
     const p = new URLSearchParams({ page: String(page), pageSize: '100' })
     if (status)       p.set('status',    status)
-    if (isPaidFilter) p.set('is_paid',   isPaidFilter)
+    if (isPaidFilter === 'no_fechamento') { p.set('is_paid', 'false'); p.set('has_partner', '1') }
+    else if (isPaidFilter === 'false')    { p.set('is_paid', 'false'); p.set('has_partner', '0') }
+    else if (isPaidFilter) p.set('is_paid', isPaidFilter)
     if (dateFrom)     p.set('start_date', dateFrom)
     if (dateTo)       p.set('end_date',  dateTo)
     if (contractTypeId) p.set('contract_type_id', contractTypeId)
@@ -685,15 +687,24 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
 
   async function submitRevert() {
     if (!revertTarget) return
+    const targetId = revertTarget.id
+    // Update OTIMISTA: marca como pending na lista local (o estorno já muda o status no banco).
+    // NÃO refazer load() imediato — o refetch logo após o POST volta stale (eventual consistency),
+    // mostrava "Aprovado" e fazia tentar de novo → "já estornada". Ver feedback de optimistic-no-refetch.
+    const markPending = () => setData(prev => prev
+      ? { ...prev, items: prev.items.map(e => e.id === targetId ? { ...e, status: 'pending' } : e) }
+      : prev)
     setReverting(true)
     try {
-      await api.post(`/expenses/${revertTarget.id}/reverse-approval`, {})
+      await api.post(`/expenses/${targetId}/reverse-approval`, {})
       toast.success('Aprovação estornada com sucesso.')
+      markPending()
     } catch (err: any) {
       const msg: string = (err as any)?.message ?? ''
-      // 422 = despesa já não está aprovada (reversão anterior funcionou)
+      // 422 com "aprovada" = já estava estornada (no banco já está pending) → reflete na UI
       if (msg.toLowerCase().includes('aprovada')) {
         toast.info('Despesa já havia sido estornada anteriormente.')
+        markPending()
       } else {
         toast.error(msg || 'Erro ao estornar aprovação.')
       }
@@ -701,7 +712,6 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
       setReverting(false)
       setRevertTarget(null)
       setRevertReason('')
-      load()
     }
   }
 
@@ -850,6 +860,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
                 {([
                   { value: '' as const, label: 'Todas' },
                   { value: 'false' as const, label: 'A pagar' },
+                  { value: 'no_fechamento' as const, label: 'No Fechamento' },
                   { value: 'true' as const, label: 'Pagas' },
                 ]).map(s => (
                   <button key={s.value} onClick={() => { setIsPaidFilter(s.value); setPage(1) }}
@@ -942,7 +953,9 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
                     <Td>
                       {exp.is_paid
                         ? <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400">Pago</span>
-                        : <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-950 text-amber-400">Em aberto</span>
+                        : (exp.user?.partner_id != null && exp.status === 'approved')
+                          ? <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400">Pago no fechamento</span>
+                          : <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-950 text-amber-400">Em aberto</span>
                       }
                     </Td>
                   )}

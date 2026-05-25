@@ -184,8 +184,6 @@ export default function FechamentoClientePage() {
 
   const [loading,         setLoading]         = useState(false)
   const [loadingDespesas, setLoadingDespesas] = useState(false)
-  const [loadingFechar,   setLoadingFechar]   = useState(false)
-  const [loadingReabrir,  setLoadingReabrir]  = useState(false)
 
   // ── Relatório (preview em iframe) / envio de e-mail ─────────────────────────
   const canSendEmail = (user as any)?.type === 'admin' || (user as any)?.type === 'administrativo'
@@ -325,33 +323,6 @@ export default function FechamentoClientePage() {
       loadTicketSummary()
     }
   }, [customerId, fromYM, toYM, clientes])
-
-  // ── Fechar / Reabrir ──
-
-  const handleFechar = () => {
-    if (!customerId || !toYM) return
-    setLoadingFechar(true)
-    api.post(`/fechamento-cliente/${customerId}/${toYM}/fechar`, {})
-      .then(() => { toast.success('Fechamento encerrado!'); loadClientes() })
-      .catch(() => toast.error('Erro ao fechar'))
-      .finally(() => setLoadingFechar(false))
-  }
-
-  const handleReabrir = () => {
-    if (!customerId || !toYM) return
-    setLoadingReabrir(true)
-    api.post(`/fechamento-cliente/${customerId}/${toYM}/reabrir`, {})
-      .then(() => {
-        toast.success('Fechamento reaberto.')
-        setDados(null)
-        setDespesas([])
-        loadClientes()
-        loadServicos()
-        loadDespesas()
-      })
-      .catch(() => toast.error('Erro ao reabrir'))
-      .finally(() => setLoadingReabrir(false))
-  }
 
   // ── Imprimir ──
 
@@ -537,7 +508,6 @@ export default function FechamentoClientePage() {
 
   // ── Derivados ──
 
-  const isClosed       = status?.status === 'closed'
   const clienteOptions = clientes.map(c => ({ id: c.customer_id, name: c.nome }))
   const todosProjetos  = dados?.projetos ?? []
   const projetoOptions = todosProjetos.map(p => ({ id: p.projeto_id, name: `${p.projeto_codigo} — ${p.projeto_nome}` }))
@@ -604,12 +574,6 @@ export default function FechamentoClientePage() {
             {periodo && (
               <span className="text-sm" style={{ color: 'var(--brand-muted)' }}>{periodo}</span>
             )}
-            {isClosed && isSingleMonth && (
-              <Badge variant="success"><Lock size={10} className="mr-1" />FECHADO</Badge>
-            )}
-            {status?.status === 'open' && isSingleMonth && (
-              <Badge variant="warning">ABERTO</Badge>
-            )}
           </div>
 
           {/* Controles: período + cliente + contrato */}
@@ -665,29 +629,9 @@ export default function FechamentoClientePage() {
                 options={clienteOptions}
                 placeholder="Selecionar cliente..."
               />
-              {isAdmin && customerId && isSingleMonth && !isClosed && (
-                <Button size="sm" onClick={handleFechar} disabled={loadingFechar}
-                  style={{ background: 'var(--brand-primary)', color: '#000' }}>
-                  {loadingFechar ? <RefreshCw size={12} className="animate-spin" /> : <Lock size={12} />}
-                  <span className="ml-1">Fechar</span>
-                </Button>
-              )}
-              {isAdmin && isClosed && isSingleMonth && (
-                <Button size="sm" variant="secondary" onClick={handleReabrir} disabled={loadingReabrir}>
-                  {loadingReabrir ? <RefreshCw size={12} className="animate-spin" /> : null}
-                  Reabrir
-                </Button>
-              )}
             </div>
           </div>
 
-          {isClosed && isSingleMonth && status && (
-            <div className="mt-3 px-3 py-2 rounded text-xs"
-              style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>
-              Dados históricos — fechado em {new Date(status.closed_at!).toLocaleDateString('pt-BR')}
-              {status.closed_by_name ? ` por ${status.closed_by_name}` : ''}
-            </div>
-          )}
         </div>
 
         {/* ── Tabs — sempre visíveis ── */}
