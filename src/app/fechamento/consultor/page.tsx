@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
-import { RefreshCw, Printer, FileText, Users, Search, X, Mail, FileSpreadsheet, Send } from 'lucide-react'
+import { RefreshCw, Printer, FileText, Users, Search, X, Mail, FileSpreadsheet, Send, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
@@ -30,6 +30,8 @@ interface ConsultorBase {
   effective_rate: number
   horas_a_pagar: number
   total: number
+  envio_em: string | null   // ISO do último envio do fechamento; null = não enviado
+  envio_por: string | null  // nome de quem enviou
 }
 
 interface ConsultorHorista extends ConsultorBase {
@@ -112,6 +114,15 @@ function fmtDate(d: string): string {
   if (!d) return '—'
   const [y, m, day] = d.split('-')
   return `${day}/${m}/${y}`
+}
+
+function fmtDateTime(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
 }
 
 function fmtH(h: number): string {
@@ -354,6 +365,36 @@ export default function FechamentoConsultorPage() {
   // Filtro por Tipo de Contrato (null = "Todos").
   const [contractType, setContractType] = useState<ContractType | null>(null)
   const [downloadingAllExcel, setDownloadingAllExcel] = useState(false)
+  // Consultor cujo status de envio está sendo limpo (spinner/disable no botão).
+  const [limpandoEnvio, setLimpandoEnvio] = useState<number | null>(null)
+
+  // Atualiza o status de envio de um consultor nas 3 listas (otimista, sem refetch).
+  const patchEnvio = useCallback((userId: number, envio_em: string | null, envio_por: string | null) => {
+    setData(prev => {
+      if (!prev) return prev
+      const patch = <T extends ConsultorBase>(arr: T[]): T[] =>
+        arr.map(c => (c.user_id === userId ? { ...c, envio_em, envio_por } : c))
+      return {
+        ...prev,
+        horistas: patch(prev.horistas),
+        banco_horas: patch(prev.banco_horas),
+        fixos: patch(prev.fixos),
+      }
+    })
+  }, [])
+
+  const limparEnvioConsultor = useCallback(async (userId: number) => {
+    setLimpandoEnvio(userId)
+    try {
+      await api.post(`/fechamento-consultor/${userId}/${yearMonth}/limpar-envio`, {})
+      patchEnvio(userId, null, null)
+      toast.success('Status de envio limpo.')
+    } catch (err: unknown) {
+      toast.error(`Erro ao limpar: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setLimpandoEnvio(null)
+    }
+  }, [yearMonth, patchEnvio])
 
   const load = useCallback(async () => {
     if (!yearMonth) return
@@ -380,6 +421,7 @@ export default function FechamentoConsultorPage() {
         { mensagem: emailMensagem },
       )
       toast.success(res?.message ?? 'Fechamento enviado por e-mail.')
+      patchEnvio(reportTarget.userId, new Date().toISOString(), user?.name ?? null)
       closeCompose()
     } catch (err: unknown) {
       toast.error(`Erro ao enviar o fechamento: ${err instanceof Error ? err.message : 'falha na API'}`)
@@ -607,6 +649,39 @@ export default function FechamentoConsultorPage() {
     return r
   }
 
+  // Célula de status de envio: badge "Enviado" + legenda (data/hora/quem) + limpar.
+  function EnvioCell({ c }: { c: ConsultorBase }) {
+    if (!c.envio_em) {
+      return <span className="text-xs" style={{ color: 'var(--text-light)' }}>Não enviado</span>
+    }
+    const legenda = `Enviado em ${fmtDateTime(c.envio_em)}${c.envio_por ? ` por ${c.envio_por}` : ''}`
+    return (
+      <div className="inline-flex flex-col items-end gap-0.5" title={legenda}>
+        <div className="inline-flex items-center gap-1.5">
+          <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold"
+            style={{ background: 'var(--success-bg)', color: 'var(--success)' }}
+          >
+            <Check size={11} /> Enviado
+          </span>
+          {canSendEmail && (
+            <button
+              onClick={() => limparEnvioConsultor(c.user_id)}
+              disabled={limpandoEnvio === c.user_id}
+              className="text-[11px] disabled:opacity-50 transition-colors hover:underline"
+              style={{ color: 'var(--text-light)' }}
+            >
+              {limpandoEnvio === c.user_id ? '...' : 'limpar'}
+            </button>
+          )}
+        </div>
+        <span className="text-[10px] font-normal" style={{ color: 'var(--text-light)' }}>
+          {fmtDateTime(c.envio_em)}{c.envio_por ? ` · ${c.envio_por}` : ''}
+        </span>
+      </div>
+    )
+  }
+
   // ─── Tab: Horistas ────────────────────────────────────────────────────────
 
   function TabHoristas() {
@@ -622,13 +697,14 @@ export default function FechamentoConsultorPage() {
               <Th right>H a Pagar</Th>
               <Th right>Taxa/h</Th>
               <Th right>Total</Th>
+              <Th right>Envio</Th>
               <Th right>Relatório</Th>
             </tr>
           </Thead>
           <Tbody>
             {rows.length === 0 && (
               <Tr>
-                <td colSpan={6} className="py-8 text-center text-zinc-500 text-sm">
+                <td colSpan={7} className="py-8 text-center text-zinc-500 text-sm">
                   Nenhum consultor horista no período
                 </td>
               </Tr>
@@ -656,6 +732,7 @@ export default function FechamentoConsultorPage() {
                     }
                   </Td>
                   <Td right className="font-semibold text-zinc-100">{formatBRL(c.total)}</Td>
+                  <Td right><EnvioCell c={c} /></Td>
                   <Td right>
                     <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={() => handleRelatorio(c)} />
                   </Td>
@@ -666,6 +743,7 @@ export default function FechamentoConsultorPage() {
               <Tr className="border-t-2 border-zinc-600 bg-zinc-800/20">
                 <td colSpan={4} className="py-2 px-3 text-right font-semibold text-zinc-300 text-sm">Total</td>
                 <Td right className="font-bold text-violet-400">{formatBRL(data?.totais.total_horistas ?? 0)}</Td>
+                <Td />
                 <Td />
               </Tr>
             )}
@@ -693,13 +771,14 @@ export default function FechamentoConsultorPage() {
               <Th right>Acumulado</Th>
               <Th right>H Extras</Th>
               <Th right>Total</Th>
+              <Th right>Envio</Th>
               <Th right>Relatório</Th>
             </tr>
           </Thead>
           <Tbody>
             {rows.length === 0 && (
               <Tr>
-                <td colSpan={9} className="py-8 text-center text-zinc-500 text-sm">
+                <td colSpan={10} className="py-8 text-center text-zinc-500 text-sm">
                   Nenhum consultor banco de horas no período
                 </td>
               </Tr>
@@ -721,6 +800,7 @@ export default function FechamentoConsultorPage() {
                     <div className="text-[10px] text-emerald-400 font-normal">+{formatBRL(c.total_extra)}</div>
                   )}
                 </Td>
+                <Td right><EnvioCell c={c} /></Td>
                 <Td right>
                   <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={() => handleRelatorio(c)} />
                 </Td>
@@ -730,6 +810,7 @@ export default function FechamentoConsultorPage() {
               <Tr className="border-t-2 border-zinc-600 bg-zinc-800/20">
                 <td colSpan={7} className="py-2 px-3 text-right font-semibold text-zinc-300 text-sm">Total</td>
                 <Td right className="font-bold text-violet-400">{formatBRL(data?.totais.total_banco_horas ?? 0)}</Td>
+                <Td />
                 <Td />
               </Tr>
             )}
@@ -752,13 +833,14 @@ export default function FechamentoConsultorPage() {
               <Th>Consultor</Th>
               <Th right>H Trabalhadas</Th>
               <Th right>Salário Mensal</Th>
+              <Th right>Envio</Th>
               <Th right>Relatório</Th>
             </tr>
           </Thead>
           <Tbody>
             {rows.length === 0 && (
               <Tr>
-                <td colSpan={4} className="py-8 text-center text-zinc-500 text-sm">
+                <td colSpan={5} className="py-8 text-center text-zinc-500 text-sm">
                   Nenhum consultor fixo no período
                 </td>
               </Tr>
@@ -768,6 +850,7 @@ export default function FechamentoConsultorPage() {
                 <Td className="font-medium text-zinc-100">{c.nome}</Td>
                 <Td right className="font-mono text-zinc-300">{fmtH(c.horas_trabalhadas)}</Td>
                 <Td right className="font-semibold text-zinc-100">{formatBRL(c.salario_mensal)}</Td>
+                <Td right><EnvioCell c={c} /></Td>
                 <Td right>
                   <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={() => handleRelatorio(c)} />
                 </Td>
@@ -777,6 +860,7 @@ export default function FechamentoConsultorPage() {
               <Tr className="border-t-2 border-zinc-600 bg-zinc-800/20">
                 <td colSpan={2} className="py-2 px-3 text-right font-semibold text-zinc-300 text-sm">Total</td>
                 <Td right className="font-bold text-violet-400">{formatBRL(data?.totais.total_fixos ?? 0)}</Td>
+                <Td />
                 <Td />
               </Tr>
             )}
