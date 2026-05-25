@@ -111,11 +111,13 @@ function resolveProfileFromType(type: string | null | undefined): ProfileType | 
 function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-md shadow-xl">
-        <button onClick={onClose} className="absolute top-3 right-3 text-zinc-500 hover:text-zinc-300">
+      <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-md shadow-xl max-h-[90vh] flex flex-col">
+        <button onClick={onClose} className="absolute top-3 right-3 z-10 text-zinc-500 hover:text-zinc-300">
           <X size={16} />
         </button>
-        {children}
+        <div className="overflow-y-auto">
+          {children}
+        </div>
       </div>
     </div>
   )
@@ -776,7 +778,7 @@ export default function UsersPage() {
               {!rateHistLoading && rateHistory.length > 0 && (
                 <div className="mt-5">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-2">Histórico de Alterações</p>
-                  <div className="rounded-lg overflow-clip border border-zinc-800">
+                  <div className="rounded-lg overflow-y-auto max-h-[260px] border border-zinc-800">
                     <table className="w-full text-[10px]">
                       <thead className="sticky top-0 z-10 bg-zinc-900">
                         <tr className="border-b border-zinc-800 bg-zinc-900">

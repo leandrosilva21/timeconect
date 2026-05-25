@@ -353,6 +353,28 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
   const [saving,  setSaving]  = useState(false)
   const [resendPwd,      setResendPwd]      = useState('')
   const [resendingModal, setResendingModal] = useState(false)
+  // Vigência do novo valor-hora: quando o hourly_rate muda, perguntamos a partir de qual mês passa a valer.
+  const [rateModalOpen, setRateModalOpen] = useState(false)
+  const [rateEffectiveMonth, setRateEffectiveMonth] = useState<string>(() => new Date().toISOString().slice(0, 7))
+
+  // Histórico de valores-hora (somente leitura) — GET /users/{id}/hourly-rate-history
+  const [rateHistoryOpen, setRateHistoryOpen] = useState(false)
+  const [rateHistory, setRateHistory] = useState<any[]>([])
+  const [rateHistoryLoading, setRateHistoryLoading] = useState(false)
+  const openRateHistory = async () => {
+    if (userId == null) return
+    setRateHistoryOpen(true)
+    setRateHistoryLoading(true)
+    try {
+      const res = await api.get<{ hasNext: boolean; items: any[] }>(`/users/${userId}/hourly-rate-history?pageSize=100`)
+      setRateHistory(Array.isArray(res?.items) ? res.items : [])
+    } catch {
+      setRateHistory([])
+      toast.error('Erro ao carregar histórico de valores')
+    } finally {
+      setRateHistoryLoading(false)
+    }
+  }
 
   // Carrega clientes + parceiros uma vez ao abrir.
   useEffect(() => {
@@ -420,7 +442,7 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
     return () => { cancelled = true }
   }, [open, userId])
 
-  const save = async () => {
+  const save = async (hourlyRateEffectiveFrom?: string) => {
     if (form.profiles.length === 0) { toast.error('Selecione ao menos um perfil de acesso'); return }
 
     const needsPartnerField = form.profiles.includes('parceiro_adm')
@@ -471,6 +493,17 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
       if (!isEdit && form.password) payload.password = form.password
 
       if (isEdit && editItem) {
+        // Mudou o valor-hora OU o tipo do consultor (rate_type/consultant_type)? Abre o modal de
+        // vigência antes de enviar — a alteração vale a partir do mês escolhido (passado não muda).
+        const isConsultorEdit = form.profiles.includes('consultor')
+        const rateChanged = form.hourly_rate !== '' && Number(form.hourly_rate) !== Number(editItem.hourly_rate ?? 0)
+        const typeChanged = isConsultorEdit && (
+          form.consultant_type !== ((editItem.consultant_type as string | undefined) ?? (editItem.rate_type === 'hourly' ? 'horista' : ''))
+          || form.rate_type !== ((editItem.rate_type as string | undefined) ?? 'hourly')
+        )
+        const vigenciaChanged = rateChanged || typeChanged
+        if (vigenciaChanged && !hourlyRateEffectiveFrom) { setSaving(false); setRateModalOpen(true); return }
+        if (vigenciaChanged && hourlyRateEffectiveFrom) { payload.hourly_rate_effective_from = hourlyRateEffectiveFrom }
         await api.put(`/users/${editItem.id}`, payload)
         toast.success('Usuário atualizado')
       } else {
@@ -659,7 +692,15 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
               </div>
             ) : hasRate && (
               <div>
-                <Label className="text-xs text-zinc-400 mb-1 block">Remuneração</Label>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-xs text-zinc-400">Remuneração</Label>
+                  {isEdit && (
+                    <button type="button" onClick={openRateHistory}
+                      className="text-[10px] font-medium text-blue-400 hover:underline">
+                      Histórico de valores
+                    </button>
+                  )}
+                </div>
                 <div className="flex gap-2 items-center">
                   {/* Consultor: tipo fixado pelo tipo de consultor; outros: toggle manual */}
                   {isConsultor ? (
@@ -894,7 +935,7 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
         <div className="flex gap-2 pt-1 justify-end">
           <Button variant="outline" onClick={onClose}
             className="h-8 text-xs border-zinc-700 text-zinc-300">Cancelar</Button>
-          <Button onClick={save} disabled={saving || !canSave}
+          <Button onClick={() => save()} disabled={saving || !canSave}
             className="h-8 text-xs bg-blue-600 hover:bg-blue-500 text-white">
             {saving ? 'Salvando...' : 'Salvar'}
           </Button>
@@ -902,6 +943,94 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
         </>
         )}
       </div>
+
+      {/* Vigência do novo valor-hora */}
+      {rateModalOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl">
+            <p className="text-sm font-semibold text-white mb-3">Vigência da alteração</p>
+            <p className="text-[13px] leading-relaxed text-zinc-400 mb-4">
+              A partir de qual mês essa alteração (valor hora / tipo) passa a valer? Meses anteriores (fechamentos já feitos) não mudam.
+            </p>
+            <div className="mb-5">
+              <Label className="text-xs text-zinc-400 mb-1 block">Mês de vigência</Label>
+              <Input
+                type="month"
+                value={rateEffectiveMonth}
+                min={new Date().toISOString().slice(0, 7)}
+                onChange={e => setRateEffectiveMonth(e.target.value)}
+                className="bg-zinc-800 border-zinc-700 text-white h-9 text-xs"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="outline" onClick={() => setRateModalOpen(false)}
+                className="h-8 text-xs border-zinc-700 text-zinc-300">Cancelar</Button>
+              <Button
+                onClick={() => { setRateModalOpen(false); save(`${rateEffectiveMonth}-01`) }}
+                disabled={!rateEffectiveMonth}
+                className="h-8 text-xs bg-blue-600 hover:bg-blue-500 text-white">
+                Confirmar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Histórico de valores-hora (somente leitura) */}
+      {rateHistoryOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-lg rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-semibold text-white">Histórico de valores</p>
+              <button onClick={() => setRateHistoryOpen(false)} className="text-zinc-500 hover:text-zinc-300">
+                <X size={16} />
+              </button>
+            </div>
+            {rateHistoryLoading ? (
+              <p className="text-xs text-zinc-500 py-6 text-center">Carregando…</p>
+            ) : rateHistory.length === 0 ? (
+              <p className="text-xs text-zinc-500 py-6 text-center">Nenhuma alteração registrada.</p>
+            ) : (
+              <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-zinc-800">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-zinc-800/60 text-zinc-400">
+                      <th className="text-left font-semibold px-3 py-2">Vigência</th>
+                      <th className="text-left font-semibold px-3 py-2">Valor</th>
+                      <th className="text-left font-semibold px-3 py-2">Alterado por</th>
+                      <th className="text-left font-semibold px-3 py-2">Em</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rateHistory.map((h, i) => (
+                      <tr key={h.id ?? i} className="border-t border-zinc-800 text-zinc-200">
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {h.effective_from
+                            ? (() => { const [y, m] = String(h.effective_from).slice(0, 7).split('-'); return `${m}/${y}` })()
+                            : <span title="vigência não informada (legado)" className="text-zinc-500">—</span>}
+                        </td>
+                        <td className="px-3 py-2 tabular-nums whitespace-nowrap">
+                          {h.old_hourly_rate != null ? Number(h.old_hourly_rate).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+                          <span className="text-zinc-500"> → </span>
+                          {h.new_hourly_rate != null ? Number(h.new_hourly_rate).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+                        </td>
+                        <td className="px-3 py-2">{h.changed_by_user?.name ?? '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-zinc-400">
+                          {h.created_at ? new Date(h.created_at).toLocaleDateString('pt-BR') : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex items-center justify-end mt-5">
+              <Button variant="outline" onClick={() => setRateHistoryOpen(false)}
+                className="h-8 text-xs border-zinc-700 text-zinc-300">Fechar</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </ModalOverlay>
   )
 }
