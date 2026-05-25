@@ -37,6 +37,14 @@ function fmtBRL(v: number | string | null | undefined) {
   return formatBRL(isNaN(n) ? 0 : n)
 }
 
+// Status de aprovação da despesa (aba "Outros").
+const EXP_STATUS_LABEL: Record<string, string> = {
+  pending: 'Pendente', rejected: 'Rejeitado', adjustment_requested: 'Ajuste Solicitado', approved: 'Aprovado',
+}
+const EXP_STATUS_VARIANT: Record<string, string> = {
+  pending: 'pending', rejected: 'rejected', adjustment_requested: 'warning', approved: 'approved',
+}
+
 // ─── SearchSelect ─────────────────────────────────────────────────────────────
 
 function SearchSelect({
@@ -184,12 +192,18 @@ export default function PagamentoDespesasPage() {
     return `${now.getFullYear()}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`
   })
   const [selectedUser, setSelectedUser] = useState('')
+  const [selectedCoordinator, setSelectedCoordinator] = useState('')
   const [paidFilter,  setPaidFilter]   = useState<'pending' | 'paid' | 'all'>('pending')
+  // Aba principal: 'pagamento' (aprovadas, fluxo de pagamento) | 'outros' (demais status).
+  const [mainTab, setMainTab] = useState<'pagamento' | 'outros'>('pagamento')
+  // Filtro de status da aba "Outros" ('' = todos exceto aprovado).
+  const [statusFilter, setStatusFilter] = useState<'' | 'pending' | 'rejected' | 'adjustment_requested'>('')
   const [page, setPage]   = useState(1)
   const [hasNext, setHasNext] = useState(false)
 
   // ── Data ──
-  const [users,    setUsers]    = useState<UserOption[]>([])
+  const [users,        setUsers]        = useState<UserOption[]>([])
+  const [coordinators, setCoordinators] = useState<UserOption[]>([])
   const [items,    setItems]    = useState<Expense[]>([])
   const [loading,  setLoading]  = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -211,15 +225,33 @@ export default function PagamentoDespesasPage() {
       .catch(() => {})
   }, [])
 
+  // Load coordinators (filtro de coordenador)
+  useEffect(() => {
+    api.get<any>('/users?pageSize=200&type=coordenador')
+      .then(r => setCoordinators(Array.isArray(r?.items) ? r.items : []))
+      .catch(() => {})
+  }, [])
+
   const buildParams = useCallback(() => {
-    const p = new URLSearchParams({ page: String(page), per_page: '100', status: 'approved' })
+    const p = new URLSearchParams({ page: String(page), per_page: '100' })
+    if (mainTab === 'pagamento') {
+      p.set('status', 'approved')
+      if (paidFilter === 'paid')    p.set('is_paid', 'true')
+      if (paidFilter === 'pending') p.set('is_paid', 'false')
+    } else {
+      // Aba "Outros": despesas não-aprovadas. Status específico, ou todos exceto aprovado.
+      if (statusFilter) {
+        p.set('status', statusFilter)
+      } else {
+        ;['pending', 'rejected', 'adjustment_requested'].forEach(s => p.append('status[]', s))
+      }
+    }
     if (dateFrom) p.set('start_date', dateFrom)
     if (dateTo)   p.set('end_date', dateTo)
     if (selectedUser) p.set('user_id[]', selectedUser)
-    if (paidFilter === 'paid')    p.set('is_paid', 'true')
-    if (paidFilter === 'pending') p.set('is_paid', 'false')
+    if (selectedCoordinator) p.set('coordinator_id', selectedCoordinator)
     return p
-  }, [page, dateFrom, dateTo, selectedUser, paidFilter])
+  }, [page, dateFrom, dateTo, selectedUser, selectedCoordinator, paidFilter, mainTab, statusFilter])
 
   const fetchData = useCallback(() => {
     setLoading(true)
@@ -238,7 +270,7 @@ export default function PagamentoDespesasPage() {
 
   // ── Totals ──
   // amount vem como string do backend (cast decimal:2 do Laravel) → coagir p/ número,
-  // senão o reduce concatena strings em vez de somar (ex.: 0 + "180.00" = "0180.00").
+  // senão o reduce concatena strings em vez de somar.
   const totalAmount   = useMemo(() => items.reduce((a, e) => a + (Number(e.amount) || 0), 0), [items])
   const paidItems     = useMemo(() => items.filter(e => e.is_paid), [items])
   const pendingItems  = useMemo(() => items.filter(e => !e.is_paid), [items])
@@ -284,14 +316,21 @@ export default function PagamentoDespesasPage() {
   // ── Revert approval ──
   const submitRevert = useCallback(async () => {
     if (!revertTarget) return
+    const targetId = revertTarget.id
+    // Update OTIMISTA: a despesa estornada deixa de estar aprovada → sai da lista de
+    // pagamento. NÃO refazer fetchData() imediato (volta stale por eventual consistency,
+    // mostrava "Aprovado" e fazia tentar de novo → "já estornada").
+    const removeFromList = () => setItems(prev => prev.filter(e => e.id !== targetId))
     setReverting(true)
     try {
-      await api.post(`/expenses/${revertTarget.id}/reverse-approval`, {})
+      await api.post(`/expenses/${targetId}/reverse-approval`, {})
       toast.success('Aprovação estornada com sucesso.')
+      removeFromList()
     } catch (err: any) {
       const msg: string = (err as any)?.message ?? ''
       if (msg.toLowerCase().includes('aprovada')) {
         toast.info('Despesa já havia sido estornada anteriormente.')
+        removeFromList()
       } else {
         toast.error(msg || 'Erro ao estornar aprovação.')
       }
@@ -299,9 +338,8 @@ export default function PagamentoDespesasPage() {
       setReverting(false)
       setRevertTarget(null)
       setRevertReason('')
-      fetchData()
     }
-  }, [revertTarget, fetchData])
+  }, [revertTarget])
 
   // ── Selection ──
   const visibleIds  = useMemo(() => items.filter(e => !e.is_paid).map(e => e.id), [items])
@@ -331,7 +369,29 @@ export default function PagamentoDespesasPage() {
           }
         />
 
-        {/* Summary */}
+        {/* Aba principal */}
+        <div className="flex rounded-xl border overflow-hidden text-sm w-fit"
+          style={{ borderColor: 'var(--brand-border)' }}>
+          {([
+            ['pagamento', 'Pagamento'],
+            ['outros',    'Outros status'],
+          ] as const).map(([val, lbl]) => (
+            <button
+              key={val}
+              onClick={() => { setMainTab(val); setPage(1); setSelected(new Set()) }}
+              className="px-5 py-2 font-medium transition-colors"
+              style={{
+                background: mainTab === val ? 'rgba(0,245,255,0.12)' : 'transparent',
+                color: mainTab === val ? 'var(--text)' : 'var(--text-muted)',
+              }}
+            >
+              {lbl}
+            </button>
+          ))}
+        </div>
+
+        {/* Summary (só na aba Pagamento) */}
+        {mainTab === 'pagamento' && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <SummaryCard
             label="Total Aprovadas"
@@ -355,6 +415,7 @@ export default function PagamentoDespesasPage() {
             accent="success"
           />
         </div>
+        )}
 
         {/* Filters */}
         <div className="flex flex-wrap items-end gap-4 p-5 rounded-2xl"
@@ -387,27 +448,60 @@ export default function PagamentoDespesasPage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Coordenador</label>
+            <SearchSelect
+              value={selectedCoordinator}
+              onChange={v => { setSelectedCoordinator(v); setPage(1) }}
+              options={coordinators}
+              placeholder="Todos os coordenadores"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Status</label>
-            <div className="flex rounded-xl border overflow-hidden text-sm"
-              style={{ borderColor: 'var(--brand-border)' }}>
-              {([
-                ['pending', 'A Pagar'],
-                ['paid',    'Pagas'],
-                ['all',     'Todas'],
-              ] as const).map(([val, lbl]) => (
-                <button
-                  key={val}
-                  onClick={() => { setPaidFilter(val); setPage(1) }}
-                  className="px-4 py-2 font-medium transition-colors"
-                  style={{
-                    background: paidFilter === val ? 'rgba(0,245,255,0.12)' : 'transparent',
-                    color: paidFilter === val ? 'var(--text)' : 'var(--text-muted)',
-                  }}
-                >
-                  {lbl}
-                </button>
-              ))}
-            </div>
+            {mainTab === 'pagamento' ? (
+              <div className="flex rounded-xl border overflow-hidden text-sm"
+                style={{ borderColor: 'var(--brand-border)' }}>
+                {([
+                  ['pending', 'A Pagar'],
+                  ['paid',    'Pagas'],
+                  ['all',     'Todas'],
+                ] as const).map(([val, lbl]) => (
+                  <button
+                    key={val}
+                    onClick={() => { setPaidFilter(val); setPage(1) }}
+                    className="px-4 py-2 font-medium transition-colors"
+                    style={{
+                      background: paidFilter === val ? 'rgba(0,245,255,0.12)' : 'transparent',
+                      color: paidFilter === val ? 'var(--text)' : 'var(--text-muted)',
+                    }}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex rounded-xl border overflow-hidden text-sm"
+                style={{ borderColor: 'var(--brand-border)' }}>
+                {([
+                  ['',                     'Todos'],
+                  ['pending',              'Pendente'],
+                  ['rejected',             'Rejeitado'],
+                  ['adjustment_requested', 'Ajuste'],
+                ] as const).map(([val, lbl]) => (
+                  <button
+                    key={val || 'todos'}
+                    onClick={() => { setStatusFilter(val); setPage(1) }}
+                    className="px-4 py-2 font-medium transition-colors"
+                    style={{
+                      background: statusFilter === val ? 'rgba(0,245,255,0.12)' : 'transparent',
+                      color: statusFilter === val ? 'var(--text)' : 'var(--text-muted)',
+                    }}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -418,7 +512,7 @@ export default function PagamentoDespesasPage() {
           <EmptyState
             icon={Receipt}
             title="Nenhuma despesa encontrada"
-            description="Ajuste os filtros para visualizar as despesas aprovadas."
+            description="Ajuste os filtros para visualizar as despesas."
           />
         ) : (
           <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--brand-border)' }}>
@@ -426,21 +520,24 @@ export default function PagamentoDespesasPage() {
               <Table>
                 <Thead>
                   <Tr baseBackground="var(--brand-surface)">
-                    <Th>
-                      <input
-                        type="checkbox"
-                        checked={allSelected}
-                        onChange={toggleAll}
-                        className="w-4 h-4 rounded accent-cyan-400"
-                      />
-                    </Th>
+                    {mainTab === 'pagamento' && (
+                      <Th>
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={toggleAll}
+                          className="w-4 h-4 rounded accent-cyan-400"
+                        />
+                      </Th>
+                    )}
                     <Th>Data</Th>
                     <Th>Consultor</Th>
+                    <Th>Coordenador</Th>
                     <Th>Projeto</Th>
                     <Th>Cliente</Th>
                     <Th>Categoria</Th>
                     <Th right>Valor</Th>
-                    <Th>Status Pag.</Th>
+                    <Th>{mainTab === 'pagamento' ? 'Status Pag.' : 'Status'}</Th>
                     <Th right>Ações</Th>
                   </Tr>
                 </Thead>
@@ -450,21 +547,30 @@ export default function PagamentoDespesasPage() {
                     const isLoading = paying.has(exp.id)
                     return (
                       <Tr key={exp.id} baseBackground="transparent">
-                        <Td>
-                          {!isPaid && (
-                            <input
-                              type="checkbox"
-                              checked={selected.has(exp.id)}
-                              onChange={() => toggleOne(exp.id)}
-                              className="w-4 h-4 rounded accent-cyan-400"
-                            />
-                          )}
-                        </Td>
+                        {mainTab === 'pagamento' && (
+                          <Td>
+                            {!isPaid && (
+                              <input
+                                type="checkbox"
+                                checked={selected.has(exp.id)}
+                                onChange={() => toggleOne(exp.id)}
+                                className="w-4 h-4 rounded accent-cyan-400"
+                              />
+                            )}
+                          </Td>
+                        )}
                         <Td mono>{fmtDate(exp.expense_date)}</Td>
                         <Td>
                           <span style={{ color: 'var(--brand-text)' }}>
                             {exp.user?.name ?? '—'}
                           </span>
+                        </Td>
+                        <Td>
+                          {(() => {
+                            const coords = ((exp.project as any)?.coordinators ?? []) as Array<{ name?: string }>
+                            const nomes = coords.map(c => c?.name).filter(Boolean).join(', ')
+                            return <span className="truncate max-w-[160px] block" title={nomes}>{nomes || '—'}</span>
+                          })()}
                         </Td>
                         <Td>
                           <span className="truncate max-w-[280px] block" title={(exp.project as any)?.name}>
@@ -485,9 +591,13 @@ export default function PagamentoDespesasPage() {
                           </span>
                         </Td>
                         <Td>
-                          {isPaid
-                            ? <Badge variant="success">Pago</Badge>
-                            : <Badge variant="warning">A Pagar</Badge>
+                          {mainTab === 'pagamento'
+                            ? (isPaid
+                                ? <Badge variant="success">Pago</Badge>
+                                : <Badge variant="warning">A Pagar</Badge>)
+                            : <Badge variant={EXP_STATUS_VARIANT[exp.status] ?? 'default'}>
+                                {exp.status_display ?? EXP_STATUS_LABEL[exp.status] ?? exp.status}
+                              </Badge>
                           }
                         </Td>
                         <Td right>
@@ -501,8 +611,8 @@ export default function PagamentoDespesasPage() {
                             >
                               <Eye size={11} /> Ver
                             </button>
-                            {/* Estornar aprovação — apenas se não estiver paga */}
-                            {!isPaid && (
+                            {/* Estornar aprovação — apenas aprovadas não pagas (aba pagamento) */}
+                            {mainTab === 'pagamento' && !isPaid && (
                               <button
                                 onClick={() => setRevertTarget(exp)}
                                 title="Estornar aprovação"
@@ -512,7 +622,8 @@ export default function PagamentoDespesasPage() {
                                 <Undo2 size={11} /> Estornar
                               </button>
                             )}
-                            {/* Pagar / Desfazer */}
+                            {/* Pagar / Desfazer (aba pagamento) */}
+                            {mainTab === 'pagamento' && (
                             <button
                               disabled={isLoading}
                               onClick={() => togglePaid(exp)}
@@ -530,6 +641,7 @@ export default function PagamentoDespesasPage() {
                                 <><CheckCircle2 size={11} /> Pagar</>
                               )}
                             </button>
+                            )}
                           </div>
                         </Td>
                       </Tr>

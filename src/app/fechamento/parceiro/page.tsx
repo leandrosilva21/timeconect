@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
+import { previewText } from '@/lib/sanitize'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { SearchSelect } from '@/components/ui/search-select'
 import { useAuth } from '@/hooks/use-auth'
@@ -1114,7 +1115,7 @@ export default function FechamentoParceiroPage() {
                             </Td>
                             <Td className="text-xs">{row.ticket ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${row.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300">#{row.ticket}</a> : '—'}</Td>
                             <Td className="text-xs max-w-xs truncate">
-                              <span title={row.observacao ?? ''}>{row.observacao ?? '—'}</span>
+                              <span title={previewText(row.observacao)}>{row.observacao ? previewText(row.observacao) : '—'}</span>
                             </Td>
                           </Tr>
                         ))}
