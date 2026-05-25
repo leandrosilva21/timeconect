@@ -316,14 +316,21 @@ export default function PagamentoDespesasPage() {
   // ── Revert approval ──
   const submitRevert = useCallback(async () => {
     if (!revertTarget) return
+    const targetId = revertTarget.id
+    // Update OTIMISTA: a despesa estornada deixa de estar aprovada → sai da lista de
+    // pagamento. NÃO refazer fetchData() imediato (volta stale por eventual consistency,
+    // mostrava "Aprovado" e fazia tentar de novo → "já estornada").
+    const removeFromList = () => setItems(prev => prev.filter(e => e.id !== targetId))
     setReverting(true)
     try {
-      await api.post(`/expenses/${revertTarget.id}/reverse-approval`, {})
+      await api.post(`/expenses/${targetId}/reverse-approval`, {})
       toast.success('Aprovação estornada com sucesso.')
+      removeFromList()
     } catch (err: any) {
       const msg: string = (err as any)?.message ?? ''
       if (msg.toLowerCase().includes('aprovada')) {
         toast.info('Despesa já havia sido estornada anteriormente.')
+        removeFromList()
       } else {
         toast.error(msg || 'Erro ao estornar aprovação.')
       }
@@ -331,9 +338,8 @@ export default function PagamentoDespesasPage() {
       setReverting(false)
       setRevertTarget(null)
       setRevertReason('')
-      fetchData()
     }
-  }, [revertTarget, fetchData])
+  }, [revertTarget])
 
   // ── Selection ──
   const visibleIds  = useMemo(() => items.filter(e => !e.is_paid).map(e => e.id), [items])
