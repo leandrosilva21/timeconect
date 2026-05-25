@@ -301,7 +301,9 @@ export function ContractCreateModal({
         if (isMensalidade && !form.valor_projeto)                            { toast.error('Informe o Valor do Contrato (mensalidade)'); return false }
         if (isOnDemand && !isMensalidade && !form.valor_projeto)             { toast.error('Informe o Valor do Projeto'); return false }
         if (!isMensalidade && !isOnDemand && !form.valor_hora)               { toast.error('Informe o Valor da Hora'); return false }
-        if (form.parent_project_id && parentBalance && !parentBalance.allow_negative) {
+        // On Demand consome do pai por apontamento (horas_contratadas=0, cobrado por hora
+        // apontada) — não reserva bloco de horas, então não valida o saldo do pai.
+        if (form.parent_project_id && parentBalance && !parentBalance.allow_negative && !isOnDemand) {
           const childHours = Number(form.horas_contratadas) || 0
           if (childHours > parentBalance.balance) {
             toast.error(`Horas (${childHours.toLocaleString('pt-BR', { minimumFractionDigits: 1 })}h) excedem o saldo do projeto pai (${parentBalance.balance.toLocaleString('pt-BR', { minimumFractionDigits: 1 })}h)`)
@@ -395,7 +397,8 @@ export function ContractCreateModal({
       }
     }
 
-    if (form.parent_project_id && parentBalance && !parentBalance.allow_negative) {
+    // On Demand não reserva horas do pai (consome por apontamento) — não bloqueia por saldo.
+    if (form.parent_project_id && parentBalance && !parentBalance.allow_negative && !isOnDemand) {
       const childHours = Number(form.horas_contratadas) || 0
       if (childHours > parentBalance.balance) {
         toast.error(`Horas (${childHours.toLocaleString('pt-BR', { minimumFractionDigits: 1 })}h) excedem o saldo do projeto pai (${parentBalance.balance.toLocaleString('pt-BR', { minimumFractionDigits: 1 })}h)`)
@@ -782,7 +785,15 @@ export function ContractCreateModal({
                           {parentBalance.balance.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}h
                         </p>
                       </div>
-                      {parentBalance.balance <= 0 && (
+                      {isOnDemand && (
+                        <div className="text-right">
+                          <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>On Demand</p>
+                          <p className="text-xs font-semibold" style={{ color: '#22c55e' }}>
+                            Não consome saldo do pai
+                          </p>
+                        </div>
+                      )}
+                      {!isOnDemand && parentBalance.balance <= 0 && (
                         <div className="text-right">
                           <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>Saldo negativo</p>
                           <p className="text-xs font-semibold"
@@ -791,7 +802,7 @@ export function ContractCreateModal({
                           </p>
                         </div>
                       )}
-                      {parentBalance.balance > 0 && Number(form.horas_contratadas) > 0 && (
+                      {!isOnDemand && parentBalance.balance > 0 && Number(form.horas_contratadas) > 0 && (
                         <div className="text-right">
                           <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>Este subprojeto</p>
                           <p className="text-xs font-semibold"
