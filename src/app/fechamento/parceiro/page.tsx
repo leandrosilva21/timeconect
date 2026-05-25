@@ -52,6 +52,9 @@ interface DespesaRow {
   projeto: string
   valor: number
   status: string
+  is_paid: boolean          // true = paga antecipadamente (fora do fechamento)
+  paid_at?: string | null
+  paid_by_name?: string | null
 }
 
 interface ApontamentoRow {
@@ -160,8 +163,6 @@ export default function FechamentoParceiroPage() {
   const [loadingConsult, setLoadingConsult]   = useState(false)
   const [loadingDesp,    setLoadingDesp]      = useState(false)
   const [loadingAp,      setLoadingAp]        = useState(false)
-  const [loadingFechar,  setLoadingFechar]    = useState(false)
-  const [loadingReabrir, setLoadingReabrir]   = useState(false)
   const [consultorView, setConsultorView] = useState<'resumo' | 'tipo'>('resumo')
 
   // ── Relatório (preview + ações) / envio de e-mail ──────────────────────────
@@ -267,31 +268,6 @@ export default function FechamentoParceiroPage() {
   }, [partnerId])
 
   // ─── Ações ────────────────────────────────────────────────────────────────
-
-  const handleFechar = () => {
-    if (!partnerId || !yearMonth) return
-    setLoadingFechar(true)
-    api.post(`/fechamento-parceiro/${partnerId}/${yearMonth}/fechar`, {})
-      .then(() => { toast.success('Fechamento encerrado!'); loadParceiros() })
-      .catch(() => toast.error('Erro ao fechar'))
-      .finally(() => setLoadingFechar(false))
-  }
-
-  const handleReabrir = () => {
-    if (!partnerId || !yearMonth) return
-    setLoadingReabrir(true)
-    api.post(`/fechamento-parceiro/${partnerId}/${yearMonth}/reabrir`, {})
-      .then(() => {
-        toast.success('Fechamento reaberto.')
-        setConsultores([])
-        setDespesas([])
-        setApontamentos([])
-        loadParceiros()
-        loadConsultores()
-      })
-      .catch(() => toast.error('Erro ao reabrir'))
-      .finally(() => setLoadingReabrir(false))
-  }
 
   const openPrintWindow = (html: string) => {
     const win = window.open('', '_blank', 'width=960,height=780')
@@ -721,7 +697,6 @@ export default function FechamentoParceiroPage() {
 
   // ─── Derivados ────────────────────────────────────────────────────────────
 
-  const isClosed   = status?.status === 'closed'
   const isFixed    = status?.pricing_type === 'fixed'
   const parceiroOptions = parceiros.map(p => ({ id: p.partner_id, name: p.nome }))
   const consultorOptions = consultores.map(c => ({ id: c.user_id, name: c.nome }))
@@ -736,8 +711,10 @@ export default function FechamentoParceiroPage() {
 
   const totalHoras    = consultores.reduce((s, r) => s + r.horas, 0)
   const totalServicos = consultores.reduce((s, r) => s + r.total, 0)
-  const totalDespesas = despesas.reduce((s, r) => s + r.valor, 0)
-  const totalAPagar   = totalServicos + totalDespesas
+  // Antecipadas (is_paid) já foram pagas fora do fechamento → fora do total a pagar.
+  const totalDespesas    = despesas.filter(r => !r.is_paid).reduce((s, r) => s + r.valor, 0)
+  const totalDespesasAnt = despesas.filter(r => r.is_paid).reduce((s, r) => s + r.valor, 0)
+  const totalAPagar      = totalServicos + totalDespesas
 
   const TABS = [
     { key: 'consultores',  label: 'Consultores' },
@@ -762,9 +739,6 @@ export default function FechamentoParceiroPage() {
                 {fmtYearMonth(yearMonth)}
               </span>
             )}
-            {isClosed && <Badge variant="success"><Lock size={10} className="mr-1" /> FECHADO</Badge>}
-            {status?.status === 'open' && <Badge variant="warning">ABERTO</Badge>}
-
             <div className="ml-auto flex items-center gap-2 flex-wrap">
               <SearchSelect
                 value={partnerId ?? ''}
@@ -789,18 +763,6 @@ export default function FechamentoParceiroPage() {
                   )}
                 </>
               )}
-              {isAdmin && partnerId && yearMonth && !isClosed && (
-                <Button size="sm" onClick={handleFechar} disabled={loadingFechar} style={{ background: 'var(--brand-primary)', color: '#000' }}>
-                  {loadingFechar ? <RefreshCw size={12} className="animate-spin" /> : <Lock size={12} />}
-                  <span className="ml-1">Fechar</span>
-                </Button>
-              )}
-              {isAdmin && isClosed && (
-                <Button size="sm" variant="secondary" onClick={handleReabrir} disabled={loadingReabrir}>
-                  {loadingReabrir ? <RefreshCw size={12} className="animate-spin" /> : null}
-                  Reabrir
-                </Button>
-              )}
             </div>
           </div>
 
@@ -823,12 +785,6 @@ export default function FechamentoParceiroPage() {
             </div>
           )}
 
-          {isClosed && status && (
-            <div className="mt-3 px-3 py-2 rounded text-xs" style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>
-              Dados históricos — fechado em {new Date(status.closed_at!).toLocaleDateString('pt-BR')}
-              {status.closed_by_name ? ` por ${status.closed_by_name}` : ''}
-            </div>
-          )}
         </div>
 
         {!partnerId ? (
@@ -1013,6 +969,7 @@ export default function FechamentoParceiroPage() {
                           <Th>Consultor</Th>
                           <Th>Projeto</Th>
                           <Th>Status</Th>
+                          <Th>Pagamento</Th>
                           <Th right>Valor</Th>
                         </tr>
                       </Thead>
@@ -1029,17 +986,43 @@ export default function FechamentoParceiroPage() {
                                 {EXPENSE_STATUS_LABELS[row.status] ?? row.status}
                               </Badge>
                             </Td>
-                            <Td right className="tabular-nums text-xs font-medium" style={{ color: 'var(--brand-primary)' }}>{formatBRL(row.valor)}</Td>
+                            <Td className="text-xs">
+                              {row.is_paid ? (
+                                <span
+                                  title={`Paga em ${row.paid_at ? new Date(row.paid_at).toLocaleDateString('pt-BR') : '—'}${row.paid_by_name ? ` por ${row.paid_by_name}` : ''}`}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium"
+                                  style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}
+                                >
+                                  <Lock size={10} /> Paga antecipadamente
+                                </span>
+                              ) : row.status === 'approved' ? (
+                                <span className="text-[11px]" style={{ color: 'var(--success)' }}>Pago no fechamento</span>
+                              ) : (
+                                <span className="text-[11px]" style={{ color: 'var(--text-light)' }}>—</span>
+                              )}
+                            </Td>
+                            <Td
+                              right
+                              className="tabular-nums text-xs font-medium"
+                              style={{ color: row.is_paid ? 'var(--text-light)' : 'var(--brand-primary)', textDecoration: row.is_paid ? 'line-through' : undefined }}
+                            >
+                              {formatBRL(row.valor)}
+                            </Td>
                           </Tr>
                         ))}
                       </Tbody>
                     </Table>
                   )}
                   {despesas.length > 0 && (
-                    <div className="mt-4 flex justify-end">
+                    <div className="mt-4 flex flex-col items-end gap-1">
                       <div className="text-sm font-semibold px-4 py-2 rounded" style={{ background: 'rgba(0,245,255,0.07)', color: 'var(--brand-primary)' }}>
-                        Total Despesas: {formatBRL(totalDespesas)}
+                        Despesas no fechamento: {formatBRL(totalDespesas)}
                       </div>
+                      {totalDespesasAnt > 0 && (
+                        <div className="text-[11px]" style={{ color: 'var(--brand-muted)' }}>
+                          + {formatBRL(totalDespesasAnt)} já pagas antecipadamente (fora do fechamento)
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1147,11 +1130,10 @@ export default function FechamentoParceiroPage() {
                   <div className="rounded-lg p-5 space-y-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--brand-border)' }}>
                     <h3 className="text-sm font-semibold mb-4" style={{ color: 'var(--brand-text)' }}>
                       Resumo — {yearMonth ? fmtYearMonth(yearMonth) : ''}
-                      {isClosed && <span className="ml-2 text-xs font-normal" style={{ color: 'var(--brand-muted)' }}>(dados do snapshot)</span>}
                     </h3>
                     <div className="flex justify-between text-sm" style={{ color: 'var(--brand-muted)' }}>
                       <span>Total Horas Trabalhadas</span>
-                      <span className="tabular-nums">{(isClosed ? status!.total_horas : totalHoras).toFixed(2)}h</span>
+                      <span className="tabular-nums">{totalHoras.toFixed(2)}h</span>
                     </div>
                     <div className="flex justify-between text-sm" style={{ color: 'var(--brand-muted)' }}>
                       <span>Total Serviços</span>
@@ -1159,13 +1141,13 @@ export default function FechamentoParceiroPage() {
                     </div>
                     <div className="flex justify-between text-sm" style={{ color: 'var(--brand-muted)' }}>
                       <span>Total Despesas</span>
-                      <span className="tabular-nums">{formatBRL(isClosed ? status!.total_despesas : totalDespesas)}</span>
+                      <span className="tabular-nums">{formatBRL(totalDespesas)}</span>
                     </div>
                     <div className="border-t pt-3" style={{ borderColor: 'var(--brand-border)' }}>
                       <div className="flex justify-between items-center">
                         <span className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>TOTAL A PAGAR</span>
                         <span className="text-lg font-bold tabular-nums" style={{ color: 'var(--brand-primary)' }}>
-                          {formatBRL(isClosed ? status!.total_a_pagar : totalAPagar)}
+                          {formatBRL(totalAPagar)}
                         </span>
                       </div>
                     </div>

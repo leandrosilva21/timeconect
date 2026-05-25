@@ -1052,6 +1052,9 @@ export default function FechamentoConsultorPage() {
                 onChange={e => setYearMonth(e.target.value)}
                 className="bg-zinc-800 border border-zinc-700 text-zinc-100 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
               />
+              <Button size="sm" variant="secondary" onClick={downloadAllExcel} disabled={downloadingAllExcel} icon={FileSpreadsheet} loading={downloadingAllExcel}>
+                {downloadingAllExcel ? 'Baixando…' : 'Exportar Excel'}
+              </Button>
               <Button size="sm" variant="secondary" onClick={load} disabled={loading} icon={RefreshCw} loading={loading}>
                 Atualizar
               </Button>
