@@ -9,7 +9,7 @@ import { SearchSelect } from '@/components/ui/search-select'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { toast } from 'sonner'
-import { Lock, RefreshCw, Handshake, Printer, Filter, Mail, FileSpreadsheet, Send, X, Save, Plus } from 'lucide-react'
+import { Lock, RefreshCw, Handshake, Printer, Filter, Mail, FileSpreadsheet, Send, X, Save, Plus, Check } from 'lucide-react'
 import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
   Badge, Button, SkeletonTable, EmptyState,
@@ -28,6 +28,8 @@ interface ParceiroStatus {
   total_a_pagar: number
   closed_at?: string
   closed_by_name?: string
+  envio_em?: string | null   // ISO do último envio por e-mail; null = não enviado
+  envio_por?: string | null  // nome de quem enviou
 }
 
 interface ConsultorRow {
@@ -79,6 +81,15 @@ function fmtYearMonth(ym: string): string {
   const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
   const [y, m] = ym.split('-')
   return `${MONTHS[parseInt(m) - 1]}/${y}`
+}
+
+function fmtDateTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -160,6 +171,7 @@ export default function FechamentoParceiroPage() {
   // Dialog de composição/preview do e-mail.
   const [composeOpen, setComposeOpen] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [limpandoEnvio, setLimpandoEnvio] = useState(false)
   const [emailPreviewHtml, setEmailPreviewHtml] = useState<string | null>(null)
   const [emailMensagem, setEmailMensagem] = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -676,11 +688,33 @@ export default function FechamentoParceiroPage() {
         { mensagem: emailMensagem, emails },
       )
       toast.success(res?.message ?? 'Fechamento enviado por e-mail.')
+      patchEnvio(partnerId, new Date().toISOString(), (user as any)?.name ?? null)
       closeCompose()
     } catch (err: unknown) {
       toast.error(`Erro ao enviar o fechamento: ${err instanceof Error ? err.message : 'falha na API'}`)
     } finally {
       setSendingEmail(false)
+    }
+  }
+
+  // Atualiza o status de envio do parceiro (otimista, sem refetch) — em `status` e na lista.
+  function patchEnvio(id: number | null, envio_em: string | null, envio_por: string | null) {
+    if (!id) return
+    setStatus(prev => (prev && prev.partner_id === id ? { ...prev, envio_em, envio_por } : prev))
+    setParceiros(prev => prev.map(p => (p.partner_id === id ? { ...p, envio_em, envio_por } : p)))
+  }
+
+  async function limparEnvio() {
+    if (!partnerId || !yearMonth) return
+    setLimpandoEnvio(true)
+    try {
+      await api.post(`/fechamento-parceiro/${partnerId}/${yearMonth}/limpar-envio`, {})
+      patchEnvio(partnerId, null, null)
+      toast.success('Status de envio limpo.')
+    } catch (err: unknown) {
+      toast.error(`Erro ao limpar: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setLimpandoEnvio(false)
     }
   }
 
@@ -1198,6 +1232,31 @@ export default function FechamentoParceiroPage() {
                           >
                             Enviar e-mail
                           </Button>
+                        )}
+
+                        {/* Status de envio: legenda (data/hora/quem) + limpar */}
+                        {canSendEmail && (
+                          status?.envio_em ? (
+                            <div
+                              className="rounded-lg px-3 py-2 text-xs flex items-start justify-between gap-2"
+                              style={{ background: 'var(--success-bg)', color: 'var(--success)' }}
+                            >
+                              <span className="flex items-start gap-1.5">
+                                <Check size={13} className="mt-0.5 shrink-0" />
+                                <span>Enviado em {fmtDateTime(status.envio_em)}{status.envio_por ? ` por ${status.envio_por}` : ''}</span>
+                              </span>
+                              <button
+                                onClick={limparEnvio}
+                                disabled={limpandoEnvio}
+                                className="shrink-0 disabled:opacity-50 hover:underline"
+                                style={{ color: 'var(--text-light)' }}
+                              >
+                                {limpandoEnvio ? '...' : 'limpar'}
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="text-xs px-1" style={{ color: 'var(--text-light)' }}>Fechamento ainda não enviado.</p>
+                          )
                         )}
 
                         <Button
