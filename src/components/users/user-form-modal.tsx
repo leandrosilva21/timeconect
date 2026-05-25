@@ -300,6 +300,7 @@ const EMPTY_FORM = {
   name: '',
   email: '',
   password: '',
+  smtp_app_password: '',
   enabled: true,
   hourly_rate: '',
   rate_type: 'hourly' as 'hourly' | 'monthly',
@@ -411,6 +412,7 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
           name:                item.name,
           email:               item.email,
           password:            '',
+          smtp_app_password:   '', // write-only no BE — nunca retorna; mantém em branco
           enabled:             item.enabled,
           hourly_rate:         item.hourly_rate ? String(item.hourly_rate) : '',
           rate_type:           (item.rate_type as 'hourly' | 'monthly') ?? 'hourly',
@@ -491,6 +493,11 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
         payload.payroll_status = form.payroll_status || PAYROLL_STATUS_DEFAULT
       }
       if (!isEdit && form.password) payload.password = form.password
+      // App Password (envio de fechamentos via O365 do próprio usuário): write-only.
+      // Só envia quando preenchido — em branco mantém a senha já armazenada no BE.
+      if (showAppPassword && form.smtp_app_password.trim()) {
+        payload.smtp_app_password = form.smtp_app_password
+      }
 
       if (isEdit && editItem) {
         // Mudou o valor-hora OU o tipo do consultor (rate_type/consultant_type)? Abre o modal de
@@ -534,6 +541,8 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
   const isConsultor   = form.profiles.includes('consultor')
   const isCoordenador = form.profiles.includes('coordenador')
   const isParceiroAdm = form.profiles.includes('parceiro_adm')
+  // App Password de envio: só admin/administrativo enviam fechamentos a partir do próprio e-mail.
+  const showAppPassword = form.profiles.includes('administrator') || form.profiles.includes('administrativo')
   const hasRate       = isConsultor || isCoordenador || isParceiroAdm
   const needsPartner  = isParceiroAdm
   const selectedPartner = partners.find(p => p.id === Number(form.partner_id))
@@ -635,6 +644,20 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
               <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                 className="mt-1 bg-zinc-800 border-zinc-700 text-white h-9 text-xs" />
             </div>
+            {showAppPassword && (
+              <div>
+                <Label className="text-xs text-zinc-400">App Password (envio de e-mail)</Label>
+                <Input type="password" value={form.smtp_app_password}
+                  onChange={e => setForm(f => ({ ...f, smtp_app_password: e.target.value }))}
+                  placeholder={isEdit ? 'Deixe em branco para manter a atual' : ''}
+                  autoComplete="off"
+                  className="mt-1 bg-zinc-800 border-zinc-700 text-white h-9 text-xs" />
+                <p className="mt-1 text-[10px] text-zinc-500">
+                  Senha de aplicativo do Office 365 para enviar os fechamentos a partir do e-mail deste usuário. Deixe em branco para manter a atual.
+                </p>
+              </div>
+            )}
+
             {!isEdit && (
               <div>
                 <Label className="text-xs text-zinc-400">Senha inicial</Label>
