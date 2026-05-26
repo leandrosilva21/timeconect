@@ -75,6 +75,7 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [tab, setTab] = useState<'ativos' | 'canceladas'>('ativos')
   const [togglingKey, setTogglingKey] = useState<string | null>(null)
   const [removingKey, setRemovingKey] = useState<string | null>(null)
@@ -210,6 +211,34 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
     }
   }
 
+  async function exportXls() {
+    if (!yearMonth) return
+    setExporting(true)
+    try {
+      const res = await fetch(
+        `/api/v1/fechamento-folha/${yearMonth}/export?empresa=bizify`,
+        { credentials: 'same-origin', headers: { Accept: 'application/vnd.ms-excel' } },
+      )
+      if (!res.ok) throw new Error(`Erro ${res.status}`)
+      const cd = res.headers.get('Content-Disposition') ?? ''
+      const match = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
+      const filename = match ? decodeURIComponent(match[1]) : `Folha_Bizify_${yearMonth}.xls`
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err: unknown) {
+      toast.error(`Erro ao gerar a planilha: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   async function onPickFile(ev: React.ChangeEvent<HTMLInputElement>) {
     const file = ev.target.files?.[0]
     if (ev.target) ev.target.value = '' // permite re-selecionar o mesmo arquivo
@@ -250,6 +279,10 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
             <Button size="sm" variant="secondary" icon={Plus} onClick={addManualRow}>Nova linha</Button>
             <Button size="sm" variant="secondary" onClick={load} disabled={loading} icon={RefreshCw} loading={loading}>
               Atualizar
+            </Button>
+            <Button size="sm" variant="secondary" icon={FileSpreadsheet} loading={exporting}
+              disabled={exporting || rows.length === 0} onClick={exportXls}>
+              {exporting ? 'Gerando…' : 'Gerar planilha (.xls)'}
             </Button>
             <Button size="sm" variant="primary" icon={Save} loading={saving} disabled={saving || rows.length === 0} onClick={save}>
               {saving ? 'Salvando…' : 'Salvar'}
