@@ -26,6 +26,13 @@ interface FolhaRow {
   // substituindo user_id (que é null nas linhas de sócio).
   row_key: string
   is_socio: boolean
+  // Linha de parceiro Raho (azul, identificada, editável como sócio).
+  is_raho?: boolean
+  partner_label?: string | null
+  // Valores ORIGINAIS calculados do mês (Raho) — p/ legenda "original" quando alterado.
+  producao_calc?: number
+  valor_hora_calc?: number
+  horas_calc?: number
   // Cooperado desativado no cadastro (ainda aparece em "Ativos", em cor âmbar).
   inativo: boolean
   // Linha ocultada da folha do mês. cancelado=true some de "Ativos" e vai p/ "Canceladas".
@@ -111,6 +118,33 @@ const cellInputClass =
 // Variante de texto (esquerda) para os campos editáveis textuais dos sócios.
 const cellInputClassText =
   'w-32 rounded-md px-2 py-1 text-xs ds-input focus:outline-none'
+
+// Input numérico com máscara pt-BR 0.000,00 (abordagem "centavos": digita só dígitos,
+// formata da direita). type="text" → SEM spinner/seta (setas não alteram o valor).
+// Guarda/emite número; `decimals` controla as casas (0 = inteiro, p.ex. dias).
+function MaskedNum({ value, onChange, decimals = 2, className, style }: {
+  value: number
+  onChange: (v: number) => void
+  decimals?: number
+  className?: string
+  style?: React.CSSProperties
+}) {
+  const display = value.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={display}
+      onChange={e => {
+        const digits = e.target.value.replace(/\D/g, '')
+        onChange(digits ? parseInt(digits, 10) / Math.pow(10, decimals) : 0)
+      }}
+      onFocus={e => e.target.select()}
+      className={className}
+      style={style}
+    />
+  )
+}
 // Cabeçalho fixo (sticky) no topo do container de rolagem. Background sólido via
 // token DS para as linhas não vazarem por trás (o Thead tem fundo translúcido).
 const stickyTh = 'sticky top-0 z-20 bg-[var(--surface)]'
@@ -152,6 +186,8 @@ export default function FechamentoFolhaPage() {
   const [removingKey, setRemovingKey] = useState<string | null>(null)
   // Aba ativa: "ativos" (cancelado=false) ou "canceladas" (cancelado=true).
   const [tab, setTab] = useState<'ativos' | 'canceladas'>('ativos')
+  // Filtro por categoria de linha.
+  const [categoria, setCategoria] = useState<'todos' | 'cooperados' | 'raho' | 'manuais'>('todos')
   // Cancelar/Reativar em andamento (por row_key) — desabilita a ação da linha.
   const [togglingKey, setTogglingKey] = useState<string | null>(null)
 
@@ -268,6 +304,10 @@ export default function FechamentoFolhaPage() {
     const set = filterUserIds.length > 0 ? new Set(filterUserIds) : null
     const filtered = rows.filter(r => {
       if (r.cancelado !== (tab === 'canceladas')) return false
+      // Filtro por categoria de linha.
+      if (categoria === 'raho'       && !r.is_raho) return false
+      if (categoria === 'manuais'    && !r.is_socio) return false
+      if (categoria === 'cooperados' && (r.is_socio || r.is_raho)) return false
       if (!set) return true
       // Com filtro ativo, traz SOMENTE os consultores selecionados (sócios não são forçados).
       return r.user_id != null && set.has(String(r.user_id))
@@ -277,7 +317,7 @@ export default function FechamentoFolhaPage() {
     const socios = filtered.filter(r => r.is_socio)
     const outros = filtered.filter(r => !r.is_socio)
     return [...socios, ...outros]
-  }, [rows, filterUserIds, tab])
+  }, [rows, filterUserIds, tab, categoria])
 
   // Atualiza um campo editável de uma linha no estado local (keyed por row_key).
   function setEdit<K extends keyof EditState>(rowKey: string, key: K, value: EditState[K]) {
@@ -402,7 +442,7 @@ export default function FechamentoFolhaPage() {
   // DELETE é idempotente no backend (seguro mesmo que a linha nunca tenha sido
   // salva). Após o DELETE, limpamos a linha e o seu estado de edição localmente.
   async function removeManualRow(r: FolhaRow) {
-    if (!r.socio_key || !r.socio_key.startsWith('manual_')) return
+    if (!r.socio_key) return // qualquer linha por socio_key é removível (sócios migrados + manuais)
     if (!window.confirm('Remover esta linha manual? Esta ação não pode ser desfeita.')) return
     setRemovingKey(r.socio_key)
     try {
@@ -428,9 +468,9 @@ export default function FechamentoFolhaPage() {
   async function setCancelado(r: FolhaRow, cancelado: boolean) {
     setTogglingKey(r.row_key)
     try {
-      const body = r.is_socio
-        ? { socio_key: r.socio_key, cancelado }
-        : { user_id: r.user_id, cancelado }
+      const body = r.user_id != null
+        ? { user_id: r.user_id, cancelado }
+        : { socio_key: r.socio_key, cancelado }
       await api.post(`/fechamento-folha/${yearMonth}/cancel`, body)
       setRows(prev => prev.map(x => x.row_key === r.row_key ? { ...x, cancelado } : x))
       toast.success(cancelado ? 'Linha cancelada' : 'Linha reativada')
@@ -445,7 +485,7 @@ export default function FechamentoFolhaPage() {
   // Espelha as fórmulas que o .xls vai produzir (lá são vermelhas / não importadas).
   // Produção: nas linhas normais é auto (r.producao); nas de sócio é editável (e.producao).
   function calc(r: FolhaRow, e: EditState) {
-    const producao = r.is_socio ? e.producao : r.producao
+    const producao = (r.is_socio || r.is_raho) ? e.producao : r.producao
     const totalRend = producao + e.variavel + e.reemb
     const totalDebitos = e.descontos + e.adiantamento
     const liquido = totalRend - totalDebitos
@@ -471,6 +511,21 @@ export default function FechamentoFolhaPage() {
             matricula: e.matricula,
             nome: e.nome,
             status: e.status,
+            valor_hora: e.valor_hora,
+            producao: e.producao,
+            dias_trabalhados: e.dias,
+            horas_trabalhadas: e.horas,
+            variavel: e.variavel,
+            reemb: e.reemb,
+            descontos_diversos: e.descontos,
+            adiantamento: e.adiantamento,
+            horista_mensalista: e.horista_mensalista,
+          }
+        }
+        if (r.is_raho) {
+          // Raho: VALORES editáveis (valor_hora/produção/horas) por user_id; cpf/nome/status seguem do cadastro.
+          return {
+            user_id: r.user_id,
             valor_hora: e.valor_hora,
             producao: e.producao,
             dias_trabalhados: e.dias,
@@ -513,6 +568,10 @@ export default function FechamentoFolhaPage() {
           total_rend: totalRend,
           total_debitos: totalDebitos,
           liquido,
+        }
+        if (r.is_raho) {
+          // Raho: reflete só os valores editáveis (identidade vem do cadastro).
+          return { ...base, horas: e.horas, valor_hora: e.valor_hora, producao: e.producao }
         }
         if (!r.is_socio) return base
         return {
@@ -593,6 +652,27 @@ export default function FechamentoFolhaPage() {
                 disabled={rows.length === 0}
                 wide
               />
+              {/* ── Filtro por categoria de linha ── */}
+              <div className="flex rounded-lg border overflow-hidden text-xs" style={{ borderColor: 'var(--brand-border)' }}>
+                {([
+                  ['todos',      'Todos'],
+                  ['cooperados', 'Cooperados'],
+                  ['raho',       'Raho'],
+                  ['manuais',    'Manuais'],
+                ] as const).map(([val, lbl]) => (
+                  <button
+                    key={val}
+                    onClick={() => setCategoria(val)}
+                    className="px-2.5 py-1.5 font-medium transition-colors whitespace-nowrap"
+                    style={{
+                      background: categoria === val ? 'rgba(0,245,255,0.12)' : 'transparent',
+                      color: categoria === val ? 'var(--text)' : 'var(--text-muted)',
+                    }}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
               {/* ── Incluir: novo usuário ou nova linha editável ── */}
               <div className="relative" ref={incluirRef}>
                 <Button
@@ -693,9 +773,9 @@ export default function FechamentoFolhaPage() {
             <span className="inline-flex items-center gap-1.5">
               <span
                 className="inline-block w-2.5 h-2.5 rounded-sm"
-                style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning-border)' }}
+                style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger)' }}
               />
-              Cooperado inativo
+              Em afastamento (usuário desativado — ocultar manualmente)
             </span>
           </div>
         )}
@@ -796,23 +876,31 @@ export default function FechamentoFolhaPage() {
                     if (!e) return null
                     const { totalRend, totalDebitos, liquido } = calc(r, e)
                     const socio = r.is_socio
-                    // Linha manual pode ser excluída; sócio fixo não.
-                    const manual = !!r.socio_key && r.socio_key.startsWith('manual_')
+                    // Raho: identidade (cpf/nome/status) read-only do usuário, mas VALORES editáveis.
+                    const valEditable = socio || !!r.is_raho
+                    // Linha por socio_key (sócios migrados + manuais) pode ser excluída.
+                    const manual = !!r.socio_key
+                    // Usuário desativado => "em afastamento": borda vermelha + badge; ocultação manual.
+                    const afastado = r.inativo
                     // Cor da linha via token DS (restaurada no leave pelo Tr.baseBackground):
                     //  • Canceladas (aba) → danger/muted
+                    //  • Raho (azul) → mantém azul mesmo em afastamento; a borda vermelha sinaliza
                     //  • Sócio (verde) → success-bg
-                    //  • Cooperado inativo → warning-bg (âmbar)
+                    //  • Em afastamento (desativado) → danger-bg + borda vermelha à esquerda
                     //  • demais → padrão (transparente)
                     const rowBg = r.cancelado
                       ? 'var(--danger-bg)'
-                      : socio
-                        ? 'var(--success-bg)'
-                        : r.inativo
-                          ? 'var(--warning-bg)'
-                          : undefined
+                      : r.is_raho
+                        ? 'rgba(59,130,246,0.13)' // azul — parceiro Raho
+                        : socio
+                          ? 'var(--success-bg)'
+                          : afastado
+                            ? 'var(--danger-bg)'
+                            : undefined
                     const busy = togglingKey === r.row_key
                     return (
-                      <Tr key={r.row_key} baseBackground={rowBg}>
+                      <Tr key={r.row_key} baseBackground={rowBg}
+                        className={afastado ? '[border-left:3px_solid_var(--danger)]' : undefined}>
                         {/* ── CPF: editável p/ sócio, read-only normal ── */}
                         <Td mono className={socio ? undefined : 'text-zinc-300'}>
                           {socio ? (
@@ -862,72 +950,89 @@ export default function FechamentoFolhaPage() {
                               className={`${cellInputClassText} w-44`}
                               style={cellInputStyle}
                             />
-                          ) : r.nome}
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5">
+                              {r.is_raho && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                                  style={{ background: 'rgba(59,130,246,0.2)', color: '#3b82f6' }}>
+                                  {r.partner_label ?? 'Raho'}
+                                </span>
+                              )}
+                              {afastado && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                                  style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>
+                                  Em afastamento
+                                </span>
+                              )}
+                              {r.nome}
+                            </span>
+                          )}
                         </Td>
 
                         {/* ── Editável (sempre): Dias ── */}
                         <Td right>
-                          <input
-                            type="number"
+                          <MaskedNum
                             value={e.dias}
-                            min={0}
-                            onChange={ev => setEdit(r.row_key, 'dias', toNum(ev.target.value))}
+                            decimals={0}
+                            onChange={v => setEdit(r.row_key, 'dias', v)}
                             className={`${cellInputClass} w-16`}
                             style={cellInputStyle}
                           />
                         </Td>
 
-                        {/* ── Horas: editável p/ sócio; normal = 180 fixo (não via apontamento) ── */}
-                        <Td right mono className={socio ? undefined : 'text-zinc-300 tabular-nums'}>
-                          {socio ? (
-                            <input
-                              type="number"
+                        {/* ── Horas: editável p/ sócio e Raho; normal = 180 fixo ── */}
+                        <Td right mono className={valEditable ? undefined : 'text-zinc-300 tabular-nums'}>
+                          {valEditable ? (
+                            <MaskedNum
                               value={e.horas}
-                              step="0.01"
-                              min={0}
-                              onChange={ev => setEdit(r.row_key, 'horas', toNum(ev.target.value))}
+                              decimals={2}
+                              onChange={v => setEdit(r.row_key, 'horas', v)}
                               className={cellInputClass}
                               style={cellInputStyle}
                             />
                           ) : fmtNum(r.horas)}
                         </Td>
 
-                        {/* ── Valor Hora: editável p/ sócio (4 casas); read-only normal ── */}
-                        <Td right mono className={socio ? undefined : 'text-zinc-400'}>
-                          {socio ? (
-                            <input
-                              type="number"
+                        {/* ── Valor Hora: editável p/ sócio e Raho (4 casas); read-only normal ── */}
+                        <Td right mono className={valEditable ? undefined : 'text-zinc-400'}>
+                          {valEditable ? (
+                            <MaskedNum
                               value={e.valor_hora}
-                              step="0.0001"
-                              min={0}
-                              onChange={ev => setEdit(r.row_key, 'valor_hora', toNum(ev.target.value))}
+                              decimals={2}
+                              onChange={v => setEdit(r.row_key, 'valor_hora', v)}
                               className={cellInputClass}
                               style={cellInputStyle}
                             />
                           ) : fmtNum(r.valor_hora, 2)}
                         </Td>
 
-                        {/* ── Produção: editável p/ sócio; read-only normal ── */}
-                        <Td right className={socio ? undefined : 'text-zinc-300'}>
-                          {socio ? (
-                            <input
-                              type="number"
-                              value={e.producao}
-                              step="0.01"
-                              onChange={ev => setEdit(r.row_key, 'producao', toNum(ev.target.value))}
-                              className={cellInputClass}
-                              style={cellInputStyle}
-                            />
+                        {/* ── Produção: editável p/ sócio e Raho; read-only normal ── */}
+                        <Td right className={valEditable ? undefined : 'text-zinc-300'}>
+                          {valEditable ? (
+                            <div className="flex flex-col items-end gap-0.5">
+                              <MaskedNum
+                                value={e.producao}
+                                decimals={2}
+                                onChange={v => setEdit(r.row_key, 'producao', v)}
+                                className={cellInputClass}
+                                style={cellInputStyle}
+                              />
+                              {r.is_raho && r.producao_calc != null && Math.abs(e.producao - r.producao_calc) > 0.005 && (
+                                <span className="text-[10px] whitespace-nowrap" style={{ color: 'var(--text-light)' }}
+                                  title="Valor calculado do mês (antes da alteração)">
+                                  orig: {formatBRL(r.producao_calc)}
+                                </span>
+                              )}
+                            </div>
                           ) : formatBRL(r.producao)}
                         </Td>
 
                         {/* ── Editável (sempre): Variável ── */}
                         <Td right>
-                          <input
-                            type="number"
+                          <MaskedNum
                             value={e.variavel}
-                            step="0.01"
-                            onChange={ev => setEdit(r.row_key, 'variavel', toNum(ev.target.value))}
+                            decimals={2}
+                            onChange={v => setEdit(r.row_key, 'variavel', v)}
                             className={cellInputClass}
                             style={cellInputStyle}
                           />
@@ -935,11 +1040,10 @@ export default function FechamentoFolhaPage() {
 
                         {/* ── Editável (sempre): Reemb ── */}
                         <Td right>
-                          <input
-                            type="number"
+                          <MaskedNum
                             value={e.reemb}
-                            step="0.01"
-                            onChange={ev => setEdit(r.row_key, 'reemb', toNum(ev.target.value))}
+                            decimals={2}
+                            onChange={v => setEdit(r.row_key, 'reemb', v)}
                             className={cellInputClass}
                             style={cellInputStyle}
                           />
@@ -952,11 +1056,10 @@ export default function FechamentoFolhaPage() {
 
                         {/* ── Editável (sempre): Descontos Diversos ── */}
                         <Td right>
-                          <input
-                            type="number"
+                          <MaskedNum
                             value={e.descontos}
-                            step="0.01"
-                            onChange={ev => setEdit(r.row_key, 'descontos', toNum(ev.target.value))}
+                            decimals={2}
+                            onChange={v => setEdit(r.row_key, 'descontos', v)}
                             className={cellInputClass}
                             style={cellInputStyle}
                           />
@@ -964,11 +1067,10 @@ export default function FechamentoFolhaPage() {
 
                         {/* ── Editável (sempre): Adiantamento ── */}
                         <Td right>
-                          <input
-                            type="number"
+                          <MaskedNum
                             value={e.adiantamento}
-                            step="0.01"
-                            onChange={ev => setEdit(r.row_key, 'adiantamento', toNum(ev.target.value))}
+                            decimals={2}
+                            onChange={v => setEdit(r.row_key, 'adiantamento', v)}
                             className={cellInputClass}
                             style={cellInputStyle}
                           />
@@ -1061,10 +1163,10 @@ export default function FechamentoFolhaPage() {
                               type="button"
                               onClick={() => setCancelado(r, true)}
                               disabled={busy || r.user_id == null}
-                              title="Cancelar / ocultar linha"
-                              aria-label="Cancelar / ocultar linha"
+                              title={afastado ? 'Ocultar (em afastamento)' : 'Cancelar / ocultar linha'}
+                              aria-label={afastado ? 'Ocultar (em afastamento)' : 'Cancelar / ocultar linha'}
                               className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ds-row-hover"
-                              style={{ color: r.inativo ? 'var(--warning)' : 'var(--text-muted)' }}
+                              style={{ color: afastado ? 'var(--danger)' : 'var(--text-muted)' }}
                             >
                               <EyeOff size={14} />
                               Cancelar
