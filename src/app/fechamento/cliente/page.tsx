@@ -203,11 +203,20 @@ export default function FechamentoClientePage() {
   const [emailMensagem, setEmailMensagem] = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
   // Destinatários — clientes não têm admin fixos, só cadastrados + avulsos.
-  const [cadastradoInput, setCadastradoInput] = useState('')            // e-mails do cliente (cadastrados), separados por vírgula
+  const [cadastradoEmails, setCadastradoEmails] = useState<string[]>([]) // e-mails do cliente (cadastrados) — chips
+  const [cadastradoDraft, setCadastradoDraft] = useState('')
   const [savingCadastro, setSavingCadastro] = useState(false)
   const [cadastroSaved, setCadastroSaved] = useState(false)
   const [avulsoEmails, setAvulsoEmails] = useState<string[]>([])        // e-mails avulsos (só deste envio)
   const [avulsoDraft, setAvulsoDraft] = useState('')
+  const addCadastrado = () => {
+    const v = cadastradoDraft.trim().replace(/,$/, '').trim().toLowerCase()
+    if (!v) return
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast.error('E-mail inválido'); return }
+    setCadastradoEmails(prev => prev.includes(v) ? prev : [...prev, v])
+    setCadastradoDraft(''); setCadastroSaved(false)
+  }
+  const removeCadastrado = (em: string) => { setCadastradoEmails(prev => prev.filter(e => e !== em)); setCadastroSaved(false) }
   // true só no primeiro fetch (sem mensagem) — usado pra semear o textarea com o padrão.
   const previewSeededRef = useRef(false)
   // True só quando o press (mousedown) começou no próprio backdrop do compose.
@@ -376,6 +385,7 @@ export default function FechamentoClientePage() {
         html: string
         mensagem_padrao: string
         fechamento_email: string | null
+        emails_administrativos?: string[]
       }>(
         `/fechamento-cliente/${customerId}/${toYM}/email-preview`,
         mensagem !== undefined ? { mensagem } : {},
@@ -384,7 +394,7 @@ export default function FechamentoClientePage() {
       if (!previewSeededRef.current) {
         previewSeededRef.current = true
         setEmailMensagem(res.mensagem_padrao ?? '')
-        setCadastradoInput(res.fechamento_email ?? '')
+        setCadastradoEmails(res.emails_administrativos ?? (res.fechamento_email ? res.fechamento_email.split(/[,;]+/).map(e => e.trim()).filter(Boolean) : []))
       }
     } catch (err: unknown) {
       toast.error(`Erro ao gerar a prévia do e-mail: ${err instanceof Error ? err.message : 'falha na API'}`)
@@ -398,7 +408,7 @@ export default function FechamentoClientePage() {
     previewSeededRef.current = false
     setEmailMensagem('')
     setEmailPreviewHtml(null)
-    setCadastradoInput('')
+    setCadastradoEmails([])
     setAvulsoEmails([])
     setAvulsoDraft('')
     setCadastroSaved(false)
@@ -410,7 +420,7 @@ export default function FechamentoClientePage() {
     setComposeOpen(false)
     setEmailPreviewHtml(null)
     setEmailMensagem('')
-    setCadastradoInput('')
+    setCadastradoEmails([])
     setAvulsoEmails([])
     setAvulsoDraft('')
     setCadastroSaved(false)
@@ -443,11 +453,11 @@ export default function FechamentoClientePage() {
     setSavingCadastro(true)
     setCadastroSaved(false)
     try {
-      const res = await api.post<{ success: boolean; fechamento_email: string }>(
+      const res = await api.post<{ success: boolean; fechamento_email: string; emails_administrativos?: string[] }>(
         `/fechamento-cliente/${customerId}/fechamento-email`,
-        { fechamento_email: cadastradoInput },
+        { emails_administrativos: cadastradoEmails },
       )
-      setCadastradoInput(res.fechamento_email ?? cadastradoInput)
+      setCadastradoEmails(res.emails_administrativos ?? cadastradoEmails)
       setCadastroSaved(true)
       toast.success('E-mails salvos no cadastro do cliente.')
     } catch (err: unknown) {
@@ -459,9 +469,8 @@ export default function FechamentoClientePage() {
 
   async function sendReportEmail() {
     if (!customerId || !toYM) return
-    // Destinatários = cadastrados (split por vírgula) + avulsos, trim + dedupe.
-    const cadastrados = cadastradoInput.split(',').map(e => e.trim()).filter(Boolean)
-    const emails = Array.from(new Set([...cadastrados, ...avulsoEmails]))
+    // Destinatários = cadastrados (chips) + avulsos, dedupe.
+    const emails = Array.from(new Set([...cadastradoEmails, ...avulsoEmails]))
     setSendingEmail(true)
     try {
       const res = await api.post<{ success: boolean; message: string }>(
@@ -1207,31 +1216,53 @@ export default function FechamentoClientePage() {
                   </label>
                   <div className="flex items-center gap-2">
                     <input
-                      type="text"
-                      value={cadastradoInput}
-                      onChange={e => { setCadastradoInput(e.target.value); setCadastroSaved(false) }}
-                      placeholder="email1@dominio.com, email2@dominio.com"
+                      type="email"
+                      value={cadastradoDraft}
+                      onChange={e => setCadastradoDraft(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addCadastrado() } }}
+                      placeholder="adicionar e-mail e pressionar Enter"
                       className="flex-1 rounded-lg px-3 py-2 text-sm ds-input focus:outline-none"
                       style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
                     />
+                    <Button size="sm" variant="secondary" icon={Plus} onClick={addCadastrado}>
+                      Adicionar
+                    </Button>
                     <Button
                       size="sm"
                       variant="secondary"
                       icon={Save}
                       loading={savingCadastro}
                       onClick={saveCadastro}
+                      disabled={cadastradoEmails.length === 0}
                       title="Salvar estes e-mails no cadastro do cliente"
                     >
                       Salvar no cadastro
                     </Button>
                   </div>
+                  {/* chips verdes (e-mails cadastrados) com × p/ remover */}
+                  {cadastradoEmails.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {cadastradoEmails.map(em => (
+                        <span
+                          key={em}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium"
+                          style={{ background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-border)' }}
+                        >
+                          {em}
+                          <button onClick={() => removeCadastrado(em)} title="Remover" style={{ color: 'var(--success)', lineHeight: 0 }}>
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {cadastroSaved && (
                     <p className="text-[11px] mt-1" style={{ color: 'var(--success)' }}>
                       Salvo no cadastro do cliente.
                     </p>
                   )}
                   <p className="text-[10px] mt-1" style={{ color: 'var(--text-light)' }}>
-                    Separe vários e-mails por vírgula. Estes ficam salvos para os próximos fechamentos.
+                    Adicione e-mails (Enter ou “Adicionar”). Clique em “Salvar no cadastro” para usá-los nos próximos fechamentos.
                   </p>
                 </div>
 
