@@ -14,6 +14,7 @@ import { PageHeader, Th, Tr, Td, Button, SkeletonTable, EmptyState } from '@/com
 interface BizRow {
   row_key: string
   socio_key: string | null // matrícula (chave de merge) — null em linha nova não salva
+  carried?: boolean // veio do mês anterior (prefill, ainda não salvo neste mês)
   cancelado: boolean
   matricula: string
   nome: string
@@ -314,6 +315,16 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
               </button>
             )
           })}
+        </div>
+      )}
+
+      {!loading && rows.some(r => r.carried) && (
+        <div
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+          style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', color: 'var(--text)' }}
+        >
+          <FileSpreadsheet size={15} style={{ color: 'var(--warning)' }} className="shrink-0" />
+          Lançamentos carregados do <strong>mês anterior</strong> — ajuste os valores e clique em <strong>Salvar</strong> para gravar este mês. Os meses passados ficam intactos.
         </div>
       )}
 
