@@ -21,6 +21,8 @@ interface Summary {
   contratos_proximos: number
   valor_total_reajustar: number
   valor_total_contratos: number
+  valor_total_acumulado: number
+  defasagem_acumulada: number
   indices: { IPCA: number; IGPM: number }
 }
 interface Row {
@@ -39,6 +41,9 @@ interface Row {
   percentual_estimado: number
   valor_estimado_reajuste: number
   periodo: { inicio: string; fim: string; label: string }
+  percentual_acumulado: number | null
+  valor_acumulado: number | null
+  periodo_acumulado: { inicio: string; fim: string; label: string } | null
 }
 interface HistRow {
   id: number
@@ -169,7 +174,7 @@ export default function DashboardReajustesPage() {
         )}
 
         {/* KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <Kpi icon={AlertTriangle} tone="danger" label="Vencidos"
             value={summary?.contratos_vencidos ?? 0}
             sub={summary ? `${formatBRL(summary.valor_total_reajustar)} impacto` : ''} loading={loading} />
@@ -181,6 +186,9 @@ export default function DashboardReajustesPage() {
           <Kpi icon={DollarSign} tone="primary" label="Impacto financeiro"
             value={summary ? formatBRL(summary.valor_total_reajustar) : '—'}
             sub="vencidos + próximos" loading={loading} isText />
+          <Kpi icon={CalendarClock} tone="warning" label="Defasagem acumulada"
+            value={summary ? formatBRL(summary.defasagem_acumulada) : '—'}
+            sub={summary ? `corrigido: ${formatBRL(summary.valor_total_acumulado)}` : ''} loading={loading} isText />
         </div>
 
         {/* Filtros */}
@@ -211,7 +219,7 @@ export default function DashboardReajustesPage() {
 
         {/* Tabela */}
         {loading ? (
-          <SkeletonTable rows={6} cols={7} />
+          <SkeletonTable rows={6} cols={8} />
         ) : filtered.length === 0 ? (
           <EmptyState icon={TrendingUp} title="Nenhum contrato" description="Nenhum contrato recorrente para os filtros atuais." />
         ) : (
@@ -225,6 +233,7 @@ export default function DashboardReajustesPage() {
                   <Th>Próximo reajuste</Th>
                   <Th>Status</Th>
                   <Th right>Impacto estimado</Th>
+                  <Th right>Acumulado (desde assinatura)</Th>
                   <Th>Ação</Th>
                 </tr>
               </thead>
@@ -253,6 +262,16 @@ export default function DashboardReajustesPage() {
                       <Td right mono className="tabular-nums">
                         <span style={{ color: 'var(--success)' }}>+{formatBRL(r.valor_estimado_reajuste)}</span>
                         <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>~{r.percentual_estimado}% {r.taxa_reajuste}</div>
+                      </Td>
+                      <Td right mono className="tabular-nums">
+                        {r.percentual_acumulado != null ? (
+                          <>
+                            <span style={{ color: 'var(--text)' }}>{formatBRL(r.valor_acumulado ?? 0)}</span>
+                            <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                              +{r.percentual_acumulado}% {r.taxa_reajuste} · {r.periodo_acumulado?.label}
+                            </div>
+                          </>
+                        ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                       </Td>
                       <Td>
                         <div className="inline-flex items-center gap-1.5">
