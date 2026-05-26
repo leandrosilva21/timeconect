@@ -1408,6 +1408,7 @@ function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loading: boo
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Ticket</th>
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Título</th>
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Solicitante</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Status Ticket</th>
                 <th className="text-right px-4 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Total no período</th>
                 <th className="text-right px-4 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Total histórico</th>
               </tr>
@@ -1420,18 +1421,29 @@ function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loading: boo
                   </td>
                   <td className="px-4 py-2" style={{ color: 'var(--text)' }}>{tk.title ?? '—'}</td>
                   <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{tk.requester ?? '—'}</td>
+                  <td className="px-4 py-2">
+                    {(() => {
+                      if (!tk.status) return <span style={{ color: 'var(--text-light)' }}>—</span>
+                      const b = String(tk.base_status ?? tk.status).toLowerCase()
+                      const c =
+                        /cancel/.test(b)                                          ? '#ef4444' :
+                        /(resolv|closed|fechad|encerrad)/.test(b)                 ? '#22c55e' :
+                        /(stop|parad|aguard|pend|espera)/.test(b)                 ? '#f59e0b' :
+                        /(new|novo|attend|atend|andamento|aberto|open)/.test(b)   ? '#00b8d4' :
+                                                                                    '#9ca3af'
+                      return (
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap"
+                          style={{ color: c, background: `${c}22`, border: `1px solid ${c}55` }}>
+                          {tk.status}
+                        </span>
+                      )
+                    })()}
+                  </td>
                   <td className="px-4 py-2 text-right font-mono">{fmtH(tk.period_minutes)}</td>
                   <td className="px-4 py-2 text-right font-mono" style={{ color: 'var(--text-muted)' }}>{fmtH(tk.lifetime_minutes)}</td>
                 </tr>
               ))}
             </tbody>
-            <tfoot>
-              <tr style={{ borderTop: '1px solid var(--border)', fontWeight: 600 }}>
-                <td colSpan={3} className="px-4 py-2 text-right">Totais ({rows.length} {rows.length === 1 ? 'ticket' : 'tickets'})</td>
-                <td className="px-4 py-2 text-right font-mono">{fmtH(rows.reduce((s, r) => s + (r.period_minutes || 0), 0))}</td>
-                <td className="px-4 py-2 text-right font-mono">{fmtH(rows.reduce((s, r) => s + (r.lifetime_minutes || 0), 0))}</td>
-              </tr>
-            </tfoot>
           </table>
         )}
       </div>
