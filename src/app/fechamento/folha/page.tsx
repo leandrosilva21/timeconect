@@ -15,6 +15,7 @@ import {
 import { MultiSelect } from '@/components/ui/multi-select'
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { UserFormModal } from '@/components/users/user-form-modal'
+import { BizifyFolha } from './BizifyFolha'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -190,6 +191,8 @@ export default function FechamentoFolhaPage() {
   const [categoria, setCategoria] = useState<'todos' | 'cooperados' | 'raho' | 'manuais'>('todos')
   // Cancelar/Reativar em andamento (por row_key) — desabilita a ação da linha.
   const [togglingKey, setTogglingKey] = useState<string | null>(null)
+  // Empresa (aba de topo): ERPSERV (cooperativa, esta tela) | Bizify (lançamentos manuais).
+  const [empresa, setEmpresa] = useState<'erpserv' | 'bizify'>('erpserv')
 
   // ─── Modal "Novo usuário" (cadastro inline de cooperado) ────────────────────
   // Cria um consultor cooperado direto no cadastro (POST /users), sem sair da
@@ -631,6 +634,31 @@ export default function FechamentoFolhaPage() {
   return (
     <AppLayout title="Fechamento — Folha Cooperativa">
       <div className="space-y-6">
+
+        {/* Abas por empresa: ERPSERV (cooperativa) | Bizify (lançamentos manuais) */}
+        <div className="flex gap-1 border-b" role="tablist" style={{ borderColor: 'var(--brand-border)' }}>
+          {([
+            { key: 'erpserv' as const, label: 'ERPSERV' },
+            { key: 'bizify' as const, label: 'Bizify' },
+          ]).map(c => {
+            const active = empresa === c.key
+            return (
+              <button
+                key={c.key}
+                role="tab"
+                onClick={() => setEmpresa(c.key)}
+                className="px-4 py-2 text-sm font-semibold transition-colors -mb-px border-b-2"
+                style={{ borderColor: active ? 'var(--primary)' : 'transparent', color: active ? 'var(--text)' : 'var(--text-muted)' }}
+              >
+                {c.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {empresa === 'bizify' ? (
+          <BizifyFolha yearMonth={yearMonth} setYearMonth={setYearMonth} />
+        ) : (<>
 
         <PageHeader
           icon={FileSpreadsheet}
@@ -1182,6 +1210,8 @@ export default function FechamentoFolhaPage() {
             </div>
           )}
         </div>
+
+        </>)}
 
         {/* ── Modal: Novo usuário (cooperado) ── */}
         <Modal
