@@ -13,6 +13,7 @@ import { formatBRL } from '@/lib/format'
 import { toast } from 'sonner'
 import { Layers, Search, ChevronDown, ChevronRight, Users, TrendingUp, Clock, BarChart2, AlertTriangle, DollarSign, X, UserCheck, Pencil, Trash2, Plus, Edit2, MessageCircle, Eye, Check, UserPlus, CalendarPlus, CalendarOff, ChevronUp, ChevronsUpDown, FileText, Download } from 'lucide-react'
 import { ProjectMessages } from '@/components/shared/ProjectMessages'
+import { MonthlyAccrualTable } from '@/components/projects/monthly-accrual-table'
 import { ProjectDataModal } from '@/components/shared/ProjectDataModal'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { PageHeader } from '@/components/ds'
@@ -2981,7 +2982,15 @@ export default function GestaoProjetosPage() {
                 <button onClick={() => { setAportesProject(null); setContribModal({ open: false }) }} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] transition-colors"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-5">
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              {((aportesProject.contract_type_display ?? aportesProject.contract_type?.name ?? '').toLowerCase().includes('mensal')) && (
+                <MonthlyAccrualTable
+                  startDate={(aportesProject as any).start_date ?? null}
+                  hoursPerMonth={aportesProject.sold_hours ?? 0}
+                  accumulated={(aportesProject as any).accumulated_sold_hours ?? null}
+                  endDate={(aportesProject as any).encerramento_date ?? null}
+                />
+              )}
               {contribLoading && <p className="text-xs text-center py-8" style={{ color: 'var(--text-light)' }}>Carregando aportes...</p>}
               {!contribLoading && contributions.length === 0 && (
                 <div className="text-center py-10">

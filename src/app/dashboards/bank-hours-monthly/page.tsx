@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation'
 import { Eye } from 'lucide-react'
 import DashboardIndicators from '@/components/dashboard/DashboardIndicators'
 import ProjectTimesheetsModal from '@/components/dashboard/ProjectTimesheetsModal'
+import { MonthlyAccrualTable } from '@/components/projects/monthly-accrual-table'
 import {
   useMaintenanceInline, exportMaintenanceToXLSX,
   ExportButton, InlineTimesheetsTable, InlineTicketSummaryTable, InlineExpensesTable, TimesheetDetailModal,
@@ -581,6 +582,14 @@ export default function BankHoursMonthlyPage() {
                         accent={summary.hourly_rate != null && (summary.amount_to_pay ?? 0) > 0 ? 'danger' : undefined}
                       />
                     </div>
+
+                    {/* Horas mensais incrementadas (acúmulo do banco mensal) — acima dos aportes */}
+                    <MonthlyAccrualTable
+                      variant="brand"
+                      startDate={summary.start_date}
+                      hoursPerMonth={summary.contracted_hours ?? 0}
+                      accumulated={summary.accumulated_contracted_hours ?? null}
+                    />
 
                     {/* Histórico de Aporte — sempre exibido (com estado vazio). */}
                     <div className="rounded-2xl overflow-x-auto overflow-y-clip" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
