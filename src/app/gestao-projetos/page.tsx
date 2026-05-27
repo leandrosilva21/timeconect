@@ -3581,6 +3581,16 @@ export default function GestaoProjetosPage() {
                       </div>
                     </div>
 
+                    {/* Horas mensais incrementadas (acúmulo do banco mensal) — só BH Mensal */}
+                    {((p.contract_type_display ?? p.contract_type?.name ?? '').toLowerCase().includes('mensal')) && (
+                      <MonthlyAccrualTable
+                        startDate={(p as any).start_date ?? null}
+                        hoursPerMonth={p.sold_hours ?? 0}
+                        accumulated={(p as any).accumulated_sold_hours ?? null}
+                        endDate={(p as any).encerramento_date ?? null}
+                      />
+                    )}
+
                     {/* Equipe */}
                     <div>
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>Equipe</p>
