@@ -375,7 +375,7 @@ function ExpInfoRow({ icon: Icon, label, value, children, last }: {
 }
 
 function ExpApproveModal({
-  item, onClose, onApprove, onReject, onRequestAdjustment, approving,
+  item, onClose, onApprove, onReject, onRequestAdjustment, approving, isOwn = false,
 }: {
   item: Expense
   onClose: () => void
@@ -383,6 +383,7 @@ function ExpApproveModal({
   onReject: () => void
   onRequestAdjustment: (reason: string) => void
   approving: boolean
+  isOwn?: boolean
 }) {
   const [chargeClient, setChargeClient] = useState<boolean | null>(null)
   const [submitted,    setSubmitted]    = useState(false)
@@ -472,8 +473,16 @@ function ExpApproveModal({
             </div>
           )}
 
+          {/* Bloqueio: quem lançou não aprova (nem admin) */}
+          {mode === 'approve' && isOwn && (
+            <div className="rounded-xl border border-amber-600/40 bg-amber-950/20 px-4 py-3">
+              <p className="text-xs font-semibold text-amber-300">Você lançou esta despesa</p>
+              <p className="text-[11px] mt-1 text-amber-200/80">Não é possível aprovar a própria despesa — outro administrador precisa aprovar. Você ainda pode visualizar, solicitar ajuste ou rejeitar.</p>
+            </div>
+          )}
+
           {/* Cobrar do cliente */}
-          {mode === 'approve' && (
+          {mode === 'approve' && !isOwn && (
             <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 px-4 py-3 space-y-3">
               <p className={`text-xs font-semibold ${submitted && chargeClient === null ? 'text-red-400' : 'text-zinc-300'}`}>
                 Cobrar do cliente? *
@@ -529,10 +538,12 @@ function ExpApproveModal({
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-zinc-700 text-zinc-300 hover:bg-white/5 disabled:opacity-50 transition-colors">
                   Cancelar
                 </button>
-                <button onClick={handleApprove} disabled={approving}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-green-600 hover:bg-green-500 text-white disabled:opacity-50 transition-colors">
-                  <Check size={12} /> {approving ? 'Aprovando...' : 'Aprovar'}
-                </button>
+                {!isOwn && (
+                  <button onClick={handleApprove} disabled={approving}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-green-600 hover:bg-green-500 text-white disabled:opacity-50 transition-colors">
+                    <Check size={12} /> {approving ? 'Aprovando...' : 'Aprovar'}
+                  </button>
+                )}
               </>
             ) : (
               <>
@@ -1213,7 +1224,10 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
                 <td className="px-2 py-2.5 w-10" onClick={e => e.stopPropagation()}>
                   <RowMenu items={[
                     { label: 'Visualizar', icon: <Eye size={12} />, onClick: () => openExpApprove(exp) },
-                    { label: 'Aprovar', icon: <Check size={12} />, onClick: () => openExpApprove(exp) },
+                    // Quem lançou a despesa não pode aprová-la (nem admin)
+                    ...((exp.user?.id ?? (exp as any).user_id) === user?.id ? [] : [
+                      { label: 'Aprovar', icon: <Check size={12} />, onClick: () => openExpApprove(exp) },
+                    ]),
                     { label: 'Solicitar Ajuste', icon: <RotateCcw size={12} />, onClick: () => { setAdjModal({ open: true, id: exp.id, type: 'expense' }); setAdjReason('') } },
                     { label: 'Rejeitar', icon: <XCircle size={12} />, onClick: () => { setRejectModal({ open: true, ids: [exp.id] }); setRejectReason('') }, danger: true },
                     ...(exp.receipt_url ? [
@@ -1294,6 +1308,7 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
         <ExpApproveModal
           item={expApprove}
           approving={approving}
+          isOwn={(expApprove.user?.id ?? (expApprove as any).user_id) === user?.id}
           onClose={() => setExpApprove(null)}
           onApprove={approveExp}
           onRequestAdjustment={requestAdjustmentExp}
