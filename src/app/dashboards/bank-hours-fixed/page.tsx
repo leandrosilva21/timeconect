@@ -7,10 +7,11 @@ import { api } from '@/lib/api'
 import { sanitizeHtml, previewText } from '@/lib/sanitize'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
-import { BarChart2, Clock, TrendingUp, TrendingDown, AlertCircle, DollarSign, ChevronDown, ArrowUp, MousePointerClick, Download, MoreVertical, Calendar, User as UserIcon, Building2, Folder, Paperclip, FileText, X as CloseIcon, Eye, Undo2 } from 'lucide-react'
+import { BarChart2, Clock, TrendingUp, TrendingDown, AlertCircle, DollarSign, ChevronDown, Download, MoreVertical, Calendar, User as UserIcon, Building2, Folder, Paperclip, FileText, X as CloseIcon, Eye, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
 import DashboardIndicators from '@/components/dashboard/DashboardIndicators'
+import ProjectTimesheetsModal from '@/components/dashboard/ProjectTimesheetsModal'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { SearchSelect } from '@/components/ui/search-select'
@@ -19,7 +20,7 @@ import { KpiCard } from '@/components/ui/kpi-card'
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Customer  { id: number; name: string }
-interface Project   { id: number; name: string; code: string; status?: string; status_display?: string }
+interface Project   { id: number; name: string; code: string; status?: string; status_display?: string; service_type?: { code?: string | null; name?: string | null } | null }
 interface Executive { id: number; name: string }
 
 interface SummaryData {
@@ -223,10 +224,12 @@ export default function BankHoursFixedPage() {
   const [selectedCustomer,  setSelectedCustomer]  = useState<number | ''>('')
   const [selectedExecutive, setSelectedExecutive] = useState<number | ''>('')
   const [selectedProject,   setSelectedProject]   = useState<number | ''>('')
-  const [dateFrom, setDateFrom] = useState(isoFirstDay)
-  const [dateTo,   setDateTo]   = useState(isoLastDay)
-  const [refMonth, setRefMonth] = useState<number | null>(now.getMonth() + 1)
-  const [refYear,  setRefYear]  = useState<number | null>(now.getFullYear())
+  // Estado inicial do filtro de data = SEM filtro selecionado (qualquer data).
+  // Antes vinha pré-selecionado com o mês atual.
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo,   setDateTo]   = useState('')
+  const [refMonth, setRefMonth] = useState<number | null>(null)
+  const [refYear,  setRefYear]  = useState<number | null>(null)
   const [filterMode, setFilterMode] = useState<'month' | 'period'>('month')
 
   const [summary,      setSummary]      = useState<SummaryData | null>(null)
@@ -316,6 +319,9 @@ export default function BankHoursFixedPage() {
       setTicketSummary([])
     }
   }, [activeTab, selectedCustomer, selectedProject, dateFrom, dateTo, refMonth, refYear, isLeafProject, user?.customer_id, inlineReloadKey])
+
+  // Modal reutilizável "Ver apontamentos" da aba Projetos (filtro de data + export Excel/PDF).
+  const [tsModalProject, setTsModalProject] = useState<ProjectItem | null>(null)
 
   // Modais da aba Projetos: Ver Apontamentos + Detalhe
   const [projectTSModal, setProjectTSModal] = useState<{ projectId: number; projectName: string; isClosed?: boolean } | null>(null)
@@ -419,6 +425,22 @@ export default function BankHoursFixedPage() {
   // não agrega o cliente inteiro. (Antes admin via o agregado do cliente sem escolher projeto.)
   const hasFilters = !!selectedProject
 
+  // Projeto selecionado + se o contrato é do tipo Sustentação (esconde a aba "Sustentação").
+  const selProj = projects.find(p => p.id === selectedProject)
+  const isSustentacaoContract = (() => {
+    const st = selProj?.service_type
+    if (!st) return false
+    const c = (st.code ?? '').toLowerCase()
+    const n = (st.name ?? '').toLowerCase()
+    return c === 'sustentacao' || /sustenta|cloud|bizify/.test(n)
+  })()
+
+  // Abas "Sustentação" e "Indicadores do Suporte" só em contrato de sustentação;
+  // "Projetos" aparece sempre (em sustentação lista os projetos-filho). Reseta se some.
+  useEffect(() => {
+    if (!isSustentacaoContract && (activeTab === 'maintenance' || activeTab === 'indicators')) setActiveTab('total')
+  }, [isSustentacaoContract, activeTab])
+
   // Build base params
   const baseParams = useCallback(() => {
     const p = new URLSearchParams()
@@ -468,22 +490,15 @@ export default function BankHoursFixedPage() {
   // Projects tab data
   const fetchProjects = useCallback(() => {
     if (!hasFilters) return
+    // Aba Projetos ignora o filtro de data por design — sempre lista tudo.
     const p = baseParams()
-    if (!dateFilterCleared) {
-      if (dateFrom) p.set('date_from', dateFrom)
-      if (dateTo)   p.set('date_to',   dateTo)
-      if (!dateFrom && !dateTo) {
-        const [toM, toY] = resolveMonthYear()
-        p.set('month', String(toM)); p.set('year', String(toY))
-      }
-    }
     p.set('service_type_name', 'Projeto')
     setLoadingProjects(true)
     api.get<any>(`/dashboards/bank-hours-fixed/projects?${p}`)
       .then(r => setProjectsList(Array.isArray(r?.data) ? r.data : []))
       .catch(() => setProjectsList([]))
       .finally(() => setLoadingProjects(false))
-  }, [baseParams, resolveMonthYear, hasFilters, dateFilterCleared, dateFrom, dateTo])
+  }, [baseParams, hasFilters])
 
   // Maintenance tab data
   const fetchMaintenance = useCallback(() => {
@@ -522,14 +537,14 @@ export default function BankHoursFixedPage() {
           <table className="w-full text-sm" style={{ background: 'var(--brand-surface)' }}>
             <thead className="sticky top-0 z-10" style={{ borderBottom: '1px solid var(--brand-border)', background: 'rgba(255,255,255,0.02)' }}>
               <tr>
-                {['Código','Projeto','Status','Tipo','Horas Vendidas','Início',''].map(col => (
-                  <th key={col} className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wider ${['Horas Vendidas'].includes(col) ? 'text-right' : 'text-left'}`} style={{ color: 'var(--brand-subtle)' }}>{col}</th>
+                {['Código','Projeto','Status','Tipo','Horas Vendidas','Consumo','Início',''].map(col => (
+                  <th key={col} className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wider ${['Horas Vendidas','Consumo'].includes(col) ? 'text-right' : 'text-left'}`} style={{ color: 'var(--brand-subtle)' }}>{col}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {items.length === 0 ? (
-                <tr><td colSpan={7} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
+                <tr><td colSpan={8} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
               ) : items.map((p) => {
                 const contributions = p.total_contributions_hours || p.hour_contribution || 0
                 return (
@@ -562,13 +577,24 @@ export default function BankHoursFixedPage() {
                     <td className="px-5 py-3.5 text-right font-medium" style={{ color: 'var(--brand-text)' }}>
                       {p.sold_hours !== null ? (contributions > 0 ? `${p.sold_hours} (+${contributions})` : String(p.sold_hours)) : '—'}
                     </td>
+                    <td className="px-5 py-3.5 text-right font-medium" style={{ color: 'var(--brand-text)' }}>{fmtH(p.consumed_hours ?? 0)}</td>
                     <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--brand-muted)' }}>{p.start_date ? fmtDate(p.start_date) : '—'}</td>
                     <td className="px-3 py-3.5 text-right">
-                      <ProjectActionsMenu onViewTimesheets={() => setProjectTSModal({
-                        projectId: p.id,
-                        projectName: p.name,
-                        isClosed: String(p.contract_type_display ?? '').toLowerCase() === 'fechado',
-                      })} />
+                      <div className="inline-flex items-center gap-1 justify-end">
+                        <button
+                          onClick={() => setTsModalProject(p)}
+                          className="p-1.5 rounded-md hover:bg-white/5"
+                          style={{ color: 'var(--text-muted)' }}
+                          title="Ver apontamentos"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <ProjectActionsMenu onViewTimesheets={() => setProjectTSModal({
+                          projectId: p.id,
+                          projectName: p.name,
+                          isClosed: String(p.contract_type_display ?? '').toLowerCase() === 'fechado',
+                        })} />
+                      </div>
                     </td>
                   </tr>
                 )
@@ -616,14 +642,6 @@ export default function BankHoursFixedPage() {
               wide
             />
           )}
-          <SearchSelect
-            label="Projeto"
-            value={String(selectedProject)}
-            onChange={v => setSelectedProject(v === '' ? '' : Number(v))}
-            options={projects.map(p => ({ id: p.id, name: `${p.code} — ${p.name}` }))}
-            placeholder="Selecione um projeto"
-            wide
-          />
           {/* Status do projeto selecionado — em evidência, cores padrão (verde/vermelho/etc). */}
           {(() => {
             const sel = projects.find(p => String(p.id) === String(selectedProject))
@@ -677,43 +695,62 @@ export default function BankHoursFixedPage() {
           </div>
         </div>
 
-        {/* Empty — chama atenção pra selecionar o projeto */}
+        {/* Sem projeto selecionado → lista de projetos com botão "Ver". */}
         {!hasFilters && (
-          <div
-            className="rounded-2xl p-12 text-center relative overflow-hidden"
-            style={{
-              background: 'linear-gradient(135deg, rgba(0,245,255,0.06) 0%, rgba(0,245,255,0.02) 100%)',
-              border: '2px dashed var(--primary)',
-            }}
-          >
-            <div
-              className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 animate-pulse"
-              style={{
-                background: 'var(--primary)',
-                color: 'var(--primary-fg)',
-                boxShadow: '0 0 0 8px rgba(0,245,255,0.10), 0 0 0 16px rgba(0,245,255,0.05)',
-              }}
-            >
-              <MousePointerClick size={36} />
-            </div>
-            <p className="font-bold text-2xl mb-2" style={{ color: 'var(--text)' }}>
-              Selecione um projeto
-            </p>
-            <p className="text-base mb-6" style={{ color: 'var(--text-muted)' }}>
-              {isAdmin
-                ? 'Escolha um cliente e um projeto acima para visualizar os dados do banco de horas.'
-                : 'Use o seletor acima para escolher o projeto que deseja visualizar.'}
-            </p>
-            <div className="flex items-center justify-center gap-2 text-sm font-medium" style={{ color: 'var(--primary)' }}>
-              <ArrowUp size={18} className="animate-bounce" />
-              <span>Use o filtro de Projeto no topo da página</span>
-              <ArrowUp size={18} className="animate-bounce" />
-            </div>
+          <div className="rounded-2xl overflow-x-auto overflow-y-clip" style={{ border: '1px solid var(--brand-border)' }}>
+            <table className="w-full text-sm" style={{ background: 'var(--brand-surface)' }}>
+              <thead className="sticky top-0 z-10" style={{ borderBottom: '1px solid var(--brand-border)', background: 'rgba(255,255,255,0.02)' }}>
+                <tr>
+                  {['Código','Projeto','Status'].map(col => (
+                    <th key={col} className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{col}</th>
+                  ))}
+                  <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projects.length === 0 ? (
+                  <tr><td colSpan={4} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
+                ) : projects.map((p) => (
+                  <tr
+                    key={p.id}
+                    className="transition-colors"
+                    style={{ borderBottom: '1px solid var(--brand-border)' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,245,255,0.03)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td className="px-5 py-3.5">
+                      <span className="font-mono text-xs px-2 py-1 rounded-md" style={{ background: 'var(--brand-border)', color: 'var(--brand-subtle)' }}>{p.code}</span>
+                    </td>
+                    <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--brand-text)' }}>{p.name}</td>
+                    <td className="px-5 py-3.5">
+                      <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{p.status_display ?? p.status ?? '—'}</span>
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <button
+                        onClick={() => setSelectedProject(p.id)}
+                        className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all"
+                        style={{ background: 'var(--brand-primary)', color: 'var(--primary-fg)' }}
+                      >
+                        <Eye size={14} /> Ver
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
         {hasFilters && (
           <div className="space-y-6">
+            {/* Voltar à lista de projetos */}
+            <button
+              onClick={() => setSelectedProject('')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium"
+              style={{ background: 'var(--surface-hover)', color: 'var(--text)', border: '1px solid var(--border)' }}
+            >
+              ← Projetos
+            </button>
             {/* Tabs */}
             <div className="flex gap-1 p-1 rounded-2xl w-fit" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
               <Tab label="Total Geral"  active={activeTab === 'total'}       onClick={() => setActiveTab('total')} />
@@ -723,10 +760,10 @@ export default function BankHoursFixedPage() {
               {summary?.has_architecture && (
                 <Tab label="Arquitetura" active={activeTab === 'architecture'} onClick={() => setActiveTab('architecture')} />
               )}
-              {(summary?.has_support ?? true) && (
+              {isSustentacaoContract && (
                 <Tab label="Sustentação" active={activeTab === 'maintenance'} onClick={() => setActiveTab('maintenance')} />
               )}
-              {!isAusterContext && (
+              {!isAusterContext && isSustentacaoContract && (
                 <Tab label="Indicadores do Suporte" active={activeTab === 'indicators'} onClick={() => setActiveTab('indicators')} />
               )}
               <Tab label="Despesas" active={activeTab === 'expenses'} onClick={() => setActiveTab('expenses')} />
@@ -881,7 +918,7 @@ export default function BankHoursFixedPage() {
             )}
 
             {/* ── SUSTENTAÇÃO ── */}
-            {activeTab === 'maintenance' && (
+            {activeTab === 'maintenance' && isSustentacaoContract && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <KpiCard label="Consumo Acumulado" value={fmtH(summary?.maintenance_consumed_hours ?? 0)} icon={Clock} accent="primary" />
@@ -894,7 +931,7 @@ export default function BankHoursFixedPage() {
             )}
 
             {/* ── INDICADORES DO SUPORTE ── */}
-            {activeTab === 'indicators' && !isAusterContext && (
+            {activeTab === 'indicators' && !isAusterContext && isSustentacaoContract && (
               <DashboardIndicators
                 basePath="/dashboards/bank-hours-fixed/indicators"
                 params={indicatorParams}
@@ -1004,6 +1041,17 @@ export default function BankHoursFixedPage() {
       {/* ─ Modal: Detalhe do Apontamento (abas Sustentação/Arquitetura) ─ */}
       {inlineDetail && (
         <TimesheetDetailModal ts={inlineDetail} onClose={() => setInlineDetail(null)} />
+      )}
+
+      {/* ─ Modal reutilizável: Ver apontamentos do projeto (filtro + export) ─ */}
+      {tsModalProject && (
+        <ProjectTimesheetsModal
+          projectId={tsModalProject.id}
+          projectCode={tsModalProject.code}
+          projectName={tsModalProject.name}
+          customerId={selectedCustomer || null}
+          onClose={() => setTsModalProject(null)}
+        />
       )}
 
     </AppLayout>
