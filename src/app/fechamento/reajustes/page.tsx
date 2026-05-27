@@ -191,6 +191,11 @@ export default function DashboardReajustesPage() {
             sub={summary ? `corrigido: ${formatBRL(summary.valor_total_acumulado)}` : ''} loading={loading} isText />
         </div>
 
+        {/* Legenda dos KPIs financeiros */}
+        <p className="text-[11px] -mt-3 leading-snug" style={{ color: 'var(--text-light)' }}>
+          <strong style={{ color: 'var(--text-muted)' }}>Defasagem acumulada</strong>: soma dos contratos corrigidos pela inflação (IPCA/IGP-M) desde a assinatura, menos o valor atual — o gap histórico total, <em>não</em> o reajuste a aplicar agora (esse é o <strong style={{ color: 'var(--text-muted)' }}>Impacto financeiro</strong>, 1 ciclo de 12 meses).
+        </p>
+
         {/* Filtros */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative">
@@ -219,7 +224,7 @@ export default function DashboardReajustesPage() {
 
         {/* Tabela */}
         {loading ? (
-          <SkeletonTable rows={6} cols={8} />
+          <SkeletonTable rows={6} cols={9} />
         ) : filtered.length === 0 ? (
           <EmptyState icon={TrendingUp} title="Nenhum contrato" description="Nenhum contrato recorrente para os filtros atuais." />
         ) : (
@@ -228,6 +233,7 @@ export default function DashboardReajustesPage() {
               <thead>
                 <tr>
                   <Th>Cliente</Th>
+                  <Th right>Valor inicial</Th>
                   <Th right>Valor atual</Th>
                   <Th>Último reajuste</Th>
                   <Th>Próximo reajuste</Th>
@@ -248,6 +254,7 @@ export default function DashboardReajustesPage() {
                         <div className="font-medium" style={{ color: 'var(--text)' }}>{r.cliente_nome ?? '—'}</div>
                         <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{r.codigo ?? '—'}</div>
                       </Td>
+                      <Td right mono className="tabular-nums" style={{ color: 'var(--text-muted)' }}>{formatBRL(r.valor_inicial ?? r.valor_atual)}</Td>
                       <Td right mono className="tabular-nums">{formatBRL(r.valor_atual)}</Td>
                       <Td style={{ color: 'var(--text-muted)' }}>{fmtDate(r.data_ultimo_reajuste)}</Td>
                       <Td>
@@ -392,6 +399,7 @@ function EditCadastroModal({ row, onClose, onSaved }: { row: Row; onClose: () =>
   const [valorInicial, setValorInicial] = useState(row.valor_inicial != null ? String(row.valor_inicial) : '')
   const [taxa, setTaxa] = useState(row.taxa_reajuste ?? '')
   const [pct, setPct] = useState(row.pct_reajuste != null ? String(row.pct_reajuste) : '')
+  const [ultimoReajuste, setUltimoReajuste] = useState(row.data_ultimo_reajuste ?? '')
   const [saving, setSaving] = useState(false)
 
   const st = { background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }
@@ -404,6 +412,7 @@ function EditCadastroModal({ row, onClose, onSaved }: { row: Row; onClose: () =>
       await api.patch(`/contracts/${row.id}/recorrente`, {
         data_assinatura: assinatura || null,
         data_vencimento: vencimento || null,
+        data_ultimo_reajuste: ultimoReajuste || null,
         valor_inicial: valorInicial !== '' ? Number(valorInicial) : null,
         taxa_reajuste: taxa || null,
         pct_reajuste: pct !== '' ? Number(pct) : null,
@@ -445,6 +454,11 @@ function EditCadastroModal({ row, onClose, onSaved }: { row: Row; onClose: () =>
           <div>
             <label className={lbl} style={{ color: 'var(--text-muted)' }}>Vencimento (aniversário)</label>
             <input type="date" value={vencimento} onChange={e => setVencimento(e.target.value)} className={inp} style={st} />
+          </div>
+          <div>
+            <label className={lbl} style={{ color: 'var(--text-muted)' }}>Último reajuste</label>
+            <input type="date" value={ultimoReajuste} onChange={e => setUltimoReajuste(e.target.value)} className={inp} style={st} />
+            <p className="text-[10px] mt-1" style={{ color: 'var(--text-light)' }}>Âncora do período de 12 meses; deixe vazio se nunca reajustou.</p>
           </div>
         </div>
       </ModalBody>
