@@ -7,7 +7,7 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
-import { Zap, Clock, DollarSign, Download, Undo2 } from 'lucide-react'
+import { Zap, Clock, DollarSign, Download, Undo2, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import { KpiCard } from '@/components/ui/kpi-card'
 import {
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/ds'
 import * as XLSX from 'xlsx'
 import DashboardIndicators from '@/components/dashboard/DashboardIndicators'
+import ProjectTimesheetsModal from '@/components/dashboard/ProjectTimesheetsModal'
 import {
   useMaintenanceInline, exportMaintenanceToXLSX,
   ExportButton as MxExportButton,
@@ -32,14 +33,31 @@ import { SearchSelect } from '@/components/ui/search-select'
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Customer  { id: number; name: string }
-interface Project   { id: number; name: string; code: string; status?: string; status_display?: string }
+interface Project   { id: number; name: string; code: string; status?: string; status_display?: string; service_type?: { code?: string | null; name?: string | null } | null }
 interface Executive { id: number; name: string }
 
 interface SummaryData {
   consumed_hours: number
   month_consumed_hours: number
+  month_maintenance_hours?: number
+  month_projects_hours?: number
   amount_to_pay?: number | null
   hourly_rate?: number | null
+}
+
+// Projeto-filho do contrato On Demand selecionado (endpoint /dashboards/on-demand/projects).
+interface ProjectItem {
+  id: number
+  name: string
+  code: string
+  status_display: string
+  contract_type_display: string
+  sold_hours: number | null
+  hour_contribution: number | null
+  total_contributions_hours: number
+  consumed_hours: number
+  hours_balance: number
+  start_date: string | null
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -49,9 +67,44 @@ function fmtBRL(v: number | null | undefined) {
   if (v == null) return '—'
   return formatBRL(v ?? 0)
 }
+function fmtDate(s: string) {
+  // Mantém o dia/mês/ano literal do banco (YYYY-MM-DD) sem aplicar shift de fuso.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : new Date(s).toLocaleDateString('pt-BR')
+}
 
 // ─── Components ──────────────────────────────────────────────────────────────
 
+
+// Card "Consumo do Mês" com detalhamento Sustentação / Projeto (mesmo formato do
+// card de breakdown do BH Fixo, mas com o split por tipo de serviço).
+function ConsumoMesCard({ total, sustentacao, projeto, hint }: { total: number; sustentacao: number; projeto: number; hint?: string }) {
+  return (
+    <div className="rounded-2xl p-5 flex flex-col gap-3 min-w-0 overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(0,245,255,0.08)' }}>
+          <Clock size={13} color="#00F5FF" />
+        </div>
+        <span className="text-xs font-semibold uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Consumo do Mês</span>
+      </div>
+      <div className="flex items-end gap-1.5">
+        <span className="text-4xl font-extrabold tracking-tight" style={{ color: '#00F5FF', lineHeight: 1 }}>{fmtH(total)}</span>
+        <span className="text-base font-medium mb-0.5" style={{ color: 'var(--brand-muted)' }}>h</span>
+      </div>
+      <div className="flex flex-col gap-1.5 pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+        <div className="flex items-baseline justify-between gap-2 min-w-0">
+          <span className="text-[10px] uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Sustentação</span>
+          <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{fmtH(sustentacao)}h</span>
+        </div>
+        <div className="flex items-baseline justify-between gap-2 min-w-0">
+          <span className="text-[10px] uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Projeto</span>
+          <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{fmtH(projeto)}h</span>
+        </div>
+      </div>
+      {hint && <span className="text-[11px]" style={{ color: 'var(--brand-subtle)' }}>{hint}</span>}
+    </div>
+  )
+}
 
 function Tab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
@@ -106,7 +159,13 @@ export default function OnDemandPage() {
 
   const [summary,       setSummary]       = useState<SummaryData | null>(null)
   const [loadingSummary, setLoadingSummary] = useState(false)
-  const [activeTab, setActiveTab] = useState<'overview' | 'maintenance' | 'expenses' | 'indicators'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'projects' | 'maintenance' | 'expenses' | 'indicators'>('overview')
+  // Modal reutilizável "Ver apontamentos" da aba Projetos.
+  const [tsModalProject, setTsModalProject] = useState<ProjectItem | null>(null)
+
+  // Aba Projetos — lista os projetos-filho do contrato On Demand selecionado.
+  const [projectsList, setProjectsList] = useState<ProjectItem[]>([])
+  const [loadingProjects, setLoadingProjects] = useState(false)
 
   // Componentes embarcados (Sustentação + Despesas) — reusam endpoints do BH Fixo
   const mxKind: 'maintenance' | 'expenses' = activeTab === 'expenses' ? 'expenses' : 'maintenance'
@@ -120,12 +179,6 @@ export default function OnDemandPage() {
   })
   const [mxDetail, setMxDetail] = useState<any | null>(null)
   const [indicatorParams, setIndicatorParams] = useState<URLSearchParams>(new URLSearchParams())
-  const [inlineRows, setInlineRows] = useState<any[]>([])
-  const [inlineLoading, setInlineLoading] = useState(false)
-  const [inlineReloadKey, setInlineReloadKey] = useState(0)
-  const reloadInline = () => setInlineReloadKey(k => k + 1)
-  const [ticketSummary, setTicketSummary] = useState<Array<{ticket: string; title: string|null; requester: string|null; period_minutes: number; lifetime_minutes: number}>>([])
-  const [ticketSummaryLoading, setTicketSummaryLoading] = useState(false)
 
   // Load customers & executives (admin only)
   useEffect(() => {
@@ -178,6 +231,24 @@ export default function OnDemandPage() {
 
   useEffect(() => { fetchSummary() }, [fetchSummary])
 
+  // Aba Projetos — busca os projetos-filho do contrato selecionado.
+  // Ignora o filtro de data (lista all-time, como no BH Fixo): só usa customer/executive/project.
+  const fetchOnDemandProjects = useCallback(() => {
+    if (!selectedProject) { setProjectsList([]); return }
+    const p = new URLSearchParams()
+    if (selectedCustomer)                    p.set('customer_id',  String(selectedCustomer))
+    else if (isCliente && user?.customer_id) p.set('customer_id',  String(user.customer_id))
+    if (selectedExecutive) p.set('executive_id', String(selectedExecutive))
+    p.set('project_id', String(selectedProject))
+    setLoadingProjects(true)
+    api.get<any>(`/dashboards/on-demand/projects?${p}`)
+      .then(r => setProjectsList(Array.isArray(r?.data) ? r.data : []))
+      .catch(() => setProjectsList([]))
+      .finally(() => setLoadingProjects(false))
+  }, [selectedCustomer, selectedExecutive, selectedProject, isCliente, user?.customer_id])
+
+  useEffect(() => { if (activeTab === 'projects') fetchOnDemandProjects() }, [fetchOnDemandProjects, activeTab])
+
   // Atualiza params para o componente de indicadores sempre que buildParams mudar
   useEffect(() => {
     setIndicatorParams(buildParams())
@@ -199,48 +270,18 @@ export default function OnDemandPage() {
   // não agrega/mostra dados de outros projetos.
   const hasFilters = !!selectedProject
 
-  // Lista inline de apontamentos do projeto + ticket summary (mesmo padrão do BH Fixo/Sustentação)
+  // Contrato de sustentação → a aba "Sustentação" (breakdown) é redundante; esconde.
+  const isSustentacaoContract = (() => {
+    const st = projects.find(p => p.id === selectedProject)?.service_type
+    if (!st) return false
+    const c = (st.code ?? '').toLowerCase()
+    const n = (st.name ?? '').toLowerCase()
+    return c === 'sustentacao' || /sustenta|cloud|bizify/.test(n)
+  })()
+  // Se a aba Sustentação sumir enquanto ativa, volta pra Visão Geral.
   useEffect(() => {
-    if (!hasFilters || !selectedProject || activeTab !== 'overview') { setInlineRows([]); setTicketSummary([]); return }
-    setInlineLoading(true)
-    setTicketSummaryLoading(true)
-    const qs = new URLSearchParams()
-    qs.set('project_id', String(selectedProject))
-    if (selectedCustomer) qs.set('customer_id', String(selectedCustomer))
-    else if (user?.customer_id) qs.set('customer_id', String(user.customer_id))
-    if (dateFrom) qs.set('date_from', dateFrom)
-    if (dateTo)   qs.set('date_to',   dateTo)
-    api.get<{ data: any[] }>(`/dashboards/bank-hours-fixed/project-timesheets?${qs}`)
-      .then(r => setInlineRows(r.data ?? []))
-      .catch(() => setInlineRows([]))
-      .finally(() => setInlineLoading(false))
-    api.get<{ tickets: any[] }>(`/dashboards/bank-hours-fixed/project-ticket-summary?${qs}`)
-      .then(r => setTicketSummary(r.tickets ?? []))
-      .catch(() => setTicketSummary([]))
-      .finally(() => setTicketSummaryLoading(false))
-  }, [hasFilters, selectedProject, selectedCustomer, dateFrom, dateTo, user?.customer_id, activeTab, inlineReloadKey])
-
-  function exportInlineToXLSX() {
-    if (inlineRows.length === 0) return
-    const data = inlineRows.map(r => ({
-      Data: r.date ? r.date.split('-').reverse().join('/') : '',
-      Consultor: r.user?.name ?? '',
-      Código: r.project?.code ?? '',
-      Projeto: r.project?.name ?? '',
-      Ticket: r.ticket ?? '',
-      'Assunto Ticket': r.ticket_subject ?? '',
-      Descrição: previewText(r.description),
-      Horas: Number(((r.effort_minutes ?? 0) / 60).toFixed(2)),
-      Status: r.status_display ?? r.status ?? '',
-    }))
-    const ws = XLSX.utils.json_to_sheet(data)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'On Demand')
-    const stamp = new Date().toISOString().slice(0, 10)
-    XLSX.writeFile(wb, `on-demand_${stamp}.xlsx`)
-  }
-
-
+    if (!isSustentacaoContract && (activeTab === 'maintenance' || activeTab === 'indicators')) setActiveTab('overview')
+  }, [isSustentacaoContract, activeTab])
 
   return (
     <AppLayout title="Dashboard — On Demand">
@@ -279,14 +320,6 @@ export default function OnDemandPage() {
               wide
             />
           )}
-          <SearchSelect
-            label="Projeto"
-            value={String(selectedProject)}
-            onChange={v => setSelectedProject(v === '' ? '' : Number(v))}
-            options={projects.map(p => ({ id: p.id, name: `${p.code} — ${p.name}` }))}
-            placeholder="Selecione um projeto"
-            wide
-          />
           {/* Status do projeto selecionado — em evidência pro cliente (Encerrado/Cancelado/etc.) */}
           {(() => {
             const sel = projects.find(p => p.id === selectedProject)
@@ -340,29 +373,69 @@ export default function OnDemandPage() {
           </div>
         </div>
 
-        {/* Empty state */}
+        {/* Sem projeto selecionado → lista de projetos com botão "Ver". */}
         {!hasFilters && (
-          <div className="rounded-2xl p-16 flex flex-col items-center gap-4 text-center" style={{ border: '1px dashed var(--brand-border)' }}>
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(0,245,255,0.08)' }}>
-              <Zap size={22} color="#00F5FF" />
-            </div>
-            <div>
-              <p className="font-semibold mb-1" style={{ color: 'var(--brand-text)' }}>Nenhum projeto selecionado</p>
-              <p className="text-sm" style={{ color: 'var(--brand-muted)' }}>
-                {isAdmin ? 'Selecione um cliente e um projeto para carregar os dados.' : 'Selecione um projeto para visualizar os dados de consumo.'}
-              </p>
-            </div>
+          <div className="rounded-2xl overflow-x-auto overflow-y-clip" style={{ border: '1px solid var(--brand-border)' }}>
+            <table className="w-full text-sm" style={{ background: 'var(--brand-surface)' }}>
+              <thead className="sticky top-0 z-10" style={{ borderBottom: '1px solid var(--brand-border)', background: 'rgba(255,255,255,0.02)' }}>
+                <tr>
+                  {['Código','Projeto','Status'].map(col => (
+                    <th key={col} className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{col}</th>
+                  ))}
+                  <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projects.length === 0 ? (
+                  <tr><td colSpan={4} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
+                ) : projects.map((p) => (
+                  <tr
+                    key={p.id}
+                    className="transition-colors"
+                    style={{ borderBottom: '1px solid var(--brand-border)' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,245,255,0.03)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td className="px-5 py-3.5">
+                      <span className="font-mono text-xs px-2 py-1 rounded-md" style={{ background: 'var(--brand-border)', color: 'var(--brand-subtle)' }}>{p.code}</span>
+                    </td>
+                    <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--brand-text)' }}>{p.name}</td>
+                    <td className="px-5 py-3.5">
+                      <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{p.status_display ?? p.status ?? '—'}</span>
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <button
+                        onClick={() => setSelectedProject(p.id)}
+                        className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all"
+                        style={{ background: 'var(--brand-primary)', color: 'var(--primary-fg)' }}
+                      >
+                        <Eye size={14} /> Ver
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
         {hasFilters && (
           <div className="space-y-6">
+            {/* Voltar à lista de projetos */}
+            <button
+              onClick={() => setSelectedProject('')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium"
+              style={{ background: 'var(--surface-hover)', color: 'var(--text)', border: '1px solid var(--border)' }}
+            >
+              ← Projetos
+            </button>
             {/* Tab bar */}
             <div className="flex gap-1 p-1 rounded-2xl w-fit" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
               <Tab label="Visão Geral"  active={activeTab === 'overview'}    onClick={() => setActiveTab('overview')} />
-              <Tab label="Sustentação"  active={activeTab === 'maintenance'} onClick={() => setActiveTab('maintenance')} />
+              <Tab label="Projetos"     active={activeTab === 'projects'}    onClick={() => setActiveTab('projects')} />
+              {isSustentacaoContract && <Tab label="Sustentação"  active={activeTab === 'maintenance'} onClick={() => setActiveTab('maintenance')} />}
               <Tab label="Despesas"     active={activeTab === 'expenses'}    onClick={() => setActiveTab('expenses')} />
-              <Tab label="Indicadores"  active={activeTab === 'indicators'}  onClick={() => setActiveTab('indicators')} />
+              {isSustentacaoContract && <Tab label="Indicadores"  active={activeTab === 'indicators'}  onClick={() => setActiveTab('indicators')} />}
             </div>
 
             {/* ── VISÃO GERAL ── */}
@@ -374,12 +447,10 @@ export default function OnDemandPage() {
                   </div>
                 ) : summary ? (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <KpiCard
-                      label="Consumo do Mês"
-                      value={fmtH(summary.month_consumed_hours)}
-                      unit="h"
-                      icon={Clock}
-                      accent="primary"
+                    <ConsumoMesCard
+                      total={summary.month_consumed_hours}
+                      sustentacao={summary.month_maintenance_hours ?? 0}
+                      projeto={summary.month_projects_hours ?? 0}
                       hint={monthConsumptionHint}
                     />
                     <KpiCard
@@ -400,16 +471,18 @@ export default function OnDemandPage() {
                     <p className="text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum dado disponível para o período selecionado.</p>
                   </div>
                 )}
-
-                {/* Exportar + Lista de apontamentos + Apuração por Ticket */}
-                <ExportButton onClick={exportInlineToXLSX} disabled={inlineRows.length === 0} />
-                <InlineTimesheetsTable rows={inlineRows} loading={inlineLoading} onReverseApproved={canReverseApproval} onReverseSuccess={reloadInline} />
-                <InlineTicketSummaryTable rows={ticketSummary} loading={ticketSummaryLoading} />
               </div>
             )}
 
+            {/* ── PROJETOS ── */}
+            {activeTab === 'projects' && (
+              // Lista os projetos-filho do contrato On Demand selecionado (all-time,
+              // ignora o filtro de data — igual ao BH Fixo).
+              <OnDemandProjectsTable items={projectsList} loading={loadingProjects} onViewTimesheets={setTsModalProject} />
+            )}
+
             {/* ── SUSTENTAÇÃO ── */}
-            {activeTab === 'maintenance' && (
+            {activeTab === 'maintenance' && isSustentacaoContract && (
               <div className="space-y-4">
                 <MxExportButton onClick={() => exportMaintenanceToXLSX('maintenance', mxRows)} disabled={mxRows.length === 0} />
                 <MxTimesheets rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} onReverseApproved={canReverseApproval} onReverseSuccess={reloadMx} />
@@ -438,7 +511,7 @@ export default function OnDemandPage() {
             })()}
 
             {/* ── INDICADORES ── */}
-            {activeTab === 'indicators' && (
+            {activeTab === 'indicators' && isSustentacaoContract && (
               <DashboardIndicators
                 basePath="/dashboards/on-demand/indicators"
                 params={indicatorParams}
@@ -449,6 +522,16 @@ export default function OnDemandPage() {
         )}
       </div>
       {mxDetail && <TimesheetDetailModal ts={mxDetail} onClose={() => setMxDetail(null)} />}
+      {/* ─ Modal reutilizável: Ver apontamentos do projeto (filtro + export) ─ */}
+      {tsModalProject && (
+        <ProjectTimesheetsModal
+          projectId={tsModalProject.id}
+          projectCode={tsModalProject.code}
+          projectName={tsModalProject.name}
+          customerId={selectedCustomer || null}
+          onClose={() => setTsModalProject(null)}
+        />
+      )}
     </AppLayout>
   )
 }
@@ -606,6 +689,67 @@ function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loading: boo
           </table>
         )}
       </div>
+    </div>
+  )
+}
+
+// Tabela dos projetos-filho do contrato On Demand (mesmo estilo do BH Fixo).
+function OnDemandProjectsTable({ items, loading, onViewTimesheets }: { items: ProjectItem[]; loading: boolean; onViewTimesheets: (p: ProjectItem) => void }) {
+  return (
+    <div className="rounded-2xl overflow-x-auto overflow-y-clip mt-4" style={{ border: '1px solid var(--brand-border)' }}>
+      {loading ? (
+        <div className="p-6 space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-10 rounded-xl animate-pulse" style={{ background: 'var(--brand-border)' }} />
+          ))}
+        </div>
+      ) : (
+        <table className="w-full text-sm" style={{ background: 'var(--brand-surface)' }}>
+          <thead className="sticky top-0 z-10" style={{ borderBottom: '1px solid var(--brand-border)', background: 'rgba(255,255,255,0.02)' }}>
+            <tr>
+              {['Código','Projeto','Status','Tipo','Consumo','Início',''].map(col => (
+                <th key={col} className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wider ${col === 'Consumo' ? 'text-right' : 'text-left'}`} style={{ color: 'var(--brand-subtle)' }}>{col}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.length === 0 ? (
+              <tr><td colSpan={7} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
+            ) : items.map((p) => {
+              return (
+                <tr
+                  key={p.id}
+                  className="transition-colors"
+                  style={{ borderBottom: '1px solid var(--brand-border)' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,245,255,0.03)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <td className="px-5 py-3.5">
+                    <span className="font-mono text-xs px-2 py-1 rounded-md" style={{ background: 'var(--brand-border)', color: 'var(--brand-subtle)' }}>{p.code}</span>
+                  </td>
+                  <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--brand-text)' }}>{p.name}</td>
+                  <td className="px-5 py-3.5">
+                    <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{p.status_display}</span>
+                  </td>
+                  <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--brand-muted)' }}>{p.contract_type_display}</td>
+                  <td className="px-5 py-3.5 text-right font-medium" style={{ color: 'var(--brand-text)' }}>{fmtH(p.consumed_hours ?? 0)}</td>
+                  <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--brand-muted)' }}>{p.start_date ? fmtDate(p.start_date) : '—'}</td>
+                  <td className="px-3 py-3.5 text-right">
+                    <button
+                      onClick={() => onViewTimesheets(p)}
+                      className="p-1.5 rounded-md hover:bg-white/5"
+                      style={{ color: 'var(--text-muted)' }}
+                      title="Ver apontamentos"
+                    >
+                      <Eye size={16} />
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
     </div>
   )
 }

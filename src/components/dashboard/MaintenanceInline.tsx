@@ -281,13 +281,14 @@ export function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loadi
             <DataTableHeadCell>Ticket</DataTableHeadCell>
             <DataTableHeadCell>Título</DataTableHeadCell>
             <DataTableHeadCell>Solicitante</DataTableHeadCell>
+            <DataTableHeadCell>Status Ticket</DataTableHeadCell>
             <DataTableHeadCell align="right">Total no período</DataTableHeadCell>
             <DataTableHeadCell align="right">Total histórico</DataTableHeadCell>
           </DataTableHeadRow>
         </DataTableHead>
         <DataTableBody>
           {loading ? (
-            <DataTableEmpty colSpan={5} message="Carregando…" />
+            <DataTableEmpty colSpan={6} message="Carregando…" />
           ) : rows.map(tk => (
             <DataTableRow key={tk.ticket}>
               <DataTableCell>
@@ -295,6 +296,24 @@ export function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loadi
               </DataTableCell>
               <DataTableCell muted={false}>{tk.title ?? '—'}</DataTableCell>
               <DataTableCell>{tk.requester ?? '—'}</DataTableCell>
+              <DataTableCell>
+                {(() => {
+                  if (!tk.status) return <span style={{ color: 'var(--text-light)' }}>—</span>
+                  const b = String(tk.base_status ?? tk.status).toLowerCase()
+                  const c =
+                    /cancel/.test(b)                                        ? '#ef4444' :
+                    /(resolv|closed|fechad|encerrad)/.test(b)               ? '#22c55e' :
+                    /(stop|parad|aguard|pend|espera)/.test(b)               ? '#f59e0b' :
+                    /(new|novo|attend|atend|andamento|aberto|open)/.test(b) ? '#00b8d4' :
+                                                                              '#9ca3af'
+                  return (
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap"
+                      style={{ color: c, background: `${c}22`, border: `1px solid ${c}55` }}>
+                      {tk.status}
+                    </span>
+                  )
+                })()}
+              </DataTableCell>
               <DataTableCell align="right" numeric muted={false}>{fmtH(tk.period_minutes)}</DataTableCell>
               <DataTableCell align="right" numeric>{fmtH(tk.lifetime_minutes)}</DataTableCell>
             </DataTableRow>
@@ -303,7 +322,7 @@ export function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loadi
         {!loading && rows.length > 0 && (
           <tfoot style={{ borderTop: '1px solid var(--border)' }}>
             <tr>
-              <td colSpan={3} className="px-4 py-3 text-right text-[13px] font-semibold" style={{ color: 'var(--text)' }}>
+              <td colSpan={4} className="px-4 py-3 text-right text-[13px] font-semibold" style={{ color: 'var(--text)' }}>
                 Totais ({rows.length} {rows.length === 1 ? 'ticket' : 'tickets'})
               </td>
               <td className="px-4 py-3 text-right tabular-nums font-semibold text-[13px]" style={{ color: 'var(--text)' }}>{fmtH(rows.reduce((s, r) => s + (r.period_minutes || 0), 0))}</td>
