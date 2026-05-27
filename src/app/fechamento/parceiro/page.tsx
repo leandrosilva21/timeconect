@@ -9,6 +9,7 @@ import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { SearchSelect } from '@/components/ui/search-select'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
+import { useTableSort } from '@/hooks/use-table-sort'
 import { toast } from 'sonner'
 import { Lock, RefreshCw, Handshake, Printer, Filter, Mail, FileSpreadsheet, Send, X, Save, Plus, Check } from 'lucide-react'
 import {
@@ -49,6 +50,7 @@ interface DespesaRow {
   descricao: string
   categoria: string
   colaborador: string
+  cliente?: string | null
   projeto: string
   valor: number
   status: string
@@ -158,6 +160,7 @@ export default function FechamentoParceiroPage() {
 
   const [consultores, setConsultores] = useState<ConsultorRow[]>([])
   const [despesas, setDespesas]       = useState<DespesaRow[]>([])
+  const [reportMode, setReportMode]   = useState<'servicos' | 'despesa' | 'ambos'>('ambos')
   const [apontamentos, setApontamentos] = useState<ApontamentoRow[]>([])
 
   const [loadingConsult, setLoadingConsult]   = useState(false)
@@ -308,28 +311,30 @@ export default function FechamentoParceiroPage() {
     .total-box-label { font-size: 11px; opacity: 0.85; margin-bottom: 4px; }
     .total-box-value { font-size: 26px; font-weight: 700; }
     .page-footer { margin-top: 32px; display: flex; justify-content: space-between; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 10px; }
-    @media print { body { padding: 16px 20px; } }
+    @media print {
+      body { padding: 16px 20px; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    }
   `
 
   // Monta o HTML completo do relatório de serviços (usado tanto no preview em
   // iframe quanto na janela de impressão). Retorna null se faltam dados.
-  const buildServicosHtml = (): string | null => {
+  const buildServicosHtml = (mode: 'servicos' | 'despesa' | 'ambos' = 'ambos'): string | null => {
     if (!status || !apontamentos.length) return null
 
     const logoUrl = window.location.origin + '/logo.png'
     const competencia = yearMonth ? fmtYearMonth(yearMonth).replace('/', ' / ') : '—'
     const tipoPrec = isFixed ? `Precificação Fixa — Taxa: ${formatBRL(status.hourly_rate)}/h` : 'Precificação Variável'
 
-    // Agrupa apontamentos: tipo de contrato → consultor
-    const tipoMapPrint = new Map<string, { nome: string; consultores: Map<number, { consultor: string; taxa: number; horas: number; total: number; rows: ApontamentoRow[] }> }>()
+    // Agrupa apontamentos: um bloco por CONSULTOR (o projeto vai como coluna na linha,
+    // sem separar/totalizar por projeto — evita o relatório ficar grande demais).
+    const consultorMapPrint = new Map<number, { consultor: string; taxa: number; horas: number; total: number; rows: ApontamentoRow[] }>()
     apontamentos.forEach(a => {
-      if (!tipoMapPrint.has(a.tipo_contrato_code)) tipoMapPrint.set(a.tipo_contrato_code, { nome: a.tipo_contrato_nome, consultores: new Map() })
-      const tipo = tipoMapPrint.get(a.tipo_contrato_code)!
-      if (!tipo.consultores.has(a.user_id)) {
+      if (!consultorMapPrint.has(a.user_id)) {
         const c = consultores.find(c => c.user_id === a.user_id)
-        tipo.consultores.set(a.user_id, { consultor: a.consultor, taxa: c?.valor_hora ?? 0, horas: 0, total: 0, rows: [] })
+        consultorMapPrint.set(a.user_id, { consultor: a.consultor, taxa: c?.valor_hora ?? 0, horas: 0, total: 0, rows: [] })
       }
-      const entry = tipo.consultores.get(a.user_id)!
+      const entry = consultorMapPrint.get(a.user_id)!
       entry.rows.push(a)
       entry.horas += a.horas
       entry.total += a.horas * entry.taxa
@@ -358,78 +363,91 @@ export default function FechamentoParceiroPage() {
         </table>
       </div>`
 
-    const sectionsHtml = Array.from(tipoMapPrint.entries()).map(([, { nome, consultores: consMap }]) => {
-      const tipoHoras = Array.from(consMap.values()).reduce((s, c) => s + c.horas, 0)
-      const tipoTotal = Array.from(consMap.values()).reduce((s, c) => s + c.total, 0)
-
-      const consultoresHtml = Array.from(consMap.values()).map(({ consultor, taxa, horas, total, rows }) => {
-        const rowsHtml = rows.map(r => `
-          <tr class="main-row">
-            <td>${new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
-            <td>${r.cliente ?? '—'}</td>
-            <td>${r.projeto}</td>
-            <td>${r.solicitante ?? '—'}</td>
-            <td>${r.ticket ?? '0'}</td>
-            <td>${r.titulo ?? '—'}</td>
-            <td class="right">${r.horas.toFixed(2)}h</td>
-          </tr>`).join('')
-        return `
-          <div style="margin-bottom:16px">
-            <div class="section-header">
-              <div><span class="section-title" style="font-size:13px">${consultor}</span> <span style="font-size:12px;color:#7c3aed;font-weight:700">· ${horas.toFixed(2)}h</span></div>
-              <div class="section-rate">Valor/hora: <b>${formatBRL(taxa)}/h</b></div>
-            </div>
-            <table>
-              <thead><tr><th>Data</th><th>Cliente</th><th>Projeto</th><th>Solicitante</th><th>Ticket</th><th>Título</th><th class="right">Horas</th></tr></thead>
-              <tbody>${rowsHtml}</tbody>
-            </table>
-            <div class="section-footer">${horas.toFixed(2)}h × ${formatBRL(taxa)}/h = <b>${formatBRL(Math.round(total * 100) / 100)}</b></div>
-          </div>`
-      }).join('')
-
+    const sectionsHtml = Array.from(consultorMapPrint.values()).map(({ consultor, taxa, horas, total, rows }) => {
+      const rowsHtml = rows.map(r => `
+        <tr class="main-row">
+          <td>${new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+          <td>${r.cliente ?? '—'}</td>
+          <td>${r.projeto}</td>
+          <td>${r.solicitante ?? '—'}</td>
+          <td>${r.ticket ?? '0'}</td>
+          <td>${r.titulo ?? '—'}</td>
+          <td class="right">${r.horas.toFixed(2)}h</td>
+        </tr>`).join('')
       return `
-        <div class="section" style="margin-bottom:24px">
-          <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #7c3aed;padding-bottom:6px;margin-bottom:14px">
-            <span style="font-size:16px;font-weight:700;color:#111">${nome}</span>
-            <span style="font-size:11px;color:#6b7280">${tipoHoras.toFixed(2)}h · <b style="color:#7c3aed">${formatBRL(tipoTotal)}</b></span>
+        <div class="section" style="margin-bottom:20px">
+          <div class="section-header" style="border-bottom:2px solid #7c3aed;padding-bottom:6px;margin-bottom:10px">
+            <div><span class="section-title" style="font-size:15px;color:#111">${consultor}</span> <span style="font-size:12px;color:#7c3aed;font-weight:700">· ${horas.toFixed(2)}h</span></div>
+            <div class="section-rate">Valor/hora: <b>${formatBRL(taxa)}/h</b></div>
           </div>
-          ${consultoresHtml}
+          <table>
+            <thead><tr><th>Data</th><th>Cliente</th><th>Projeto</th><th>Solicitante</th><th>Ticket</th><th>Título</th><th class="right">Horas</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+          <div class="section-footer">${horas.toFixed(2)}h × ${formatBRL(taxa)}/h = <b>${formatBRL(Math.round(total * 100) / 100)}</b></div>
         </div>
         <hr class="divider"/>`
     }).join('')
 
+    const saldoDesp = despesas.filter(d => !d.is_paid).reduce((s, d) => s + d.valor, 0)
+    const despHtml = despesas.length === 0 ? '' : `
+      <div class="section" style="margin-bottom:24px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #0891b2;padding-bottom:6px;margin-bottom:14px">
+          <span style="font-size:16px;font-weight:700;color:#0e7490">Despesas reembolsadas no fechamento</span>
+          <span style="font-size:11px;color:#6b7280">Saldo: <b style="color:#0e7490">${formatBRL(saldoDesp)}</b></span>
+        </div>
+        <table>
+          <thead><tr><th>Data</th><th>Colaborador</th><th>Categoria</th><th>Cliente</th><th>Projeto</th><th>Pagamento</th><th class="right">Valor</th></tr></thead>
+          <tbody>${despesas.map(d => `
+            <tr class="main-row">
+              <td>${new Date(d.data + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+              <td>${d.colaborador}</td>
+              <td>${d.categoria}</td>
+              <td>${d.cliente ?? '—'}</td>
+              <td>${d.projeto}</td>
+              <td>${d.is_paid ? (d.paid_at ? 'Pago em ' + new Date(d.paid_at).toLocaleDateString('pt-BR') : 'Pago') : '<span style="color:#0e7490">No fechamento</span>'}</td>
+              <td class="right">${formatBRL(d.valor)}</td>
+            </tr>`).join('')}
+            <tr><td colspan="6" class="right" style="font-weight:bold">Saldo a pagar no fechamento</td><td class="right" style="font-weight:bold;color:#0e7490">${formatBRL(saldoDesp)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <hr class="divider"/>`
+
+    const isServ = mode !== 'despesa'
+    const isDesp = mode !== 'servicos'
+    const h1Label = mode === 'despesa' ? 'Relatório de Despesas' : mode === 'servicos' ? 'Relatório de Serviços' : 'Relatório de Fechamento'
+    const totalBoxHtml = mode === 'despesa'
+      ? `<div class="total-box" style="background:#0e7490;border-color:#0891b2;"><div class="total-box-block"><div class="total-box-label">Saldo a pagar no fechamento</div><div class="total-box-value">${formatBRL(saldoDesp)}</div></div></div>`
+      : mode === 'servicos'
+        ? `<div class="total-box"><div class="total-box-block"><div class="total-box-label">Total de Horas</div><div class="total-box-value">${totalHoras.toFixed(2)}h</div></div><div class="total-box-block" style="text-align:right"><div class="total-box-label">Total Serviços</div><div class="total-box-value">${formatBRL(totalServicos)}</div></div></div>`
+        : `<div class="total-box"><div class="total-box-block"><div class="total-box-label">Total de Horas</div><div class="total-box-value">${totalHoras.toFixed(2)}h</div></div><div class="total-box-block" style="text-align:center"><div class="total-box-label">Total Serviços</div><div class="total-box-value">${formatBRL(totalServicos)}</div></div>${saldoDesp > 0 ? `<div class="total-box-block" style="text-align:center"><div class="total-box-label">Despesas</div><div class="total-box-value">${formatBRL(saldoDesp)}</div></div>` : ''}<div class="total-box-block" style="text-align:right"><div class="total-box-label">Total a Pagar</div><div class="total-box-value">${formatBRL(totalServicos + saldoDesp)}</div></div></div>`
+
     const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="UTF-8"/>
-<title>Relatório de Fechamento — ${status.nome} — ${competencia}</title>
+<title>${h1Label} — ${status.nome} — ${competencia}</title>
 <style>${printStyles}</style>
 </head>
 <body>
   <div class="page-header">
     <div class="page-header-left"><img src="${logoUrl}" alt="Logo"/></div>
     <div class="page-header-right">
-      <h1>Relatório de Fechamento</h1>
+      <h1>${h1Label}</h1>
       <div class="subtitle">${tipoPrec}</div>
       <div class="meta"><b>Parceiro:</b> ${status.nome}</div>
       <div class="meta"><b>Competência:</b> ${competencia}</div>
     </div>
   </div>
 
-  ${sectionsHtml}
+  ${isServ ? sectionsHtml : ''}
 
-  ${resumoHtml}
+  ${isServ ? resumoHtml : ''}
 
-  <div class="total-box">
-    <div class="total-box-block">
-      <div class="total-box-label">Total de Horas</div>
-      <div class="total-box-value">${totalHoras.toFixed(2)}h</div>
-    </div>
-    <div class="total-box-block" style="text-align:right">
-      <div class="total-box-label">Total Serviços</div>
-      <div class="total-box-value">${formatBRL(totalServicos)}</div>
-    </div>
-  </div>
-  ${isFixed ? '<p style="margin-top:8px;font-size:10px;color:#9ca3af">* Taxa fixa aplicada a todos os consultores.</p>' : ''}
+  ${isDesp ? despHtml : ''}
+
+  ${totalBoxHtml}
+  ${isServ && isFixed ? '<p style="margin-top:8px;font-size:10px;color:#9ca3af">* Taxa fixa aplicada a todos os consultores.</p>' : ''}
 
   <div class="page-footer">
     <span>ERPSERV Consultoria — Documento gerado pelo sistema Minutor</span>
@@ -470,19 +488,20 @@ export default function FechamentoParceiroPage() {
           <td>${new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
           <td>${r.descricao}</td>
           <td>${r.categoria}</td>
+          <td>${r.cliente ?? '—'}</td>
           <td>${r.projeto}</td>
-          <td><span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:500;background:${r.status === 'approved' ? '#dcfce7' : '#fef9c3'};color:${r.status === 'approved' ? '#15803d' : '#854d0e'}">${EXPENSE_STATUS_LABELS[r.status] ?? r.status}</span></td>
-          <td class="right" style="color:#7c3aed;font-weight:600">${formatBRL(r.valor)}</td>
+          <td>${r.is_paid ? (r.paid_at ? 'Pago em ' + new Date(r.paid_at).toLocaleDateString('pt-BR') : 'Pago') : '<span style="color:#0e7490">No fechamento</span>'}</td>
+          <td class="right" style="color:#0e7490;font-weight:600">${formatBRL(r.valor)}</td>
         </tr>`).join('')
 
       return `
         <div class="section">
-          <div class="section-header">
-            <div><span class="section-title">${consultor}</span></div>
-            <div class="section-rate">Subtotal: <b>${formatBRL(sub)}</b></div>
+          <div class="section-header" style="background:#cffafe;border-left:3px solid #0891b2;padding:6px 10px;border-radius:0 4px 4px 0;">
+            <div><span class="section-title" style="color:#0e7490">${consultor}</span></div>
+            <div class="section-rate" style="color:#0e7490">Subtotal: <b>${formatBRL(sub)}</b></div>
           </div>
           <table>
-            <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Projeto</th><th>Status</th><th class="right">Valor</th></tr></thead>
+            <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Cliente</th><th>Projeto</th><th>Pagamento</th><th class="right">Valor</th></tr></thead>
             <tbody>${rowsHtml}</tbody>
           </table>
         </div>
@@ -508,9 +527,9 @@ export default function FechamentoParceiroPage() {
 
   ${sectionsHtml}
 
-  <div class="total-box">
+  <div class="total-box" style="background:#0e7490;border-color:#0891b2;">
     <div class="total-box-block">
-      <div class="total-box-label">Total de Despesas</div>
+      <div class="total-box-label">Saldo a pagar no fechamento</div>
       <div class="total-box-value">${formatBRL(totalDespesas)}</div>
     </div>
   </div>
@@ -534,7 +553,7 @@ export default function FechamentoParceiroPage() {
       // O `api` helper sempre faz res.json(); pra blob usamos fetch direto no
       // mesmo proxy /api/v1 (o middleware injeta o Authorization via cookie).
       const res = await fetch(
-        `/api/v1/fechamento-parceiro/${partnerId}/${yearMonth}/excel`,
+        `/api/v1/fechamento-parceiro/${partnerId}/${yearMonth}/excel?mode=${reportMode}`,
         { credentials: 'same-origin', headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } },
       )
       if (!res.ok) throw new Error(`Erro ${res.status}`)
@@ -571,7 +590,7 @@ export default function FechamentoParceiroPage() {
         fechamento_email: string | null
       }>(
         `/fechamento-parceiro/${partnerId}/${yearMonth}/email-preview`,
-        mensagem !== undefined ? { mensagem } : {},
+        mensagem !== undefined ? { mensagem, mode: reportMode } : { mode: reportMode },
       )
       setEmailPreviewHtml(res.html)
       if (!previewSeededRef.current) {
@@ -662,7 +681,7 @@ export default function FechamentoParceiroPage() {
     try {
       const res = await api.post<{ success: boolean; message: string }>(
         `/fechamento-parceiro/${partnerId}/${yearMonth}/enviar-email`,
-        { mensagem: emailMensagem, emails },
+        { mensagem: emailMensagem, emails, mode: reportMode },
       )
       toast.success(res?.message ?? 'Fechamento enviado por e-mail.')
       patchEnvio(partnerId, new Date().toISOString(), (user as any)?.name ?? null)
@@ -709,6 +728,10 @@ export default function FechamentoParceiroPage() {
     .filter(a => !filterApConsultor || a.user_id === filterApConsultor)
     .filter(a => !filterApStatus    || a.status === filterApStatus)
 
+  // Ordenação client-side (clique no cabeçalho) das listas de despesas e apontamentos.
+  const despesasSort = useTableSort(despesas)
+  const apontSort    = useTableSort(filteredApontamentos)
+
   const totalHoras    = consultores.reduce((s, r) => s + r.horas, 0)
   const totalServicos = consultores.reduce((s, r) => s + r.total, 0)
   // Antecipadas (is_paid) já foram pagas fora do fechamento → fora do total a pagar.
@@ -752,16 +775,21 @@ export default function FechamentoParceiroPage() {
                 onChange={(m, y) => { setMonth(m || null); setYear(y || null) }}
               />
               {tab === 'relatorio' && partnerId && (
-                <>
-                  <Button size="sm" variant="secondary" onClick={handlePrint}>
-                    <Printer size={12} className="mr-1" /> Serviços
-                  </Button>
-                  {despesas.length > 0 && (
-                    <Button size="sm" variant="secondary" onClick={handlePrintDespesas}>
-                      <Printer size={12} className="mr-1" /> Despesas
-                    </Button>
-                  )}
-                </>
+                <div className="flex items-center gap-0.5 rounded-lg p-0.5" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+                  {([['servicos', 'Serviços'], ['despesa', 'Despesas'], ['ambos', 'Ambos']] as const).map(([m, label]) => (
+                    <button
+                      key={m}
+                      onClick={() => setReportMode(m)}
+                      className="px-3 py-1.5 rounded text-xs font-medium transition-colors"
+                      style={{
+                        background: reportMode === m ? 'var(--brand-primary)' : 'transparent',
+                        color: reportMode === m ? '#000' : 'var(--brand-muted)',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -963,18 +991,18 @@ export default function FechamentoParceiroPage() {
                     <Table>
                       <Thead>
                         <tr>
-                          <Th>Data</Th>
-                          <Th>Descrição</Th>
-                          <Th>Categoria</Th>
-                          <Th>Consultor</Th>
-                          <Th>Projeto</Th>
-                          <Th>Status</Th>
+                          <Th {...despesasSort.thProps('data')}>Data</Th>
+                          <Th {...despesasSort.thProps('descricao')}>Descrição</Th>
+                          <Th {...despesasSort.thProps('categoria')}>Categoria</Th>
+                          <Th {...despesasSort.thProps('colaborador')}>Consultor</Th>
+                          <Th {...despesasSort.thProps('projeto')}>Projeto</Th>
+                          <Th {...despesasSort.thProps('status')}>Status</Th>
                           <Th>Pagamento</Th>
-                          <Th right>Valor</Th>
+                          <Th right {...despesasSort.thProps('valor')}>Valor</Th>
                         </tr>
                       </Thead>
                       <Tbody>
-                        {despesas.map(row => (
+                        {despesasSort.sorted.map(row => (
                           <Tr key={row.id}>
                             <Td className="text-xs tabular-nums">{new Date(row.data + 'T12:00:00').toLocaleDateString('pt-BR')}</Td>
                             <Td className="text-xs">{row.descricao}</Td>
@@ -1073,17 +1101,17 @@ export default function FechamentoParceiroPage() {
                     <Table>
                       <Thead>
                         <tr>
-                          <Th>Data</Th>
-                          <Th>Consultor</Th>
-                          <Th>Projeto</Th>
-                          <Th right>Horas</Th>
-                          <Th>Status</Th>
-                          <Th>Ticket</Th>
+                          <Th {...apontSort.thProps('data')}>Data</Th>
+                          <Th {...apontSort.thProps('consultor')}>Consultor</Th>
+                          <Th {...apontSort.thProps('projeto')}>Projeto</Th>
+                          <Th right {...apontSort.thProps('horas')}>Horas</Th>
+                          <Th {...apontSort.thProps('status')}>Status</Th>
+                          <Th {...apontSort.thProps('ticket')}>Ticket</Th>
                           <Th>Observação</Th>
                         </tr>
                       </Thead>
                       <Tbody>
-                        {filteredApontamentos.map(row => (
+                        {apontSort.sorted.map(row => (
                           <Tr key={row.id}>
                             <Td className="text-xs tabular-nums whitespace-nowrap">
                               {new Date(row.data + 'T12:00:00').toLocaleDateString('pt-BR')}
@@ -1160,7 +1188,7 @@ export default function FechamentoParceiroPage() {
                 loadingAp ? (
                   <div className="p-6"><SkeletonTable rows={4} cols={6} /></div>
                 ) : (() => {
-                  const reportHtml = buildServicosHtml()
+                  const reportHtml = buildServicosHtml(reportMode)
                   if (!reportHtml) {
                     return (
                       <EmptyState

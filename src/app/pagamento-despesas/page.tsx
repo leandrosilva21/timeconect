@@ -10,7 +10,7 @@ import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { ExpenseViewModal } from '@/components/ui/expense-view-modal'
 import {
   DollarSign, CheckCircle2, Receipt, ChevronDown, Handshake,
-  Search, X, Check, RotateCcw, Eye, Zap,
+  Search, X, Check, RotateCcw, Eye, Zap, CalendarClock,
 } from 'lucide-react'
 import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
@@ -271,9 +271,9 @@ export default function PagamentoDespesasPage() {
   const totalAmount   = useMemo(() => items.reduce((a, e) => a + (Number(e.amount) || 0), 0), [items])
   const paidItems     = useMemo(() => items.filter(e => e.is_paid), [items])
   // Parceiro não-pago = "pago no fechamento" (será quitado no fechamento, não é pagamento avulso).
-  const noFechamentoItems = useMemo(() => items.filter(e => !e.is_paid && e.user?.partner_id != null), [items])
-  // A Pagar = só os que precisam de pagamento avulso (não-parceiro, não-pagos).
-  const pendingItems  = useMemo(() => items.filter(e => !e.is_paid && e.user?.partner_id == null), [items])
+  const noFechamentoItems = useMemo(() => items.filter(e => !e.is_paid && (e.user?.partner_id != null || e.pagar_no_fechamento)), [items])
+  // A Pagar = só os que precisam de pagamento avulso (não-parceiro, não-pagos, não-encaminhados ao fechamento).
+  const pendingItems  = useMemo(() => items.filter(e => !e.is_paid && e.user?.partner_id == null && !e.pagar_no_fechamento), [items])
   const paidAmount    = useMemo(() => paidItems.reduce((a, e) => a + (Number(e.amount) || 0), 0), [paidItems])
   const pendingAmount = useMemo(() => pendingItems.reduce((a, e) => a + (Number(e.amount) || 0), 0), [pendingItems])
   const noFechamentoAmount = useMemo(() => noFechamentoItems.reduce((a, e) => a + (Number(e.amount) || 0), 0), [noFechamentoItems])
@@ -288,6 +288,23 @@ export default function PagamentoDespesasPage() {
       toast.success(newVal ? 'Despesa marcada como paga.' : 'Marcação removida.')
     } catch {
       toast.error('Erro ao atualizar pagamento.')
+    } finally {
+      setPaying(p => { const s = new Set(p); s.delete(exp.id); return s })
+    }
+  }, [])
+
+  // ── Encaminhar ao fechamento do consultor (ou voltar p/ A Pagar) ──
+  const toggleFechamento = useCallback(async (exp: Expense) => {
+    const newVal = !exp.pagar_no_fechamento
+    setPaying(p => new Set(p).add(exp.id))
+    try {
+      await api.post(`/expenses/${exp.id}/set-fechamento`, { pagar_no_fechamento: newVal })
+      setItems(prev => prev.map(e => e.id === exp.id
+        ? { ...e, pagar_no_fechamento: newVal, is_paid: newVal ? false : e.is_paid }
+        : e))
+      toast.success(newVal ? 'Encaminhada ao fechamento do consultor.' : 'Voltou para A Pagar.')
+    } catch {
+      toast.error('Erro ao atualizar.')
     } finally {
       setPaying(p => { const s = new Set(p); s.delete(exp.id); return s })
     }
@@ -317,8 +334,8 @@ export default function PagamentoDespesasPage() {
   // ── Itens visíveis na tabela (filtro de STATUS) ──
   const visibleItems = useMemo(() => {
     if (mainTab !== 'pagamento') return items // aba "Outros status": já filtrado por statusFilter no fetch
-    if (paidFilter === 'pending')       return items.filter(e => !e.is_paid && e.user?.partner_id == null)
-    if (paidFilter === 'no_fechamento') return items.filter(e => !e.is_paid && e.user?.partner_id != null)
+    if (paidFilter === 'pending')       return items.filter(e => !e.is_paid && e.user?.partner_id == null && !e.pagar_no_fechamento)
+    if (paidFilter === 'no_fechamento') return items.filter(e => !e.is_paid && (e.user?.partner_id != null || e.pagar_no_fechamento))
     if (paidFilter === 'paid')          return items.filter(e => e.is_paid)
     return items
   }, [items, paidFilter, mainTab])
@@ -608,6 +625,11 @@ export default function PagamentoDespesasPage() {
                             <button
                               disabled={isLoading}
                               onClick={() => togglePaid(exp)}
+                              title={isPaid
+                                ? 'Desfazer pagamento'
+                                : exp.user?.partner_id != null
+                                  ? 'Pagar agora — antecipa o pagamento que seria feito no fechamento do parceiro'
+                                  : 'Marcar despesa como paga'}
                               className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
                               style={isPaid
                                 ? { background: 'rgba(239,68,68,0.10)', color: '#EF4444' }
@@ -619,10 +641,29 @@ export default function PagamentoDespesasPage() {
                               ) : isPaid ? (
                                 <><RotateCcw size={11} /> Desfazer</>
                               ) : exp.user?.partner_id != null ? (
-                                <><Zap size={11} /> Antecipar pagamento</>
+                                <><Zap size={11} /> Pagar</>
                               ) : (
                                 <><CheckCircle2 size={11} /> Pagar</>
                               )}
+                            </button>
+                            )}
+                            {/* No fechamento / Voltar — qualquer consultor não-parceiro, não-pago */}
+                            {mainTab === 'pagamento' && !isPaid && exp.user?.partner_id == null && (
+                            <button
+                              disabled={isLoading}
+                              onClick={() => toggleFechamento(exp)}
+                              title={exp.pagar_no_fechamento
+                                ? 'Voltar para A Pagar (pagamento avulso)'
+                                : 'Encaminhar ao fechamento do consultor — será pago no fechamento'}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                              style={exp.pagar_no_fechamento
+                                ? { background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }
+                                : { background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }
+                              }
+                            >
+                              {exp.pagar_no_fechamento
+                                ? <><RotateCcw size={11} /> A Pagar</>
+                                : <><CalendarClock size={11} /> No fechamento</>}
                             </button>
                             )}
                           </div>

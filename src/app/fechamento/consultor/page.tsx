@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
+import { useTableSort } from '@/hooks/use-table-sort'
 import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
 import { RefreshCw, Printer, FileText, Users, Search, X, Mail, FileSpreadsheet, Send, Check } from 'lucide-react'
@@ -30,6 +31,7 @@ interface ConsultorBase {
   effective_rate: number
   horas_a_pagar: number
   total: number
+  total_despesas: number    // despesas pagar_no_fechamento (não pagas avulso) somadas
   envio_em: string | null   // ISO do último envio do fechamento; null = não enviado
   envio_por: string | null  // nome de quem enviou
 }
@@ -68,6 +70,7 @@ interface Totais {
   total_horistas: number
   total_banco_horas: number
   total_fixos: number
+  total_despesas: number
   total_geral: number
 }
 
@@ -168,6 +171,8 @@ const printStyles = `
   .section-header { display: flex; justify-content: space-between; align-items: center; background: #ede9fe; border-left: 3px solid #7c3aed; padding: 6px 10px; margin-bottom: 6px; border-radius: 0 4px 4px 0; }
   .section-title { font-size: 11px; font-weight: 700; color: #5b21b6; text-transform: uppercase; letter-spacing: 0.4px; }
   .section-total { font-size: 12px; font-weight: 700; color: #5b21b6; }
+  .section-header.despesa { background: #cffafe; border-left-color: #0891b2; }
+  .section-header.despesa .section-title, .section-header.despesa .section-total { color: #0e7490; }
   .client-header { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; margin: 8px 0 4px; border-bottom: 1px solid #ddd6fe; }
   .client-name { font-size: 11px; font-weight: 700; color: #1a1a1a; }
   .client-total { font-size: 11px; color: #7c3aed; font-weight: 600; }
@@ -185,10 +190,26 @@ const printStyles = `
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 `
 
+interface DespesaRow {
+  id: number
+  data: string
+  descricao: string | null
+  categoria: string
+  cliente: string
+  projeto: string
+  valor: number
+  is_paid: boolean
+  paid_at: string | null
+}
+
+type ReportMode = 'servicos' | 'despesa' | 'ambos'
+
 function buildReport(
   consultor: ConsultorBase | ConsultorHorista | ConsultorBancoHoras | ConsultorFixo,
   apontamentos: ApontamentoRow[],
-  yearMonth: string
+  yearMonth: string,
+  despesas: DespesaRow[] = [],
+  mode: ReportMode = 'ambos'
 ): string {
   const grouped = new Map<string, ApontamentoRow[]>()
   for (const apt of apontamentos) {
@@ -276,7 +297,49 @@ function buildReport(
     }
   }
 
+  const despesaTotal = despesas.filter(d => !d.is_paid).reduce((s, d) => s + d.valor, 0) // saldo a pagar no fechamento
+  const despesasHtml = despesas.length === 0 ? '' : `
+    <div class="section">
+      <div class="section-header despesa">
+        <span class="section-title">Despesas reembolsadas no fechamento</span>
+        <span class="section-total">Saldo: ${formatBRL(despesaTotal)}</span>
+      </div>
+      <table>
+        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Cliente</th><th>Projeto</th><th>Pagamento</th><th class="right">Valor</th></tr></thead>
+        <tbody>${despesas.map(d => `
+          <tr class="main-row">
+            <td>${fmtDate(d.data)}</td>
+            <td>${d.descricao || '—'}</td>
+            <td>${d.categoria}</td>
+            <td>${d.cliente}</td>
+            <td>${d.projeto}</td>
+            <td>${d.is_paid ? (d.paid_at ? 'Pago em ' + new Date(d.paid_at).toLocaleDateString('pt-BR') : 'Pago') : '<span style="color:#7c3aed">No fechamento</span>'}</td>
+            <td class="right">${formatBRL(d.valor)}</td>
+          </tr>`).join('')}
+          <tr><td colspan="6" class="right" style="font-weight:bold;padding-top:6px">Saldo a pagar no fechamento</td><td class="right" style="font-weight:bold;padding-top:6px">${formatBRL(despesaTotal)}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  `
+
   const totalHoras = apontamentos.reduce((s, r) => s + r.horas, 0)
+
+  const isServ = mode !== 'despesa'
+  const isDesp = mode !== 'servicos'
+  const servTotal = consultor.total
+  const despTot = consultor.total_despesas || 0
+  const modeLabel = mode === 'servicos' ? 'Serviços' : mode === 'despesa' ? 'Despesas' : 'Completo'
+
+  const summaryHtml = mode === 'despesa'
+    ? `<div class="summary-item"><div class="summary-label">Despesas (fechamento)</div><div class="summary-value" style="color:#7c3aed">${formatBRL(despTot)}</div></div>`
+    : `<div class="summary-item"><div class="summary-label">Total Horas</div><div class="summary-value">${fmtH(totalHoras)}</div></div>${summaryExtra}<div class="summary-item"><div class="summary-label">Total Serviços</div><div class="summary-value" style="color:#7c3aed">${formatBRL(servTotal)}</div></div>`
+
+  const totalValor = mode === 'servicos' ? servTotal : mode === 'despesa' ? despTot : servTotal + despTot
+  const totalLabel = mode === 'servicos'
+    ? 'TOTAL A PAGAR — SERVIÇOS'
+    : mode === 'despesa'
+      ? 'TOTAL — DESPESAS (FECHAMENTO)'
+      : `TOTAL A PAGAR${despTot > 0 ? ` &nbsp;(serviços ${formatBRL(servTotal)} + despesas ${formatBRL(despTot)})` : ''}`
 
   return `
     <div class="page">
@@ -284,18 +347,15 @@ function buildReport(
         <div class="logo"><img src="${window.location.origin}/logo.png" alt="ERPServ Consultoria" /></div>
         <div class="meta">
           <strong>${consultor.nome}</strong>
-          Fechamento de Consultores &nbsp;·&nbsp; ${fmtYearMonth(yearMonth)}
+          Fechamento de Consultores &nbsp;·&nbsp; ${fmtYearMonth(yearMonth)} &nbsp;·&nbsp; ${modeLabel}
         </div>
       </div>
-      <div class="summary-box">
-        <div class="summary-item"><div class="summary-label">Total Horas</div><div class="summary-value">${fmtH(totalHoras)}</div></div>
-        ${summaryExtra}
-        <div class="summary-item"><div class="summary-label">Total a Pagar</div><div class="summary-value" style="color:#7c3aed">${formatBRL(consultor.total)}</div></div>
-      </div>
-      ${sectionsHtml}
+      <div class="summary-box">${summaryHtml}</div>
+      ${isServ ? sectionsHtml : ''}
+      ${isDesp ? despesasHtml : ''}
       <div class="total-box">
-        <span class="total-label">TOTAL A PAGAR — ${consultor.nome.toUpperCase()}</span>
-        <span class="total-value">${formatBRL(consultor.total)}</span>
+        <span class="total-label">${totalLabel}</span>
+        <span class="total-value">${formatBRL(totalValor)}</span>
       </div>
     </div>
   `
@@ -310,19 +370,21 @@ function buildFullHtml(html: string) {
 function RelatorioBtn({ userId, printingUser, onClick }: {
   userId: number
   printingUser: number | null
-  onClick: () => void
+  onClick: (mode: ReportMode) => void
 }) {
   const loading = printingUser === userId
+  const link = 'text-[11px] disabled:opacity-50 transition-colors ds-link'
   return (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      title="Gerar relatório individual"
-      className="inline-flex items-center gap-1 text-xs disabled:opacity-50 transition-colors ds-link"
-    >
-      {loading ? <RefreshCw size={13} className="animate-spin" /> : <Printer size={13} />}
-      Relatório
-    </button>
+    <span className="inline-flex items-center gap-1.5 justify-end">
+      {loading
+        ? <RefreshCw size={13} className="animate-spin" />
+        : <Printer size={13} style={{ opacity: 0.7 }} />}
+      <button onClick={() => onClick('servicos')} disabled={loading} title="Relatório de Serviços" className={link}>Serviços</button>
+      <span className="text-zinc-600">·</span>
+      <button onClick={() => onClick('despesa')} disabled={loading} title="Relatório de Despesas" className={link}>Despesa</button>
+      <span className="text-zinc-600">·</span>
+      <button onClick={() => onClick('ambos')} disabled={loading} title="Relatório completo (serviços + despesas)" className={link}>Ambos</button>
+    </span>
   )
 }
 
@@ -345,7 +407,7 @@ export default function FechamentoConsultorPage() {
   const [printingUser, setPrintingUser] = useState<number | null>(null)
   const [reportHtml, setReportHtml] = useState<string | null>(null)
   // Consultor alvo do relatório aberto (só pra relatório INDIVIDUAL — habilita o "Enviar e-mail").
-  const [reportTarget, setReportTarget] = useState<{ userId: number; name: string } | null>(null)
+  const [reportTarget, setReportTarget] = useState<{ userId: number; name: string; mode: ReportMode } | null>(null)
   const [sendingEmail, setSendingEmail] = useState(false)
   const [downloadingExcel, setDownloadingExcel] = useState(false)
   // Dialog de composição/preview do e-mail (abre ao clicar "Enviar e-mail").
@@ -418,7 +480,7 @@ export default function FechamentoConsultorPage() {
       // `mensagem` é a versão editada (por envio) que o admin compôs no dialog.
       const res = await api.post<{ success: boolean; message: string }>(
         `/fechamento-consultor/${reportTarget.userId}/${yearMonth}/enviar-email`,
-        { mensagem: emailMensagem },
+        { mensagem: emailMensagem, mode: reportTarget.mode },
       )
       toast.success(res?.message ?? 'Fechamento enviado por e-mail.')
       patchEnvio(reportTarget.userId, new Date().toISOString(), user?.name ?? null)
@@ -438,7 +500,7 @@ export default function FechamentoConsultorPage() {
     try {
       const res = await api.post<{ html: string; mensagem_padrao: string }>(
         `/fechamento-consultor/${reportTarget.userId}/${yearMonth}/email-preview`,
-        mensagem !== undefined ? { mensagem } : {},
+        mensagem !== undefined ? { mensagem, mode: reportTarget.mode } : { mode: reportTarget.mode },
       )
       setEmailPreviewHtml(res.html)
       if (!previewSeededRef.current) {
@@ -484,7 +546,7 @@ export default function FechamentoConsultorPage() {
       // O `api` helper sempre faz res.json(); pra blob usamos fetch direto no
       // mesmo proxy /api/v1 (o middleware injeta o Authorization via cookie).
       const res = await fetch(
-        `/api/v1/fechamento-consultor/${reportTarget.userId}/${yearMonth}/excel`,
+        `/api/v1/fechamento-consultor/${reportTarget.userId}/${yearMonth}/excel?mode=${reportTarget.mode}`,
         { credentials: 'same-origin', headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } },
       )
       if (!res.ok) throw new Error(`Erro ${res.status}`)
@@ -544,15 +606,16 @@ export default function FechamentoConsultorPage() {
     }
   }
 
-  async function handleRelatorio(consultor: ConsultorBase | ConsultorHorista | ConsultorBancoHoras | ConsultorFixo) {
+  async function handleRelatorio(consultor: ConsultorBase | ConsultorHorista | ConsultorBancoHoras | ConsultorFixo, mode: ReportMode = 'ambos') {
     setPrintingUser(consultor.user_id)
     try {
-      const res = await api.get<{ data: ApontamentoRow[] }>(
-        `/fechamento-consultor/${consultor.user_id}/${yearMonth}/apontamentos`
-      )
-      const html = buildReport(consultor, res.data ?? [], yearMonth)
+      const [res, despRes] = await Promise.all([
+        api.get<{ data: ApontamentoRow[] }>(`/fechamento-consultor/${consultor.user_id}/${yearMonth}/apontamentos`),
+        api.get<{ data: DespesaRow[] }>(`/fechamento-consultor/${consultor.user_id}/${yearMonth}/despesas`),
+      ])
+      const html = buildReport(consultor, res.data ?? [], yearMonth, despRes.data ?? [], mode)
       setReportHtml(buildFullHtml(html))
-      setReportTarget({ userId: consultor.user_id, name: consultor.nome })
+      setReportTarget({ userId: consultor.user_id, name: consultor.nome, mode })
     } catch (err: unknown) {
       toast.error(`Erro ao gerar relatório: ${err instanceof Error ? err.message : 'falha na API'}`)
     } finally {
@@ -572,11 +635,11 @@ export default function FechamentoConsultorPage() {
       <tr>
         <td>${c.nome}</td>
         <td>${c.email ?? '—'}</td>
-        <td class="right">${formatBRL(c.total)}</td>
+        <td class="right">${formatBRL(c.total + (c.total_despesas || 0))}</td>
       </tr>
     `).join('')
 
-    const totalGeral = todos.reduce((s, c) => s + c.total, 0)
+    const totalGeral = todos.reduce((s, c) => s + c.total + (c.total_despesas || 0), 0)
 
     const html = `
       <div class="page">
@@ -609,6 +672,9 @@ export default function FechamentoConsultorPage() {
     const rowsHtml = rows.map(r => `
       <tr><td>${r.label}</td><td class="right">${r.count}</td><td class="right">${formatBRL(r.total)}</td></tr>
     `).join('')
+    const despesasHtml = totais.total_despesas > 0
+      ? `<tr><td>Despesas (fechamento)</td><td class="right">—</td><td class="right">${formatBRL(totais.total_despesas)}</td></tr>`
+      : ''
     const html = `
       <div class="page">
         <div class="header">
@@ -617,11 +683,11 @@ export default function FechamentoConsultorPage() {
         </div>
         <table>
           <thead><tr><th>Tipo de Vínculo</th><th class="right">Consultores</th><th class="right">Total</th></tr></thead>
-          <tbody>${rowsHtml}</tbody>
+          <tbody>${rowsHtml}${despesasHtml}</tbody>
         </table>
         <div class="total-box">
           <span class="total-label">TOTAL GERAL</span>
-          <span class="total-value">${formatBRL(totais.total_geral)}</span>
+          <span class="total-value">${formatBRL(totais.total_geral + (totais.total_despesas || 0))}</span>
         </div>
       </div>
     `
@@ -686,17 +752,18 @@ export default function FechamentoConsultorPage() {
 
   function TabHoristas() {
     const rows = applyFilters(data?.horistas ?? [])
+    const { sorted, thProps } = useTableSort(rows, (c, k) => k === 'total' ? (c.total + (c.total_despesas || 0)) : (c as unknown as Record<string, unknown>)[k])
     return (
       <div>
         <p className="text-sm text-zinc-400 mb-3">{rows.length} consultor{rows.length !== 1 ? 'es' : ''}</p>
         <Table>
           <Thead>
             <tr>
-              <Th>Consultor</Th>
-              <Th right>H Trabalhadas</Th>
-              <Th right>H a Pagar</Th>
-              <Th right>Taxa/h</Th>
-              <Th right>Total</Th>
+              <Th {...thProps('nome')}>Consultor</Th>
+              <Th right {...thProps('horas_trabalhadas')}>H Trabalhadas</Th>
+              <Th right {...thProps('horas_a_pagar')}>H a Pagar</Th>
+              <Th right {...thProps('effective_rate')}>Taxa/h</Th>
+              <Th right {...thProps('total')}>Total</Th>
               <Th right>Envio</Th>
               <Th right>Relatório</Th>
             </tr>
@@ -709,7 +776,7 @@ export default function FechamentoConsultorPage() {
                 </td>
               </Tr>
             )}
-            {rows.map(c => {
+            {sorted.map(c => {
               const hasGuaranteed = c.guaranteed_prorated > 0 && c.horas_a_pagar > c.horas_trabalhadas
               return (
                 <Tr key={c.user_id}>
@@ -731,10 +798,15 @@ export default function FechamentoConsultorPage() {
                       : formatBRL(c.effective_rate)
                     }
                   </Td>
-                  <Td right className="font-semibold text-zinc-100">{formatBRL(c.total)}</Td>
+                  <Td right className="font-semibold text-zinc-100">
+                    {formatBRL(c.total + (c.total_despesas || 0))}
+                    {c.total_despesas > 0 && (
+                      <div className="text-[10px] text-cyan-400 font-normal">serv {formatBRL(c.total)} + desp {formatBRL(c.total_despesas)}</div>
+                    )}
+                  </Td>
                   <Td right><EnvioCell c={c} /></Td>
                   <Td right>
-                    <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={() => handleRelatorio(c)} />
+                    <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={(mode) => handleRelatorio(c, mode)} />
                   </Td>
                 </Tr>
               )
@@ -742,7 +814,7 @@ export default function FechamentoConsultorPage() {
             {rows.length > 0 && (
               <Tr className="border-t-2 border-zinc-600 bg-zinc-800/20">
                 <td colSpan={4} className="py-2 px-3 text-right font-semibold text-zinc-300 text-sm">Total</td>
-                <Td right className="font-bold text-violet-400">{formatBRL(data?.totais.total_horistas ?? 0)}</Td>
+                <Td right className="font-bold text-violet-400">{formatBRL((data?.totais.total_horistas ?? 0) + (data?.horistas?.reduce((s, c) => s + (c.total_despesas || 0), 0) ?? 0))}</Td>
                 <Td />
                 <Td />
               </Tr>
@@ -757,20 +829,21 @@ export default function FechamentoConsultorPage() {
 
   function TabBancoHoras() {
     const rows = applyFilters(data?.banco_horas ?? [])
+    const { sorted, thProps } = useTableSort(rows, (c, k) => k === 'total' ? (c.total + (c.total_despesas || 0)) : (c as unknown as Record<string, unknown>)[k])
     return (
       <div>
         <p className="text-sm text-zinc-400 mb-3">{rows.length} consultor{rows.length !== 1 ? 'es' : ''}</p>
         <Table>
           <Thead>
             <tr>
-              <Th>Consultor</Th>
-              <Th right>Base Mensal</Th>
-              <Th right>Esperado</Th>
-              <Th right>Trabalhado</Th>
-              <Th right>Saldo Mês</Th>
-              <Th right>Acumulado</Th>
-              <Th right>H Extras</Th>
-              <Th right>Total</Th>
+              <Th {...thProps('nome')}>Consultor</Th>
+              <Th right {...thProps('fixed_salary')}>Base Mensal</Th>
+              <Th right {...thProps('expected_hours')}>Esperado</Th>
+              <Th right {...thProps('horas_trabalhadas')}>Trabalhado</Th>
+              <Th right {...thProps('month_balance')}>Saldo Mês</Th>
+              <Th right {...thProps('accumulated_balance')}>Acumulado</Th>
+              <Th right {...thProps('horas_extras')}>H Extras</Th>
+              <Th right {...thProps('total')}>Total</Th>
               <Th right>Envio</Th>
               <Th right>Relatório</Th>
             </tr>
@@ -783,7 +856,7 @@ export default function FechamentoConsultorPage() {
                 </td>
               </Tr>
             )}
-            {rows.map(c => (
+            {sorted.map(c => (
               <Tr key={c.user_id}>
                 <Td className="font-medium text-zinc-100">{c.nome}</Td>
                 <Td right className="font-semibold text-zinc-200">{formatBRL(c.fixed_salary)}</Td>
@@ -795,21 +868,24 @@ export default function FechamentoConsultorPage() {
                   {c.horas_extras > 0 ? fmtH(c.horas_extras) : '—'}
                 </Td>
                 <Td right className="font-semibold text-zinc-100">
-                  {formatBRL(c.total)}
+                  {formatBRL(c.total + (c.total_despesas || 0))}
                   {c.total_extra > 0 && (
-                    <div className="text-[10px] text-emerald-400 font-normal">+{formatBRL(c.total_extra)}</div>
+                    <div className="text-[10px] text-emerald-400 font-normal">+{formatBRL(c.total_extra)} extra</div>
+                  )}
+                  {c.total_despesas > 0 && (
+                    <div className="text-[10px] text-cyan-400 font-normal">+{formatBRL(c.total_despesas)} desp</div>
                   )}
                 </Td>
                 <Td right><EnvioCell c={c} /></Td>
                 <Td right>
-                  <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={() => handleRelatorio(c)} />
+                  <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={(mode) => handleRelatorio(c, mode)} />
                 </Td>
               </Tr>
             ))}
             {rows.length > 0 && (
               <Tr className="border-t-2 border-zinc-600 bg-zinc-800/20">
                 <td colSpan={7} className="py-2 px-3 text-right font-semibold text-zinc-300 text-sm">Total</td>
-                <Td right className="font-bold text-violet-400">{formatBRL(data?.totais.total_banco_horas ?? 0)}</Td>
+                <Td right className="font-bold text-violet-400">{formatBRL((data?.totais.total_banco_horas ?? 0) + (data?.banco_horas?.reduce((s, c) => s + (c.total_despesas || 0), 0) ?? 0))}</Td>
                 <Td />
                 <Td />
               </Tr>
@@ -824,15 +900,16 @@ export default function FechamentoConsultorPage() {
 
   function TabFixo() {
     const rows = applyFilters((data?.fixos ?? []) as ConsultorFixo[])
+    const { sorted, thProps } = useTableSort(rows)
     return (
       <div>
         <p className="text-sm text-zinc-400 mb-3">{rows.length} consultor{rows.length !== 1 ? 'es' : ''}</p>
         <Table>
           <Thead>
             <tr>
-              <Th>Consultor</Th>
-              <Th right>H Trabalhadas</Th>
-              <Th right>Salário Mensal</Th>
+              <Th {...thProps('nome')}>Consultor</Th>
+              <Th right {...thProps('horas_trabalhadas')}>H Trabalhadas</Th>
+              <Th right {...thProps('salario_mensal')}>Salário Mensal</Th>
               <Th right>Envio</Th>
               <Th right>Relatório</Th>
             </tr>
@@ -845,21 +922,26 @@ export default function FechamentoConsultorPage() {
                 </td>
               </Tr>
             )}
-            {rows.map(c => (
+            {sorted.map(c => (
               <Tr key={c.user_id}>
                 <Td className="font-medium text-zinc-100">{c.nome}</Td>
                 <Td right className="font-mono text-zinc-300">{fmtH(c.horas_trabalhadas)}</Td>
-                <Td right className="font-semibold text-zinc-100">{formatBRL(c.salario_mensal)}</Td>
+                <Td right className="font-semibold text-zinc-100">
+                  {formatBRL(c.salario_mensal)}
+                  {c.total_despesas > 0 && (
+                    <div className="text-[10px] text-cyan-400 font-normal">+{formatBRL(c.total_despesas)} desp. no fech.</div>
+                  )}
+                </Td>
                 <Td right><EnvioCell c={c} /></Td>
                 <Td right>
-                  <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={() => handleRelatorio(c)} />
+                  <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={(mode) => handleRelatorio(c, mode)} />
                 </Td>
               </Tr>
             ))}
             {rows.length > 0 && (
               <Tr className="border-t-2 border-zinc-600 bg-zinc-800/20">
                 <td colSpan={2} className="py-2 px-3 text-right font-semibold text-zinc-300 text-sm">Total</td>
-                <Td right className="font-bold text-violet-400">{formatBRL(data?.totais.total_fixos ?? 0)}</Td>
+                <Td right className="font-bold text-violet-400">{formatBRL((data?.totais.total_fixos ?? 0) + (data?.fixos?.reduce((s, c) => s + (c.total_despesas || 0), 0) ?? 0))}</Td>
                 <Td />
                 <Td />
               </Tr>

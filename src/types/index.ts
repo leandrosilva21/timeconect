@@ -228,6 +228,7 @@ export interface Expense {
   status: string
   charge_client: boolean
   is_paid: boolean
+  pagar_no_fechamento?: boolean
   paid_by?: number
   paid_at?: string
   receipt_path?: string

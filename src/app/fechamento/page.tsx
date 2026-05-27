@@ -7,6 +7,7 @@ import { formatBRL } from '@/lib/format'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
+import { useTableSort } from '@/hooks/use-table-sort'
 import { toast } from 'sonner'
 import {
   DollarSign, TrendingUp, BarChart2, UserCheck, AlertTriangle,
@@ -132,6 +133,7 @@ function marginColor(pct: number): string {
 // ─── Subcomponentes de aba ───────────────────────────────────────────────────
 
 function TabProducao({ data, loading }: { data: ProducaoRow[]; loading: boolean }) {
+  const { sorted, thProps } = useTableSort(data)
   if (loading) return <SkeletonTable rows={6} cols={8} />
   if (!data.length) return <EmptyState icon={BarChart2} title="Sem produção" description="Nenhum apontamento encontrado para o período." />
 
@@ -139,18 +141,18 @@ function TabProducao({ data, loading }: { data: ProducaoRow[]; loading: boolean 
     <Table>
       <Thead>
         <Tr>
-          <Th>Consultor</Th>
-          <Th>Projeto</Th>
-          <Th>Cliente</Th>
-          <Th>Tipo Contrato</Th>
-          <Th right>Hs Aprov.</Th>
-          <Th right>Hs Pend.</Th>
-          <Th right>Despesas Aprov.</Th>
-          <Th right>Despesas Pend.</Th>
+          <Th {...thProps('consultor_nome')}>Consultor</Th>
+          <Th {...thProps('projeto_nome')}>Projeto</Th>
+          <Th {...thProps('cliente_nome')}>Cliente</Th>
+          <Th {...thProps('tipo_contrato')}>Tipo Contrato</Th>
+          <Th right {...thProps('horas_aprovadas')}>Hs Aprov.</Th>
+          <Th right {...thProps('horas_pendentes')}>Hs Pend.</Th>
+          <Th right {...thProps('despesas_aprovadas')}>Despesas Aprov.</Th>
+          <Th right {...thProps('despesas_pendentes')}>Despesas Pend.</Th>
         </Tr>
       </Thead>
       <Tbody>
-        {data.map((row, i) => (
+        {sorted.map((row, i) => (
           <Tr key={i}>
             <Td>
               <div className="font-medium text-xs" style={{ color: 'var(--brand-text)' }}>{row.consultor_nome}</div>
