@@ -8,13 +8,13 @@ import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { SearchSelect } from '@/components/ui/search-select'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
+import { useTableSort } from '@/hooks/use-table-sort'
 import { toast } from 'sonner'
-import { Lock, RefreshCw, Building2, Printer, FileText, Receipt, ChevronRight, ChevronDown, Mail, FileSpreadsheet, Send, X, Save, Plus, Check } from 'lucide-react'
+import { Lock, RefreshCw, Building2, Printer, FileText, Receipt, ChevronRight, ChevronLeft, ChevronDown, Mail, FileSpreadsheet, Send, X, Save, Plus, Check, Paperclip } from 'lucide-react'
 import {
   Table, Thead, Th, Tbody, Tr, Td,
   Badge, Button, SkeletonTable, EmptyState,
 } from '@/components/ds'
-import Image from 'next/image'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -92,7 +92,24 @@ interface ProjetoGlobal { projeto_id: number; nome: string; codigo: string; hora
 interface ClienteGlobal  { customer_id: number; nome: string; projetos: ProjetoGlobal[]; total_horas: number; total_receita: number }
 interface GlobalData     { tipos: { code: string; nome: string; clientes: ClienteGlobal[]; total_clientes: number; total_horas: number; total_receita: number }[]; total_geral: number }
 
-type Tab = 'global' | 'servicos' | 'relatorio' | 'despesas'
+type Tab = 'global' | 'servicos' | 'relatorio' | 'cobranca'
+interface DespesaCobrancaRow { customer_id: number; nome: string; qtd: number; total: number }
+
+// Apontamento "plano" (todos os clientes) — aba Apontamentos.
+interface ApontamentoGeralRow {
+  id: number
+  data: string
+  customer_id: number | null
+  cliente: string
+  projeto_id: number
+  projeto_codigo: string
+  projeto_nome: string
+  colaborador: string
+  solicitante?: string | null
+  ticket?: string | null
+  titulo?: string | null
+  horas: number
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -176,6 +193,9 @@ export default function FechamentoClientePage() {
 
   const [dados,    setDados]    = useState<ApontamentosData | null>(null)
   const [despesas, setDespesas] = useState<DespesaRow[]>([])
+  // Apontamentos "planos" de TODOS os clientes (aba Apontamentos).
+  const [apsGeral, setApsGeral]             = useState<ApontamentoGeralRow[]>([])
+  const [loadingApsGeral, setLoadingApsGeral] = useState(false)
   // Apuração por Ticket — só preenchido para Vedamotors.
   // O valor (ticketSummary) só era lido pelo HTML client-side do relatório, que agora
   // vem do backend; o setter segue alimentado pelos loaders/efeitos para não mexer
@@ -209,6 +229,21 @@ export default function FechamentoClientePage() {
   const [cadastroSaved, setCadastroSaved] = useState(false)
   const [avulsoEmails, setAvulsoEmails] = useState<string[]>([])        // e-mails avulsos (só deste envio)
   const [avulsoDraft, setAvulsoDraft] = useState('')
+  // Anexos extras (além do PDF + Excel) — só deste envio.
+  const [anexos, setAnexos] = useState<File[]>([])
+  const addAnexos = (files: FileList | null) => {
+    if (!files?.length) return
+    setAnexos(prev => {
+      const seen = new Set(prev.map(f => `${f.name}:${f.size}`))
+      return [...prev, ...Array.from(files).filter(f => !seen.has(`${f.name}:${f.size}`))]
+    })
+  }
+  const removeAnexo = (i: number) => setAnexos(prev => prev.filter((_, idx) => idx !== i))
+  // Limite dos anexos extras. O envio via Graph soma PDF+XLSX+extras até ~3 MB; como o
+  // relatório já pesa ~1 MB, os extras ficam limitados a 2 MB (o backend revalida o total).
+  const MAX_ANEXOS_BYTES = 2 * 1024 * 1024
+  const anexosBytes = anexos.reduce((s, f) => s + f.size, 0)
+  const anexosExcedido = anexosBytes > MAX_ANEXOS_BYTES
   const addCadastrado = () => {
     const v = cadastradoDraft.trim().replace(/,$/, '').trim().toLowerCase()
     if (!v) return
@@ -255,6 +290,17 @@ export default function FechamentoClientePage() {
       .finally(() => setLoading(false))
   }, [customerId, fromYM, toYM])
 
+  // Apontamentos de TODOS os clientes (aba Apontamentos) — filtra cliente/projeto no front.
+  const loadApsGeral = useCallback(() => {
+    if (!fromYM || !toYM) return
+    setLoadingApsGeral(true)
+    const params = new URLSearchParams({ from: fromYM, to: toYM })
+    api.get<{ data: ApontamentoGeralRow[] }>(`/fechamento-cliente/apontamentos-geral?${params}`)
+      .then(r => setApsGeral(r.data ?? []))
+      .catch(() => toast.error('Erro ao carregar apontamentos'))
+      .finally(() => setLoadingApsGeral(false))
+  }, [fromYM, toYM])
+
   const loadDespesas = useCallback(() => {
     if (!customerId || !fromYM || !toYM) return
     setLoadingDespesas(true)
@@ -264,6 +310,22 @@ export default function FechamentoClientePage() {
       .catch(() => toast.error('Erro ao carregar despesas'))
       .finally(() => setLoadingDespesas(false))
   }, [customerId, fromYM, toYM])
+
+  // ── Despesas a cobrar (consolidado de TODOS os clientes do mês) ──
+  const [despCobranca, setDespCobranca]     = useState<DespesaCobrancaRow[]>([])
+  const [loadingCobranca, setLoadingCobranca] = useState(false)
+  const loadCobranca = useCallback(() => {
+    if (!toYM) return
+    setLoadingCobranca(true)
+    api.get<{ data: DespesaCobrancaRow[] }>(`/fechamento-cliente/despesas-resumo?year_month=${toYM}`)
+      .then(r => setDespCobranca(r.data ?? []))
+      .catch(() => toast.error('Erro ao carregar despesas a cobrar'))
+      .finally(() => setLoadingCobranca(false))
+  }, [toYM])
+  useEffect(() => { if (tab === 'cobranca') loadCobranca() }, [tab, loadCobranca])
+  useEffect(() => { if (tab === 'servicos') loadApsGeral() }, [tab, loadApsGeral])
+  // Filtro persistido pode ter guardado a aba "despesas" (removida) — normaliza.
+  useEffect(() => { if ((tab as string) === 'despesas') setTab('servicos') }, [tab])
 
   // Apuração por Ticket — só Vedamotors. Espelha o relatório de apontamentos:
   // GET /timesheets/summary-by-ticket com customer_id + start_date/end_date.
@@ -333,15 +395,9 @@ export default function FechamentoClientePage() {
     }
   }, [customerId, fromYM, toYM, clientes])
 
-  // ── Imprimir ──
-
-  const handlePrint = (target: 'servicos' | 'despesas') => {
-    document.body.setAttribute('data-print', target)
-    window.print()
-    setTimeout(() => document.body.removeAttribute('data-print'), 500)
-  }
-
   // ── Excel / E-mail ──────────────────────────────────────────────────────────
+  // Modo do relatório aberto: a aba Despesas a Cobrar abre em modo 'despesa'.
+  const detailMode = (): 'servicos' | 'despesa' => (tab === 'cobranca' ? 'despesa' : 'servicos')
 
   async function downloadExcel() {
     if (!customerId || !toYM) return
@@ -349,14 +405,15 @@ export default function FechamentoClientePage() {
     try {
       // O `api` helper sempre faz res.json(); pra blob usamos fetch direto no
       // mesmo proxy /api/v1 (o middleware injeta o Authorization via cookie).
+      const modo = detailMode()
       const res = await fetch(
-        `/api/v1/fechamento-cliente/${customerId}/${toYM}/excel`,
+        `/api/v1/fechamento-cliente/${customerId}/${toYM}/excel${modo === 'despesa' ? '?mode=despesa' : ''}`,
         { credentials: 'same-origin', headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } },
       )
       if (!res.ok) throw new Error(`Erro ${res.status}`)
       const cd = res.headers.get('Content-Disposition') ?? ''
       const match = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
-      const fallback = `Fechamento_${toYM}_${clienteNome || 'cliente'}.xlsx`
+      const fallback = `${modo === 'despesa' ? 'Despesas' : 'Fechamento'}_${toYM}_${clienteNome || 'cliente'}.xlsx`
       const filename = match ? decodeURIComponent(match[1]) : fallback
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
@@ -388,7 +445,7 @@ export default function FechamentoClientePage() {
         emails_administrativos?: string[]
       }>(
         `/fechamento-cliente/${customerId}/${toYM}/email-preview`,
-        mensagem !== undefined ? { mensagem } : {},
+        mensagem !== undefined ? { mensagem, mode: detailMode() } : { mode: detailMode() },
       )
       setEmailPreviewHtml(res.html)
       if (!previewSeededRef.current) {
@@ -401,7 +458,7 @@ export default function FechamentoClientePage() {
     } finally {
       setPreviewLoading(false)
     }
-  }, [customerId, toYM])
+  }, [customerId, toYM, tab])
 
   function openCompose() {
     if (!customerId || !toYM) return
@@ -411,6 +468,7 @@ export default function FechamentoClientePage() {
     setCadastradoEmails([])
     setAvulsoEmails([])
     setAvulsoDraft('')
+    setAnexos([])
     setCadastroSaved(false)
     setComposeOpen(true)
     void fetchEmailPreview() // primeiro fetch: sem mensagem → html + mensagem_padrao + e-mails
@@ -423,6 +481,7 @@ export default function FechamentoClientePage() {
     setCadastradoEmails([])
     setAvulsoEmails([])
     setAvulsoDraft('')
+    setAnexos([])
     setCadastroSaved(false)
     previewSeededRef.current = false
   }
@@ -469,15 +528,30 @@ export default function FechamentoClientePage() {
 
   async function sendReportEmail() {
     if (!customerId || !toYM) return
+    if (anexosExcedido) {
+      toast.error(`Anexos excedem o limite de ${(MAX_ANEXOS_BYTES / 1048576).toFixed(0)} MB. Remova ou reduza os arquivos.`)
+      return
+    }
     // Destinatários = cadastrados (chips) + avulsos, dedupe.
     const emails = Array.from(new Set([...cadastradoEmails, ...avulsoEmails]))
     setSendingEmail(true)
     try {
-      const res = await api.post<{ success: boolean; message: string }>(
-        `/fechamento-cliente/${customerId}/${toYM}/enviar-email`,
-        { mensagem: emailMensagem, emails },
+      // multipart (FormData) para levar os anexos extras junto do PDF + Excel.
+      const fd = new FormData()
+      fd.append('mensagem', emailMensagem)
+      fd.append('mode', detailMode())
+      emails.forEach(e => fd.append('emails[]', e))
+      anexos.forEach(f => fd.append('anexos[]', f, f.name))
+
+      const res = await fetch(
+        `/api/v1/fechamento-cliente/${customerId}/${toYM}/enviar-email`,
+        { method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json' }, body: fd },
       )
-      toast.success(res?.message ?? 'Fechamento enviado por e-mail.')
+      const json = await res.json().catch(() => ({})) as { success?: boolean; message?: string }
+      if (!res.ok || json?.success === false) {
+        throw new Error(json?.message || `Erro ${res.status}`)
+      }
+      toast.success(json?.message ?? 'Fechamento enviado por e-mail.')
       patchEnvio(customerId, new Date().toISOString(), (user as any)?.name ?? null)
       closeCompose()
     } catch (err: unknown) {
@@ -527,6 +601,46 @@ export default function FechamentoClientePage() {
   const clienteNome    = clientes.find(c => c.customer_id === customerId)?.nome ?? ''
   const periodo        = fmtPeriodo(fromYM, toYM)
 
+  // ── Aba Apontamentos (todos os clientes) ──
+  const apsCliente     = customerId ? apsGeral.filter(a => a.customer_id === customerId) : apsGeral
+  const apsFiltered    = projetoFilter ? apsCliente.filter(a => a.projeto_id === projetoFilter) : apsCliente
+  const apsHorasTotal  = apsFiltered.reduce((s, a) => s + a.horas, 0)
+  const apsProjetoOptions = Array.from(
+    new Map(apsCliente.map(a => [a.projeto_id, `${a.projeto_codigo} — ${a.projeto_nome}`])).entries(),
+  ).map(([id, name]) => ({ id, name }))
+  // Filtro de contrato do cabeçalho: na aba Apontamentos usa os projetos do conjunto
+  // geral (todos os clientes); nas demais, os projetos do cliente aberto.
+  const headerProjetoOptions = tab === 'servicos' ? apsProjetoOptions : projetoOptions
+
+  // ── Aba Relatório Serviços (lista de clientes com serviços, da Visão Global) ──
+  // Só clientes On Demand PAI (sem investimento): o /fechamento-contrato classifica
+  // pelo contrato-raiz (filho consolida no pai), então o tipo 'on_demand' já é pai;
+  // a interseção com a lista do índice exclui os buckets de investimento comercial.
+  const onDemandClientes = new Set(clientes.map(c => c.customer_id))
+  const clientesServicos = (() => {
+    const m = new Map<number, { customer_id: number; nome: string; total_horas: number; total_receita: number; tipos: Set<string> }>()
+    ;(globalData?.tipos ?? []).filter(t => t.code === 'on_demand').forEach(tipo => tipo.clientes.forEach(c => {
+      if (!onDemandClientes.has(c.customer_id)) return
+      c.projetos.forEach(p => {
+        if (p.horas <= 0) return
+        if (!m.has(c.customer_id)) m.set(c.customer_id, { customer_id: c.customer_id, nome: c.nome, total_horas: 0, total_receita: 0, tipos: new Set() })
+        const e = m.get(c.customer_id)!
+        e.total_horas   += p.horas
+        e.total_receita += Math.round(p.horas * p.valor_hora * 100) / 100
+        e.tipos.add(tipo.nome)
+      })
+    }))
+    return Array.from(m.values()).filter(c => c.total_receita > 0).sort((a, b) => a.nome.localeCompare(b.nome))
+  })()
+
+  // Status de envio por cliente (legenda nas listas) — do /fechamento-cliente.
+  const enviadoMap = new Map(clientes.map(c => [c.customer_id, { envio_em: c.envio_em, envio_por: c.envio_por }]))
+
+  // Ordenação client-side das tabelas (clique no cabeçalho).
+  const apontamentosSort = useTableSort(apsFiltered)
+  const servicosSort     = useTableSort(clientesServicos)
+  const cobrancaSort     = useTableSort(despCobranca)
+
   // Relatório — busca o HTML standalone do backend (mesma Blade do PDF). Reseta ao
   // trocar cliente/competência pra não exibir um relatório defasado durante o fetch.
   // As escritas de estado ficam dentro do fluxo async (não no corpo síncrono do
@@ -535,10 +649,15 @@ export default function FechamentoClientePage() {
     let cancelled = false
     const run = async () => {
       setReportHtml(null)
-      if (tab !== 'relatorio' || !customerId || projetos.length === 0) return
+      const isServ = tab === 'relatorio'
+      const isDesp = tab === 'cobranca'
+      if ((!isServ && !isDesp) || !customerId) return
+      if (isServ && projetos.length === 0) return
+      if (isDesp && despesas.length === 0) return
       setReportHtmlLoading(true)
       try {
-        const res = await api.get<{ html: string }>(`/fechamento-cliente/${customerId}/${toYM}/report-html`)
+        const q = isDesp ? '?mode=despesa' : ''
+        const res = await api.get<{ html: string }>(`/fechamento-cliente/${customerId}/${toYM}/report-html${q}`)
         if (!cancelled) setReportHtml(res.html)
       } catch {
         if (!cancelled) { setReportHtml(null); toast.error('Erro ao gerar o relatório') }
@@ -548,29 +667,135 @@ export default function FechamentoClientePage() {
     }
     void run()
     return () => { cancelled = true }
-  }, [tab, customerId, toYM, projetos.length])
+  }, [tab, customerId, toYM, projetos.length, despesas.length])
+
+  // ── Detalhe (tela tradicional): preview do relatório + ações (imprimir/email/excel) ──
+  const renderDetail = (mode: 'servicos' | 'despesa') => {
+    const isDesp = mode === 'despesa'
+    const total  = isDesp ? totalDespesas : totalGeral
+
+    // Enquanto carrega (dados/despesas/relatório), mostra skeleton — o "vazio" só
+    // vale depois do load, senão pisca a mensagem de vazio durante o fetch.
+    if (loading || loadingDespesas || reportHtmlLoading) {
+      return <SkeletonTable rows={6} cols={4} />
+    }
+    if (!isDesp && projetos.length === 0) {
+      return <EmptyState icon={FileText} title="Sem dados para relatório"
+        description="Nenhum apontamento encontrado no período selecionado." />
+    }
+    if (isDesp && despesas.length === 0) {
+      return <EmptyState icon={Receipt} title="Sem despesas a cobrar"
+        description="Este cliente não tem despesas a cobrar no período." />
+    }
+    if (reportHtml === null) {
+      return <SkeletonTable rows={6} cols={4} />
+    }
+
+    return (
+      <div className="flex-1 flex min-h-0 flex-col md:flex-row -m-6">
+        {/* LEFT — preview do documento */}
+        <div className="flex-1 min-h-0 overflow-auto flex justify-center p-3 md:p-6" style={{ background: 'var(--bg)' }}>
+          <iframe
+            ref={reportIframeRef}
+            srcDoc={reportHtml}
+            title="Relatório"
+            className="w-full"
+            style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, maxWidth: 820, minHeight: 640 }}
+          />
+        </div>
+
+        {/* RIGHT — painel de ações */}
+        <aside
+          className="shrink-0 w-full md:w-[300px] flex flex-col gap-3 p-4 overflow-y-auto border-t md:border-t-0 md:border-l"
+          style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+        >
+          <div className="pb-3 mb-1" style={{ borderBottom: '1px solid var(--border)' }}>
+            <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text)' }}>{clienteNome}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+              {fromYM === toYM ? fmtYM(toYM) : `${fmtYM(fromYM)} — ${fmtYM(toYM)}`}
+            </p>
+            <p className="text-[11px] mt-2 uppercase tracking-wide" style={{ color: 'var(--text-light)' }}>
+              {isDesp ? 'Total a cobrar' : 'Valor a pagar'}
+            </p>
+            <p className="text-lg font-bold" style={{ color: isDesp ? '#0e7490' : 'var(--primary)' }}>{formatBRL(total)}</p>
+          </div>
+
+          <Button
+            variant="primary"
+            size="sm"
+            icon={Printer}
+            className="w-full !justify-start"
+            onClick={() => reportIframeRef.current?.contentWindow?.print()}
+          >
+            Imprimir
+          </Button>
+
+          {canSendEmail && (
+            <Button
+              size="sm"
+              icon={Mail}
+              className="w-full !justify-start"
+              title={`Enviar ${isDesp ? 'despesas' : 'fechamento'} de ${clienteNome} por e-mail`}
+              onClick={openCompose}
+            >
+              Enviar e-mail
+            </Button>
+          )}
+
+          {canSendEmail && (
+            status?.envio_em ? (
+              <div
+                className="rounded-lg px-3 py-2 text-xs flex items-start justify-between gap-2"
+                style={{ background: 'var(--success-bg)', color: 'var(--success)' }}
+              >
+                <span className="flex items-start gap-1.5">
+                  <Check size={13} className="mt-0.5 shrink-0" />
+                  <span>Enviado em {fmtDateTime(status.envio_em)}{status.envio_por ? ` por ${status.envio_por}` : ''}</span>
+                </span>
+                <button
+                  onClick={limparEnvio}
+                  disabled={limpandoEnvio}
+                  className="shrink-0 disabled:opacity-50 hover:underline"
+                  style={{ color: 'var(--text-light)' }}
+                >
+                  {limpandoEnvio ? '...' : 'limpar'}
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs px-1" style={{ color: 'var(--text-light)' }}>
+                {isDesp ? 'Despesas ainda não enviadas.' : 'Fechamento ainda não enviado.'}
+              </p>
+            )
+          )}
+
+          <Button
+            size="sm"
+            icon={FileSpreadsheet}
+            loading={downloadingExcel}
+            className="w-full !justify-start"
+            onClick={downloadExcel}
+          >
+            {downloadingExcel ? 'Baixando…' : 'Baixar Excel'}
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={ChevronLeft}
+            className="w-full !justify-start mt-auto"
+            onClick={() => setCustomerId(null)}
+          >
+            Voltar à lista
+          </Button>
+        </aside>
+      </div>
+    )
+  }
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <AppLayout title="Fechamento On Demand">
-      {/* Estilos de impressão */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden !important; }
-          body[data-print="servicos"] #print-servicos,
-          body[data-print="servicos"] #print-servicos * { visibility: visible !important; }
-          body[data-print="servicos"] #print-servicos { position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; }
-          body[data-print="despesas"] #print-despesas,
-          body[data-print="despesas"] #print-despesas * { visibility: visible !important; }
-          body[data-print="despesas"] #print-despesas { position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; }
-        }
-        #print-servicos, #print-despesas {
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-      `}</style>
-
       <div className="flex-1 flex flex-col min-h-0 overflow-auto">
 
         {/* ── Header ── */}
@@ -618,14 +843,16 @@ export default function FechamentoClientePage() {
             </div>
 
             {/* Filtro de contrato (projeto) */}
-            {projetoOptions.length > 0 && (
+            {headerProjetoOptions.length > 0 && (
               <div>
-                <div className="text-xs mb-1" style={{ color: 'var(--brand-muted)' }}>Contrato</div>
+                <div className="text-xs mb-1" style={{ color: 'var(--brand-muted)' }}>
+                  {tab === 'servicos' ? 'Projeto' : 'Contrato'}
+                </div>
                 <SearchSelect
                   value={projetoFilter ?? ''}
                   onChange={v => setProjetoFilter(v ? Number(v) : null)}
-                  options={projetoOptions}
-                  placeholder="Todos os contratos"
+                  options={headerProjetoOptions}
+                  placeholder={tab === 'servicos' ? 'Todos os projetos' : 'Todos os contratos'}
                 />
               </div>
             )}
@@ -649,7 +876,7 @@ export default function FechamentoClientePage() {
             { key: 'global',    label: 'Visão Global' },
             { key: 'servicos',  label: 'Apontamentos' },
             { key: 'relatorio', label: 'Relatório Serviços' },
-            { key: 'despesas',  label: `Despesas${despesas.length > 0 ? ` (${despesas.length})` : ''}` },
+            { key: 'cobranca',  label: 'Despesas a Cobrar' },
           ] as const).map(t => (
             <button
               key={t.key}
@@ -830,342 +1057,180 @@ export default function FechamentoClientePage() {
             )
           })()}
 
-          {/* Quando tab não é global e nenhum cliente foi selecionado */}
-          {tab !== 'global' && !customerId && (
-            <EmptyState icon={Building2} title="Selecione um cliente"
-              description="Escolha o cliente e o período para visualizar o fechamento." />
+          {/* ── Tab Apontamentos — todos os clientes (filtros: cliente + projeto) ── */}
+          {tab === 'servicos' && (
+            loadingApsGeral ? <SkeletonTable rows={8} cols={8} /> :
+            apsFiltered.length === 0 ? (
+              <EmptyState icon={FileText} title="Sem apontamentos"
+                description="Nenhum apontamento On Demand aprovado no período e filtros selecionados." />
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {apsFiltered.length} apontamento{apsFiltered.length === 1 ? '' : 's'}
+                    {customerId ? '' : ' · todos os clientes'} em <span className="font-semibold">{fmtYMFull(toYM)}</span>
+                  </p>
+                  <div className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-primary)' }}>
+                    {apsHorasTotal.toFixed(2)}h
+                  </div>
+                </div>
+                <Table>
+                  <Thead>
+                    <tr>
+                      <Th {...apontamentosSort.thProps('data')}>Data</Th>
+                      <Th {...apontamentosSort.thProps('cliente')}>Cliente</Th>
+                      <Th {...apontamentosSort.thProps('projeto_codigo')}>Projeto</Th>
+                      <Th {...apontamentosSort.thProps('colaborador')}>Colaborador</Th>
+                      <Th {...apontamentosSort.thProps('solicitante')}>Solicitante</Th>
+                      <Th {...apontamentosSort.thProps('ticket')}>Ticket</Th>
+                      <Th {...apontamentosSort.thProps('titulo')}>Título</Th>
+                      <Th right {...apontamentosSort.thProps('horas')}>Horas</Th>
+                    </tr>
+                  </Thead>
+                  <Tbody>
+                    {apontamentosSort.sorted.map(a => (
+                      <Tr key={a.id}>
+                        <Td muted className="text-xs tabular-nums whitespace-nowrap">{fmtDate(a.data)}</Td>
+                        <Td className="text-xs font-medium">{a.cliente}</Td>
+                        <Td muted className="text-xs">{a.projeto_codigo}</Td>
+                        <Td className="text-xs">{a.colaborador}</Td>
+                        <Td muted className="text-xs">{a.solicitante ?? '—'}</Td>
+                        <Td muted className="text-xs">{a.ticket ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${a.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-500 hover:text-cyan-400">#{a.ticket}</a> : '—'}</Td>
+                        <Td muted className="text-xs">{a.titulo ?? '—'}</Td>
+                        <Td right className="tabular-nums text-xs font-medium">{a.horas.toFixed(2)}h</Td>
+                      </Tr>
+                    ))}
+                    <Tr>
+                      <td colSpan={7} className="px-5 py-3 text-right text-xs font-semibold" style={{ color: 'var(--brand-muted)' }}>
+                        TOTAL DE HORAS
+                      </td>
+                      <Td right className="font-bold tabular-nums" style={{ color: 'var(--brand-primary)' }}>
+                        {apsHorasTotal.toFixed(2)}h
+                      </Td>
+                    </Tr>
+                  </Tbody>
+                </Table>
+              </>
+            )
           )}
 
-          {tab !== 'global' && customerId && (
-            <>
-
-              {/* ── Tab Apontamentos ── */}
-              {tab === 'servicos' && (
-                loading ? <SkeletonTable rows={6} cols={5} /> :
-                projetos.length === 0 ? (
-                  <EmptyState icon={FileText} title="Sem apontamentos"
-                    description="Nenhum apontamento aprovado encontrado no período e filtro selecionados." />
-                ) : (
-                  <div className="space-y-6">
-                    {projetos.map(p => (
-                      <div key={p.projeto_id}>
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <span className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>
-                              {p.projeto_nome}
-                            </span>
-                            <span className="ml-2 text-xs" style={{ color: 'var(--brand-subtle)' }}>
-                              {p.projeto_codigo}
-                            </span>
-                            <span className="ml-2 text-xs px-1.5 py-0.5 rounded"
-                              style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>
-                              {p.tipo_contrato}
-                            </span>
-                          </div>
-                          <div className="text-xs" style={{ color: 'var(--brand-muted)' }}>
-                            {formatBRL(p.valor_hora)}/h
-                          </div>
-                        </div>
-                        <Table>
-                          <Thead>
-                            <tr>
-                              <Th>Data</Th>
-                              <Th>Colaborador</Th>
-                              <Th>Solicitante</Th>
-                              <Th>Ticket</Th>
-                              <Th>Título</Th>
-                              <Th right>Horas</Th>
-                            </tr>
-                          </Thead>
-                          <Tbody>
-                            {(p.apontamentos ?? []).map(ts => (
-                              <Tr key={ts.id}>
-                                <Td muted className="text-xs tabular-nums whitespace-nowrap">{fmtDate(ts.data)}</Td>
-                                <Td className="text-xs">{ts.colaborador}</Td>
-                                <Td muted className="text-xs">{ts.solicitante ?? '—'}</Td>
-                                <Td muted className="text-xs">{ts.ticket ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${ts.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-500 hover:text-cyan-400">#{ts.ticket}</a> : '—'}</Td>
-                                <Td muted className="text-xs">{ts.titulo ?? '—'}</Td>
-                                <Td right className="tabular-nums text-xs font-medium">
-                                  {ts.horas.toFixed(2)}h
-                                  {ts.client_extra_pct ? (
-                                    <span className="ml-1.5 text-[10px] font-semibold" style={{ color: '#F59E0B' }}>
-                                      +{ts.client_extra_pct}%{ts.valor_extra ? ` = +${formatBRL(ts.valor_extra)}` : ''}
-                                    </span>
-                                  ) : null}
-                                </Td>
-                              </Tr>
-                            ))}
-                            {p.extra_receita != null && p.extra_receita > 0 && (
-                              <Tr>
-                                <td colSpan={6} className="px-5 py-2 text-right text-[10px] font-semibold"
-                                  style={{ color: '#d97706' }}>
-                                  Acréscimo %
-                                </td>
-                                <Td right className="text-[10px] font-bold tabular-nums" style={{ color: '#d97706' }}>
-                                  +{formatBRL(p.extra_receita)}
-                                </Td>
-                              </Tr>
-                            )}
-                            <Tr>
-                              <td colSpan={6} className="px-5 py-3 text-right text-xs font-semibold"
-                                style={{ color: 'var(--brand-muted)' }}>
-                                {p.horas.toFixed(2)}h × {formatBRL(p.valor_hora)}/h{p.extra_receita && p.extra_receita > 0 ? ' + acréscimo' : ''} =
-                              </td>
-                              <Td right className="font-bold tabular-nums" style={{ color: 'var(--brand-primary)' }}>
-                                {formatBRL(p.total_receita)}
-                              </Td>
-                            </Tr>
-                          </Tbody>
-                        </Table>
-                      </div>
-                    ))}
-                    <div className="flex justify-end pt-2">
-                      <div className="px-5 py-3 rounded-xl"
-                        style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-                        <span className="text-sm font-semibold mr-4" style={{ color: 'var(--brand-muted)' }}>
-                          {totalHoras.toFixed(2)}h · Total Serviços
-                        </span>
-                        <span className="text-base font-bold tabular-nums" style={{ color: 'var(--brand-primary)' }}>
-                          {formatBRL(totalGeral)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )
-              )}
-
-              {/* ── Tab Relatório Serviços ── */}
+              {/* ── Tab Relatório Serviços — lista de clientes; Abrir → relatório tradicional ── */}
               {tab === 'relatorio' && (
-                projetos.length === 0 ? (
-                  <EmptyState icon={FileText} title="Sem dados para relatório"
-                    description="Nenhum apontamento encontrado no período selecionado." />
-                ) : (loading || reportHtmlLoading || reportHtml === null) ? (
-                  <SkeletonTable rows={6} cols={4} />
-                ) : (
-                    /* Split horizontal — preview à esquerda, painel de ações à direita */
-                    <div className="flex-1 flex min-h-0 flex-col md:flex-row -m-6">
-                      {/* LEFT — preview do documento, largura limitada e centralizada */}
-                      <div className="flex-1 min-h-0 overflow-auto flex justify-center p-3 md:p-6" style={{ background: 'var(--bg)' }}>
-                        <iframe
-                          ref={reportIframeRef}
-                          srcDoc={reportHtml}
-                          title="Relatório"
-                          className="w-full"
-                          style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, maxWidth: 820, minHeight: 640 }}
-                        />
-                      </div>
-
-                      {/* RIGHT — painel de ações fixo */}
-                      <aside
-                        className="shrink-0 w-full md:w-[300px] flex flex-col gap-3 p-4 overflow-y-auto border-t md:border-t-0 md:border-l"
-                        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
-                      >
-                        <div className="pb-3 mb-1" style={{ borderBottom: '1px solid var(--border)' }}>
-                          <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text)' }}>{clienteNome}</p>
-                          <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                            {fromYM === toYM ? fmtYM(toYM) : `${fmtYM(fromYM)} — ${fmtYM(toYM)}`}
-                          </p>
-                          <p className="text-[11px] mt-2 uppercase tracking-wide" style={{ color: 'var(--text-light)' }}>Valor a pagar</p>
-                          <p className="text-lg font-bold" style={{ color: 'var(--primary)' }}>{formatBRL(totalGeral)}</p>
-                        </div>
-
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          icon={Printer}
-                          className="w-full !justify-start"
-                          onClick={() => reportIframeRef.current?.contentWindow?.print()}
-                        >
-                          Imprimir
-                        </Button>
-
-                        {canSendEmail && (
-                          <Button
-                            size="sm"
-                            icon={Mail}
-                            className="w-full !justify-start"
-                            title={`Enviar fechamento de ${clienteNome} por e-mail`}
-                            onClick={openCompose}
-                          >
-                            Enviar e-mail
-                          </Button>
-                        )}
-
-                        {/* Status de envio: legenda (data/hora/quem) + limpar */}
-                        {canSendEmail && (
-                          status?.envio_em ? (
-                            <div
-                              className="rounded-lg px-3 py-2 text-xs flex items-start justify-between gap-2"
-                              style={{ background: 'var(--success-bg)', color: 'var(--success)' }}
-                            >
-                              <span className="flex items-start gap-1.5">
-                                <Check size={13} className="mt-0.5 shrink-0" />
-                                <span>Enviado em {fmtDateTime(status.envio_em)}{status.envio_por ? ` por ${status.envio_por}` : ''}</span>
-                              </span>
-                              <button
-                                onClick={limparEnvio}
-                                disabled={limpandoEnvio}
-                                className="shrink-0 disabled:opacity-50 hover:underline"
-                                style={{ color: 'var(--text-light)' }}
-                              >
-                                {limpandoEnvio ? '...' : 'limpar'}
-                              </button>
-                            </div>
-                          ) : (
-                            <p className="text-xs px-1" style={{ color: 'var(--text-light)' }}>Fechamento ainda não enviado.</p>
-                          )
-                        )}
-
-                        <Button
-                          size="sm"
-                          icon={FileSpreadsheet}
-                          loading={downloadingExcel}
-                          className="w-full !justify-start"
-                          onClick={downloadExcel}
-                        >
-                          {downloadingExcel ? 'Baixando…' : 'Baixar Excel'}
-                        </Button>
-
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon={X}
-                          className="w-full !justify-start mt-auto"
-                          onClick={() => setTab('servicos')}
-                        >
-                          Fechar
-                        </Button>
-                      </aside>
-                    </div>
-                )
-              )}
-
-              {/* ── Tab Despesas ── */}
-              {tab === 'despesas' && (
-                loadingDespesas ? <SkeletonTable rows={5} cols={5} /> :
-                despesas.length === 0 ? (
-                  <EmptyState icon={Receipt} title="Sem despesas"
-                    description="Nenhuma despesa aprovada encontrada no período selecionado." />
-                ) : (
-                  <>
-                    <div className="flex justify-end mb-4">
-                      <Button size="sm" onClick={() => handlePrint('despesas')}
-                        style={{ background: 'var(--brand-primary)', color: '#000' }}>
-                        <Printer size={13} />
-                        <span className="ml-1.5">Relatório de Despesas</span>
-                      </Button>
-                    </div>
-
-                    {/* Tabela de despesas (UI) */}
-                    <div className="mb-6">
+                customerId ? renderDetail('servicos') : (
+                  loadingGlobal ? <SkeletonTable rows={6} cols={5} /> :
+                  clientesServicos.length === 0 ? (
+                    <EmptyState icon={FileText} title="Sem serviços no período"
+                      description="Nenhum cliente com apontamentos On Demand no mês selecionado." />
+                  ) : (
+                    <>
+                      <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
+                        Clientes com serviços em <span className="font-semibold">{fmtYMFull(toYM)}</span>.
+                        Clique em “Abrir” para ver o relatório e imprimir / enviar por e-mail / exportar.
+                      </p>
                       <Table>
                         <Thead>
                           <tr>
-                            <Th>Data</Th>
-                            <Th>Descrição</Th>
-                            <Th>Categoria</Th>
-                            <Th>Colaborador</Th>
-                            <Th>Projeto</Th>
-                            <Th right>Valor</Th>
+                            <Th {...servicosSort.thProps('nome')}>Cliente</Th>
+                            <Th>Tipo de contrato</Th>
+                            <Th right {...servicosSort.thProps('total_horas')}>Horas</Th>
+                            <Th right {...servicosSort.thProps('total_receita')}>Total Serviços</Th>
+                            <Th>Envio</Th>
+                            <Th right>Ação</Th>
                           </tr>
                         </Thead>
                         <Tbody>
-                          {despesas.map(d => (
-                            <Tr key={d.id}>
-                              <Td muted className="text-xs tabular-nums whitespace-nowrap">{fmtDate(d.data)}</Td>
-                              <Td className="text-xs">{d.descricao}</Td>
-                              <Td muted className="text-xs">{d.categoria}</Td>
-                              <Td muted className="text-xs">{d.colaborador}</Td>
-                              <Td muted className="text-xs">{d.projeto}</Td>
-                              <Td right className="tabular-nums text-xs font-medium">{formatBRL(d.valor)}</Td>
-                            </Tr>
-                          ))}
+                          {servicosSort.sorted.map(c => {
+                            const env = enviadoMap.get(c.customer_id)
+                            return (
+                              <Tr key={c.customer_id}>
+                                <Td className="text-sm font-medium">{c.nome}</Td>
+                                <Td>
+                                  <div className="flex flex-wrap gap-1">
+                                    {Array.from(c.tipos).map(t => (
+                                      <span key={t} className="text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap"
+                                        style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>{t}</span>
+                                    ))}
+                                  </div>
+                                </Td>
+                                <Td right muted className="tabular-nums text-xs">{c.total_horas.toFixed(2)}h</Td>
+                                <Td right className="tabular-nums text-sm font-semibold">{formatBRL(c.total_receita)}</Td>
+                                <Td>{env?.envio_em
+                                  ? <Badge variant="success"><Check size={10} className="mr-1" />{fmtDateTime(env.envio_em)}{env.envio_por ? ` · ${env.envio_por}` : ''}</Badge>
+                                  : <span className="text-xs" style={{ color: 'var(--text-light)' }}>não enviado</span>}
+                                </Td>
+                                <Td right>
+                                  <Button size="sm" variant="secondary" onClick={() => setCustomerId(c.customer_id)}>Abrir</Button>
+                                </Td>
+                              </Tr>
+                            )
+                          })}
                           <Tr>
-                            <td colSpan={5} className="px-5 py-3 text-right text-xs font-bold"
-                              style={{ color: 'var(--brand-muted)' }}>
-                              TOTAL DESPESAS
-                            </td>
-                            <Td right className="tabular-nums font-bold" style={{ color: 'var(--brand-primary)' }}>
-                              {formatBRL(totalDespesas)}
-                            </Td>
+                            <td className="px-5 py-3 text-right text-xs font-bold" style={{ color: 'var(--brand-muted)' }} colSpan={2}>TOTAL GERAL</td>
+                            <Td right muted className="tabular-nums text-xs">{clientesServicos.reduce((s, c) => s + c.total_horas, 0).toFixed(2)}h</Td>
+                            <Td right className="tabular-nums font-bold" style={{ color: 'var(--brand-primary)' }}>{formatBRL(clientesServicos.reduce((s, c) => s + c.total_receita, 0))}</Td>
+                            <Td /><Td right />
                           </Tr>
                         </Tbody>
                       </Table>
-                    </div>
-
-                    {/* Documento para impressão */}
-                    <div id="print-despesas">
-                      <div className="bg-white text-gray-900 rounded-2xl shadow-lg mx-auto"
-                        style={{ maxWidth: 800, fontFamily: 'Arial, sans-serif' }}>
-                        <div className="flex items-start justify-between px-10 pt-8 pb-6"
-                          style={{ borderBottom: '2px solid #5b21b6' }}>
-                          <Image src="/logo.png" alt="ERPSERV" width={180} height={72}
-                            style={{ objectFit: 'contain' }} />
-                          <div className="text-right">
-                            <div className="text-xl font-bold text-gray-800 mb-1">Relatório de Despesas</div>
-                            <div className="text-sm text-gray-500">Reembolso ao Cliente</div>
-                            <div className="mt-2 text-sm text-gray-700">
-                              <span className="font-semibold">Cliente:</span> {clienteNome}
-                            </div>
-                            <div className="text-sm text-gray-700">
-                              <span className="font-semibold">Competência:</span>{' '}
-                              {fromYM === toYM ? fmtYMFull(toYM) : `${fmtYM(fromYM)} a ${fmtYM(toYM)}`}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="px-10 py-6">
-                          <table className="w-full text-sm border-collapse">
-                            <thead className="sticky top-0 z-10" style={{ background: '#f5f3ff' }}>
-                              <tr style={{ background: '#f5f3ff' }}>
-                                <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Data</th>
-                                <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Descrição</th>
-                                <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Categoria</th>
-                                <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Colaborador</th>
-                                <th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Projeto</th>
-                                <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">Valor</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {despesas.map((d, i) => (
-                                <tr key={d.id}
-                                  style={{ background: i % 2 === 0 ? '#fff' : '#faf9ff', borderBottom: '1px solid #e5e7eb' }}>
-                                  <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{fmtDate(d.data)}</td>
-                                  <td className="px-3 py-2 text-xs text-gray-800">{d.descricao}</td>
-                                  <td className="px-3 py-2 text-xs text-gray-500">{d.categoria}</td>
-                                  <td className="px-3 py-2 text-xs text-gray-500">{d.colaborador}</td>
-                                  <td className="px-3 py-2 text-xs text-gray-500">{d.projeto}</td>
-                                  <td className="px-3 py-2 text-xs text-right font-medium text-gray-800 tabular-nums">
-                                    {formatBRL(d.valor)}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                            <tfoot>
-                              <tr style={{ background: '#ede9fe', borderTop: '2px solid #5b21b6' }}>
-                                <td colSpan={5} className="px-3 py-2 text-right text-sm font-semibold text-gray-700">
-                                  TOTAL DESPESAS
-                                </td>
-                                <td className="px-3 py-2 text-right text-sm font-bold tabular-nums"
-                                  style={{ color: '#5b21b6' }}>
-                                  {formatBRL(totalDespesas)}
-                                </td>
-                              </tr>
-                            </tfoot>
-                          </table>
-                        </div>
-                        <div className="px-10 pb-8 flex justify-between items-center text-xs text-gray-400"
-                          style={{ borderTop: '1px solid #e5e7eb', paddingTop: 16 }}>
-                          <span>ERPSERV Consultoria — Documento gerado pelo sistema Minutor</span>
-                          <span>Emitido em {new Date().toLocaleDateString('pt-BR')}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </>
+                    </>
+                  )
                 )
               )}
 
-            </>
-          )}
+              {/* ── Tab Despesas a Cobrar — lista de clientes; Abrir → relatório de despesa ── */}
+              {tab === 'cobranca' && (
+                customerId ? renderDetail('despesa') : (
+                loadingCobranca ? <SkeletonTable rows={5} cols={4} /> :
+                despCobranca.length === 0 ? (
+                  <EmptyState icon={Receipt} title="Sem despesas a cobrar"
+                    description="Nenhum cliente com despesa marcada para cobrança (e ainda não paga) no mês selecionado." />
+                ) : (
+                  <>
+                    <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
+                      Clientes com despesas marcadas para cobrança e ainda não pagas em{' '}
+                      <span className="font-semibold">{fmtYMFull(toYM)}</span>. Clique em “Abrir” para
+                      revisar e enviar o relatório de despesas do cliente.
+                    </p>
+                    <Table>
+                      <Thead>
+                        <tr>
+                          <Th {...cobrancaSort.thProps('nome')}>Cliente</Th>
+                          <Th right {...cobrancaSort.thProps('qtd')}>Despesas</Th>
+                          <Th right {...cobrancaSort.thProps('total')}>Total a cobrar</Th>
+                          <Th>Envio</Th>
+                          <Th right>Ação</Th>
+                        </tr>
+                      </Thead>
+                      <Tbody>
+                        {cobrancaSort.sorted.map(r => {
+                          const env = enviadoMap.get(r.customer_id)
+                          return (
+                            <Tr key={r.customer_id}>
+                              <Td className="text-sm font-medium">{r.nome}</Td>
+                              <Td right muted className="tabular-nums text-xs">{r.qtd}</Td>
+                              <Td right className="tabular-nums text-sm font-semibold">{formatBRL(r.total)}</Td>
+                              <Td>{env?.envio_em
+                                ? <Badge variant="success"><Check size={10} className="mr-1" />{fmtDateTime(env.envio_em)}{env.envio_por ? ` · ${env.envio_por}` : ''}</Badge>
+                                : <span className="text-xs" style={{ color: 'var(--text-light)' }}>não enviado</span>}
+                              </Td>
+                              <Td right>
+                                <Button size="sm" variant="secondary" onClick={() => setCustomerId(r.customer_id)}>Abrir</Button>
+                              </Td>
+                            </Tr>
+                          )
+                        })}
+                        <Tr>
+                          <td className="px-5 py-3 text-right text-xs font-bold" style={{ color: 'var(--brand-muted)' }}>TOTAL GERAL</td>
+                          <Td right muted className="tabular-nums text-xs">{despCobranca.reduce((s, r) => s + r.qtd, 0)}</Td>
+                          <Td right className="tabular-nums font-bold" style={{ color: 'var(--brand-primary)' }}>{formatBRL(despCobranca.reduce((s, r) => s + r.total, 0))}</Td>
+                          <Td /><Td right />
+                        </Tr>
+                      </Tbody>
+                    </Table>
+                  </>
+                )
+                )
+              )}
 
         </div>
       </div>
@@ -1186,7 +1251,9 @@ export default function FechamentoClientePage() {
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3.5 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
               <div>
-                <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Enviar fechamento por e-mail</p>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                  {tab === 'cobranca' ? 'Enviar despesas por e-mail' : 'Enviar fechamento por e-mail'}
+                </p>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
                   {clienteNome} · {fromYM === toYM ? fmtYM(toYM) : `${fmtYM(fromYM)} — ${fmtYM(toYM)}`}
                 </p>
@@ -1346,6 +1413,55 @@ export default function FechamentoClientePage() {
                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
                 />
               </div>
+
+              {/* Anexos extras — o relatório (PDF) e a planilha (Excel) já vão automaticamente */}
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-light)' }}>
+                  Anexos
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors"
+                    style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                  >
+                    <Paperclip size={13} />
+                    Adicionar arquivo
+                    <input
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={e => { addAnexos(e.target.files); e.target.value = '' }}
+                    />
+                  </label>
+                  <span className="text-[11px]" style={{ color: 'var(--text-light)' }}>
+                    O relatório (PDF) e a planilha (Excel) do fechamento já vão anexados.
+                  </span>
+                </div>
+                {anexos.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {anexos.map((f, i) => (
+                      <span
+                        key={`${f.name}-${i}`}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs"
+                        style={{ background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)' }}
+                      >
+                        <FileText size={11} style={{ color: 'var(--text-muted)' }} />
+                        {f.name}
+                        <span style={{ color: 'var(--text-light)' }}>({(f.size / 1024).toFixed(0)} KB)</span>
+                        <button onClick={() => removeAnexo(i)} style={{ color: 'var(--text-muted)' }} title="Remover">
+                          <X size={11} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {anexos.length > 0 && (
+                  <p className="text-[11px] mt-1.5 font-medium" style={{ color: anexosExcedido ? 'var(--danger)' : 'var(--text-light)' }}>
+                    {(anexosBytes / 1048576).toFixed(1)} MB de {(MAX_ANEXOS_BYTES / 1048576).toFixed(0)} MB
+                    {anexosExcedido && ' — excede o limite; remova arquivos para poder enviar.'}
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Footer */}
@@ -1358,6 +1474,8 @@ export default function FechamentoClientePage() {
                 size="sm"
                 icon={Send}
                 loading={sendingEmail}
+                disabled={anexosExcedido}
+                title={anexosExcedido ? 'Anexos excedem o limite — remova arquivos para enviar.' : undefined}
                 onClick={sendReportEmail}
               >
                 {sendingEmail ? 'Enviando…' : 'Enviar'}
