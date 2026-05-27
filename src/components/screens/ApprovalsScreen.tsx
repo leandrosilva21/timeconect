@@ -650,7 +650,9 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
 
   // Load support data
   useEffect(() => {
-    api.get<any>('/users?pageSize=100').then(r => {
+    // Colaborador: consultor + coordenador + administrativo + admin (todos os internos,
+    // exclui só cliente) — pra filtrar lançamentos feitos por qualquer um deles.
+    api.get<any>('/users?pageSize=300&exclude_type=cliente').then(r => {
       const l = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
       setUsers(l.map((u: any) => ({ id: u.id, name: u.name })))
     }).catch(() => {})
