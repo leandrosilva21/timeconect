@@ -564,7 +564,9 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
         : '/customers/user-linked?pageSize=500'
       Promise.allSettled([
         api.get<any>(customerEndpoint),
-        api.get<any>('/users?pageSize=100&role=Consultor'),
+        // Colaborador: inclui consultor + coordenador + administrativo + admin (todos os
+        // internos, exclui só cliente) — pra filtrar despesas lançadas por qualquer um deles.
+        api.get<any>('/users?pageSize=300&exclude_type=cliente'),
         api.get<any>('/users?pageSize=100&role=Coordenador'),
         api.get<any>('/executives?pageSize=100'),
       ]).then(([cu, co, cr, ex]) => {
@@ -741,7 +743,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
               <MultiSelect value={customerIds}    onChange={v => { setCustomerIds(v);    setPage(1) }} options={customers}    placeholder="Todos os clientes"     />
               <SearchSelect value={projectId}     onChange={v => { setProjectId(v);     setPage(1) }} options={allProjects}  placeholder="Todos os projetos"     />
-              <MultiSelect value={userIds}        onChange={v => { setUserIds(v);        setPage(1) }} options={consultants}  placeholder="Todos os consultores"  />
+              <MultiSelect value={userIds}        onChange={v => { setUserIds(v);        setPage(1) }} options={consultants}  placeholder="Todos os colaboradores" />
               <MultiSelect value={coordinatorIds} onChange={v => { setCoordinatorIds(v); setPage(1) }} options={coordinators} placeholder="Todos os coordenadores" />
               <MultiSelect value={executiveIds}   onChange={v => { setExecutiveIds(v);   setPage(1) }} options={executives}   placeholder="Todos os executivos"   />
             </div>
