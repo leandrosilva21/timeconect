@@ -28,6 +28,9 @@ interface SustProject extends Project {
   contract_type_display?: string
   status_display?: string
   project_value?: number | null
+  // Override do coord: quando preenchido, projeto é gerenciado por outro coordenador
+  // e NÃO deve aparecer no portal de sustentação (regra pré-existente).
+  kanban_coordinator_override_id?: number | null
 }
 
 interface CostSummary {
@@ -449,7 +452,9 @@ export default function SustentacaoProjetosPage() {
         const items = res.items ?? []
         // For coordinator sustentacao the API auto-scopes; for admin we filter client-side
         const isCoordenadorSust = user?.type === 'coordenador' && (user as any)?.coordinator_type === 'sustentacao'
-        setProjects(isCoordenadorSust ? items : items.filter(isSustProject))
+        const base = isCoordenadorSust ? items : items.filter(isSustProject)
+        // Esconde projetos gerenciados por outro coordenador (override) — saem do portal.
+        setProjects(base.filter(p => !p.kanban_coordinator_override_id))
       })
       .catch(() => toast.error('Erro ao carregar projetos'))
       .finally(() => setLoading(false))
