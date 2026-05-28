@@ -434,6 +434,8 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
   const canActAsUser     = isAdmin || isCoordenador
   const isCliente        = user?.type === 'cliente'
   const canPay           = isAdmin || isAdministrativo
+  // Chip "Meus projetos / Todos" pra coordenador (idem Apontamentos / Demandas).
+  const [coordScope, setCoordScope] = useState<'meus' | 'todos'>('meus')
 
   const { filters: flt, set: setFilter, clear: clearPersistedFilters } = usePersistedFilters(
     'expenses',
@@ -529,10 +531,14 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
     if (projectId) p.set('project_id', projectId)
     userIds.forEach(v => p.append('user_id[]', v))
     coordinatorIds.forEach(v => p.append('coordinator_id[]', v))
+    // Chip "Meus projetos" do coordenador: força coordinator_id = user.id quando ativo.
+    if (isCoordenador && coordScope === 'meus' && user?.id && !coordinatorIds.includes(String(user.id))) {
+      p.append('coordinator_id[]', String(user.id))
+    }
     executiveIds.forEach(v => p.append('executive_id[]', v))
     if (scope) p.set('scope', scope)
     return p.toString()
-  }, [page, status, isPaidFilter, dateFrom, dateTo, customerIds, projectId, userIds, coordinatorIds, executiveIds, contractTypeId, categoriaServico, isCliente, user?.customer_id, scope])
+  }, [page, status, isPaidFilter, dateFrom, dateTo, customerIds, projectId, userIds, coordinatorIds, executiveIds, contractTypeId, categoriaServico, isCliente, user?.customer_id, user?.id, scope, isCoordenador, coordScope])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -726,6 +732,24 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
           subtitle="Registro de despesas e reembolsos"
           actions={
             <>
+              {isCoordenador && (
+                <div className="inline-flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                  {(['meus', 'todos'] as const).map(opt => {
+                    const active = coordScope === opt
+                    return (
+                      <button key={opt} onClick={() => setCoordScope(opt)}
+                        className="px-3 py-1.5 text-xs font-semibold transition-colors"
+                        style={{
+                          background: active ? 'var(--primary)' : 'var(--surface)',
+                          color: active ? 'var(--primary-fg)' : 'var(--text-muted)',
+                          borderRight: opt === 'meus' ? '1px solid var(--border)' : undefined,
+                        }}>
+                        {opt === 'meus' ? 'Meus projetos' : 'Todos'}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
               <Button variant="ghost" size="sm" icon={RefreshCw} onClick={load}>Atualizar</Button>
               {!isCliente && <Button variant="primary" size="sm" icon={Plus} onClick={openCreate}>Nova</Button>}
             </>
