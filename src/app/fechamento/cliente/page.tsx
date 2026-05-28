@@ -1474,8 +1474,13 @@ export default function FechamentoClientePage() {
                 size="sm"
                 icon={Send}
                 loading={sendingEmail}
-                disabled={anexosExcedido}
-                title={anexosExcedido ? 'Anexos excedem o limite — remova arquivos para enviar.' : undefined}
+                disabled={anexosExcedido || (cadastradoEmails.length === 0 && avulsoEmails.length === 0)}
+                title={
+                  anexosExcedido ? 'Anexos excedem o limite — remova arquivos para enviar.'
+                  : (cadastradoEmails.length === 0 && avulsoEmails.length === 0)
+                    ? 'Cadastre ao menos um e-mail no cliente ou adicione um e-mail avulso para enviar.'
+                    : undefined
+                }
                 onClick={sendReportEmail}
               >
                 {sendingEmail ? 'Enviando…' : 'Enviar'}
