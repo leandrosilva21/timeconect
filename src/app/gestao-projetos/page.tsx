@@ -3166,6 +3166,8 @@ export default function GestaoProjetosPage() {
                   hoursPerMonth={aportesProject.sold_hours ?? 0}
                   accumulated={(aportesProject as any).accumulated_sold_hours ?? null}
                   endDate={(aportesProject as any).encerramento_date ?? null}
+                  projectId={aportesProject.id}
+                  canEditConsumption={isAdmin || isCoordenador}
                 />
               )}
               {contribLoading && <p className="text-xs text-center py-8" style={{ color: 'var(--text-light)' }}>Carregando aportes...</p>}
@@ -3779,6 +3781,8 @@ export default function GestaoProjetosPage() {
                         hoursPerMonth={p.sold_hours ?? 0}
                         accumulated={(p as any).accumulated_sold_hours ?? null}
                         endDate={(p as any).encerramento_date ?? null}
+                        projectId={p.id}
+                        canEditConsumption={isAdmin || isCoordenador}
                       />
                     )}
 
