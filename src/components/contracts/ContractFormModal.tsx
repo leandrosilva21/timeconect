@@ -322,14 +322,22 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
     api.get<CustomerContact[]>(`/customer-contacts?customer_id=${form.customer_id}`)
       .then(r => setCustomerContacts(Array.isArray(r) ? r : []))
       .catch(() => setCustomerContacts([]))
+    // Projetos pausados/encerrados/cancelados não podem receber novos subprojetos nem aportes —
+    // filtra todos os 3 status em ambos os dropdowns.
+    const INACTIVE_STATUSES = new Set(['paused', 'finished', 'cancelled'])
     api.get<any>(`/projects?customer_id=${form.customer_id}&parent_projects_only=true&pageSize=100`)
-      .then(r => setParentProjects((r?.items ?? []).map((p: any) => ({ id: p.id, name: `${p.code} — ${p.name}` }))))
+      .then(r => setParentProjects(
+        ((r?.items ?? []) as any[])
+          .filter(p => !INACTIVE_STATUSES.has(p.status))
+          .map((p: any) => ({ id: p.id, name: `${p.code} — ${p.name}` }))
+      ))
       .catch(() => setParentProjects([]))
     // TODOS os projetos do cliente (pai + filho) para o select do form de aporte.
     // Ordena pais alfabético e filhos imediatamente abaixo do pai (indented).
     api.get<any>(`/projects?customer_id=${form.customer_id}&pageSize=200`)
       .then(r => {
-        const list: any[] = r?.items ?? []
+        const raw: any[] = r?.items ?? []
+        const list = raw.filter(p => !INACTIVE_STATUSES.has(p.status))
         const byId = new Map<number, any>(list.map(p => [p.id, p]))
         const parents = list.filter(p => !p.parent_project_id).sort((a, b) => String(a.code).localeCompare(String(b.code)))
         const childrenByParent = new Map<number, any[]>()
