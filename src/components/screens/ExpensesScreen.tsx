@@ -22,6 +22,8 @@ import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
+import { useTableSort } from '@/hooks/use-table-sort'
+import * as XLSX from 'xlsx'
 
 async function fetchAndOpenFile(url: string, download = false) {
   const res = await fetch(toRelativePath(url), { credentials: 'same-origin' })
@@ -723,6 +725,62 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
     }
   }
 
+  // ─── Ordenação client-side da página atual (campos aninhados via accessor) ───
+  const items = data?.items ?? []
+  const expenseSortAccessor = useCallback((row: Expense, key: string): unknown => {
+    switch (key) {
+      case 'expense_date': return row.expense_date
+      case 'user':         return row.user?.name ?? ''
+      case 'project':      return row.project?.name ?? ''
+      case 'customer':     return row.project?.customer?.name ?? ''
+      case 'description':  return row.description ?? ''
+      case 'category':     return row.category?.name ?? ''
+      case 'service_type': return (row.project as any)?.service_type?.name ?? ''
+      case 'amount':       return Number(row.amount) || 0
+      case 'status':       return row.status ?? ''
+      case 'is_paid':      return row.is_paid ? 1 : 0
+      case 'created_at':   return row.created_at ?? ''
+      default:             return (row as any)[key]
+    }
+  }, [])
+  const { sorted: sortedItems, thProps } = useTableSort(items, expenseSortAccessor)
+
+  // ─── Exportar Excel (apenas a página visível ordenada — mesma regra do print) ──
+  const exportToExcel = () => {
+    if (sortedItems.length === 0) {
+      toast.info('Sem despesas para exportar — ajuste os filtros.')
+      return
+    }
+    const STATUS_LABEL_LOCAL: Record<string, string> = {
+      pending: 'Pendente', approved: 'Aprovado', rejected: 'Rejeitado', adjustment_requested: 'Ajuste',
+    }
+    const rows = sortedItems.map(e => ({
+      Data: e.expense_date ? e.expense_date.split('-').reverse().join('/') : '',
+      Colaborador: e.user?.name ?? '',
+      Projeto: e.project?.name ?? '',
+      Cliente: e.project?.customer?.name ?? '',
+      Descrição: e.description ?? '',
+      Categoria: e.category?.name ?? '',
+      'Tipo de Serviço': (e.project as any)?.service_type?.name ?? '',
+      Valor: Number(e.amount) || 0,
+      Status: STATUS_LABEL_LOCAL[e.status] ?? e.status ?? '',
+      Pagamento: e.is_paid ? 'Pago' : 'Em aberto',
+      'Cobrar Cliente': e.charge_client ? 'Sim' : 'Não',
+      'Inclusão': e.created_at ? new Date(e.created_at).toLocaleString('pt-BR') : '',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    // Formatação BRL na coluna H (Valor) — XLSX aceita numFmt por célula.
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1')
+    for (let r = 1; r <= range.e.r; r++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c: 7 })]
+      if (cell) cell.z = '"R$" #,##0.00'
+    }
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Despesas')
+    const stamp = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `despesas_${stamp}.xlsx`)
+  }
+
   return (
     <div>
       <div className={embedded ? '' : 'max-w-7xl mx-auto'}>
@@ -732,6 +790,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
           subtitle="Registro de despesas e reembolsos"
           actions={
             <>
+              <Button variant="ghost" size="sm" icon={Download} onClick={exportToExcel} disabled={sortedItems.length === 0}>Exportar Excel</Button>
               <Button variant="ghost" size="sm" icon={RefreshCw} onClick={load}>Atualizar</Button>
               {!isCliente && <Button variant="primary" size="sm" icon={Plus} onClick={openCreate}>Nova</Button>}
             </>
@@ -913,27 +972,27 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
             <Thead>
               <tr>
                 {!isCliente && <Th className="w-10" />}
-                <Th>Data</Th>
-                <Th>Colaborador</Th>
-                <Th className="hidden md:table-cell">Projeto</Th>
-                {!isCliente && <Th className="hidden sm:table-cell">Cliente</Th>}
-                {!isCliente && <Th>Descrição</Th>}
-                {!isCliente && <Th className="hidden lg:table-cell">Categoria</Th>}
-                <Th className="hidden xl:table-cell">Tipo de Serviço</Th>
-                <Th right>Valor</Th>
-                {!isCliente && <Th>Status</Th>}
-                {!isCliente && <Th>Pagamento</Th>}
-                <Th className="hidden lg:table-cell">Inclusão</Th>
+                <Th {...thProps('expense_date')}>Data</Th>
+                <Th {...thProps('user')}>Colaborador</Th>
+                <Th {...thProps('project')} className="hidden md:table-cell">Projeto</Th>
+                {!isCliente && <Th {...thProps('customer')} className="hidden sm:table-cell">Cliente</Th>}
+                {!isCliente && <Th {...thProps('description')}>Descrição</Th>}
+                {!isCliente && <Th {...thProps('category')} className="hidden lg:table-cell">Categoria</Th>}
+                <Th {...thProps('service_type')} className="hidden xl:table-cell">Tipo de Serviço</Th>
+                <Th {...thProps('amount')} right>Valor</Th>
+                {!isCliente && <Th {...thProps('status')}>Status</Th>}
+                {!isCliente && <Th {...thProps('is_paid')}>Pagamento</Th>}
+                <Th {...thProps('created_at')} className="hidden lg:table-cell">Inclusão</Th>
               </tr>
             </Thead>
             <Tbody>
-              {data?.items.length === 0 ? (
+              {sortedItems.length === 0 ? (
                 <tr>
                   <td colSpan={isCliente ? 4 : 11}>
                     <EmptyState icon={Receipt} title="Nenhuma despesa encontrada" description="Tente ajustar os filtros ou criar uma nova despesa." />
                   </td>
                 </tr>
-              ) : data?.items.map(exp => (
+              ) : sortedItems.map(exp => (
                 <Tr key={exp.id} onClick={() => setViewItem(exp)}>
                   {!isCliente && (
                     <Td className="w-10">
