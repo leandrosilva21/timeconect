@@ -579,7 +579,7 @@ const CONTRACT_MENU_ITEMS = [
 const PROJECT_MENU_ITEMS = [
   { action: 'view',       label: 'Visualizar',       icon: Eye,           clientVisible: false },
   { action: 'edit',       label: 'Editar',            icon: Pencil,        clientVisible: false, adminOnly: true },
-  { action: 'chat',       label: 'Chat',              icon: MessageSquare, clientVisible: true  },
+  // 'Chat' removido (2026-05-28): após virar projeto, chat sai do escopo. Chat só na Requisição (fase Demanda).
   { action: 'status',     label: 'Alterar Status',    icon: Layers,        clientVisible: false },
   { action: 'cost',       label: 'Custo',             icon: DollarSign,    clientVisible: false, coordHidden: true },
   { action: 'timesheets', label: 'Apont. & Despesas', icon: Clock,         clientVisible: false },
@@ -750,14 +750,7 @@ function ProjectKanbanCard({
               )}
             </div>
             <div className="flex items-center gap-1">
-              <button onClick={e => { e.stopPropagation(); onAction('chat') }}
-                className="relative p-1 rounded-md hover:bg-white/10 transition-colors" title="Abrir Chat"
-                style={{ color: hasUnread ? 'var(--text)' : 'var(--text-muted)' }}>
-                <MessageSquare size={11} />
-                {hasUnread && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style={{ background: 'var(--primary)' }} />
-                )}
-              </button>
+              {/* Ícone de chat removido (2026-05-28): após virar projeto, chat sai. Chat só na Requisição. */}
               <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8' }}>
                 {card.code}
               </span>

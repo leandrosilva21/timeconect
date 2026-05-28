@@ -205,7 +205,7 @@ function endDateStyle(dateStr: string): { color: string; bg: string; label: stri
 const PROJECT_MENU_ITEMS = [
   { action: 'view',       label: 'Visualizar',       icon: Eye },
   { action: 'edit',       label: 'Editar',            icon: Pencil,     adminOnly: true },
-  { action: 'chat',       label: 'Chat',              icon: MessageSquare },
+  // 'Chat' removido (2026-05-28): após virar projeto, chat sai. Chat só na Requisição/Contrato.
   { action: 'status',     label: 'Alterar Status',    icon: Layers },
   { action: 'cost',       label: 'Custo',             icon: DollarSign, coordHidden: true },
   { action: 'timesheets', label: 'Apont. & Despesas', icon: Clock },
@@ -2103,15 +2103,7 @@ function ProjectKanbanCard({ card, index, onClick, onAction, onMove, availableCo
               {card.coordinators?.[0] ? `👤 ${card.coordinators[0]}` : ''}
             </span>
             <div className="flex items-center gap-1">
-              {onAction && (
-                <button onClick={e => { e.stopPropagation(); onAction('chat') }}
-                  className="p-1 rounded-md transition-colors" title="Abrir Chat"
-                  style={{ color: 'var(--text-muted)', background: 'transparent' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                  <MessageSquare size={11} />
-                </button>
-              )}
+              {/* Ícone de chat removido (2026-05-28): após virar projeto, chat sai. Chat só na Requisição/Contrato. */}
               <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
                 {card.code}
               </span>
