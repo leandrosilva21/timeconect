@@ -231,6 +231,9 @@ export default function FechamentoClientePage() {
   const [avulsoDraft, setAvulsoDraft] = useState('')
   // Anexos extras (além do PDF + Excel) — só deste envio.
   const [anexos, setAnexos] = useState<File[]>([])
+  // Ref pro input file: permite disparar o picker via button.click() (mais robusto que
+  // <label> wrapping — alguns navegadores/CSPs ignoravam o clique no label invisível).
+  const anexoInputRef = useRef<HTMLInputElement | null>(null)
   const addAnexos = (files: FileList | null) => {
     if (!files?.length) return
     setAnexos(prev => {
@@ -532,8 +535,23 @@ export default function FechamentoClientePage() {
       toast.error(`Anexos excedem o limite de ${(MAX_ANEXOS_BYTES / 1048576).toFixed(0)} MB. Remova ou reduza os arquivos.`)
       return
     }
-    // Destinatários = cadastrados (chips) + avulsos, dedupe.
-    const emails = Array.from(new Set([...cadastradoEmails, ...avulsoEmails]))
+    // Promove avulsoDraft pra chip se o user digitou e não pressionou Enter / + Adicionar.
+    // Sem isso, um e-mail digitado mas não confirmado era ignorado e dava 422 do BE.
+    const draftClean = avulsoDraft.trim().replace(/,$/, '').trim()
+    const avulsoFinal = draftClean && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(draftClean)
+      ? Array.from(new Set([...avulsoEmails, draftClean]))
+      : avulsoEmails
+    // Destinatários = cadastrados (chips) + avulsos (incluindo draft promovido), dedupe.
+    const emails = Array.from(new Set([...cadastradoEmails, ...avulsoFinal]))
+    if (emails.length === 0) {
+      toast.error('Informe ao menos um e-mail de destino antes de enviar.')
+      return
+    }
+    // Sincroniza estado: se promoveu o draft, persiste como chip e limpa o input.
+    if (avulsoFinal !== avulsoEmails) {
+      setAvulsoEmails(avulsoFinal)
+      setAvulsoDraft('')
+    }
     setSendingEmail(true)
     try {
       // multipart (FormData) para levar os anexos extras junto do PDF + Excel.
@@ -1429,19 +1447,22 @@ export default function FechamentoClientePage() {
                   Anexos
                 </label>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <label
+                  <button
+                    type="button"
+                    onClick={() => anexoInputRef.current?.click()}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors"
                     style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
                   >
                     <Paperclip size={13} />
                     Adicionar arquivo
-                    <input
-                      type="file"
-                      multiple
-                      className="hidden"
-                      onChange={e => { addAnexos(e.target.files); e.target.value = '' }}
-                    />
-                  </label>
+                  </button>
+                  <input
+                    ref={anexoInputRef}
+                    type="file"
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={e => { addAnexos(e.target.files); e.target.value = '' }}
+                  />
                   <span className="text-[11px]" style={{ color: 'var(--text-light)' }}>
                     O relatório (PDF) e a planilha (Excel) do fechamento já vão anexados.
                   </span>
@@ -1483,10 +1504,16 @@ export default function FechamentoClientePage() {
                 size="sm"
                 icon={Send}
                 loading={sendingEmail}
-                disabled={anexosExcedido || (cadastradoEmails.length === 0 && avulsoEmails.length === 0)}
+                // Conta o draft do campo avulso (mesmo sem ter virado chip) — assim o user
+                // que digitou um e-mail válido e não pressionou Enter já vê o botão habilitar.
+                disabled={anexosExcedido || (
+                  cadastradoEmails.length === 0
+                  && avulsoEmails.length === 0
+                  && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(avulsoDraft.trim())
+                )}
                 title={
                   anexosExcedido ? 'Anexos excedem o limite — remova arquivos para enviar.'
-                  : (cadastradoEmails.length === 0 && avulsoEmails.length === 0)
+                  : (cadastradoEmails.length === 0 && avulsoEmails.length === 0 && !avulsoDraft.trim())
                     ? 'Cadastre ao menos um e-mail no cliente ou adicione um e-mail avulso para enviar.'
                     : undefined
                 }
