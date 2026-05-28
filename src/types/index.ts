@@ -69,6 +69,8 @@ export interface Project {
   vendidas_aporte_hours?: number
   own_consumed_hours?: number
   children_consumed_hours?: number
+  coordination_hours?: number | null
+  coordination_consumed_hours?: number
   children_consumption_breakdown?: ChildConsumptionBreakdown[]
   child_projects?: Project[]
   node_state?: 'ACTIVE' | 'DISABLED' | null
