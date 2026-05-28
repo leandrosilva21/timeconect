@@ -11,6 +11,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { useTableSort } from '@/hooks/use-table-sort'
 import { toast } from 'sonner'
+import { NotasPjCell, type NotasPayload } from '@/components/fechamento/NotasPjCell'
 import { Lock, RefreshCw, Handshake, Printer, Filter, Mail, FileSpreadsheet, Send, X, Save, Plus, Check } from 'lucide-react'
 import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
@@ -32,6 +33,8 @@ interface ParceiroStatus {
   closed_by_name?: string
   envio_em?: string | null   // ISO do último envio por e-mail; null = não enviado
   envio_por?: string | null  // nome de quem enviou
+  contract_type?: string | null // pj | clt | cooperado
+  notas?: NotasPayload          // NFS-e + Nota de débito (só parceiro PJ)
 }
 
 interface ConsultorRow {
@@ -700,6 +703,13 @@ export default function FechamentoParceiroPage() {
     setParceiros(prev => prev.map(p => (p.partner_id === id ? { ...p, envio_em, envio_por } : p)))
   }
 
+  // Atualiza as notas fiscais (NFS-e/Nota de débito) do parceiro (otimista) — em `status` e na lista.
+  const canDecideNotas = (user as any)?.type === 'admin' || (user as any)?.type === 'administrativo'
+  function patchNotas(id: number, notas: NotasPayload) {
+    setStatus(prev => (prev && prev.partner_id === id ? { ...prev, notas } : prev))
+    setParceiros(prev => prev.map(p => (p.partner_id === id ? { ...p, notas } : p)))
+  }
+
   async function limparEnvio() {
     if (!partnerId || !yearMonth) return
     setLimpandoEnvio(true)
@@ -814,6 +824,21 @@ export default function FechamentoParceiroPage() {
           )}
 
         </div>
+
+        {partnerId && status?.contract_type === 'pj' && (
+          <div className="mx-6 mt-4 p-3 rounded-lg border" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
+            <div className="text-xs font-semibold mb-2" style={{ color: 'var(--brand-text)' }}>Notas Fiscais (PJ)</div>
+            <NotasPjCell
+              type="parceiro"
+              id={partnerId}
+              yearMonth={yearMonth}
+              notas={status?.notas ?? null}
+              canDecide={canDecideNotas}
+              canUpload={canDecideNotas}
+              onChanged={(n) => patchNotas(partnerId, n)}
+            />
+          </div>
+        )}
 
         {!partnerId ? (
           <EmptyState icon={Handshake} title="Selecione um parceiro" description="Escolha o parceiro e a competência para visualizar o fechamento." />

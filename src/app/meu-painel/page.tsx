@@ -3,6 +3,7 @@
 import { AppLayout } from '@/components/layout/app-layout'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { api, ApiError, toRelativePath } from '@/lib/api'
+import { NotasPjCell, type NotasPayload } from '@/components/fechamento/NotasPjCell'
 import { previewText, sanitizeHtml } from '@/lib/sanitize'
 import { formatBRL } from '@/lib/format'
 import { exportTimesheetsToExcel } from '@/lib/exportTimesheets'
@@ -1442,6 +1443,46 @@ const EMPTY_EXP = {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+/**
+ * Card self-contained: o consultor PJ envia suas NFS-e + Nota de débito do mês.
+ * Busca o estado via GET /fechamento/notas/consultor/{id}/{ym}; se a resposta vier
+ * `notas: null` (consultor não-PJ), o card não aparece. Só upload — o aceite/recusa é do admin.
+ */
+function MinhasNotasFiscaisCard({ userId }: { userId: number }) {
+  const [ym, setYm] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [notas, setNotas] = useState<NotasPayload>(null)
+  const [isPj, setIsPj] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    api.get<{ notas: NotasPayload }>(`/fechamento/notas/consultor/${userId}/${ym}`)
+      .then(r => { if (alive) { setNotas(r.notas ?? null); setIsPj(r.notas != null) } })
+      .catch(() => { if (alive) setIsPj(false) })
+    return () => { alive = false }
+  }, [userId, ym])
+
+  if (isPj !== true) return null // não-PJ ou ainda carregando: não mostra
+
+  return (
+    <div className="mb-4 rounded-xl border p-4" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
+      <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Minhas Notas Fiscais (PJ)</h3>
+        <input
+          type="month"
+          value={ym}
+          onChange={e => setYm(e.target.value)}
+          className="px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs"
+        />
+      </div>
+      <p className="text-xs text-zinc-500 mb-3">Envie a NFS-e e a Nota de débito do mês. O administrativo valida (aceita ou recusa com motivo).</p>
+      <NotasPjCell type="consultor" id={userId} yearMonth={ym} notas={notas} canDecide={false} canUpload onChanged={setNotas} />
+    </div>
+  )
+}
+
 export default function MeuPainelPage() {
   const { user } = useAuth()
   const isCoordenador = user?.type === 'coordenador'
@@ -2154,6 +2195,8 @@ export default function MeuPainelPage() {
 
   return (
     <AppLayout title="Meu Painel">
+
+      {user?.id && <MinhasNotasFiscaisCard userId={user.id} />}
 
       {/* ── Sticky sub-header (period nav + tabs) ── */}
       <div

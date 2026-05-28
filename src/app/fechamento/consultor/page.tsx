@@ -9,6 +9,7 @@ import { api } from '@/lib/api'
 import { formatBRL } from '@/lib/format'
 import { RefreshCw, Printer, FileText, Users, Search, X, Mail, FileSpreadsheet, Send, Check } from 'lucide-react'
 import { toast } from 'sonner'
+import { NotasPjCell, type NotasPayload } from '@/components/fechamento/NotasPjCell'
 import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
   Button, SkeletonTable, EmptyState,
@@ -34,6 +35,7 @@ interface ConsultorBase {
   total_despesas: number    // despesas pagar_no_fechamento (não pagas avulso) somadas
   envio_em: string | null   // ISO do último envio do fechamento; null = não enviado
   envio_por: string | null  // nome de quem enviou
+  notas?: NotasPayload      // NFS-e + Nota de débito (só consultor PJ avulso)
 }
 
 interface ConsultorHorista extends ConsultorBase {
@@ -445,6 +447,21 @@ export default function FechamentoConsultorPage() {
     })
   }, [])
 
+  // Atualiza as notas fiscais (NFS-e/Nota de débito) de um consultor nas 3 listas (otimista).
+  const patchNotas = useCallback((userId: number, notas: NotasPayload) => {
+    setData(prev => {
+      if (!prev) return prev
+      const patch = <T extends ConsultorBase>(arr: T[]): T[] =>
+        arr.map(c => (c.user_id === userId ? { ...c, notas } : c))
+      return {
+        ...prev,
+        horistas: patch(prev.horistas),
+        banco_horas: patch(prev.banco_horas),
+        fixos: patch(prev.fixos),
+      }
+    })
+  }, [])
+
   const limparEnvioConsultor = useCallback(async (userId: number) => {
     setLimpandoEnvio(userId)
     try {
@@ -764,6 +781,7 @@ export default function FechamentoConsultorPage() {
               <Th right {...thProps('horas_a_pagar')}>H a Pagar</Th>
               <Th right {...thProps('effective_rate')}>Taxa/h</Th>
               <Th right {...thProps('total')}>Total</Th>
+              <Th right>Notas (PJ)</Th>
               <Th right>Envio</Th>
               <Th right>Relatório</Th>
             </tr>
@@ -771,7 +789,7 @@ export default function FechamentoConsultorPage() {
           <Tbody>
             {rows.length === 0 && (
               <Tr>
-                <td colSpan={7} className="py-8 text-center text-zinc-500 text-sm">
+                <td colSpan={8} className="py-8 text-center text-zinc-500 text-sm">
                   Nenhum consultor horista no período
                 </td>
               </Tr>
@@ -804,6 +822,7 @@ export default function FechamentoConsultorPage() {
                       <div className="text-[10px] text-cyan-400 font-normal">serv {formatBRL(c.total)} + desp {formatBRL(c.total_despesas)}</div>
                     )}
                   </Td>
+                  <Td><NotasPjCell type="consultor" id={c.user_id} yearMonth={yearMonth} notas={c.notas ?? null} canDecide={canSendEmail} canUpload={canSendEmail || user?.id === c.user_id} onChanged={(n) => patchNotas(c.user_id, n)} /></Td>
                   <Td right><EnvioCell c={c} /></Td>
                   <Td right>
                     <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={(mode) => handleRelatorio(c, mode)} />
@@ -844,6 +863,7 @@ export default function FechamentoConsultorPage() {
               <Th right {...thProps('accumulated_balance')}>Acumulado</Th>
               <Th right {...thProps('horas_extras')}>H Extras</Th>
               <Th right {...thProps('total')}>Total</Th>
+              <Th right>Notas (PJ)</Th>
               <Th right>Envio</Th>
               <Th right>Relatório</Th>
             </tr>
@@ -851,7 +871,7 @@ export default function FechamentoConsultorPage() {
           <Tbody>
             {rows.length === 0 && (
               <Tr>
-                <td colSpan={10} className="py-8 text-center text-zinc-500 text-sm">
+                <td colSpan={11} className="py-8 text-center text-zinc-500 text-sm">
                   Nenhum consultor banco de horas no período
                 </td>
               </Tr>
@@ -876,7 +896,8 @@ export default function FechamentoConsultorPage() {
                     <div className="text-[10px] text-cyan-400 font-normal">+{formatBRL(c.total_despesas)} desp</div>
                   )}
                 </Td>
-                <Td right><EnvioCell c={c} /></Td>
+                <Td><NotasPjCell type="consultor" id={c.user_id} yearMonth={yearMonth} notas={c.notas ?? null} canDecide={canSendEmail} canUpload={canSendEmail || user?.id === c.user_id} onChanged={(n) => patchNotas(c.user_id, n)} /></Td>
+                  <Td right><EnvioCell c={c} /></Td>
                 <Td right>
                   <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={(mode) => handleRelatorio(c, mode)} />
                 </Td>
@@ -910,6 +931,7 @@ export default function FechamentoConsultorPage() {
               <Th {...thProps('nome')}>Consultor</Th>
               <Th right {...thProps('horas_trabalhadas')}>H Trabalhadas</Th>
               <Th right {...thProps('salario_mensal')}>Salário Mensal</Th>
+              <Th right>Notas (PJ)</Th>
               <Th right>Envio</Th>
               <Th right>Relatório</Th>
             </tr>
@@ -917,7 +939,7 @@ export default function FechamentoConsultorPage() {
           <Tbody>
             {rows.length === 0 && (
               <Tr>
-                <td colSpan={5} className="py-8 text-center text-zinc-500 text-sm">
+                <td colSpan={6} className="py-8 text-center text-zinc-500 text-sm">
                   Nenhum consultor fixo no período
                 </td>
               </Tr>
@@ -932,7 +954,8 @@ export default function FechamentoConsultorPage() {
                     <div className="text-[10px] text-cyan-400 font-normal">+{formatBRL(c.total_despesas)} desp. no fech.</div>
                   )}
                 </Td>
-                <Td right><EnvioCell c={c} /></Td>
+                <Td><NotasPjCell type="consultor" id={c.user_id} yearMonth={yearMonth} notas={c.notas ?? null} canDecide={canSendEmail} canUpload={canSendEmail || user?.id === c.user_id} onChanged={(n) => patchNotas(c.user_id, n)} /></Td>
+                  <Td right><EnvioCell c={c} /></Td>
                 <Td right>
                   <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={(mode) => handleRelatorio(c, mode)} />
                 </Td>

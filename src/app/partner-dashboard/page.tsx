@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { api, ApiError } from '@/lib/api'
+import { NotasPjCell, type NotasPayload } from '@/components/fechamento/NotasPjCell'
 import { exportTimesheetsToExcel } from '@/lib/exportTimesheets'
 import { TimesheetFormModal } from '@/components/ui/timesheet-form-modal'
 import { formatBRL, formatNumber } from '@/lib/format'
@@ -213,6 +214,34 @@ function KpiCard({
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Card do Painel do Parceiro: o admin do parceiro (parceiro_admin) envia a NFS-e + Nota de
+ * débito do parceiro no mês. O GET retorna `notas: null` se o parceiro não for PJ → o card some.
+ * Só upload — o aceite/recusa é do administrativo (Fechamento → Parceiro).
+ */
+function NotasFiscaisParceiroCard({ partnerId, yearMonth }: { partnerId: number; yearMonth: string }) {
+  const [notas, setNotas] = useState<NotasPayload>(null)
+  const [isPj, setIsPj] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    api.get<{ notas: NotasPayload }>(`/fechamento/notas/parceiro/${partnerId}/${yearMonth}`)
+      .then(r => { if (alive) { setNotas(r.notas ?? null); setIsPj(r.notas != null) } })
+      .catch(() => { if (alive) setIsPj(false) })
+    return () => { alive = false }
+  }, [partnerId, yearMonth])
+
+  if (isPj !== true) return null
+
+  return (
+    <div className="rounded-xl border p-4" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
+      <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--text)' }}>Notas Fiscais (PJ)</h3>
+      <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>Envie a NFS-e e a Nota de débito do parceiro neste mês. O administrativo valida (aceita ou recusa com motivo).</p>
+      <NotasPjCell type="parceiro" id={partnerId} yearMonth={yearMonth} notas={notas} canDecide={false} canUpload onChanged={setNotas} />
+    </div>
+  )
+}
 
 export default function PartnerDashboardPage() {
   const { user } = useAuth()
@@ -654,6 +683,10 @@ export default function PartnerDashboardPage() {
             />
           </div>
         ) : null}
+
+        {data?.partner?.id && (
+          <NotasFiscaisParceiroCard partnerId={data.partner.id} yearMonth={`${year}-${pad(month + 1)}`} />
+        )}
 
         {/* ── Tabs ── */}
         <div
