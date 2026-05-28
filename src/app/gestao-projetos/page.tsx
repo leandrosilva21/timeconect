@@ -474,7 +474,9 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
               ...(canChangeStatus ? [{ label: 'Alterar Status', icon: <Layers size={12} />, onClick: () => onChangeStatus?.(project) }] : []),
               { label: 'Custo',             icon: <DollarSign  size={12} />, onClick: () => onMenuAction('costs',      project) },
               { label: 'Apont. & Despesas', icon: <Clock       size={12} />, onClick: () => onMenuAction('timesheets', project) },
-              ...(canEdit ? [{ label: 'Aportes', icon: <TrendingUp size={12} />, onClick: () => onMenuAction('aportes', project) }] : []),
+              // 'Aportes' removido do menu de linha (2026-05-28): aporte agora se cria via
+              // toggle "É aporte?" no Novo Contrato do Kanban Contratos; visualização via aba
+              // Aportes do projeto no modal Visualizar.
               { label: 'Selecionar Equipe', icon: <Users       size={12} />, onClick: () => onMenuAction('team',       project) },
               {
                 label: (project as any).has_open_period ? 'Fechar Mês' : 'Abrir Mês',
@@ -3870,7 +3872,7 @@ export default function GestaoProjetosPage() {
               {/* Footer */}
               <div className="flex items-center justify-between px-6 py-3 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
                 <div className="flex gap-2">
-                  <button onClick={() => { handleMenuAction('aportes', base) }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}><TrendingUp size={11} /> Aportes</button>
+                  {/* Botão 'Aportes' removido (2026-05-28): aporte agora se cria via Kanban Contratos ("É aporte?") e visualiza pela aba Aportes do modal Visualizar. */}
                   <button onClick={() => { handleMenuAction('team', base) }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}><Users size={11} /> Equipe</button>
                 </div>
                 <button onClick={() => { setViewProject(null); setViewProjectFull(null) }} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Fechar</button>

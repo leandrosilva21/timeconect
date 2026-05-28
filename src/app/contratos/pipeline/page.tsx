@@ -605,7 +605,7 @@ const PROJECT_MENU_ITEMS = [
   { action: 'status',     label: 'Alterar Status',    icon: Layers,        clientVisible: false },
   { action: 'cost',       label: 'Custo',             icon: DollarSign,    clientVisible: false, coordHidden: true },
   { action: 'timesheets', label: 'Apont. & Despesas', icon: Clock,         clientVisible: false },
-  { action: 'aportes',    label: 'Aportes',           icon: TrendingUp,    clientVisible: false, adminOnly: true },
+  // 'Aportes' removido do menu de linha (2026-05-28): aporte se cria via "É aporte?" no Novo Contrato.
   { action: 'team',       label: 'Selecionar Equipe', icon: Users,         clientVisible: false },
   { action: 'delete',     label: 'Excluir',           icon: Trash2,        clientVisible: false, danger: true, adminOnly: true },
 ]

@@ -643,7 +643,7 @@ export default function SustentacaoProjetosPage() {
                             { label: 'Custo',           icon: <DollarSign size={12} />, onClick: () => setCostProject(p) },
                             { label: 'Apontamentos',    icon: <Clock size={12} />,      onClick: () => router.push(`/timesheets?project_id=${p.id}`) },
                             { label: 'Despesas',        icon: <BarChart2 size={12} />,  onClick: () => router.push(`/expenses?project_id=${p.id}`) },
-                            { label: 'Aportes',         icon: <TrendingUp size={12} />, onClick: () => router.push(`/gestao-projetos?edit=${p.id}`) },
+                            // 'Aportes' removido do menu de linha (2026-05-28): aporte se cria via "É aporte?" no Novo Contrato.
                             { label: 'Selecionar Equipe', icon: <Users size={12} />,    onClick: () => openTeam(p) },
                             ...(isAdmin ? [{ label: 'Excluir', icon: <Trash2 size={12} className="text-red-400" />, onClick: () => setDeleteProject(p), danger: true }] : []),
                           ]} />

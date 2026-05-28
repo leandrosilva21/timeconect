@@ -209,7 +209,7 @@ const PROJECT_MENU_ITEMS = [
   { action: 'status',     label: 'Alterar Status',    icon: Layers },
   { action: 'cost',       label: 'Custo',             icon: DollarSign, coordHidden: true },
   { action: 'timesheets', label: 'Apont. & Despesas', icon: Clock },
-  { action: 'aportes',    label: 'Aportes',           icon: TrendingUp, adminOnly: true },
+  // 'Aportes' removido do menu de linha (2026-05-28): aporte se cria via "É aporte?" no Novo Contrato.
   { action: 'team',       label: 'Selecionar Equipe', icon: Users },
   { action: 'delete',     label: 'Excluir',           icon: Trash2,     danger: true, adminOnly: true },
 ]
@@ -222,7 +222,7 @@ const CONTRACT_MENU_ITEMS = [
   { action: 'status',     label: 'Alterar Status',    icon: Layers },
   { action: 'cost',       label: 'Custo',             icon: DollarSign, coordHidden: true },
   { action: 'timesheets', label: 'Apont. & Despesas', icon: Clock },
-  { action: 'aportes',    label: 'Aportes',           icon: TrendingUp, adminOnly: true },
+  // 'Aportes' removido do menu de linha (2026-05-28): aporte se cria via "É aporte?" no Novo Contrato.
   { action: 'team',       label: 'Selecionar Equipe', icon: Users },
   { action: 'delete',     label: 'Excluir',           icon: Trash2,     danger: true, adminOnly: true },
 ]
