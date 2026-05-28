@@ -16,7 +16,8 @@ import { toast } from 'sonner'
 
 interface MonthlyAccrualTableProps {
   startDate?: string | null
-  hoursPerMonth: number
+  /** Só usado no modo legado (sem projectId). No modo extrato vem do backend. */
+  hoursPerMonth?: number
   /** Total acumulado (já congelado no encerramento). Define o nº de meses. */
   accumulated?: number | null
   /** Encerramento — usado só no fallback quando não há acumulado. */
@@ -28,20 +29,21 @@ interface MonthlyAccrualTableProps {
   canEditConsumption?: boolean
 }
 
+type StatementType = 'monthly' | 'fixed' | 'on_demand' | 'none'
 interface StatementRow {
   year_month: string
-  increment_hours: number
-  accumulated_hours: number
+  vendidas_hours: number | null
   consumption_hours: number
   accumulated_consumption_hours: number
-  balance_hours: number
+  balance_hours: number | null
   editable: boolean
 }
 interface Statement {
+  statement_type: StatementType
   rows: StatementRow[]
-  total_hours: number
+  total_vendidas_hours: number | null
   total_consumption_hours: number
-  balance_hours: number
+  balance_hours: number | null
   cutoff: string
 }
 
@@ -54,7 +56,7 @@ function tokens(variant: 'brand' | 'default') {
 const fmtMonth = (ym: string) => { const [y, m] = ym.split('-'); return `${m}/${y}` }
 const fmtH = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(1)}h`
 
-export function MonthlyAccrualTable({ startDate, hoursPerMonth, accumulated, endDate, variant = 'default', projectId, canEditConsumption }: MonthlyAccrualTableProps) {
+export function MonthlyAccrualTable({ startDate, hoursPerMonth = 0, accumulated, endDate, variant = 'default', projectId, canEditConsumption }: MonthlyAccrualTableProps) {
   const t = tokens(variant)
 
   // ── Estado do modo extrato (hooks sempre chamados; corpo é condicional) ──
@@ -106,30 +108,38 @@ export function MonthlyAccrualTable({ startDate, hoursPerMonth, accumulated, end
     }
     if (!stmt || stmt.rows.length === 0) return null
 
+    // Colunas por tipo: Mensal/Fixo/Fechado mostram Vendidas+Saldo; On Demand só Consumo.
+    const showVendidas = stmt.statement_type === 'monthly' || stmt.statement_type === 'fixed'
+    const vendidasLabel = stmt.statement_type === 'monthly' ? 'Vendidas (acum.)' : 'Vendidas'
+    const headerRight = showVendidas
+      ? `${stmt.rows.length} ${stmt.rows.length === 1 ? 'mês' : 'meses'} · ${fmtH(stmt.total_vendidas_hours ?? 0)} vendidas`
+      : `${stmt.rows.length} ${stmt.rows.length === 1 ? 'mês' : 'meses'} · ${fmtH(stmt.total_consumption_hours)} consumidas`
+    const thCls = 'px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider'
+
     return (
       <div className="rounded-xl overflow-clip" style={{ border: `1px solid ${t.border}`, background: t.surface }}>
         <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: t.border }}>
-          <h3 className="text-sm font-bold" style={{ color: t.text }}>Horas Mensais Incrementadas</h3>
-          <span className="text-xs" style={{ color: t.subtle }}>{stmt.rows.length} {stmt.rows.length === 1 ? 'mês' : 'meses'} · {fmtH(stmt.total_hours)}</span>
+          <h3 className="text-sm font-bold" style={{ color: t.text }}>Situação do Contrato (mês a mês)</h3>
+          <span className="text-xs" style={{ color: t.subtle }}>{headerRight}</span>
         </div>
         <div className="max-h-72 overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10" style={{ background: t.surface }}>
               <tr style={{ borderBottom: `1px solid ${t.border}` }}>
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: t.subtle }}>Mês</th>
-                <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: t.subtle }}>Horas</th>
-                <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: t.subtle }}>Consumo</th>
-                <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: t.subtle }}>Saldo</th>
+                {showVendidas && <th className={thCls} style={{ color: t.subtle }}>{vendidasLabel}</th>}
+                <th className={thCls} style={{ color: t.subtle }}>Consumo</th>
+                {showVendidas && <th className={thCls} style={{ color: t.subtle }}>Saldo</th>}
               </tr>
             </thead>
             <tbody>
               {stmt.rows.map(r => {
-                const negative = r.balance_hours < 0
+                const negative = (r.balance_hours ?? 0) < 0
                 const canEdit = r.editable && !!canEditConsumption
                 return (
                   <tr key={r.year_month} style={{ borderBottom: `1px solid ${t.border}` }}>
                     <td className="px-3 py-2 tabular-nums" style={{ color: t.muted }}>{fmtMonth(r.year_month)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: t.text }}>{fmtH(r.accumulated_hours)}</td>
+                    {showVendidas && <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: t.text }}>{fmtH(r.vendidas_hours ?? 0)}</td>}
                     <td className="px-3 py-2 text-right tabular-nums" style={{ color: t.text }}>
                       {canEdit ? (
                         <div className="inline-flex items-center gap-1 justify-end">
@@ -154,7 +164,7 @@ export function MonthlyAccrualTable({ startDate, hoursPerMonth, accumulated, end
                         <span className="font-semibold">{fmtH(r.consumption_hours)}</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: negative ? 'var(--danger)' : t.text }}>{fmtH(r.balance_hours)}</td>
+                    {showVendidas && <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: negative ? 'var(--danger)' : t.text }}>{r.balance_hours != null ? fmtH(r.balance_hours) : '—'}</td>}
                   </tr>
                 )
               })}
@@ -162,9 +172,9 @@ export function MonthlyAccrualTable({ startDate, hoursPerMonth, accumulated, end
             <tfoot>
               <tr style={{ borderTop: `1px solid ${t.border}` }}>
                 <td className="px-3 py-2.5 text-right text-[13px] font-bold" style={{ color: t.text }}>Total</td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-bold" style={{ color: t.text }}>{fmtH(stmt.total_hours)}</td>
+                {showVendidas && <td className="px-3 py-2.5 text-right tabular-nums font-bold" style={{ color: t.text }}>{fmtH(stmt.total_vendidas_hours ?? 0)}</td>}
                 <td className="px-3 py-2.5 text-right tabular-nums font-bold" style={{ color: t.text }}>{fmtH(stmt.total_consumption_hours)}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-bold" style={{ color: stmt.balance_hours < 0 ? 'var(--danger)' : t.text }}>{fmtH(stmt.balance_hours)}</td>
+                {showVendidas && <td className="px-3 py-2.5 text-right tabular-nums font-bold" style={{ color: (stmt.balance_hours ?? 0) < 0 ? 'var(--danger)' : t.text }}>{stmt.balance_hours != null ? fmtH(stmt.balance_hours) : '—'}</td>}
               </tr>
             </tfoot>
           </table>

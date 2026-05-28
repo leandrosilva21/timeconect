@@ -2291,7 +2291,7 @@ export default function GestaoProjetosPage() {
     const a = document.createElement('a'); a.href = url; a.download = att.original_name; a.click(); URL.revokeObjectURL(url)
   }
   const [viewProjectLoading, setViewProjectLoading] = useState(false)
-  const [viewProjectTab, setViewProjectTab] = useState<'overview' | 'cost'>('overview')
+  const [viewProjectTab, setViewProjectTab] = useState<'overview' | 'extrato' | 'cost'>('overview')
   // Histórico de valores-hora (somente leitura) — GET /projects/{id}/change-history?field_name=hourly_rate
   const [rateHistoryOpen, setRateHistoryOpen] = useState(false)
   const [rateHistory, setRateHistory] = useState<any[]>([])
@@ -3440,7 +3440,7 @@ export default function GestaoProjetosPage() {
 
               {/* Tab nav */}
               <div className="flex gap-1 px-6 border-b" style={{ borderColor: 'var(--border)' }}>
-                {(['overview', 'cost'] as const).filter(t => t !== 'cost' || user?.type !== 'coordenador').map(t => (
+                {(['overview', 'extrato', 'cost'] as const).filter(t => t !== 'cost' || user?.type !== 'coordenador').map(t => (
                   <button key={t} onClick={() => {
                     setViewProjectTab(t)
                     if (t === 'cost' && !viewCostSummary && !viewCostLoading) {
@@ -3453,7 +3453,7 @@ export default function GestaoProjetosPage() {
                   }}
                     className="px-4 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap"
                     style={{ color: viewProjectTab === t ? 'var(--text)' : 'var(--text-muted)', borderBottom: viewProjectTab === t ? '2px solid var(--primary)' : '2px solid transparent', marginBottom: '-1px' }}>
-                    {t === 'overview' ? 'Visão Geral' : 'Custo'}
+                    {t === 'overview' ? 'Visão Geral' : t === 'extrato' ? 'Extrato' : 'Custo'}
                   </button>
                 ))}
               </div>
@@ -3630,6 +3630,12 @@ export default function GestaoProjetosPage() {
                     })()}
                   </div>
                 )}
+                {viewProjectTab === 'extrato' && (
+                  <div className="p-6">
+                    <MonthlyAccrualTable projectId={p.id} canEditConsumption={isAdmin || isCoordenador} />
+                  </div>
+                )}
+
                 {viewProjectTab === 'overview' && (
                 <div className="grid grid-cols-2 gap-0 divide-x" style={{ borderColor: 'var(--border)' }}>
 
@@ -3779,17 +3785,7 @@ export default function GestaoProjetosPage() {
                       )
                     })()}
 
-                    {/* Horas mensais incrementadas (acúmulo do banco mensal) — só BH Mensal */}
-                    {((p.contract_type_display ?? p.contract_type?.name ?? '').toLowerCase().includes('mensal')) && (
-                      <MonthlyAccrualTable
-                        startDate={(p as any).start_date ?? null}
-                        hoursPerMonth={p.sold_hours ?? 0}
-                        accumulated={(p as any).accumulated_sold_hours ?? null}
-                        endDate={(p as any).encerramento_date ?? null}
-                        projectId={p.id}
-                        canEditConsumption={isAdmin || isCoordenador}
-                      />
-                    )}
+                    {/* Extrato mês a mês migrou para a aba "Extrato" do modal. */}
 
                     {/* Horas de Coordenação — card de governança p/ admin (quando há banco explícito).
                         Pro coordenador o TOP Horas já faz o swap, então omite aqui. */}
