@@ -211,6 +211,8 @@ function ProjectTreeNode({
 }) {
   const meta = HEALTH_META[p.status]
   const hasChildren = !isChild && (p.children?.length ?? 0) > 0
+  // On Demand: sem banco/saldo — não mostra HealthBar, saldo nem chip de saúde.
+  const isOnDemand = (p.contract_type ?? '').toLowerCase().includes('on demand')
 
   return (
     <>
@@ -238,13 +240,17 @@ function ProjectTreeNode({
               </span>
             )}
           </div>
-          {!p.is_closed && <HealthBar pct={p.percentage} />}
+          {!p.is_closed && !isOnDemand && <HealthBar pct={p.percentage} />}
         </div>
 
         <div className="text-right shrink-0">
           {p.is_closed ? (
             <p className="text-[11px] font-semibold tabular-nums" style={{ color: 'var(--brand-text)' }}>
               {fmtH(p.sold_hours)}
+            </p>
+          ) : isOnDemand ? (
+            <p className="text-[11px] font-semibold tabular-nums" style={{ color: 'var(--brand-text)' }}>
+              {fmtH(p.consumed_hours)} consumido
             </p>
           ) : (
             <>
@@ -260,10 +266,17 @@ function ProjectTreeNode({
               )}
             </>
           )}
-          <span className="inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
-            style={{ background: meta.bg, color: meta.color }}>
-            {meta.label}{!p.is_closed && p.percentage !== null && ` · ${p.percentage.toFixed(0)}%`}
-          </span>
+          {isOnDemand ? (
+            <span className="inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+              style={{ background: 'rgba(148,163,184,0.12)', color: '#94a3b8' }}>
+              On Demand
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+              style={{ background: meta.bg, color: meta.color }}>
+              {meta.label}{!p.is_closed && p.percentage !== null && ` · ${p.percentage.toFixed(0)}%`}
+            </span>
+          )}
         </div>
       </li>
       {hasChildren && isExpanded && p.children!.map(c => (
