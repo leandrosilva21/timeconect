@@ -317,7 +317,7 @@ export default function ContratosPage() {
     { action: 'cost',       label: 'Custo',             icon: DollarSign, del: false },
     { action: 'timesheets', label: 'Apontamentos',      icon: Clock,    del: false },
     { action: 'expenses',   label: 'Despesas',          icon: BarChart2, del: false },
-    { action: 'aportes',    label: 'Aportes',           icon: TrendingUp, del: false },
+    // 'Aportes' removido do menu de linha (2026-05-28): aporte se cria via "É aporte?" no Novo Contrato.
     { action: 'team',       label: 'Selecionar Equipe', icon: Users,    del: false },
     { action: 'delete',     label: 'Excluir',           icon: Trash2,   del: true  },
   ] as const
