@@ -1039,25 +1039,6 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
           subtitle="Registro de horas por projeto e colaborador"
           actions={
             <>
-              {/* Chip "Meus projetos / Todos" — coordenador */}
-              {isCoordenador && (
-                <div className="inline-flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-                  {(['meus', 'todos'] as const).map(opt => {
-                    const active = coordScope === opt
-                    return (
-                      <button key={opt} onClick={() => setCoordScope(opt)}
-                        className="px-3 py-1.5 text-xs font-semibold transition-colors"
-                        style={{
-                          background: active ? 'var(--primary)' : 'var(--surface)',
-                          color: active ? 'var(--primary-fg)' : 'var(--text-muted)',
-                          borderRight: opt === 'meus' ? '1px solid var(--border)' : undefined,
-                        }}>
-                        {opt === 'meus' ? 'Meus projetos' : 'Todos'}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
               <Button variant="ghost" size="sm" icon={RefreshCw} onClick={() => refetch()}>Atualizar</Button>
               <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={handleExport} loading={exporting}>
                 {exporting ? 'Exportando...' : 'Excel'}
@@ -1323,6 +1304,26 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
             </button>
           ))}
         </div>}
+
+        {/* Chip "Meus projetos / Todos" — coordenador, perto da tabela */}
+        {isCoordenador && (
+          <div className="mb-3 inline-flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            {(['meus', 'todos'] as const).map(opt => {
+              const active = coordScope === opt
+              return (
+                <button key={opt} onClick={() => setCoordScope(opt)}
+                  className="px-3 py-1.5 text-xs font-semibold transition-colors"
+                  style={{
+                    background: active ? 'var(--primary)' : 'var(--surface)',
+                    color: active ? 'var(--primary-fg)' : 'var(--text-muted)',
+                    borderRight: opt === 'meus' ? '1px solid var(--border)' : undefined,
+                  }}>
+                  {opt === 'meus' ? 'Meus projetos' : 'Todos'}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* Total horas */}
         {data && data.totalEffortHours && (() => {

@@ -732,29 +732,31 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
           subtitle="Registro de despesas e reembolsos"
           actions={
             <>
-              {isCoordenador && (
-                <div className="inline-flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-                  {(['meus', 'todos'] as const).map(opt => {
-                    const active = coordScope === opt
-                    return (
-                      <button key={opt} onClick={() => setCoordScope(opt)}
-                        className="px-3 py-1.5 text-xs font-semibold transition-colors"
-                        style={{
-                          background: active ? 'var(--primary)' : 'var(--surface)',
-                          color: active ? 'var(--primary-fg)' : 'var(--text-muted)',
-                          borderRight: opt === 'meus' ? '1px solid var(--border)' : undefined,
-                        }}>
-                        {opt === 'meus' ? 'Meus projetos' : 'Todos'}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
               <Button variant="ghost" size="sm" icon={RefreshCw} onClick={load}>Atualizar</Button>
               {!isCliente && <Button variant="primary" size="sm" icon={Plus} onClick={openCreate}>Nova</Button>}
             </>
           }
         />
+
+        {/* Chip "Meus projetos / Todos" — coordenador, perto da tabela */}
+        {isCoordenador && (
+          <div className="mb-3 inline-flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            {(['meus', 'todos'] as const).map(opt => {
+              const active = coordScope === opt
+              return (
+                <button key={opt} onClick={() => setCoordScope(opt)}
+                  className="px-3 py-1.5 text-xs font-semibold transition-colors"
+                  style={{
+                    background: active ? 'var(--primary)' : 'var(--surface)',
+                    color: active ? 'var(--primary-fg)' : 'var(--text-muted)',
+                    borderRight: opt === 'meus' ? '1px solid var(--border)' : undefined,
+                  }}>
+                  {opt === 'meus' ? 'Meus projetos' : 'Todos'}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* Filter card */}
         <div className="p-4 rounded-2xl mb-4 space-y-3"
