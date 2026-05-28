@@ -683,7 +683,13 @@ export default function FechamentoClientePage() {
       if (isDesp && despesas.length === 0) return
       setReportHtmlLoading(true)
       try {
-        const q = isDesp ? '?mode=despesa' : ''
+        // Filtro de contrato (projetoFilter) propaga pro BE: senão o relatório/PDF
+        // mostrava todos os contratos do cliente mesmo com 1 selecionado no header.
+        const params = new URLSearchParams()
+        if (isDesp) params.set('mode', 'despesa')
+        if (isServ && projetoFilter) params.set('project_id', String(projetoFilter))
+        const qs = params.toString()
+        const q = qs ? `?${qs}` : ''
         const res = await api.get<{ html: string }>(`/fechamento-cliente/${customerId}/${toYM}/report-html${q}`)
         if (!cancelled) setReportHtml(res.html)
       } catch {
@@ -694,7 +700,7 @@ export default function FechamentoClientePage() {
     }
     void run()
     return () => { cancelled = true }
-  }, [tab, customerId, toYM, projetos.length, despesas.length])
+  }, [tab, customerId, toYM, projetos.length, despesas.length, projetoFilter])
 
   // ── Detalhe (tela tradicional): preview do relatório + ações (imprimir/email/excel) ──
   const renderDetail = (mode: 'servicos' | 'despesa') => {
