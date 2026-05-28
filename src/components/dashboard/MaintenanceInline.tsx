@@ -142,7 +142,7 @@ function ReverseApprovalButton({ onClick, busy }: { onClick: () => void; busy: b
   )
 }
 
-export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowClick, onReverseApproved, onReverseSuccess }: {
+export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowClick, onReverseApproved, onReverseSuccess, clientView = false }: {
   rows: any[]
   loading: boolean
   variant?: 'maintenance' | 'architecture'
@@ -150,8 +150,18 @@ export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', 
   // Quando definido, mostra o botão de estornar nas linhas aprovadas.
   onReverseApproved?: boolean
   onReverseSuccess?: () => void
+  // Visão do cliente: paginar 30 linhas + totalizador de horas conforme filtro.
+  // Outras visões (admin/coord) seguem sem paginação/totalizador.
+  clientView?: boolean
 }) {
   const [reversingId, setReversingId] = useState<number | null>(null)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 30
+  // Reset pra página 1 quando o filtro muda (rows muda de referência).
+  useEffect(() => { setPage(1) }, [rows])
+  const totalPages = clientView ? Math.max(1, Math.ceil(rows.length / PAGE_SIZE)) : 1
+  const visibleRows = clientView ? rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) : rows
+  const totalHours = clientView ? rows.reduce((s, r) => s + ((r.effort_minutes ?? 0) / 60), 0) : 0
   const handleReverse = async (id: number) => {
     if (!confirm('Estornar a aprovação deste apontamento?')) return
     setReversingId(id)
@@ -176,9 +186,16 @@ export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', 
         boxShadow: 'var(--shadow-sm)',
       }}
     >
-      <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+      <div className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap" style={{ borderBottom: '1px solid var(--border)' }}>
         <h3 className="ds-text-h2" style={{ color: 'var(--text)' }}>Apontamentos do período</h3>
-        <span className="ds-text-caption" style={{ color: 'var(--text-muted)' }}>{rows.length} registros</span>
+        <span className="ds-text-caption flex items-center gap-3" style={{ color: 'var(--text-muted)' }}>
+          {clientView && rows.length > 0 && (
+            <span style={{ color: 'var(--text)' }}>
+              Total: <strong style={{ color: 'var(--primary)' }}>{totalHours.toFixed(2)}h</strong>
+            </span>
+          )}
+          <span>{rows.length} registros</span>
+        </span>
       </div>
       <DataTable inline>
         <DataTableHead>
@@ -212,7 +229,7 @@ export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', 
             <DataTableEmpty colSpan={colSpan} message="Carregando…" />
           ) : rows.length === 0 ? (
             <DataTableEmpty colSpan={colSpan} message="Sem apontamentos no período selecionado." />
-          ) : rows.map(r => {
+          ) : visibleRows.map(r => {
             const desc = previewText(r.description) || '—'
             const canReverse = onReverseApproved && isActionAllowed(r.status, 'reverse_approval')
             const handleClick = onRowClick ? () => onRowClick(r) : undefined
@@ -251,6 +268,29 @@ export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', 
           })}
         </DataTableBody>
       </DataTable>
+      {clientView && totalPages > 1 && (
+        <div className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap" style={{ borderTop: '1px solid var(--border)' }}>
+          <span className="ds-text-caption" style={{ color: 'var(--text-muted)' }}>
+            Página {page} de {totalPages} · mostrando {visibleRows.length} de {rows.length}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-3 py-1.5 rounded-md text-xs font-medium disabled:opacity-40"
+              style={{ background: 'var(--surface-hover)', color: 'var(--text)', border: '1px solid var(--border)' }}
+            >Anterior</button>
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="px-3 py-1.5 rounded-md text-xs font-medium disabled:opacity-40"
+              style={{ background: 'var(--surface-hover)', color: 'var(--text)', border: '1px solid var(--border)' }}
+            >Próxima</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

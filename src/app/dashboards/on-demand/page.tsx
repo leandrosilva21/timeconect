@@ -485,7 +485,7 @@ export default function OnDemandPage() {
             {activeTab === 'maintenance' && isSustentacaoContract && (
               <div className="space-y-4">
                 <MxExportButton onClick={() => exportMaintenanceToXLSX('maintenance', mxRows)} disabled={mxRows.length === 0} />
-                <MxTimesheets rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} onReverseApproved={canReverseApproval} onReverseSuccess={reloadMx} />
+                <MxTimesheets rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} onReverseApproved={canReverseApproval} onReverseSuccess={reloadMx} clientView={isCliente} />
                 <MxTicketSummary rows={mxTicketSummary} loading={mxTicketLoading} />
               </div>
             )}
