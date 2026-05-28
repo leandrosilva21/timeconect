@@ -207,12 +207,15 @@ export function ContractCreateModal({
     api.get<CustomerContact[]>(`/customer-contacts?customer_id=${form.customer_id}`)
       .then(r => setCustomerContacts(Array.isArray(r) ? r : []))
       .catch(() => setCustomerContacts([]))
+    // Projetos pausados/encerrados/cancelados não podem receber novos subprojetos nem aportes —
+    // filtra todos os 3 status em ambos os dropdowns (aporte e contrato normal).
+    const INACTIVE_STATUSES = new Set(['paused', 'finished', 'cancelled'])
     api.get<any>(`/projects?customer_id=${form.customer_id}&per_page=200&parent_projects_only=true`)
       .then(r => {
         const list: any[] = r?.items ?? (Array.isArray(r) ? r : [])
         setParentProjects(
           list
-            .filter((p: any) => !p.parent_project_id)
+            .filter((p: any) => !p.parent_project_id && !INACTIVE_STATUSES.has(p.status))
             .map((p: any) => ({ id: p.id, name: p.code ? `[${p.code}] ${p.name}` : p.name, code_prefix: p.code ?? null }))
         )
       })
@@ -221,7 +224,8 @@ export function ContractCreateModal({
     // Ordena pais alfabético e filhos imediatamente abaixo do pai (indented).
     api.get<any>(`/projects?customer_id=${form.customer_id}&pageSize=200`)
       .then(r => {
-        const list: any[] = r?.items ?? (Array.isArray(r) ? r : [])
+        const raw: any[] = r?.items ?? (Array.isArray(r) ? r : [])
+        const list = raw.filter(p => !INACTIVE_STATUSES.has(p.status))
         const byId = new Map<number, any>(list.map(p => [p.id, p]))
         const parents = list.filter(p => !p.parent_project_id).sort((a, b) => String(a.code).localeCompare(String(b.code)))
         const childrenByParent = new Map<number, any[]>()
