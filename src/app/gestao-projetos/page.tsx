@@ -3706,7 +3706,12 @@ export default function GestaoProjetosPage() {
                       const isCoordView = isCoordinatorOf(p, user?.id)
                       const cm = isCoordView ? coordinationMeta(p, operationalVendidas) : null
                       const cardVendidas = isCoordView ? cm!.bank : operationalVendidas
-                      const cardConsumed = isCoordView ? cm!.consumed : (vp?.consumed_hours ?? p.consumed_hours ?? consumed)
+                      // initial_hours_consumed (HS Consumidas Iniciais) entra no consumido só
+                      // no fallback logado — quando vem consumed_hours (gestaoMode) já está somado.
+                      // Sem isso, "Consumidas" mostrava só o logado e divergia do Saldo (que já
+                      // subtrai a inicial via general_hours_balance).
+                      const cardInitialConsumed = Number((vp as any)?.initial_hours_consumed ?? (p as any)?.initial_hours_consumed) || 0
+                      const cardConsumed = isCoordView ? cm!.consumed : (vp?.consumed_hours ?? p.consumed_hours ?? (consumed + cardInitialConsumed))
                       const cardTotal    = cardVendidas
                       const cardSaldo    = isCoordView ? cm!.saldo : (vp?.general_hours_balance ?? (cardVendidas - cardConsumed))
                       const cardPct      = cardTotal > 0 ? (cardConsumed / cardTotal) * 100 : 0
