@@ -136,7 +136,7 @@ interface ProjectEditForm {
   sold_hours: string; project_value: string
   hourly_rate: string; additional_hourly_rate: string
   initial_hours_balance: string; initial_cost: string
-  consultant_hours: string; coordinator_hours: string
+  consultant_hours: string; coordinator_hours: string; coordination_hours: string
   parent_project_id: string
   service_type_id: string; contract_type_id: string
   tipo_faturamento: string; tipo_alocacao: string
@@ -1098,6 +1098,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     initial_cost:                    d.initial_cost != null ? String(d.initial_cost) : '',
     consultant_hours:                d.consultant_hours != null ? String(d.consultant_hours) : '',
     coordinator_hours:               d.coordinator_hours != null ? String(d.coordinator_hours) : '',
+    coordination_hours:              (d as any).coordination_hours != null ? String((d as any).coordination_hours) : '',
     parent_project_id:               d.parent_project_id ? String(d.parent_project_id) : '',
     service_type_id:                 d.service_type_id ? String(d.service_type_id) : (d.service_type?.id ? String(d.service_type.id) : ''),
     contract_type_id:                d.contract_type_id ? String(d.contract_type_id) : (d.contract_type?.id ? String(d.contract_type.id) : ''),
@@ -1211,6 +1212,8 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       if (form.sold_hours !== '')             payload.sold_hours                    = Number(form.sold_hours)
       if (form.consultant_hours !== '')       payload.consultant_hours              = Number(form.consultant_hours)
       if (form.coordinator_hours !== '')      payload.coordinator_hours             = Number(form.coordinator_hours)
+      // coordination_hours (banco do coord, CA v1): envia 0 quando vazio pra permitir zerar.
+      payload.coordination_hours = form.coordination_hours === '' ? 0 : Number(form.coordination_hours)
       if (form.initial_hours_balance !== '')  payload.initial_hours_balance         = Number(form.initial_hours_balance)
       if (form.initial_cost !== '')           payload.initial_cost                  = Number(form.initial_cost)
       if (form.max_expense_per_consultant !== '') payload.max_expense_per_consultant = Number(form.max_expense_per_consultant)
@@ -1372,6 +1375,13 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 <div><label style={lStyle}>Hora Adicional (R$)</label><input type="number" value={form.additional_hourly_rate} onChange={setF('additional_hourly_rate')} style={iStyle} placeholder="0.00" step="0.01" /></div>
                 <div><label style={lStyle}>Horas Contratadas</label><input type="number" value={form.sold_hours} onChange={setF('sold_hours')} style={iStyle} placeholder="0" step="1" /></div>
                 <div><label style={lStyle}>% Horas Coordenador</label><input type="number" value={form.coordinator_hours} onChange={setF('coordinator_hours')} style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
+                <div>
+                  <label style={lStyle}>Horas de Coordenação</label>
+                  <input type="number" value={form.coordination_hours} onChange={setF('coordination_hours')} style={iStyle} placeholder="0" step="0.5" min="0" max={form.sold_hours || undefined} />
+                  {form.coordination_hours !== '' && form.sold_hours !== '' && Number(form.coordination_hours) > Number(form.sold_hours) && (
+                    <p className="text-[10px] mt-1" style={{ color: 'var(--danger-border)' }}>Não pode exceder as horas vendidas ({form.sold_hours}h).</p>
+                  )}
+                </div>
                 <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
               </div>
               <div className="grid grid-cols-2 gap-3 rounded-xl p-3" style={{ border: '1px solid var(--brand-border)', background: 'var(--surface-hover)' }}>
