@@ -4,18 +4,20 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { Project, PaginatedResponse, HourContribution } from '@/types'
 import { formatBRL } from '@/lib/format'
 import { toast } from 'sonner'
-import { Layers, Search, ChevronDown, ChevronRight, Users, TrendingUp, Clock, BarChart2, AlertTriangle, DollarSign, X, UserCheck, Pencil, Trash2, Plus, Edit2, MessageCircle, Eye, Check, UserPlus, CalendarPlus, CalendarOff } from 'lucide-react'
+import { Layers, Search, ChevronDown, ChevronRight, Users, TrendingUp, Clock, BarChart2, AlertTriangle, DollarSign, X, UserCheck, Pencil, Trash2, Plus, Edit2, MessageCircle, Eye, Check, UserPlus, CalendarPlus, CalendarOff, ChevronUp, ChevronsUpDown, FileText, Download } from 'lucide-react'
 import { ProjectMessages } from '@/components/shared/ProjectMessages'
+import { MonthlyAccrualTable } from '@/components/projects/monthly-accrual-table'
 import { ProjectDataModal } from '@/components/shared/ProjectDataModal'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { PageHeader } from '@/components/ds'
 import { RowMenu } from '@/components/ui/row-menu'
+import { CustomerContactsSection } from '@/components/ui/customer-contacts-section'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -88,6 +90,37 @@ interface CostSummary {
   consultant_breakdown: { consultant_name: string; total_hours: number; approved_hours: number; pending_hours: number; cost: number; consultant_hourly_rate?: number; consultant_rate_type?: string }[]
 }
 
+// ─── Cabeçalho ordenável ────────────────────────────────────────────────────
+
+function SortableTh({
+  children, columnKey, sortKey, sortDir, onSort, disabled, className = '', align, minWidth,
+}: {
+  children: React.ReactNode
+  columnKey: string
+  sortKey: string | null
+  sortDir: 'asc' | 'desc'
+  onSort: (k: any) => void
+  disabled?: boolean
+  className?: string
+  align?: 'left' | 'center' | 'right'
+  minWidth?: number
+}) {
+  const isActive = sortKey === columnKey && !disabled
+  const Icon = isActive ? (sortDir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown
+  return (
+    <th
+      className={`text-[11px] font-medium uppercase tracking-[0.04em] select-none ${disabled ? '' : 'cursor-pointer'} ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'} ${className}`}
+      style={{ color: isActive ? 'var(--text)' : 'var(--text-muted)', minWidth }}
+      onClick={() => { if (!disabled) onSort(columnKey) }}
+    >
+      <span className={`inline-flex items-center gap-1 ${align === 'center' ? 'justify-center w-full' : ''}`}>
+        {children}
+        {!disabled && <Icon size={11} style={{ opacity: isActive ? 1 : 0.4 }} />}
+      </span>
+    </th>
+  )
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function healthColor(pct: number | undefined): 'green' | 'yellow' | 'red' {
@@ -98,9 +131,9 @@ function healthColor(pct: number | undefined): 'green' | 'yellow' | 'red' {
 }
 
 const healthStyles = {
-  green:  { bar: '#22c55e', badge: 'rgba(34,197,94,0.12)',  text: '#86efac' },
-  yellow: { bar: '#f59e0b', badge: 'rgba(245,158,11,0.12)', text: '#fcd34d' },
-  red:    { bar: '#ef4444', badge: 'rgba(239,68,68,0.12)',  text: '#fca5a5' },
+  green:  { bar: 'var(--success-border)', badge: 'var(--success-bg)',  text: 'var(--success-border)' },
+  yellow: { bar: 'var(--warning-border)', badge: 'var(--warning-bg)', text: 'var(--warning-border)' },
+  red:    { bar: 'var(--danger-border)', badge: 'var(--danger-bg)',  text: 'var(--danger-border)' },
 }
 
 function fmt(n: number | string | null | undefined, dec = 0) {
@@ -132,10 +165,34 @@ function calcProjHours(p: ProjectWithTeam): { displaySold: number; consumedHours
   return { displaySold, consumedHours }
 }
 
+// Banco de horas de coordenação (lente do coordenador). "Vendidas" = coordination_hours;
+// se em branco, cai pro vendido operacional (displaySold). Consumido = apontamentos do
+// coordenador. 4 níveis de risco (saudável ≤70 / atenção 71-90 / crítico 91-100 / estourado >100).
+function coordinationMeta(p: ProjectWithTeam, displaySold: number) {
+  const raw = (p.coordination_hours != null && String(p.coordination_hours) !== '') ? Number(p.coordination_hours) : null
+  const explicit = raw != null && raw > 0
+  const bank = explicit ? raw! : displaySold
+  const consumed = Number(p.coordination_consumed_hours ?? 0)
+  const saldo = Math.round((bank - consumed) * 100) / 100
+  const pct = bank > 0 ? (consumed / bank) * 100 : 0
+  const risk: 'saudavel' | 'atencao' | 'critico' | 'estourado' =
+    pct > 100 ? 'estourado' : pct >= 91 ? 'critico' : pct >= 71 ? 'atencao' : 'saudavel'
+  const color = risk === 'saudavel' ? 'var(--success-border)'
+    : risk === 'atencao' ? 'var(--warning-border)' : 'var(--danger-border)'
+  const alertText = risk === 'estourado' ? `Coordenação excedida em ${fmt(Math.abs(saldo), 1)}h`
+    : risk === 'critico' ? 'Horas de coordenação esgotando'
+    : risk === 'atencao' ? 'Coordenação próxima do limite' : ''
+  return { bank, consumed, saldo, pct, risk, color, alertText, explicit }
+}
+
+function isCoordinatorOf(p: ProjectWithTeam, userId?: number | null): boolean {
+  return !!userId && !!p.coordinators?.some(c => c.id === userId)
+}
+
 const inputStyle = {
-  background: 'var(--brand-bg)',
-  border: '1px solid var(--brand-border)',
-  color: 'var(--brand-text)',
+  background: 'var(--bg)',
+  border: '1px solid var(--border)',
+  color: 'var(--text)',
 }
 
 // ─── SearchSelect ─────────────────────────────────────────────────────────────
@@ -174,24 +231,24 @@ function SearchSelect({ value, onChange, options, placeholder, portal = false }:
   const dropdown = (
     <div
       onMouseDown={e => e.stopPropagation()}
-      className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden"
+      className="bg-[var(--bg)] border border-[var(--border)] rounded-lg shadow-xl overflow-hidden"
       style={portal
         ? { position: 'fixed', top: pos.top, left: pos.left, width: pos.width, minWidth: 220, zIndex: 9999 }
         : { position: 'absolute', top: '100%', marginTop: 4, left: 0, minWidth: '220px', zIndex: 50 }
       }
     >
-      <div className="p-2 border-b border-zinc-700">
+      <div className="p-2 border-b border-[var(--border)]">
         <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar..."
-          className="w-full h-7 px-2 text-xs bg-zinc-800 border border-zinc-700 text-zinc-200 rounded outline-none placeholder:text-zinc-600 focus:border-zinc-500" />
+          className="w-full h-7 px-2 text-xs bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text)] rounded outline-none placeholder:text-[var(--text-light)] focus:border-[var(--border-strong)]" />
       </div>
       <div className="max-h-52 overflow-y-auto py-0.5">
         <button type="button" onClick={() => select('')}
-          className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left transition-colors ${!value ? 'text-cyan-400 bg-zinc-800' : 'text-zinc-400 hover:bg-zinc-800'}`}>{placeholder}</button>
+          className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left transition-colors ${!value ? 'text-cyan-400 bg-[var(--surface-hover)]' : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)]'}`}>{placeholder}</button>
         {filtered.length === 0
-          ? <p className="px-3 py-2 text-xs text-zinc-600 italic">Nenhum resultado</p>
+          ? <p className="px-3 py-2 text-xs text-[var(--text-light)] italic">Nenhum resultado</p>
           : filtered.map(o => (
             <button key={o.id} type="button" onClick={() => select(String(o.id))}
-              className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left transition-colors ${String(o.id) === value ? 'text-cyan-400 bg-zinc-800' : 'text-zinc-200 hover:bg-zinc-800'}`}>
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left transition-colors ${String(o.id) === value ? 'text-cyan-400 bg-[var(--surface-hover)]' : 'text-[var(--text)] hover:bg-[var(--surface-hover)]'}`}>
               {o.name}
             </button>
           ))}
@@ -202,9 +259,9 @@ function SearchSelect({ value, onChange, options, placeholder, portal = false }:
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => open ? setOpen(false) : openDropdown()}
-        className={`w-full h-8 flex items-center justify-between gap-1 px-2 text-xs bg-zinc-800 border border-zinc-700 rounded-md outline-none hover:border-zinc-500 transition-colors ${selected ? 'text-zinc-200' : 'text-zinc-500'}`}>
+        className={`w-full h-8 flex items-center justify-between gap-1 px-2 text-xs bg-[var(--surface-hover)] border border-[var(--border)] rounded-md outline-none hover:border-[var(--border-strong)] transition-colors ${selected ? 'text-[var(--text)]' : 'text-[var(--text-light)]'}`}>
         <span className="truncate">{selected ? selected.name : placeholder}</span>
-        <ChevronRight size={12} className="rotate-90 shrink-0 text-zinc-500" />
+        <ChevronRight size={12} className="rotate-90 shrink-0 text-[var(--text-light)]" />
       </button>
       {open && (portal ? createPortal(dropdown, document.body) : dropdown)}
     </div>
@@ -233,18 +290,18 @@ function SimpleSelect({ value, onChange, options, placeholder }: {
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen(o => !o)}
-        className={`h-8 flex items-center justify-between gap-1 px-2 text-xs bg-zinc-800 border border-zinc-700 rounded-md outline-none hover:border-zinc-500 transition-colors whitespace-nowrap ${selected ? 'text-zinc-200' : 'text-zinc-500'}`}>
+        className={`h-8 flex items-center justify-between gap-1 px-2 text-xs bg-[var(--surface-hover)] border border-[var(--border)] rounded-md outline-none hover:border-[var(--border-strong)] transition-colors whitespace-nowrap ${selected ? 'text-[var(--text)]' : 'text-[var(--text-light)]'}`}>
         <span>{selected ? selected.name : placeholder}</span>
-        <ChevronRight size={12} className="rotate-90 shrink-0 text-zinc-500" />
+        <ChevronRight size={12} className="rotate-90 shrink-0 text-[var(--text-light)]" />
       </button>
       {open && (
-        <div className="absolute top-full mt-1 left-0 z-50 min-w-full bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden">
+        <div className="absolute top-full mt-1 left-0 z-50 min-w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg shadow-xl overflow-hidden">
           <div className="max-h-52 overflow-y-auto py-0.5">
             <button type="button" onClick={() => select('')}
-              className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left transition-colors ${!value ? 'text-cyan-400 bg-zinc-800' : 'text-zinc-400 hover:bg-zinc-800'}`}>{placeholder}</button>
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left transition-colors ${!value ? 'text-cyan-400 bg-[var(--surface-hover)]' : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)]'}`}>{placeholder}</button>
             {options.map(o => (
               <button key={o.id} type="button" onClick={() => select(o.id)}
-                className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left transition-colors ${o.id === value ? 'text-cyan-400 bg-zinc-800' : 'text-zinc-200 hover:bg-zinc-800'}`}>
+                className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left transition-colors ${o.id === value ? 'text-cyan-400 bg-[var(--surface-hover)]' : 'text-[var(--text)] hover:bg-[var(--surface-hover)]'}`}>
                 {o.name}
               </button>
             ))}
@@ -261,7 +318,7 @@ function Skeleton() {
   return (
     <div className="animate-pulse space-y-3">
       {[...Array(6)].map((_, i) => (
-        <div key={i} className="h-14 rounded-xl" style={{ background: 'var(--brand-surface)' }} />
+        <div key={i} className="h-14 rounded-xl" style={{ background: 'var(--surface)' }} />
       ))}
     </div>
   )
@@ -278,15 +335,15 @@ interface SummaryCardProps {
 
 function SummaryCard({ icon, label, value, sub }: SummaryCardProps) {
   return (
-    <div className="rounded-2xl p-5" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+    <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
       <div className="flex items-center gap-3 mb-3">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(0,245,255,0.08)' }}>
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--primary-soft)' }}>
           {icon}
         </div>
-        <span className="text-xs font-medium" style={{ color: 'var(--brand-muted)' }}>{label}</span>
+        <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{label}</span>
       </div>
-      <p className="text-2xl font-bold tracking-tight" style={{ color: 'var(--brand-text)' }}>{value}</p>
-      {sub && <p className="text-xs mt-1" style={{ color: 'var(--brand-subtle)' }}>{sub}</p>}
+      <p className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>{value}</p>
+      {sub && <p className="text-xs mt-1" style={{ color: 'var(--text-light)' }}>{sub}</p>}
     </div>
   )
 }
@@ -345,6 +402,8 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
   }
 
   const teamCount = (project.consultants?.length ?? 0) + (project.coordinators?.length ?? 0)
+  const childConsumption = project.children_consumption_breakdown ?? []
+  const hasChildConsumption = childConsumption.length > 0
 
   // Tree visual
   const isChild           = treeRow ? treeRow._level > 0 : false
@@ -352,11 +411,11 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
   const isInactive        = isChild && (project as any).node_state === 'DISABLED'
   const isActive          = isChild && (project as any).node_state !== 'DISABLED'
   const isParentIndirect  = isParent && (project as any).coordinator_is_direct === false
-  const rowBg             = isActive ? 'rgba(0,245,255,0.06)' : 'transparent'
-  const rowBorderLeft     = isActive ? '3px solid #00F5FF'
-    : isParent ? '2px solid rgba(255,255,255,0.07)'
-    : isInactive ? '2px solid rgba(255,255,255,0.04)' : undefined
-  const rowBoxShadow      = isActive ? 'inset 0 0 0 1px rgba(0,245,255,0.08)' : undefined
+  const rowBg             = isActive ? 'var(--primary-soft)' : 'transparent'
+  const rowBorderLeft     = isActive ? '3px solid var(--primary)'
+    : isParent ? '2px solid var(--border-strong)'
+    : isInactive ? '2px solid var(--border)' : undefined
+  const rowBoxShadow      = isActive ? 'inset 0 0 0 1px var(--primary-soft)' : undefined
   const rowOpacity        = isInactive ? 0.4 : isParentIndirect ? 0.6 : 1
 
   const statusRowClass = project.status === 'cancelled' ? 'row--cancelado'
@@ -370,25 +429,27 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
       {(project as any).has_open_period && (
         <tr style={{ height: 0 }}>
           <td colSpan={20} style={{ padding: 0, height: 0 }}>
-            <div style={{ background: 'rgba(249,115,22,0.16)', borderTop: '2px solid #F97316', display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', fontSize: 11, color: '#9A3412', fontWeight: 700, letterSpacing: '0.02em' }}>
-              <span style={{ animation: 'pulse 1.5s infinite', color: '#F97316' }}>⚠</span> MÊS ABERTO — apontamentos permitidos em competência fechada
+            <div style={{ background: 'var(--warning-bg)', borderTop: '2px solid var(--warning-border)', display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', fontSize: 11, color: 'var(--warning)', fontWeight: 700, letterSpacing: '0.02em' }}>
+              <span style={{ animation: 'pulse 1.5s infinite', color: 'var(--warning-border)' }}>⚠</span> MÊS ABERTO — apontamentos permitidos em competência fechada
             </div>
           </td>
         </tr>
       )}
       <tr
-        className={`border-b transition-all cursor-pointer ${statusRowClass} ${childRowClass}`.trim()}
+        className={`border-b transition-colors cursor-pointer ${statusRowClass} ${childRowClass}`.trim()}
         style={{
-          borderColor: (project as any).has_open_period ? 'rgba(249,115,22,0.45)' : 'var(--brand-border)',
+          borderColor: (project as any).has_open_period ? 'var(--warning-border)' : 'var(--border)',
           background: (project as any).has_open_period
-            ? 'rgba(249,115,22,0.06)'
+            ? 'var(--warning-bg)'
             : isActive ? rowBg : !statusRowClass ? rowBg : undefined,
           borderLeft: (project as any).has_open_period
-            ? '4px solid #F97316'
+            ? '4px solid var(--warning-border)'
             : isActive ? rowBorderLeft : !statusRowClass ? rowBorderLeft : undefined,
-          boxShadow: (project as any).has_open_period ? '0 0 0 1px rgba(249,115,22,0.18) inset' : rowBoxShadow,
+          boxShadow: (project as any).has_open_period ? '0 0 0 1px var(--warning-border) inset' : rowBoxShadow,
           opacity: !statusRowClass ? rowOpacity : undefined,
         }}
+        onMouseEnter={(e) => { if (!isActive && !statusRowClass) e.currentTarget.style.background = 'var(--surface-hover)' }}
+        onMouseLeave={(e) => { if (!isActive && !statusRowClass) e.currentTarget.style.background = 'transparent' }}
         onClick={treeRow ? (treeRow._hasChildren ? onTreeToggle : undefined) : onToggle}
       >
         {/* Checkbox de seleção */}
@@ -429,13 +490,13 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
               onClick={() => onMenuAction('messages', project)}
               className="relative flex items-center justify-center w-7 h-7 rounded transition-colors"
               style={hasUnread
-                ? { color: '#00F5FF', background: 'rgba(0,245,255,0.12)' }
-                : { color: '#52525B' }}
+                ? { color: 'var(--primary)', background: 'var(--primary-soft)' }
+                : { color: 'var(--text-light)' }}
               title="Mensagens"
             >
               <MessageCircle size={13} />
               {hasUnread && (
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style={{ background: 'var(--primary)', boxShadow: '0 0 6px rgba(0,245,255,0.8)' }} />
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style={{ background: 'var(--primary)', boxShadow: '0 0 6px var(--ring)' }} />
               )}
             </button>
           </div>
@@ -452,33 +513,34 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
             {treeRow
               ? treeRow._hasChildren
                 ? (treeRow._isExpanded
-                    ? <ChevronDown size={14} style={{ color: 'var(--brand-primary)' }} />
-                    : <ChevronRight size={14} style={{ color: 'var(--brand-subtle)' }} />)
+                    ? <ChevronDown size={14} style={{ color: 'var(--primary)' }} />
+                    : <ChevronRight size={14} style={{ color: 'var(--text-light)' }} />)
                 : isChild
-                  ? <span className="text-xs shrink-0" style={{ color: 'var(--brand-subtle)' }}>└─</span>
+                  ? <span className="text-xs shrink-0" style={{ color: 'var(--text-light)' }}>└─</span>
                   : <span className="w-3.5" />
               : teamCount > 0
                 ? (expanded
-                    ? <ChevronDown size={14} style={{ color: 'var(--brand-subtle)' }} />
-                    : <ChevronRight size={14} style={{ color: 'var(--brand-subtle)' }} />)
+                    ? <ChevronDown size={14} style={{ color: 'var(--text-light)' }} />
+                    : <ChevronRight size={14} style={{ color: 'var(--text-light)' }} />)
                 : <span className="w-3.5" />
             }
             <div>
               <div className="flex items-center gap-1.5">
-                <p
+                {/* Nome sem link pro workspace /projetos/[id] — workspace é cronograma (em teste, fora de prod). */}
+                <span
                   className="text-sm font-semibold"
-                  style={{ color: isActive ? '#00F5FF' : isParent ? 'var(--brand-subtle)' : 'var(--brand-muted)' }}
+                  style={{ color: isActive ? 'var(--primary)' : isParent ? 'var(--text-light)' : 'var(--text-muted)' }}
                 >
                   {project.name}
-                </p>
+                </span>
                 {treeRow && isParent && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>PAI</span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'var(--surface-hover)', color: 'var(--text-light)' }}>PAI</span>
                 )}
                 {treeRow && isActive && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(0,245,255,0.12)', color: '#00F5FF' }}>ATIVO</span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}>ATIVO</span>
                 )}
               </div>
-              <p className="text-xs font-mono" style={{ color: 'var(--brand-subtle)' }}>
+              <p className="text-xs font-mono" style={{ color: 'var(--text-light)' }}>
                 {project.code}
               </p>
             </div>
@@ -486,117 +548,182 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
         </td>
 
         {/* Cliente */}
-        <td className="py-3 pr-4 text-sm" style={{ color: 'var(--brand-muted)' }}>
+        <td className="py-3 pr-4 text-sm" style={{ color: 'var(--text-muted)' }}>
           {project.customer?.name ?? '—'}
         </td>
 
         {/* Tipo de Contrato */}
-        <td className="py-3 pr-4 text-xs" style={{ color: 'var(--brand-subtle)' }}>
+        <td className="py-3 pr-4 text-xs" style={{ color: 'var(--text-light)' }}>
           {project.contract_type_display ?? project.contract_type?.name ?? '—'}
         </td>
 
         {/* Tipo de Serviço */}
-        <td className="py-3 pr-4 text-xs" style={{ color: 'var(--brand-subtle)' }}>
+        <td className="py-3 pr-4 text-xs" style={{ color: 'var(--text-light)' }}>
           {project.service_type?.name ?? '—'}
         </td>
 
         {/* Horas Mensais */}
-        <td className="py-3 px-4 text-sm text-center tabular-nums" style={{ color: 'var(--brand-muted)' }}>
-          {isBhMensal ? fmt(project.sold_hours ?? 0) : <span style={{ color: 'var(--brand-subtle)', fontSize: 11 }}>—</span>}
+        <td className="py-3 px-4 text-sm text-center tabular-nums" style={{ color: 'var(--text-muted)' }}>
+          {isBhMensal ? fmt(project.sold_hours ?? 0) : <span style={{ color: 'var(--text-light)', fontSize: 11 }}>—</span>}
         </td>
 
         {/* HS Vendidas */}
-        <td className="py-3 px-4 text-sm text-center tabular-nums" style={{ color: 'var(--brand-muted)' }}>
+        <td className="py-3 px-4 text-sm text-center tabular-nums" style={{ color: 'var(--text-muted)' }}>
           {isOnDemand ? (
-            <span style={{ color: 'var(--brand-subtle)', fontSize: 11 }}>= consumo</span>
+            <span style={{ color: 'var(--text-light)', fontSize: 11 }}>= consumo</span>
           ) : (
             <div className="flex flex-col items-center leading-tight">
               <span>{fmt(displaySold)}</span>
-              {contributions > 0 && (
-                <span style={{ fontSize: 10, color: 'var(--brand-subtle)' }}>({fmt(contributions, 1)})</span>
+              {(project.vendidas_aporte_hours ?? 0) > 0 && (
+                <>
+                  <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Projeto {fmt(project.vendidas_projeto_hours ?? 0, 1)}</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Aporte {fmt(project.vendidas_aporte_hours ?? 0, 1)}</span>
+                </>
               )}
             </div>
           )}
         </td>
 
         {/* Total Contratadas = acumulado + aporte */}
-        <td className="py-3 px-4 text-sm text-center tabular-nums" style={{ color: 'var(--brand-muted)' }}>
+        <td className="py-3 px-4 text-sm text-center tabular-nums" style={{ color: 'var(--text-muted)' }}>
           {isOnDemand ? (
-            <span style={{ color: 'var(--brand-subtle)', fontSize: 11 }}>—</span>
+            <span style={{ color: 'var(--text-light)', fontSize: 11 }}>—</span>
           ) : (
             fmt(displaySold, 1)
           )}
         </td>
 
         {/* HS Consumidas */}
-        <td className="py-3 px-4 text-sm text-center tabular-nums" style={{ color: 'var(--brand-muted)' }}>
-          {fmt(consumedHours, 1)}
+        <td className="py-3 px-4 text-sm text-center tabular-nums" style={{ color: 'var(--text-muted)' }}>
+          {(project.children_consumed_hours ?? 0) > 0 ? (
+            <div className="flex flex-col items-center leading-tight">
+              <span>{fmt(consumedHours, 1)}</span>
+              <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Pai {fmt(project.own_consumed_hours, 1)}</span>
+              <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Filhos {fmt(project.children_consumed_hours, 1)}</span>
+            </div>
+          ) : (
+            fmt(consumedHours, 1)
+          )}
         </td>
 
         {/* Saldo */}
-        <td className="py-3 px-4 text-sm text-center tabular-nums font-semibold"
-          style={{ color: saldoNeg ? '#ef4444' : 'var(--brand-text)' }}>
-          {isOnDemand ? <span style={{ color: 'var(--brand-subtle)' }}>0,0</span> : (saldo != null ? fmt(saldo, 1) : '—')}
+        <td className="py-3 px-4 text-[13px] text-right tabular-nums font-semibold"
+          style={{ color: saldoNeg ? 'var(--danger-border)' : 'var(--text)' }}>
+          {isOnDemand ? <span style={{ color: 'var(--text-light)' }}>0,0</span> : (saldo != null ? fmt(saldo, 1) : '—')}
         </td>
 
         {/* % Uso + barra */}
         <td className="py-3 px-4 min-w-[140px]">
           {isOnDemand ? (
-            <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>—</span>
+            <span className="text-xs" style={{ color: 'var(--text-light)' }}>—</span>
           ) : (
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${Math.min(pct, 100)}%`, background: hs.bar }}
-                />
+            <>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${Math.min(pct, 100)}%`, background: hs.bar }}
+                  />
+                </div>
+                <span className="text-xs tabular-nums w-9 text-center" style={{ color: hs.text }}>
+                  {displaySold > 0 ? `${Math.round(pct)}%` : '—'}
+                </span>
               </div>
-              <span className="text-xs tabular-nums w-9 text-center" style={{ color: hs.text }}>
-                {displaySold > 0 ? `${Math.round(pct)}%` : '—'}
-              </span>
-            </div>
+            </>
           )}
         </td>
 
-        {/* Status */}
+        {/* Coord. — mini-barra de progresso do banco de coordenação + popover de hover */}
+        <td className="py-3 px-4 min-w-[140px] relative" onClick={e => e.stopPropagation()}>
+          {(() => {
+            const cBank = Number((project as any).coordination_hours ?? 0)
+            if (cBank <= 0) return <span className="text-xs" style={{ color: 'var(--text-light)' }}>—</span>
+            const cCons = Number((project as any).coordination_consumed_hours ?? 0)
+            const cPct  = (cCons / cBank) * 100
+            const cColor = cPct >= 90 ? 'var(--danger-border)' : cPct >= 70 ? 'var(--warning-border)' : 'var(--success-border)'
+            const cSaldo = cBank - cCons
+            const cRisk  = cPct >= 90 ? 'Crítico' : cPct >= 70 ? 'Atenção' : 'Saudável'
+            return (
+              <div className="group/coord relative cursor-help">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
+                    <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(cPct, 100)}%`, background: cColor }} />
+                  </div>
+                  <span className="text-[10px] tabular-nums font-semibold shrink-0" style={{ color: cColor }}>{Math.round(cPct)}%</span>
+                </div>
+                <div className="text-[9px] mt-0.5 tabular-nums" style={{ color: 'var(--text-light)' }}>
+                  {cCons.toFixed(1)}h / {cBank.toFixed(1)}h
+                </div>
+                {/* Popover de hover */}
+                <div
+                  className="invisible opacity-0 group-hover/coord:visible group-hover/coord:opacity-100 transition-opacity duration-150 pointer-events-none absolute z-50 left-1/2 -translate-x-1/2 bottom-[calc(100%+8px)] w-56 rounded-lg p-3 shadow-xl"
+                  style={{ background: 'var(--surface)', border: `1px solid ${cColor}66`, boxShadow: '0 6px 20px rgba(0,0,0,0.35)' }}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-light)' }}>Coordenação</span>
+                    <span className="text-[10px] font-bold" style={{ color: cColor }}>{cRisk} · {Math.round(cPct)}%</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 text-center mb-2">
+                    <div>
+                      <p className="text-[9px]" style={{ color: 'var(--text-light)' }}>Vendidas</p>
+                      <p className="text-xs font-bold tabular-nums" style={{ color: 'var(--text)' }}>{cBank.toFixed(1)}h</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px]" style={{ color: 'var(--text-light)' }}>Consumidas</p>
+                      <p className="text-xs font-bold tabular-nums" style={{ color: 'var(--text-muted)' }}>{cCons.toFixed(1)}h</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px]" style={{ color: 'var(--text-light)' }}>Saldo</p>
+                      <p className="text-xs font-bold tabular-nums" style={{ color: cSaldo < 0 ? 'var(--danger-border)' : 'var(--success-border)' }}>{cSaldo.toFixed(1)}h</p>
+                    </div>
+                  </div>
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
+                    <div className="h-full rounded-full" style={{ width: `${Math.min(cPct, 100)}%`, background: cColor }} />
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+        </td>
+
+        {/* Status — semantic chip via tokens */}
         <td className="py-3 whitespace-nowrap">
-          <span
-            className="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
-            style={{
-              background: project.status === 'started' ? 'rgba(0,245,255,0.10)'
-                : project.status === 'paused' ? 'rgba(245,158,11,0.12)'
-                : project.status === 'cancelled' ? 'rgba(239,68,68,0.12)'
-                : project.status === 'finished' ? 'rgba(161,161,170,0.12)'
-                : project.status === 'awaiting_start' ? 'rgba(139,92,246,0.12)'
-                : 'rgba(161,161,170,0.12)',
-              color: project.status === 'started' ? '#00F5FF'
-                : project.status === 'paused' ? '#F59E0B'
-                : project.status === 'cancelled' ? '#EF4444'
-                : project.status === 'finished' ? '#71717A'
-                : project.status === 'awaiting_start' ? '#8B5CF6'
-                : '#A1A1AA',
-            }}
-          >
-            {project.status_display ?? statusLabel[project.status] ?? project.status}
-          </span>
+          {(() => {
+            const stMap: Record<string, { bg: string; fg: string; bd: string }> = {
+              started:        { bg: 'var(--primary-soft)', fg: 'var(--primary)',         bd: 'var(--ring)' },
+              paused:         { bg: 'var(--warning-bg)',   fg: 'var(--warning)',         bd: 'var(--warning-border)' },
+              cancelled:      { bg: 'var(--danger-bg)',    fg: 'var(--danger)',          bd: 'var(--danger-border)' },
+              finished:       { bg: 'var(--surface-hover)',fg: 'var(--text-muted)',      bd: 'var(--border)' },
+              awaiting_start: { bg: 'var(--info-bg)',      fg: 'var(--info)',            bd: 'var(--info-border)' },
+            }
+            const s = stMap[project.status] ?? stMap.finished
+            return (
+              <span
+                className="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap inline-flex items-center"
+                style={{ background: s.bg, color: s.fg, border: `1px solid ${s.bd}` }}
+              >
+                {project.status_display ?? statusLabel[project.status] ?? project.status}
+              </span>
+            )
+          })()}
         </td>
       </tr>
 
-      {/* Expansão: equipe */}
-      {expanded && teamCount > 0 && (
-        <tr style={{ background: 'rgba(0,0,0,0.2)' }}>
+      {/* Expansão: equipe + consumo dos filhos */}
+      {expanded && (teamCount > 0 || hasChildConsumption) && (
+        <tr style={{ background: 'var(--surface-hover)' }}>
           <td /><td />
-          <td colSpan={11} className="py-3 px-4">
+          <td colSpan={12} className="py-3 px-4">
             <div className="flex flex-wrap gap-4">
               {(project.coordinators ?? []).length > 0 && (
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--brand-subtle)' }}>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--text-light)' }}>
                     Coordenadores
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {project.coordinators!.map(u => (
                       <span key={u.id} className="text-xs px-2.5 py-1 rounded-lg font-medium"
-                        style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>
+                        style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}>
                         {u.name}
                       </span>
                     ))}
@@ -605,7 +732,7 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
               )}
               {(project.consultants ?? []).length > 0 && (
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--brand-subtle)' }}>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--text-light)' }}>
                     Consultores
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -613,7 +740,7 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
                       const allowManual = u.pivot?.allow_manual_timesheet ?? false
                       return (
                         <div key={u.id} className="relative group/manual flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg font-medium"
-                          style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)' }}>
+                          style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
                           <span>{u.name}</span>
                           {canEdit && onConsultantManualToggle && (
                             <button
@@ -621,19 +748,41 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
                               title={allowManual ? 'Bloquear apontamento manual neste projeto' : 'Liberar apontamento manual neste projeto'}
                               className="ml-1 w-4 h-4 rounded flex items-center justify-center transition-colors"
                               style={{
-                                background: allowManual ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.08)',
-                                color: allowManual ? '#22c55e' : 'var(--brand-subtle)',
+                                background: allowManual ? 'var(--success-border)' : 'var(--surface-hover)',
+                                color: allowManual ? 'var(--success-border)' : 'var(--text-light)',
                               }}
                             >
                               <Clock size={10} />
                             </button>
                           )}
                           {!canEdit && allowManual && (
-                            <span style={{ color: '#22c55e' }}><Clock size={10} /></span>
+                            <span style={{ color: 'var(--success-border)' }}><Clock size={10} /></span>
                           )}
                         </div>
                       )
                     })}
+                  </div>
+                </div>
+              )}
+              {hasChildConsumption && (
+                <div className="basis-full">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--text-light)' }}>
+                    Consumo dos filhos no banco do pai
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    {childConsumption.map(c => (
+                      <div key={c.id} className="flex items-center gap-2 text-xs">
+                        <span className="font-mono" style={{ color: 'var(--text-light)' }}>{c.code}</span>
+                        <span style={{ color: 'var(--text-muted)' }}>—</span>
+                        <span style={{ color: 'var(--text-muted)' }}>{c.name}</span>
+                        {c.contract_type && (
+                          <span style={{ color: 'var(--text-light)' }}>({c.contract_type})</span>
+                        )}
+                        <span className="font-semibold tabular-nums" style={{ color: 'var(--text)' }}>
+                          {fmt(c.consumed_hours, 1)}h
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -654,7 +803,7 @@ interface ProjectEditForm {
   sold_hours: string; project_value: string
   hourly_rate: string; additional_hourly_rate: string
   initial_hours_consumed: string; initial_cost: string
-  consultant_hours: string; coordinator_hours: string
+  consultant_hours: string; coordinator_hours: string; coordination_hours: string
   parent_project_id: string
   service_type_id: string; contract_type_id: string
   tipo_faturamento: string; tipo_alocacao: string
@@ -664,11 +813,20 @@ interface ProjectEditForm {
   max_expense_per_consultant: string
   timesheet_retroactive_limit_days: string
   allow_manual_timesheets: boolean; allow_negative_balance: boolean
+  movidesk_integration_enabled: boolean
   coordinator_ids: number[]; consultant_ids: number[]; consultant_group_ids: number[]
+  kanban_coordinator_override_id: string
 }
 
 function ProjectInlineEditModal({ project, onClose, onSaved }: { project: ProjectFull; onClose: () => void; onSaved: () => void }) {
+  const { user } = useAuth()
+  const isAdmin = user?.type === 'admin'
   const d = project as any
+  // Captura no mount se o projeto tem valores de histórico — mantém bloco visível
+  // durante a edição mesmo se o user apagar pra zerar (evita "campo some ao limpar").
+  const [hadInitialHistory] = useState(
+    Number(d.initial_hours_consumed ?? 0) > 0 || Number(d.initial_cost ?? 0) > 0
+  )
   // Parse existing code: PREFIX001-26 → seq='001', year='26'; PREFIX001-26-01 → suffix='01'
   const parsedCode = useMemo(() => {
     const m = (d.code ?? '').match(/^[A-Za-z]+(\d+)-(\d+)(?:-(\d+))?/)
@@ -703,6 +861,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     initial_cost:                    d.initial_cost != null ? String(d.initial_cost) : '',
     consultant_hours:                d.consultant_hours != null ? String(d.consultant_hours) : '',
     coordinator_hours:               d.coordinator_hours != null ? String(d.coordinator_hours) : '',
+    coordination_hours:              (d as any).coordination_hours != null ? String((d as any).coordination_hours) : '',
     parent_project_id:               d.parent_project_id ? String(d.parent_project_id) : '',
     service_type_id:                 d.service_type_id ? String(d.service_type_id) : (d.service_type?.id ? String(d.service_type.id) : ''),
     contract_type_id:                d.contract_type_id ? String(d.contract_type_id) : (d.contract_type?.id ? String(d.contract_type.id) : ''),
@@ -716,14 +875,36 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     timesheet_retroactive_limit_days: d.timesheet_retroactive_limit_days != null ? String(d.timesheet_retroactive_limit_days) : '',
     allow_manual_timesheets:         d.allow_manual_timesheets ?? true,
     allow_negative_balance:          d.allow_negative_balance ?? false,
+    movidesk_integration_enabled:    (d as any).movidesk_integration_enabled ?? false,
     coordinator_ids:                 (d.coordinators ?? d.approvers ?? []).map((c: any) => c.id),
     consultant_ids:                  (d.consultants ?? []).map((c: any) => c.id),
     consultant_group_ids:            (d.consultant_groups ?? []).map((g: any) => g.id),
+    kanban_coordinator_override_id:  d.kanban_coordinator_override_id ? String(d.kanban_coordinator_override_id) : '',
   })
   const [saving, setSaving] = useState(false)
   const [manualTimesheetIds, setManualTimesheetIds] = useState<Set<number>>(
     () => new Set((d.consultants ?? []).filter((c: any) => c.pivot?.allow_manual_timesheet).map((c: any) => c.id))
   )
+
+  // Anexos do projeto (inclui os herdados do contrato vinculado, source='contract')
+  const [projAttachments, setProjAttachments] = useState<any[]>([])
+  const [pendingAttach, setPendingAttach] = useState<{ file: File; type: string }[]>([])
+  const attachFileRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    api.get<any[]>(`/projects/${project.id}/attachments`).then(r => setProjAttachments(Array.isArray(r) ? r : [])).catch(() => {})
+  }, [project.id])
+  const fmtAttSize = (b: any) => b == null ? '' : b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1048576).toFixed(1)} MB`
+  const downloadProjAtt = async (att: any) => {
+    const res = await fetch(`/api/v1/projects/${project.id}/attachments/${att.id}`, { credentials: 'same-origin' })
+    if (!res.ok) { toast.error('Erro ao baixar arquivo'); return }
+    const blob = await res.blob(); const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = att.original_name; a.click(); URL.revokeObjectURL(url)
+  }
+  const deleteProjAtt = async (att: any) => {
+    if (!confirm('Remover este anexo?')) return
+    try { await api.delete(`/projects/${project.id}/attachments/${att.id}`); setProjAttachments(p => p.filter(x => x.id !== att.id)); toast.success('Anexo removido') }
+    catch (e: any) { toast.error(e?.message ?? 'Erro ao remover anexo') }
+  }
 
   const [optServiceTypes,    setOptServiceTypes]    = useState<{id:number;name:string}[]>([])
   const [optContractTypes,   setOptContractTypes]   = useState<{id:number;name:string}[]>([])
@@ -742,7 +923,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       api.get<any>('/contract-types?pageSize=100'),
       api.get<any>('/users?type=coordenador&coordinator_type=projetos&pageSize=200'),
       api.get<any>('/users?type=admin&pageSize=200'),
-      api.get<any>('/users?type=consultor&pageSize=200'),
+      api.get<any>('/users?type=consultor,parceiro_admin&pageSize=200'),
       api.get<any>('/consultant-groups?pageSize=100&active=1'),
       api.get<any>('/customers?pageSize=500'),
     ]).then(([st, ct, coords, admins, consults, grps, custs]) => {
@@ -770,6 +951,32 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
 
   const [codeExists,   setCodeExists]   = useState(false)
   const [codeChecking, setCodeChecking] = useState(false)
+  // Fluxo in-app de troca de integração Movidesk (substitui window.confirm)
+  const [movideskConflict, setMovideskConflict] = useState<{ current?: { code?: string; name?: string }; payload: Record<string, unknown> } | null>(null)
+  const [movideskStep, setMovideskStep] = useState<'confirm' | 'migrate' | 'processing'>('confirm')
+  const [movideskMigrating, setMovideskMigrating] = useState(false)
+
+  // Vigência do novo valor-hora: quando o hourly_rate muda, perguntamos a partir de qual mês passa a valer.
+  const [rateModalOpen, setRateModalOpen] = useState(false)
+  const [rateEffectiveMonth, setRateEffectiveMonth] = useState<string>(() => new Date().toISOString().slice(0, 7))
+
+  // Histórico de valores-hora (somente leitura) — GET /projects/{id}/change-history?field_name=hourly_rate
+  const [rateHistoryOpen, setRateHistoryOpen] = useState(false)
+  const [rateHistory, setRateHistory] = useState<any[]>([])
+  const [rateHistoryLoading, setRateHistoryLoading] = useState(false)
+  const openRateHistory = async () => {
+    setRateHistoryOpen(true)
+    setRateHistoryLoading(true)
+    try {
+      const res = await api.get<{ hasNext: boolean; items: any[] }>(`/projects/${project.id}/change-history?field_name=hourly_rate&pageSize=100`)
+      setRateHistory(Array.isArray(res?.items) ? res.items : [])
+    } catch {
+      setRateHistory([])
+      toast.error('Erro ao carregar histórico de valores')
+    } finally {
+      setRateHistoryLoading(false)
+    }
+  }
 
   const selectedCustomerObj = useMemo(() => optCustomers.find(c => String(c.id) === form.customer_id), [optCustomers, form.customer_id])
   // Use prefix from selected customer, or fall back to original code prefix
@@ -806,9 +1013,22 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
   const setF = (key: keyof ProjectEditForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [key]: e.target.value }))
 
-  const handleSave = async () => {
+  const handleSave = async (hourlyRateEffectiveFrom?: string) => {
     if (!form.name.trim()) { toast.error('Nome obrigatório'); return }
     if (codeExists) { toast.error('Código já existe em outro projeto. Altere o código antes de salvar.'); return }
+    // Horas de coordenação obrigatórias para projetos que não são On Demand
+    // (no On Demand o campo nem aparece — backend recebe 0 como fallback).
+    const ctNameForSave = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase() ?? ''
+    const isOnDemandSave = ctNameForSave.includes('on demand') || form.tipo_faturamento === 'on_demand'
+    if (!isOnDemandSave && form.coordination_hours === '') {
+      toast.error('Horas de Coordenação obrigatórias.')
+      return
+    }
+    // Horas de coordenação não podem exceder as horas vendidas (contratadas) do projeto.
+    if (form.coordination_hours !== '' && form.sold_hours !== '' && Number(form.coordination_hours) > Number(form.sold_hours)) {
+      toast.error(`Horas de coordenação não podem ser maiores que as horas vendidas (${form.sold_hours}h).`)
+      return
+    }
     setSaving(true)
     try {
       const payload: Record<string, unknown> = {
@@ -820,6 +1040,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
         encerramento_date:    form.encerramento_date || null,
         allow_manual_timesheets: form.allow_manual_timesheets,
         allow_negative_balance:  form.allow_negative_balance,
+        movidesk_integration_enabled: form.movidesk_integration_enabled,
         cobra_despesa_cliente:   form.cobra_despesa_cliente,
         observacoes_contrato: form.observacoes_contrato || null,
         condicao_pagamento:   form.condicao_pagamento || null,
@@ -841,41 +1062,91 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       if (form.sold_hours !== '')            payload.sold_hours                   = Number(form.sold_hours)
       if (form.consultant_hours !== '')      payload.consultant_hours             = Number(form.consultant_hours)
       if (form.coordinator_hours !== '')     payload.coordinator_hours            = Number(form.coordinator_hours)
-      if (form.initial_hours_consumed !== '') payload.initial_hours_consumed      = Number(form.initial_hours_consumed)
-      if (form.initial_cost !== '')          payload.initial_cost                 = Number(form.initial_cost)
+      // '' envia 0 pra permitir zerar o banco de coordenação (volta ao fallback operacional).
+      payload.coordination_hours = form.coordination_hours === '' ? 0 : Number(form.coordination_hours)
+      // initial_* sempre enviam: '' vira 0 pra permitir zerar valor existente.
+      payload.initial_hours_consumed = form.initial_hours_consumed === '' ? 0 : Number(form.initial_hours_consumed)
+      payload.initial_cost           = form.initial_cost === '' ? 0 : Number(form.initial_cost)
       if (form.max_expense_per_consultant !== '') payload.max_expense_per_consultant = Number(form.max_expense_per_consultant)
       if (form.timesheet_retroactive_limit_days !== '') payload.timesheet_retroactive_limit_days = Number(form.timesheet_retroactive_limit_days)
-      await api.put(`/projects/${project.id}`, payload)
-      // Salva allow_manual_timesheet por consultor (pivô separado)
-      const directInitial: any[] = d.consultants ?? []
-      const groupInitial: any[] = (d.consultant_groups ?? []).flatMap((g: any) => g.consultants ?? [])
-      const allInitialConsultants = [...directInitial, ...groupInitial].filter((c, i, arr) => arr.findIndex((x: any) => x.id === c.id) === i)
-      const initialManual = new Set<number>(allInitialConsultants.filter((c: any) => c.pivot?.allow_manual_timesheet).map((c: any) => Number(c.id)))
-      const allIds = new Set<number>([...allInitialConsultants.map((c: any) => Number(c.id)), ...Array.from(initialManual)])
-      await Promise.allSettled(
-        Array.from(allIds).filter(id => manualTimesheetIds.has(id) !== initialManual.has(id)).map(id =>
-          api.put(`/projects/${project.id}/consultants/${id}/manual-timesheet`, { allow: manualTimesheetIds.has(id) })
-        )
-      )
-      toast.success('Projeto atualizado')
-      onSaved()
+      // kanban_coordinator_override_id: envia null se vazio (pra limpar) ou int se preenchido
+      payload.kanban_coordinator_override_id = form.kanban_coordinator_override_id === ''
+        ? null
+        : Number(form.kanban_coordinator_override_id)
+      // Mudou o valor-hora? Abre o modal de vigência antes de enviar (fechamentos passados não mudam).
+      const rateChanged = form.hourly_rate !== '' && Number(form.hourly_rate) !== Number(d.hourly_rate ?? 0)
+      if (rateChanged && !hourlyRateEffectiveFrom) { setSaving(false); setRateModalOpen(true); return }
+      if (rateChanged && hourlyRateEffectiveFrom) { payload.hourly_rate_effective_from = hourlyRateEffectiveFrom }
+      try {
+        await api.put(`/projects/${project.id}`, payload)
+      } catch (err: any) {
+        const isConflict = (err instanceof ApiError) && err.status === 409 && (err.data as any)?.code === 'MOVIDESK_INTEGRATION_CONFLICT'
+        if (!isConflict) throw err
+        // Abre o fluxo de modais in-app; o PUT de swap é refeito por submitMovideskSwap.
+        setMovideskConflict({ current: (err.data as any)?.current_project, payload })
+        setMovideskStep('confirm')
+        setSaving(false)
+        return
+      }
+      await finishAfterSave()
     } catch (e: any) { toast.error(e?.message ?? 'Erro ao salvar projeto') }
     finally { setSaving(false) }
   }
 
-  const iStyle: React.CSSProperties = { width: '100%', background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', borderRadius: '0.625rem', padding: '0.5rem 0.75rem', fontSize: '0.8125rem', color: 'var(--brand-text)', outline: 'none' }
-  const lStyle: React.CSSProperties = { fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-subtle)', marginBottom: '0.375rem', display: 'block' }
+  // Pós-processamento compartilhado entre o fluxo normal e o de troca Movidesk.
+  const finishAfterSave = async () => {
+    // Salva allow_manual_timesheet por consultor (pivô separado)
+    const directInitial: any[] = d.consultants ?? []
+    const groupInitial: any[] = (d.consultant_groups ?? []).flatMap((g: any) => g.consultants ?? [])
+    const allInitialConsultants = [...directInitial, ...groupInitial].filter((c, i, arr) => arr.findIndex((x: any) => x.id === c.id) === i)
+    const initialManual = new Set<number>(allInitialConsultants.filter((c: any) => c.pivot?.allow_manual_timesheet).map((c: any) => Number(c.id)))
+    const allIds = new Set<number>([...allInitialConsultants.map((c: any) => Number(c.id)), ...Array.from(initialManual)])
+    await Promise.allSettled(
+      Array.from(allIds).filter(id => manualTimesheetIds.has(id) !== initialManual.has(id)).map(id =>
+        api.put(`/projects/${project.id}/consultants/${id}/manual-timesheet`, { allow: manualTimesheetIds.has(id) })
+      )
+    )
+    if (pendingAttach.length > 0) {
+      for (const { file, type } of pendingAttach) {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('type', type)
+        await fetch(`/api/v1/projects/${project.id}/attachments`, { method: 'POST', credentials: 'same-origin', body: fd })
+      }
+      setPendingAttach([])
+    }
+    toast.success('Projeto atualizado')
+    onSaved()
+  }
+
+  // Refaz o PUT confirmando a troca de integração Movidesk (com ou sem migração).
+  const submitMovideskSwap = async (migrate: boolean) => {
+    if (!movideskConflict) return
+    setMovideskMigrating(migrate)
+    setMovideskStep('processing')
+    try {
+      await api.put(`/projects/${project.id}`, { ...movideskConflict.payload, confirm_movidesk_swap: true, migrate_movidesk_timesheets: migrate })
+      await finishAfterSave()
+      setMovideskConflict(null)
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao salvar projeto')
+      setMovideskConflict(null)
+    }
+  }
+
+  const iStyle: React.CSSProperties = { width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '0.625rem', padding: '0.5rem 0.75rem', fontSize: '0.8125rem', color: 'var(--text)', outline: 'none' }
+  const lStyle: React.CSSProperties = { fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-light)', marginBottom: '0.375rem', display: 'block' }
   const SecTitle = ({ children }: { children: React.ReactNode }) => (
-    <p className="text-[10px] font-semibold uppercase tracking-wider pt-3 pb-2" style={{ color: 'var(--brand-subtle)', borderTop: '1px solid var(--brand-border)' }}>{children}</p>
+    <p className="text-[10px] font-semibold uppercase tracking-wider pt-3 pb-2" style={{ color: 'var(--text-light)', borderTop: '1px solid var(--border)' }}>{children}</p>
   )
   const Toggle2 = ({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) => (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--brand-border)' }}>
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
       <button type="button" onClick={() => onChange(!checked)}
         className="relative w-10 h-5 rounded-full transition-colors shrink-0"
-        style={{ background: checked ? '#22c55e' : 'rgba(255,255,255,0.1)' }}>
+        style={{ background: checked ? 'var(--success-border)' : 'var(--border-strong)' }}>
         <span className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform" style={{ transform: checked ? 'translateX(20px)' : 'translateX(0)' }} />
       </button>
-      <span className="text-xs" style={{ color: 'var(--brand-text)' }}>{label}</span>
+      <span className="text-xs" style={{ color: 'var(--text)' }}>{label}</span>
     </div>
   )
 
@@ -892,15 +1163,15 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
   const filteredGroups   = optGroups.filter(g => g.name.toLowerCase().includes(teamSearch.toLowerCase()))
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
-      <div className="flex flex-col rounded-2xl w-full max-w-5xl max-h-[94vh]" style={{ background: 'var(--brand-surface)', border: '1px solid rgba(0,245,255,0.25)' }}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+      <div className="flex flex-col rounded-2xl w-full max-w-5xl max-h-[94vh]" style={{ background: 'var(--surface)', border: '1px solid var(--ring)' }}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>{d.code}</p>
-            <h3 className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>Editar Projeto</h3>
+            <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-light)' }}>{d.code}</p>
+            <h3 className="text-base font-bold" style={{ color: 'var(--text)' }}>Editar Projeto</h3>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"><X size={16} style={{ color: 'var(--brand-muted)' }} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] transition-colors"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
         </div>
 
         {/* Body */}
@@ -911,7 +1182,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
             <div className="space-y-3">
 
               {/* Identificação */}
-              <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Identificação</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>Identificação</p>
               <div><label style={lStyle}>Nome do Projeto *</label><input value={form.name} onChange={setF('name')} style={iStyle} /></div>
               {/* Cliente */}
               <div>
@@ -924,6 +1195,12 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                   portal={true}
                 />
               </div>
+
+              {/* Contatos do cliente */}
+              <CustomerContactsSection
+                customerId={form.customer_id ? Number(form.customer_id) : null}
+                customerName={selectedCustomerObj?.name}
+              />
 
               {/* Código do Projeto — builder */}
               <div>
@@ -941,7 +1218,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                         onBlur={checkCodeExists}
                         className="px-3 py-2 rounded-lg text-sm font-mono text-center outline-none focus:ring-1 focus:ring-cyan-500/40"
                         style={{ ...iStyle, width: '5rem' }} />
-                      <span className="text-sm font-mono" style={{ color: 'var(--brand-muted)' }}>-</span>
+                      <span className="text-sm font-mono" style={{ color: 'var(--text-muted)' }}>-</span>
                       <input type="text" maxLength={2} placeholder="26"
                         value={form.code_year}
                         onChange={e => setForm(f => ({ ...f, code_year: e.target.value.replace(/\D/g, '').slice(0, 2) }))}
@@ -950,7 +1227,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                         style={{ ...iStyle, width: '4rem' }} />
                       {form.code_suffix && (
                         <>
-                          <span className="text-sm font-mono" style={{ color: 'var(--brand-muted)' }}>-</span>
+                          <span className="text-sm font-mono" style={{ color: 'var(--text-muted)' }}>-</span>
                           <div className="px-3 py-2 rounded-lg text-sm font-mono text-center select-none"
                             style={{ ...iStyle, width: '4rem', opacity: 0.5 }}>
                             {form.code_suffix}
@@ -958,30 +1235,30 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                         </>
                       )}
                       {codePreview && (
-                        <span className="text-xs font-mono px-2 py-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>
+                        <span className="text-xs font-mono px-2 py-1 rounded-lg" style={{ background: 'var(--surface-hover)', color: 'var(--text-light)' }}>
                           {codePreview}
                         </span>
                       )}
                     </div>
-                    {codeChecking && <p className="text-[11px]" style={{ color: 'var(--brand-muted)' }}>Verificando código...</p>}
+                    {codeChecking && <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Verificando código...</p>}
                     {codeExists && !codeChecking && (
                       <p className="text-[11px] text-red-400">⚠ Código <span className="font-mono font-semibold">{codePreview}</span> já existe em outro projeto.</p>
                     )}
                     {!form.code_seq && (
-                      <p className="text-[11px] italic" style={{ color: 'var(--brand-subtle)' }}>Atual: <span className="font-mono">{d.code}</span> — deixe vazio para manter</p>
+                      <p className="text-[11px] italic" style={{ color: 'var(--text-light)' }}>Atual: <span className="font-mono">{d.code}</span> — deixe vazio para manter</p>
                     )}
                   </div>
                 ) : form.customer_id ? (
                   <div className="flex items-center gap-3 px-3 py-2 rounded-lg" style={iStyle}>
-                    <span className="text-xs italic flex-1" style={{ color: '#F59E0B' }}>Cliente sem prefixo configurado</span>
+                    <span className="text-xs italic flex-1" style={{ color: 'var(--warning-border)' }}>Cliente sem prefixo configurado</span>
                     <a href="/cadastros?tab=customers" target="_blank" rel="noreferrer"
                       className="text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0"
-                      style={{ background: 'var(--brand-primary)', color: 'var(--primary-fg)' }}>
+                      style={{ background: 'var(--primary)', color: 'var(--primary-fg)' }}>
                       Configurar prefixo
                     </a>
                   </div>
                 ) : (
-                  <p className="text-xs italic" style={{ color: 'var(--brand-subtle)' }}>Selecione um cliente para editar o código</p>
+                  <p className="text-xs italic" style={{ color: 'var(--text-light)' }}>Selecione um cliente para editar o código</p>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1035,46 +1312,145 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
               </div>
               <div><label style={lStyle}>Descrição</label><textarea value={form.description} onChange={setF('description')} style={{ ...iStyle, resize: 'vertical', minHeight: '64px' }} /></div>
 
-              {/* Financeiro */}
+              {/* Anexos */}
+              <div>
+                <label style={lStyle}>Anexos (aprovação do cliente / proposta, contrato, logo)</label>
+                {(projAttachments.length > 0 || pendingAttach.length > 0) ? (
+                  <div className="space-y-1.5 mb-2">
+                    {projAttachments.map(att => (
+                      <div key={att.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--brand-border)' }}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText size={13} className="shrink-0" style={{ color: 'var(--brand-subtle)' }} />
+                          <div className="min-w-0">
+                            <p className="text-xs truncate" style={{ color: 'var(--brand-text)' }}>{att.original_name}</p>
+                            <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{att.type ?? 'anexo'}{att.size != null ? ` · ${fmtAttSize(att.size)}` : ''}{att.source === 'contract' ? ' · do contrato' : ''}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button type="button" onClick={() => downloadProjAtt(att)} title="Baixar" className="p-1 rounded transition-colors hover:bg-white/10" style={{ color: 'var(--brand-subtle)' }}><Download size={13} /></button>
+                          {att.source !== 'contract' && (
+                            <button type="button" onClick={() => deleteProjAtt(att)} title="Remover" className="p-1 rounded transition-colors hover:bg-white/10" style={{ color: 'var(--brand-subtle)' }}><Trash2 size={13} /></button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {pendingAttach.map((pf, i) => (
+                      <div key={`pend-${i}`} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(0,245,255,0.04)', border: '1px solid rgba(0,245,255,0.15)' }}>
+                        <div className="min-w-0">
+                          <p className="text-xs truncate" style={{ color: 'var(--brand-text)' }}>{pf.file.name}</p>
+                          <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{pf.type} · aguardando salvar</p>
+                        </div>
+                        <button type="button" onClick={() => setPendingAttach(p => p.filter((_, j) => j !== i))} className="p-1 shrink-0" style={{ color: 'var(--brand-subtle)' }}><X size={12} /></button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] italic mb-2" style={{ color: 'var(--brand-subtle)' }}>Nenhum anexo</p>
+                )}
+                <input ref={attachFileRef} type="file" className="hidden"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt,.csv,.zip"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) { setPendingAttach(p => [...p, { file: f, type: 'proposta' }]); e.target.value = '' } }} />
+                <button type="button" onClick={() => attachFileRef.current?.click()}
+                  className="w-full py-3 rounded-lg border-2 border-dashed text-xs transition-colors hover:border-cyan-500/40"
+                  style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-subtle)' }}>
+                  Clique para adicionar anexo
+                </button>
+              </div>
+
+              {/* Financeiro — On Demand mostra só Valor da Hora; demais tipos mostram tudo. */}
               <SecTitle>Financeiro</SecTitle>
+              {(() => {
+                const ctNameForm = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase() ?? ''
+                const isOnDemandForm = ctNameForm.includes('on demand') || form.tipo_faturamento === 'on_demand'
+                return (
+              <>
               <div className="grid grid-cols-2 gap-3">
-                <div><label style={lStyle}>Valor do Projeto (R$)</label><input type="number" value={form.project_value} onChange={e => {
-                  const pv = e.target.value
-                  const hrs = Number(form.sold_hours)
-                  setForm(prev => ({
-                    ...prev,
-                    project_value: pv,
-                    hourly_rate: hrs > 0 && pv !== '' ? String(+(Number(pv) / hrs).toFixed(2)) : prev.hourly_rate,
-                  }))
-                }} style={iStyle} placeholder="0.00" step="0.01" /></div>
-                <div><label style={lStyle}>Valor da Hora (R$)</label><input type="number" value={form.hourly_rate} onChange={e => {
-                  const hr = e.target.value
-                  const hrs = Number(form.sold_hours)
-                  setForm(prev => ({
-                    ...prev,
-                    hourly_rate: hr,
-                    project_value: hrs > 0 && hr !== '' ? String(+(Number(hr) * hrs).toFixed(2)) : prev.project_value,
-                  }))
-                }} style={iStyle} placeholder="0.00" step="0.01" /></div>
-                <div><label style={lStyle}>Hora Adicional (R$)</label><input type="number" value={form.additional_hourly_rate} onChange={setF('additional_hourly_rate')} style={iStyle} placeholder="0.00" step="0.01" /></div>
-                <div><label style={lStyle}>Horas Contratadas</label><input type="number" value={form.sold_hours} onChange={e => {
-                  const hrs = e.target.value
-                  const hr = Number(form.hourly_rate)
-                  setForm(prev => ({
-                    ...prev,
-                    sold_hours: hrs,
-                    project_value: hr > 0 && hrs !== '' ? String(+(hr * Number(hrs)).toFixed(2)) : prev.project_value,
-                  }))
-                }} style={iStyle} placeholder="0" step="1" /></div>
-                <div><label style={lStyle}>% Horas Coordenador</label><input type="number" value={form.coordinator_hours} onChange={setF('coordinator_hours')} style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
-                <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
+                {!isOnDemandForm && (
+                  <div><label style={lStyle}>Valor do Projeto (R$)</label><input type="number" value={form.project_value} onChange={e => {
+                    const pv = e.target.value
+                    const hrs = Number(form.sold_hours)
+                    setForm(prev => ({
+                      ...prev,
+                      project_value: pv,
+                      hourly_rate: hrs > 0 && pv !== '' ? String(+(Number(pv) / hrs).toFixed(2)) : prev.hourly_rate,
+                    }))
+                  }} style={iStyle} placeholder="0.00" step="0.01" /></div>
+                )}
+                <div>
+                  <div className="flex items-center justify-between" style={{ marginBottom: '0.375rem' }}>
+                    <label style={{ ...lStyle, marginBottom: 0 }}>Valor da Hora (R$)</label>
+                    {d.id != null && (
+                      <button type="button" onClick={openRateHistory}
+                        className="text-[10px] font-medium hover:underline" style={{ color: 'var(--primary)' }}>
+                        Histórico de valores
+                      </button>
+                    )}
+                  </div>
+                  <input type="number" value={form.hourly_rate} onChange={e => {
+                    const hr = e.target.value
+                    const hrs = Number(form.sold_hours)
+                    setForm(prev => ({
+                      ...prev,
+                      hourly_rate: hr,
+                      project_value: hrs > 0 && hr !== '' ? String(+(Number(hr) * hrs).toFixed(2)) : prev.project_value,
+                    }))
+                  }} style={iStyle} placeholder="0.00" step="0.01" />
+                </div>
+                {!isOnDemandForm && (
+                  <div><label style={lStyle}>Hora Adicional (R$)</label><input type="number" value={form.additional_hourly_rate} onChange={setF('additional_hourly_rate')} style={iStyle} placeholder="0.00" step="0.01" /></div>
+                )}
+                {!isOnDemandForm && (
+                  <div><label style={lStyle}>Horas Contratadas</label><input type="number" value={form.sold_hours} onChange={e => {
+                    const hrs = e.target.value
+                    const hr = Number(form.hourly_rate)
+                    setForm(prev => ({
+                      ...prev,
+                      sold_hours: hrs,
+                      project_value: hr > 0 && hrs !== '' ? String(+(hr * Number(hrs)).toFixed(2)) : prev.project_value,
+                    }))
+                  }} style={iStyle} placeholder="0" step="1" /></div>
+                )}
+                {!isOnDemandForm && (
+                  <div><label style={lStyle}>% Horas Coordenador</label><input type="number" value={form.coordinator_hours} onChange={setF('coordinator_hours')} style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
+                )}
+                {!isOnDemandForm && (
+                  <div>
+                    <label style={lStyle}>Horas de Coordenação <span style={{ color: 'var(--danger-border)' }}>*</span></label>
+                    <input type="number" required value={form.coordination_hours} onChange={setF('coordination_hours')} style={iStyle} placeholder="0" step="0.5" min="0" max={form.sold_hours || undefined} />
+                    {form.coordination_hours !== '' && form.sold_hours !== '' && Number(form.coordination_hours) > Number(form.sold_hours) && (
+                      <p className="text-[10px] mt-1" style={{ color: 'var(--danger-border)' }}>Não pode exceder as horas vendidas ({form.sold_hours}h).</p>
+                    )}
+                  </div>
+                )}
+                {!isOnDemandForm && (
+                  <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
+                )}
+                {!isOnDemandForm && (() => {
+                  // Sobra de horas (read-only): contratadas − consultor − (%coordenador × consultor).
+                  const sold = Number(form.sold_hours || 0)
+                  const cons = Number(form.consultant_hours || 0)
+                  const coordPct = Number(form.coordinator_hours || 0)
+                  const sobra = Math.round((sold - cons - (coordPct / 100) * cons) * 100) / 100
+                  return (
+                    <div><label style={lStyle}>Sobra de Horas</label><input type="text" value={isNaN(sobra) ? '—' : `${sobra}h`} readOnly tabIndex={-1} style={{ ...iStyle, opacity: 0.7, cursor: 'default' }} /></div>
+                  )
+                })()}
               </div>
-              <div className="grid grid-cols-2 gap-3 rounded-xl p-3" style={{ border: '1px solid var(--brand-border)', background: 'rgba(255,255,255,0.02)' }}>
-                <div><label style={{ ...lStyle, marginBottom: 0 }}>Histórico do sistema anterior</label></div>
-                <div />
-                <div><label style={lStyle}>HS Consumidas Iniciais</label><input type="number" value={form.initial_hours_consumed} onChange={setF('initial_hours_consumed')} style={iStyle} placeholder="0" step="0.5" /></div>
-                <div><label style={lStyle}>Custo Inicial (R$)</label><input type="number" value={form.initial_cost} onChange={setF('initial_cost')} style={iStyle} placeholder="0.00" step="0.01" /></div>
-              </div>
+              {/* Histórico: oculto em On Demand novo (sem valor); mostra em On Demand
+                  legado pra permitir zerar valores migrados do sistema anterior.
+                  Usa hadInitialHistory (capturado no mount) pra não sumir quando o
+                  user limpa os campos durante a edição. */}
+              {(!isOnDemandForm || hadInitialHistory) && (
+                <div className="grid grid-cols-2 gap-3 rounded-xl p-3" style={{ border: '1px solid var(--border)', background: 'var(--surface-hover)' }}>
+                  <div><label style={{ ...lStyle, marginBottom: 0 }}>Histórico do sistema anterior</label></div>
+                  <div />
+                  <div><label style={lStyle}>HS Consumidas Iniciais</label><input type="number" value={form.initial_hours_consumed} onChange={setF('initial_hours_consumed')} style={iStyle} placeholder="0" step="0.5" /></div>
+                  <div><label style={lStyle}>Custo Inicial (R$)</label><input type="number" value={form.initial_cost} onChange={setF('initial_cost')} style={iStyle} placeholder="0.00" step="0.01" /></div>
+                </div>
+              )}
+              </>
+                )
+              })()}
 
               {/* Comercial */}
               <SecTitle>Informações Comerciais</SecTitle>
@@ -1116,7 +1492,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 <div>
                   <label style={lStyle}>Valor Máx. por Consultor (R$)</label>
                   <input type="number" value={form.max_expense_per_consultant} onChange={setF('max_expense_per_consultant')} style={iStyle} placeholder="Ilimitado" min="0" step="0.01" />
-                  <p className="text-[10px] mt-1" style={{ color: 'var(--brand-subtle)' }}>Vazio = ilimitado</p>
+                  <p className="text-[10px] mt-1" style={{ color: 'var(--text-light)' }}>Vazio = ilimitado</p>
                 </div>
                 <div>
                   <label style={lStyle}>Prazo para Lançamento (dias)</label>
@@ -1124,12 +1500,41 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 </div>
               </div>
               <Toggle2 checked={form.allow_negative_balance} onChange={v => setForm(p => ({ ...p, allow_negative_balance: v }))} label="Permitir saldo negativo de horas" />
+              <Toggle2
+                checked={form.movidesk_integration_enabled}
+                onChange={v => setForm(p => ({ ...p, movidesk_integration_enabled: v }))}
+                label="Receber integração Movidesk (apontamentos importados deste cliente caem neste projeto)"
+              />
+
+              {/* Override de Coordenador (sustentação) — só admin */}
+              {(() => {
+                const stName = (optServiceTypes.find(s => s.id === Number(form.service_type_id))?.name ?? '').toLowerCase()
+                const isSustentacao = stName.includes('sustenta')
+                if (!isAdmin || !isSustentacao) return null
+                return (
+                  <div className="rounded-xl p-3 mt-2" style={{ background: 'var(--primary-soft)', border: '1px solid var(--ring)' }}>
+                    <label style={lStyle} className="block mb-1">Gerenciado por outro coordenador</label>
+                    <p className="text-[10px] mb-2" style={{ color: 'var(--text-light)' }}>
+                      Ao selecionar um coordenador, o card sai da fila de sustentação no Kanban e migra pra fila dele.
+                      O projeto também some das abas Apontamentos/Despesas/Aprovações do Portal de Sustentação.
+                    </p>
+                    <select
+                      value={form.kanban_coordinator_override_id}
+                      onChange={setF('kanban_coordinator_override_id')}
+                      style={iStyle}
+                    >
+                      <option value="">— Nenhum (segue fluxo padrão de sustentação) —</option>
+                      {optCoordinators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                )
+              })()}
             </div>
 
             {/* ── Coluna Direita — Equipe ── */}
             <div className="flex flex-col">
-              <p className="text-[10px] font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--brand-subtle)' }}>Equipe Alocada</p>
-              <div className="flex gap-1 mb-3 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+              <p className="text-[10px] font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-light)' }}>Equipe Alocada</p>
+              <div className="flex gap-1 mb-3 border-b" style={{ borderColor: 'var(--border)' }}>
                 {([
                   ['coord',   'Coordenadores', form.coordinator_ids.length],
                   ['consult', 'Consultores',   form.consultant_ids.length],
@@ -1138,7 +1543,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                   <button key={id} onClick={() => { setTeamTab(id); setTeamSearch('') }}
                     className="px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap"
                     style={{ color: teamTab === id ? 'var(--text)' : 'var(--text-muted)', borderBottom: teamTab === id ? '2px solid var(--primary)' : '2px solid transparent', marginBottom: '-1px' }}>
-                    {label}{count > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px]" style={{ background: 'rgba(0,245,255,0.12)', color: '#00F5FF' }}>{count}</span>}
+                    {label}{count > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px]" style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}>{count}</span>}
                   </button>
                 ))}
               </div>
@@ -1148,18 +1553,18 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 const allProjectConsultants = [...directConsultants, ...groupConsultants].filter((c, i, arr) => arr.findIndex(x => x.id === c.id) === i)
                 if (allProjectConsultants.length === 0) return null
                 return (
-                  <div className="mb-2 rounded-xl p-2" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--brand-border)' }}>
-                    <p className="text-[10px] font-semibold uppercase tracking-widest mb-1.5 px-1" style={{ color: 'var(--brand-subtle)' }}>Apontamento manual — consultores no projeto</p>
+                  <div className="mb-2 rounded-xl p-2" style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest mb-1.5 px-1" style={{ color: 'var(--text-light)' }}>Apontamento manual — consultores no projeto</p>
                     {allProjectConsultants.map((c: any) => {
                       const allowManual = manualTimesheetIds.has(c.id)
                       return (
-                        <div key={c.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/5">
-                          <span className="text-xs" style={{ color: 'var(--brand-text)' }}>{c.name}</span>
+                        <div key={c.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-[var(--surface-hover)]">
+                          <span className="text-xs" style={{ color: 'var(--text)' }}>{c.name}</span>
                           <button
                             title={allowManual ? 'Bloquear apontamento manual' : 'Liberar apontamento manual'}
                             onClick={() => setManualTimesheetIds(prev => { const s = new Set(prev); allowManual ? s.delete(c.id) : s.add(c.id); return s })}
                             className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors shrink-0"
-                            style={{ background: allowManual ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)', border: `1px solid ${allowManual ? 'rgba(34,197,94,0.4)' : 'var(--brand-border)'}`, color: allowManual ? '#22c55e' : 'var(--brand-subtle)' }}>
+                            style={{ background: allowManual ? 'var(--success-bg)' : 'var(--surface-hover)', border: `1px solid ${allowManual ? 'var(--success-border)' : 'var(--border)'}`, color: allowManual ? 'var(--success-border)' : 'var(--text-light)' }}>
                             <Clock size={10} />
                             {allowManual ? 'Liberado' : 'Bloqueado'}
                           </button>
@@ -1172,18 +1577,18 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
               <input value={teamSearch} onChange={e => setTeamSearch(e.target.value)}
                 placeholder="Buscar..."
                 className="w-full text-xs px-3 py-2 rounded-xl outline-none mb-2"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }} />
-              <div className="flex-1 overflow-y-auto space-y-1 rounded-xl p-2" style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid var(--brand-border)', maxHeight: 520 }}>
+                style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+              <div className="flex-1 overflow-y-auto space-y-1 rounded-xl p-2" style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)', maxHeight: 520 }}>
                 {teamTab === 'coord' && filteredCoords.map(c => {
                   const sel = form.coordinator_ids.includes(c.id)
                   return (
                     <button key={c.id} onClick={() => setForm(p => ({ ...p, coordinator_ids: toggleId(p.coordinator_ids, c.id) }))}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-white/5"
-                      style={{ background: sel ? 'rgba(0,245,255,0.06)' : 'transparent', border: `1px solid ${sel ? 'rgba(0,245,255,0.2)' : 'transparent'}` }}>
-                      <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'rgba(0,245,255,0.2)' : 'rgba(255,255,255,0.06)', border: '1px solid var(--brand-border)' }}>
-                        {sel && <Check size={10} style={{ color: '#00F5FF' }} />}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-[var(--surface-hover)]"
+                      style={{ background: sel ? 'var(--primary-soft)' : 'transparent', border: `1px solid ${sel ? 'var(--ring)' : 'transparent'}` }}>
+                      <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'var(--ring)' : 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                        {sel && <Check size={10} style={{ color: 'var(--primary)' }} />}
                       </div>
-                      <span className="text-xs" style={{ color: sel ? '#00F5FF' : 'var(--brand-text)' }}>{c.name}</span>
+                      <span className="text-xs" style={{ color: sel ? 'var(--primary)' : 'var(--text)' }}>{c.name}</span>
                     </button>
                   )
                 })}
@@ -1191,12 +1596,12 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                   const sel = form.consultant_ids.includes(c.id)
                   return (
                     <button key={c.id} onClick={() => setForm(p => ({ ...p, consultant_ids: toggleId(p.consultant_ids, c.id) }))}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-white/5"
-                      style={{ background: sel ? 'rgba(139,92,246,0.06)' : 'transparent', border: `1px solid ${sel ? 'rgba(139,92,246,0.25)' : 'transparent'}` }}>
-                      <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.06)', border: '1px solid var(--brand-border)' }}>
-                        {sel && <Check size={10} style={{ color: '#a78bfa' }} />}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-[var(--surface-hover)]"
+                      style={{ background: sel ? 'var(--surface-hover)' : 'transparent', border: `1px solid ${sel ? 'var(--brand-purple)' : 'transparent'}` }}>
+                      <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'var(--brand-purple)' : 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                        {sel && <Check size={10} style={{ color: 'var(--brand-purple)' }} />}
                       </div>
-                      <span className="text-xs" style={{ color: sel ? '#a78bfa' : 'var(--brand-text)' }}>{c.name}</span>
+                      <span className="text-xs" style={{ color: sel ? 'var(--brand-purple)' : 'var(--text)' }}>{c.name}</span>
                     </button>
                   )
                 })}
@@ -1204,31 +1609,158 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                   const sel = form.consultant_group_ids.includes(g.id)
                   return (
                     <button key={g.id} onClick={() => setForm(p => ({ ...p, consultant_group_ids: toggleId(p.consultant_group_ids, g.id) }))}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-white/5"
-                      style={{ background: sel ? 'rgba(245,158,11,0.06)' : 'transparent', border: `1px solid ${sel ? 'rgba(245,158,11,0.25)' : 'transparent'}` }}>
-                      <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.06)', border: '1px solid var(--brand-border)' }}>
-                        {sel && <Check size={10} style={{ color: '#f59e0b' }} />}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-[var(--surface-hover)]"
+                      style={{ background: sel ? 'var(--warning-bg)' : 'transparent', border: `1px solid ${sel ? 'var(--warning-border)' : 'transparent'}` }}>
+                      <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: sel ? 'var(--warning-border)' : 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                        {sel && <Check size={10} style={{ color: 'var(--warning-border)' }} />}
                       </div>
-                      <span className="text-xs" style={{ color: sel ? '#f59e0b' : 'var(--brand-text)' }}>{g.name}</span>
+                      <span className="text-xs" style={{ color: sel ? 'var(--warning-border)' : 'var(--text)' }}>{g.name}</span>
                     </button>
                   )
                 })}
-                {teamTab === 'coord'   && filteredCoords.length   === 0 && <p className="text-xs text-center py-4" style={{ color: 'var(--brand-subtle)' }}>Nenhum resultado</p>}
-                {teamTab === 'consult' && filteredConsults.length === 0 && <p className="text-xs text-center py-4" style={{ color: 'var(--brand-subtle)' }}>Nenhum resultado</p>}
-                {teamTab === 'group'   && filteredGroups.length   === 0 && <p className="text-xs text-center py-4" style={{ color: 'var(--brand-subtle)' }}>Nenhum resultado</p>}
+                {teamTab === 'coord'   && filteredCoords.length   === 0 && <p className="text-xs text-center py-4" style={{ color: 'var(--text-light)' }}>Nenhum resultado</p>}
+                {teamTab === 'consult' && filteredConsults.length === 0 && <p className="text-xs text-center py-4" style={{ color: 'var(--text-light)' }}>Nenhum resultado</p>}
+                {teamTab === 'group'   && filteredGroups.length   === 0 && <p className="text-xs text-center py-4" style={{ color: 'var(--text-light)' }}>Nenhum resultado</p>}
               </div>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
-          <button onClick={handleSave} disabled={saving} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: saving ? 'rgba(0,245,255,0.05)' : 'rgba(0,245,255,0.1)', color: '#00F5FF', border: '1px solid rgba(0,245,255,0.3)', opacity: saving ? 0.6 : 1 }}>
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t shrink-0" style={{ borderColor: 'var(--border)' }}>
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancelar</button>
+          <button onClick={() => handleSave()} disabled={saving} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: saving ? 'var(--primary-soft)' : 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)', opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Salvando...' : 'Salvar Alterações'}
           </button>
         </div>
       </div>
+
+      {/* Fluxo de troca de integração Movidesk (modais in-app) */}
+      {movideskConflict && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="w-full max-w-md rounded-2xl p-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <p className="text-sm font-semibold mb-3" style={{ color: 'var(--brand-text)' }}>Integração Movidesk</p>
+
+            {movideskStep === 'confirm' && (
+              <>
+                <p className="text-[13px] leading-relaxed mb-5" style={{ color: 'var(--brand-muted)' }}>
+                  Cliente já tem a integração ativa em <strong style={{ color: 'var(--brand-text)' }}>{movideskConflict.current?.code ?? ''} {movideskConflict.current?.name ?? ''}</strong>. Deseja mudar a integração para este projeto?
+                </p>
+                <div className="flex items-center justify-end gap-3">
+                  <button onClick={() => setMovideskConflict(null)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancelar</button>
+                  <button onClick={() => setMovideskStep('migrate')} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}>Sim, mudar</button>
+                </div>
+              </>
+            )}
+
+            {movideskStep === 'migrate' && (
+              <>
+                <p className="text-[13px] leading-relaxed mb-5" style={{ color: 'var(--brand-muted)' }}>
+                  Deseja migrar os apontamentos de origem Movidesk de <strong style={{ color: 'var(--brand-text)' }}>{movideskConflict.current?.code ?? ''} {movideskConflict.current?.name ?? ''}</strong> para este projeto? (somente os apontamentos importados do Movidesk são movidos)
+                </p>
+                <div className="flex items-center justify-end gap-3">
+                  <button onClick={() => submitMovideskSwap(false)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Não migrar</button>
+                  <button onClick={() => submitMovideskSwap(true)} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}>Sim, migrar</button>
+                </div>
+              </>
+            )}
+
+            {movideskStep === 'processing' && (
+              <>
+                <p className="text-[13px] leading-relaxed mb-4" style={{ color: 'var(--brand-muted)' }}>{movideskMigrating ? 'Migrando apontamentos...' : 'Salvando...'}</p>
+                <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--brand-border)' }}>
+                  <div className="h-full w-1/3 rounded-full animate-[mvProgress_1.1s_ease-in-out_infinite]" style={{ background: 'var(--brand-primary)' }} />
+                </div>
+                <style>{`@keyframes mvProgress{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}`}</style>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Vigência do novo valor-hora */}
+      {rateModalOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="w-full max-w-md rounded-2xl p-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <p className="text-sm font-semibold mb-3" style={{ color: 'var(--brand-text)' }}>Vigência do valor hora</p>
+            <p className="text-[13px] leading-relaxed mb-4" style={{ color: 'var(--brand-muted)' }}>
+              A partir de qual mês esse novo valor hora passa a valer? Meses anteriores (fechamentos já feitos) não mudam.
+            </p>
+            <div className="mb-5">
+              <label style={lStyle}>Mês de vigência</label>
+              <input
+                type="month"
+                value={rateEffectiveMonth}
+                min={new Date().toISOString().slice(0, 7)}
+                onChange={e => setRateEffectiveMonth(e.target.value)}
+                style={iStyle}
+              />
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button onClick={() => setRateModalOpen(false)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancelar</button>
+              <button
+                onClick={() => { setRateModalOpen(false); handleSave(`${rateEffectiveMonth}-01`) }}
+                disabled={!rateEffectiveMonth}
+                className="px-5 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+                style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}
+              >Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Histórico de valores-hora (somente leitura) */}
+      {rateHistoryOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="w-full max-w-lg rounded-2xl p-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Histórico de valores</p>
+              <button onClick={() => setRateHistoryOpen(false)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] transition-colors"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
+            </div>
+            {rateHistoryLoading ? (
+              <p className="text-sm py-6 text-center animate-pulse" style={{ color: 'var(--text-light)' }}>Carregando...</p>
+            ) : rateHistory.length === 0 ? (
+              <p className="text-sm py-6 text-center" style={{ color: 'var(--text-light)' }}>Nenhuma alteração registrada.</p>
+            ) : (
+              <div className="max-h-[60vh] overflow-y-auto rounded-xl" style={{ border: '1px solid var(--border)' }}>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr style={{ background: 'var(--surface-hover)', color: 'var(--text-light)' }}>
+                      <th className="text-left font-semibold px-3 py-2">Vigência</th>
+                      <th className="text-left font-semibold px-3 py-2">Valor</th>
+                      <th className="text-left font-semibold px-3 py-2">Alterado por</th>
+                      <th className="text-left font-semibold px-3 py-2">Em</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rateHistory.filter((h: any, i: number, a: any[]) => a.findIndex((x: any) => String(x.created_at ?? '').slice(0, 10) === String(h.created_at ?? '').slice(0, 10)) === i).map((h, i) => (
+                      <tr key={h.id ?? i} style={{ borderTop: '1px solid var(--border)', color: 'var(--text)' }}>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {h.effective_from
+                            ? (() => { const [y, m] = String(h.effective_from).slice(0, 7).split('-'); return `${m}/${y}` })()
+                            : <span title="vigência não informada (legado)" style={{ color: 'var(--text-light)' }}>—</span>}
+                        </td>
+                        <td className="px-3 py-2 tabular-nums whitespace-nowrap">
+                          {h.old_value != null ? formatBRL(Number(h.old_value)) : '—'}
+                          <span style={{ color: 'var(--text-light)' }}> → </span>
+                          {h.new_value != null ? formatBRL(Number(h.new_value)) : '—'}
+                        </td>
+                        <td className="px-3 py-2">{h.changed_by_user?.name ?? '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
+                          {h.created_at ? new Date(h.created_at).toLocaleDateString('pt-BR') : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex items-center justify-end mt-5">
+              <button onClick={() => setRateHistoryOpen(false)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1239,7 +1771,7 @@ function ProjectEditByIdModal({ projectId, onClose, onSaved }: { projectId: numb
   useEffect(() => {
     api.get<ProjectFull>(`/projects/${projectId}`).then(setP).catch(() => toast.error('Erro ao carregar projeto')).finally(() => setLoading(false))
   }, [projectId])
-  if (loading) return <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)' }}><p className="text-sm animate-pulse" style={{ color: 'var(--brand-subtle)' }}>Carregando...</p></div>
+  if (loading) return <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)' }}><p className="text-sm animate-pulse" style={{ color: 'var(--text-light)' }}>Carregando...</p></div>
   if (!p) return null
   return <ProjectInlineEditModal project={p} onClose={onClose} onSaved={onSaved} />
 }
@@ -1249,6 +1781,14 @@ function ProjectEditByIdModal({ projectId, onClose, onSaved }: { projectId: numb
 export default function GestaoProjetosPage() {
   const router = useRouter()
   const { user } = useAuth()
+
+  // Consultor não acessa esta rotina, nem com extra_permissions — redireciona.
+  useEffect(() => {
+    if (user?.type === 'consultor') {
+      router.replace('/meu-painel')
+    }
+  }, [user?.type, router])
+
   const isAdmin = user?.type === 'admin'
   const isCoordenador = user?.type === 'coordenador'
   const isCliente = user?.type === 'cliente'
@@ -1267,17 +1807,19 @@ export default function GestaoProjetosPage() {
       statusFilters:      [] as string[],
       clienteFilters:     [] as string[],
       saudeFilter:        '',
+      coordFilter:        '',
       filterContractType: '',
       filterServiceTypes: [] as string[],
       filterCoordinators: [] as string[],
       filterExecutives:   [] as string[],
     },
   )
-  const { search, statusFilters, clienteFilters, saudeFilter, filterContractType, filterServiceTypes, filterCoordinators, filterExecutives } = flt
+  const { search, statusFilters, clienteFilters, saudeFilter, coordFilter, filterContractType, filterServiceTypes, filterCoordinators, filterExecutives } = flt
   const setSearch             = (v: string)   => setFilter('search', v)
   const setStatus             = (v: string[]) => setFilter('statusFilters', v)
   const setCliente            = (v: string[]) => setFilter('clienteFilters', v)
   const setSaude              = (v: string)   => setFilter('saudeFilter', v)
+  const setCoord              = (v: string)   => setFilter('coordFilter', v)
   const setFilterContractType = (v: string)   => setFilter('filterContractType', v)
   const setFilterServiceType  = (v: string[]) => setFilter('filterServiceTypes', v)
   const setFilterCoordinators = (v: string[]) => setFilter('filterCoordinators', v)
@@ -1288,15 +1830,17 @@ export default function GestaoProjetosPage() {
     setStatus([])
     setCliente([])
     setSaude('')
+    setCoord('')
     setFilterContractType('')
     setFilterServiceType([])
     setFilterCoordinators([])
     setFilterExecutives([])
   }
 
-  const hasActiveFilters = !!(search || statusFilters.length || clienteFilters.length || saudeFilter || filterContractType || filterServiceTypes.length || filterCoordinators.length || filterExecutives.length)
+  const hasActiveFilters = !!(search || statusFilters.length || clienteFilters.length || saudeFilter || coordFilter || filterContractType || filterServiceTypes.length || filterCoordinators.length || filterExecutives.length)
 
   const [projects, setProjects]   = useState<ProjectWithTeam[]>([])
+  const [showClosed, setShowClosed] = useState(false)
   const [loading, setLoading]     = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [expanded, setExpanded]   = useState<Set<number>>(new Set())
@@ -1305,6 +1849,7 @@ export default function GestaoProjetosPage() {
   const [executivesList, setExecutivesList]     = useState<{ id: string; name: string }[]>([])
   const [customerExecutiveMap, setCustomerExecutiveMap] = useState<Record<number, number>>({})
   const [multiContratual, setMultiContratual] = useState(false)
+  const [multiShowClosed, setMultiShowClosed] = useState(false) // toggle: ver encerrados/cancelados na árvore multi-contratual
   const [rows, setRows] = useState<TreeRow[]>([])
   const [allCustomers, setAllCustomers] = useState<{ id: string; name: string }[]>([])
 
@@ -1439,9 +1984,23 @@ export default function GestaoProjetosPage() {
   const [contributions, setContributions]     = useState<HourContribution[]>([])
   const [contribLoading, setContribLoading]   = useState(false)
   const [contribModal, setContribModal]       = useState<{ open: boolean; item?: HourContribution }>({ open: false })
-  const [contribForm, setContribForm]         = useState({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '' })
+  const [contribForm, setContribForm]         = useState({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '', motivo: 'aporte' })
   const [contribSaving, setContribSaving]     = useState(false)
   const [contribDeleteConfirm, setContribDeleteConfirm] = useState<HourContribution | null>(null)
+
+  // Abre modal de Aportes do projeto se URL contém ?aportes=ID.
+  // Fallback: a navegação principal usa o modal do ProjectViewModal (aba Aportes)
+  // sem sair do Kanban, mas mantemos a entrada via URL pra deep-link/compartilhamento.
+  useEffect(() => {
+    const projectIdParam = new URLSearchParams(window.location.search).get('aportes')
+    if (!projectIdParam) return
+    let cancelled = false
+    api.get<ProjectWithTeam>(`/projects/${projectIdParam}`)
+      .then(p => { if (!cancelled) setAportesProject(p) })
+      .catch(() => toast.error('Projeto não encontrado'))
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     setLoading(true)
@@ -1491,8 +2050,21 @@ export default function GestaoProjetosPage() {
     return result.sort((a, b) => a.name.localeCompare(b.name))
   }, [projects])
 
+  type SortKey = 'name' | 'customer' | 'contract_type' | 'service_type' | 'monthly_hours' | 'sold_hours' | 'total_cont' | 'consumed' | 'balance' | 'pct' | 'coord'
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const toggleSort = (k: SortKey) => {
+    if (sortKey !== k) { setSortKey(k); setSortDir('asc'); return }
+    if (sortDir === 'asc') { setSortDir('desc'); return }
+    setSortKey(null); setSortDir('asc')
+  }
+
   const filtered = useMemo(() => {
     return projects.filter(p => {
+      // Fila separada: encerrados/cancelados só aparecem na aba "Encerrados" (showClosed);
+      // nas demais abas eles ficam de fora.
+      const isClosed = p.status === 'finished' || p.status === 'cancelled'
+      if (showClosed ? !isClosed : isClosed) return false
       if (filterContractType && p.contract_type_display !== filterContractType) return false
       if (filterServiceTypes.length > 0) {
         const stId = (p as any).service_type_id ?? (p as any).service_type?.id
@@ -1514,6 +2086,10 @@ export default function GestaoProjetosPage() {
         const color = healthColor(pct)
         if (color !== saudeFilter) return false
       }
+      if (coordFilter) {
+        const cm = coordinationMeta(p, calcProjHours(p).displaySold)
+        if (!cm.explicit || cm.risk !== coordFilter) return false
+      }
       if (search) {
         const q = search.toLowerCase()
         return (
@@ -1524,7 +2100,42 @@ export default function GestaoProjetosPage() {
       }
       return true
     })
-  }, [projects, search, statusFilters, clienteFilters, saudeFilter, filterContractType, filterServiceTypes, filterCoordinators, filterExecutives, customerExecutiveMap])
+  }, [projects, search, statusFilters, clienteFilters, saudeFilter, coordFilter, filterContractType, filterServiceTypes, filterCoordinators, filterExecutives, customerExecutiveMap, showClosed])
+
+  const sortedFiltered = useMemo(() => {
+    if (!sortKey) return filtered
+    const dir = sortDir === 'asc' ? 1 : -1
+    const getValue = (p: ProjectWithTeam): number | string => {
+      const ctName = String((p as any).contract_type?.name ?? p.contract_type_display ?? '').toLowerCase()
+      const isBhMensal = ctName.includes('mensal')
+      switch (sortKey) {
+        case 'name':          return p.name ?? ''
+        case 'customer':      return p.customer?.name ?? ''
+        case 'contract_type': return p.contract_type_display ?? p.contract_type?.name ?? ''
+        case 'service_type':  return p.service_type?.name ?? ''
+        case 'monthly_hours': return isBhMensal ? (p.sold_hours ?? 0) : -Infinity
+        case 'sold_hours':    return calcProjHours(p).displaySold
+        case 'total_cont':    return ((p as any).total_available_hours ?? p.sold_hours ?? 0)
+        case 'consumed':      return calcProjHours(p).consumedHours
+        case 'balance':       return (p as any).general_hours_balance ?? 0
+        case 'pct': {
+          const { displaySold, consumedHours } = calcProjHours(p)
+          return displaySold > 0 ? (consumedHours / displaySold) * 100 : 0
+        }
+        case 'coord': {
+          const bank = Number((p as any).coordination_hours ?? 0)
+          if (bank <= 0) return -1
+          return (Number((p as any).coordination_consumed_hours ?? 0) / bank) * 100
+        }
+      }
+    }
+    return [...filtered].sort((a, b) => {
+      const va = getValue(a)
+      const vb = getValue(b)
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir
+      return String(va).localeCompare(String(vb), 'pt-BR') * dir
+    })
+  }, [filtered, sortKey, sortDir])
 
   const toggleTree = (row: TreeRow) => {
     setRows(prev => {
@@ -1547,6 +2158,9 @@ export default function GestaoProjetosPage() {
     if (!multiContratual) return [] as TreeRow[]
     const parentRows = rows.filter(r => r._level === 0)
     const filteredParents = parentRows.filter(p => {
+      const isClosed = p.status === 'finished' || p.status === 'cancelled'
+      // Multi-contratual: encerrados/cancelados só aparecem com o toggle "Ver encerrados" ligado.
+      if (!multiShowClosed && isClosed) return false
       if (statusFilters.length > 0 && !statusFilters.includes(p.status ?? '')) return false
       if (clienteFilters.length > 0 && !clienteFilters.includes(String(p.customer_id))) return false
       if (filterCoordinators.length > 0) {
@@ -1562,6 +2176,10 @@ export default function GestaoProjetosPage() {
         const pct = displaySold > 0 ? (consumedHours / displaySold) * 100 : 0
         if (healthColor(pct) !== saudeFilter) return false
       }
+      if (coordFilter) {
+        const cm = coordinationMeta(p, calcProjHours(p).displaySold)
+        if (!cm.explicit || cm.risk !== coordFilter) return false
+      }
       if (search) {
         const q = search.toLowerCase()
         if (!p.name.toLowerCase().includes(q) && !p.code.toLowerCase().includes(q) && !(p.customer?.name ?? '').toLowerCase().includes(q)) return false
@@ -1572,22 +2190,34 @@ export default function GestaoProjetosPage() {
     for (const parent of filteredParents) {
       const live = rows.find(r => r.id === parent.id && r._level === 0) ?? parent
       result.push(live)
-      if (live._isExpanded) result.push(...rows.filter(r => r._parentId === live.id && r._level > 0))
+      if (live._isExpanded) result.push(...rows.filter(r => {
+        if (r._parentId !== live.id || r._level <= 0) return false
+        // Filhos encerrados/cancelados só aparecem com o toggle "Ver encerrados" ligado.
+        const childClosed = r.status === 'finished' || r.status === 'cancelled'
+        return multiShowClosed || !childClosed
+      }))
     }
     return result
-  }, [rows, multiContratual, statusFilters, clienteFilters, saudeFilter, search, filterCoordinators, filterExecutives, customerExecutiveMap])
+  }, [rows, multiContratual, statusFilters, clienteFilters, saudeFilter, search, filterCoordinators, filterExecutives, customerExecutiveMap, multiShowClosed])
 
   // ── Métricas dos cards ──
   const stats = useMemo(() => {
-    const ativos    = filtered.filter(p => ['active', 'started'].includes(p.status)).length
-    const vendidas  = filtered.reduce((s, p) => s + calcProjHours(p).displaySold, 0)
-    const consumidas = filtered.reduce((s, p) => s + calcProjHours(p).consumedHours, 0)
-    const saldo     = filtered.reduce((s, p) => s + (p.general_hours_balance ?? 0), 0)
-    const comPct    = filtered.filter(p => calcProjHours(p).displaySold > 0)
+    // Evita DUPLICAR horas de filho nos cards: se o PAI está no filtro, o consumo/vendidas do
+    // filho já estão agregados no banco do pai — só conta o filho quando o pai NÃO está no filtro.
+    const filteredIds = new Set(filtered.map(p => p.id))
+    const base = filtered.filter(p => {
+      const parentId = p.parent_project_id ?? p.parent_project?.id
+      return !(parentId && filteredIds.has(parentId))
+    })
+    const ativos    = base.filter(p => ['active', 'started'].includes(p.status)).length
+    const vendidas  = base.reduce((s, p) => s + calcProjHours(p).displaySold, 0)
+    const consumidas = base.reduce((s, p) => s + calcProjHours(p).consumedHours, 0)
+    const saldo     = base.reduce((s, p) => s + (p.general_hours_balance ?? 0), 0)
+    const comPct    = base.filter(p => calcProjHours(p).displaySold > 0)
     const avgPct    = comPct.length
       ? comPct.reduce((s, p) => s + (p.balance_percentage ?? 0), 0) / comPct.length
       : 0
-    const criticos  = filtered.filter(p => (p.balance_percentage ?? 0) >= 90).length
+    const criticos  = base.filter(p => (p.balance_percentage ?? 0) >= 90).length
     return { ativos, vendidas, consumidas, saldo, avgPct, criticos }
   }, [filtered])
 
@@ -1617,6 +2247,7 @@ export default function GestaoProjetosPage() {
         hourly_rate: Number(contribForm.hourly_rate),
         contributed_at: contribForm.contributed_at,
         description: contribForm.description || null,
+        motivo: contribForm.motivo || 'aporte',
       }
       if (contribModal.item) {
         await api.put(`/projects/${aportesProject.id}/hour-contributions/${contribModal.item.id}`, payload)
@@ -1643,8 +2274,32 @@ export default function GestaoProjetosPage() {
 
   const [viewProject, setViewProject] = useState<ProjectWithTeam | null>(null)
   const [viewProjectFull, setViewProjectFull] = useState<ProjectFull | null>(null)
+  const [viewAttachments, setViewAttachments] = useState<any[]>([])
+  const downloadViewAtt = async (projId: number, att: any) => {
+    const res = await fetch(`/api/v1/projects/${projId}/attachments/${att.id}`, { credentials: 'same-origin' })
+    if (!res.ok) { toast.error('Erro ao baixar arquivo'); return }
+    const blob = await res.blob(); const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = att.original_name; a.click(); URL.revokeObjectURL(url)
+  }
   const [viewProjectLoading, setViewProjectLoading] = useState(false)
   const [viewProjectTab, setViewProjectTab] = useState<'overview' | 'cost'>('overview')
+  // Histórico de valores-hora (somente leitura) — GET /projects/{id}/change-history?field_name=hourly_rate
+  const [rateHistoryOpen, setRateHistoryOpen] = useState(false)
+  const [rateHistory, setRateHistory] = useState<any[]>([])
+  const [rateHistoryLoading, setRateHistoryLoading] = useState(false)
+  const openRateHistory = async (projectId: number) => {
+    setRateHistoryOpen(true)
+    setRateHistoryLoading(true)
+    try {
+      const res = await api.get<{ hasNext: boolean; items: any[] }>(`/projects/${projectId}/change-history?field_name=hourly_rate&pageSize=100`)
+      setRateHistory(Array.isArray(res?.items) ? res.items : [])
+    } catch {
+      setRateHistory([])
+      toast.error('Erro ao carregar histórico de valores')
+    } finally {
+      setRateHistoryLoading(false)
+    }
+  }
   const [viewCostSummary, setViewCostSummary] = useState<CostSummary | null>(null)
   const [viewCostLoading, setViewCostLoading] = useState(false)
   const [messagesProject, setMessagesProject] = useState<ProjectWithTeam | null>(null)
@@ -1691,6 +2346,7 @@ export default function GestaoProjetosPage() {
     if (action === 'view') {
       setViewProject(project)
       setViewProjectFull(null)
+      setViewAttachments([])
       setViewProjectTab('overview')
       setViewCostSummary(null)
       setViewProjectLoading(true)
@@ -1698,6 +2354,9 @@ export default function GestaoProjetosPage() {
         .then(r => setViewProjectFull(r))
         .catch(() => {})
         .finally(() => setViewProjectLoading(false))
+      api.get<any[]>(`/projects/${project.id}/attachments`)
+        .then(r => setViewAttachments(Array.isArray(r) ? r : []))
+        .catch(() => {})
       return
     }
     if (action === 'messages') { setMessagesProject(project); return }
@@ -1719,7 +2378,9 @@ export default function GestaoProjetosPage() {
       setTeamSearch('')
       setTeamTab('consultores')
       setSelectedIds(new Set((project.consultants ?? []).map(c => c.id)))
-      setSelectedGroupIds(new Set())
+      // Pré-seleciona os grupos já vinculados ao projeto (antes começava vazio,
+      // dando impressão de que o save não persistia).
+      setSelectedGroupIds(new Set(((project as any).consultant_groups ?? []).map((g: any) => g.id)))
       try {
         const promises: Promise<void>[] = []
         if (allConsultants.length === 0) {
@@ -1730,8 +2391,8 @@ export default function GestaoProjetosPage() {
         }
         if (consultantGroups.length === 0) {
           promises.push(
-            api.get<{ data: { id: number; name: string }[] }>('/consultant-groups?pageSize=200')
-              .then(r => setConsultantGroups(r.data ?? []))
+            api.get<any>('/consultant-groups?pageSize=200')
+              .then(r => setConsultantGroups(r.items ?? r.data ?? []))
           )
         }
         await Promise.all(promises)
@@ -1756,7 +2417,11 @@ export default function GestaoProjetosPage() {
       toast.success('Equipe atualizada')
       setTeamProject(null)
       setProjects(prev => prev.map(p => p.id === teamProject.id
-        ? { ...p, consultants: allConsultants.filter(c => selectedIds.has(c.id)).map(c => ({ ...c, email: '' })) }
+        ? {
+            ...p,
+            consultants: allConsultants.filter(c => selectedIds.has(c.id)).map(c => ({ ...c, email: '' })),
+            consultant_groups: consultantGroups.filter(g => selectedGroupIds.has(g.id)).map(g => ({ id: g.id, name: g.name })),
+          } as typeof p
         : p
       ))
       if (viewProject?.id === teamProject.id) {
@@ -1888,31 +2553,31 @@ export default function GestaoProjetosPage() {
         {/* ── Cards de Resumo ── */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
           <SummaryCard
-            icon={<Layers size={15} color="var(--brand-primary)" />}
+            icon={<Layers size={15} color="var(--primary)" />}
             label="Projetos Ativos"
             value={String(stats.ativos)}
             sub={`de ${filtered.length} total`}
           />
           <SummaryCard
-            icon={<Clock size={15} color="var(--brand-primary)" />}
+            icon={<Clock size={15} color="var(--primary)" />}
             label="Horas Vendidas"
             value={fmt(stats.vendidas)}
             sub="horas contratadas"
           />
           <SummaryCard
-            icon={<TrendingUp size={15} color="var(--brand-primary)" />}
+            icon={<TrendingUp size={15} color="var(--primary)" />}
             label="Horas Consumidas"
             value={fmt(stats.consumidas, 1)}
             sub="apontadas aprovadas"
           />
           <SummaryCard
-            icon={<BarChart2 size={15} color={stats.saldo < 0 ? '#ef4444' : 'var(--brand-primary)'} />}
+            icon={<BarChart2 size={15} color={stats.saldo < 0 ? 'var(--danger-border)' : 'var(--primary)'} />}
             label="Saldo Total"
             value={fmt(stats.saldo, 1) + ' h'}
             sub={stats.saldo < 0 ? 'saldo negativo' : 'horas disponíveis'}
           />
           <SummaryCard
-            icon={<AlertTriangle size={15} color={stats.criticos > 0 ? '#ef4444' : 'var(--brand-primary)'} />}
+            icon={<AlertTriangle size={15} color={stats.criticos > 0 ? 'var(--danger-border)' : 'var(--primary)'} />}
             label="Consumo Médio"
             value={`${Math.round(stats.avgPct)}%`}
             sub={stats.criticos > 0 ? `${stats.criticos} crítico(s)` : 'dentro do esperado'}
@@ -1922,7 +2587,7 @@ export default function GestaoProjetosPage() {
         {/* ── Filtros ── */}
         <div className="flex flex-wrap items-center gap-3 mb-5">
           <div className="relative flex-1 min-w-48 max-w-xs">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--brand-subtle)' }} />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-light)' }} />
             <input
               type="text"
               placeholder="Buscar projeto, código ou cliente..."
@@ -1973,34 +2638,75 @@ export default function GestaoProjetosPage() {
               placeholder="Todos os executivos"
             />
           )}
-          {/* Filtro de Saúde — button group colorido */}
-          <div className="flex items-center gap-0.5 bg-zinc-800/70 border border-zinc-700/50 rounded-full p-1">
+          {/* Filtro de Saúde — segmented control */}
+          <div
+            className="flex items-center gap-0.5 rounded-full p-1"
+            style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border)' }}
+          >
             {([
-              { id: '',       label: 'Todos',    active: 'bg-cyan-400 text-zinc-900',   inactive: 'text-zinc-400 hover:text-zinc-200' },
-              { id: 'green',  label: 'Saudável', active: 'bg-green-500 text-white',     inactive: 'text-green-500 hover:text-green-400' },
-              { id: 'yellow', label: 'Atenção',  active: 'bg-amber-400 text-zinc-900',  inactive: 'text-amber-400 hover:text-amber-300' },
-              { id: 'red',    label: 'Crítico',  active: 'bg-red-500 text-white',       inactive: 'text-red-500 hover:text-red-400' },
-            ] as const).map(opt => (
-              <button key={opt.id} type="button"
-                onClick={() => setSaude(opt.id)}
-                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${saudeFilter === opt.id ? opt.active : opt.inactive}`}>
-                {opt.label}
-              </button>
-            ))}
+              { id: '',       label: 'Todos',    activeBg: 'var(--primary)',         activeFg: 'var(--primary-fg)' },
+              { id: 'green',  label: 'Saudável', activeBg: 'var(--success-border)',  activeFg: 'var(--surface)' },
+              { id: 'yellow', label: 'Atenção',  activeBg: 'var(--warning-border)',  activeFg: 'var(--surface)' },
+              { id: 'red',    label: 'Crítico',  activeBg: 'var(--danger-border)',   activeFg: 'var(--surface)' },
+            ] as const).map(opt => {
+              const isActive = saudeFilter === opt.id
+              return (
+                <button key={opt.id} type="button"
+                  onClick={() => setSaude(opt.id)}
+                  className="px-3 py-1 rounded-full text-xs font-semibold transition-all whitespace-nowrap"
+                  style={isActive
+                    ? { background: opt.activeBg, color: opt.activeFg }
+                    : { background: 'transparent', color: 'var(--text-muted)' }
+                  }
+                  onMouseEnter={isActive ? undefined : (e) => (e.currentTarget.style.color = 'var(--text)')}
+                  onMouseLeave={isActive ? undefined : (e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+          {/* Filtro por risco do banco de coordenação */}
+          <div
+            className="flex items-center gap-0.5 rounded-full p-1"
+            style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border)' }}
+            title="Risco do banco de horas de coordenação"
+          >
+            <span className="px-2 text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-light)' }}>Coord</span>
+            {([
+              { id: '',          label: 'Todos',    activeBg: 'var(--primary)',        activeFg: 'var(--primary-fg)' },
+              { id: 'atencao',   label: 'Atenção',  activeBg: 'var(--warning-border)', activeFg: 'var(--surface)' },
+              { id: 'critico',   label: 'Crítica',  activeBg: 'var(--danger-border)',  activeFg: 'var(--surface)' },
+              { id: 'estourado', label: 'Excedida', activeBg: 'var(--danger-border)',  activeFg: 'var(--surface)' },
+            ] as const).map(opt => {
+              const isActive = coordFilter === opt.id
+              return (
+                <button key={opt.id} type="button"
+                  onClick={() => setCoord(opt.id)}
+                  className="px-3 py-1 rounded-full text-xs font-semibold transition-all whitespace-nowrap"
+                  style={isActive
+                    ? { background: opt.activeBg, color: opt.activeFg }
+                    : { background: 'transparent', color: 'var(--text-muted)' }
+                  }
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
           </div>
           {hasActiveFilters && (
             <button
               onClick={clearAllFilters}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all"
-              style={{ background: 'rgba(239,68,68,0.10)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)' }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+              style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-border)' }}
             >
               <X size={12} /> Limpar filtros
             </button>
           )}
           <button
             onClick={openByRes}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ml-auto"
-            style={{ background: 'rgba(0,245,255,0.06)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.18)' }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ml-auto"
+            style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}
           >
             <UserPlus size={13} /> Alocar por Recurso
           </button>
@@ -2010,47 +2716,74 @@ export default function GestaoProjetosPage() {
         <div className="flex items-center gap-3 flex-wrap">
           {/* Botão Multi-contratual */}
           <button
-            onClick={() => { setMultiContratual(v => !v) }}
+            onClick={() => { setMultiContratual(v => !v); setShowClosed(false) }}
             className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap"
             style={multiContratual
-              ? { background: 'var(--brand-primary)', color: 'var(--primary-fg)', boxShadow: '0 0 12px rgba(0,245,255,0.35)' }
-              : { background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.25)' }}
+              ? { background: 'var(--primary)', color: 'var(--primary-fg)', boxShadow: '0 0 12px var(--ring)' }
+              : { background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}
           >
             ⬡ Multi-contratual
           </button>
+          {multiContratual && (
+            <label
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer select-none whitespace-nowrap"
+              style={multiShowClosed
+                ? { background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }
+                : { color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+              title="Mostra/oculta projetos encerrados e cancelados na árvore multi-contratual"
+            >
+              <input type="checkbox" checked={multiShowClosed} onChange={e => setMultiShowClosed(e.target.checked)} />
+              Ver encerrados
+            </label>
+          )}
           <div
             className="flex items-center gap-1 p-1 rounded-xl w-fit flex-wrap"
-            style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)' }}
+            style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}
           >
             <button
-              onClick={() => { setFilterContractType(''); setMultiContratual(false) }}
+              onClick={() => { setFilterContractType(''); setMultiContratual(false); setShowClosed(false) }}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-              style={!filterContractType && !multiContratual
-                ? { background: 'var(--brand-primary)', color: 'var(--primary-fg)' }
-                : { color: 'var(--brand-muted)' }}
+              style={!filterContractType && !multiContratual && !showClosed
+                ? { background: 'var(--primary)', color: 'var(--primary-fg)' }
+                : { color: 'var(--text-muted)' }}
             >
               Todos
             </button>
             {availableContractTypes.map(ct => (
               <button
                 key={ct.id}
-                onClick={() => { setFilterContractType(String(ct.id)); setMultiContratual(false) }}
+                onClick={() => { setFilterContractType(String(ct.id)); setMultiContratual(false); setShowClosed(false) }}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-                style={filterContractType === String(ct.id)
-                  ? { background: 'var(--brand-primary)', color: 'var(--primary-fg)' }
-                  : { color: 'var(--brand-muted)' }}
+                style={filterContractType === String(ct.id) && !showClosed
+                  ? { background: 'var(--primary)', color: 'var(--primary-fg)' }
+                  : { color: 'var(--text-muted)' }}
               >
                 {ct.name}
               </button>
             ))}
           </div>
+          {/* Fila separada: Encerrados / Cancelados */}
+          {(() => {
+            const closedCount = projects.filter(p => p.status === 'finished' || p.status === 'cancelled').length
+            return (
+              <button
+                onClick={() => { setShowClosed(true); setFilterContractType(''); setMultiContratual(false) }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap"
+                style={showClosed
+                  ? { background: 'var(--danger-border)', color: 'var(--surface)' }
+                  : { background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+              >
+                <CalendarOff size={13} /> Encerrados / Cancelados{closedCount ? ` (${closedCount})` : ''}
+              </button>
+            )
+          })()}
         </div>
 
         {/* ── Tabela ── */}
         {loading ? (
           <Skeleton />
-        ) : (multiContratual ? filteredRows : filtered).length === 0 ? (
-          <div className="text-center py-20" style={{ color: 'var(--brand-subtle)' }}>
+        ) : (multiContratual ? filteredRows : sortedFiltered).length === 0 ? (
+          <div className="text-center py-20" style={{ color: 'var(--text-light)' }}>
             <Layers size={40} className="mx-auto mb-3 opacity-30" />
             <p className="text-sm">Nenhum projeto encontrado</p>
           </div>
@@ -2059,53 +2792,54 @@ export default function GestaoProjetosPage() {
           {/* ── Barra de ação em massa ── */}
           {selectedProjectIds.size > 0 && (
             <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl mb-3 text-sm"
-              style={{ background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.2)' }}>
-              <span className="font-semibold" style={{ color: 'var(--brand-primary)' }}>
+              style={{ background: 'var(--primary-soft)', border: '1px solid var(--ring)' }}>
+              <span className="font-semibold" style={{ color: 'var(--primary)' }}>
                 {selectedProjectIds.size} projeto(s) selecionado(s)
               </span>
               <button onClick={openBulkAlloc}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors hover:opacity-90"
-                style={{ background: 'rgba(0,245,255,0.12)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.25)' }}>
+                style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}>
                 <UserPlus size={13} /> Alocar Equipe
               </button>
               <button onClick={() => setSelectedProjectIds(new Set())}
-                className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors hover:bg-white/5"
-                style={{ color: 'var(--brand-subtle)' }}>
+                className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors hover:bg-[var(--surface-hover)]"
+                style={{ color: 'var(--text-light)' }}>
                 <X size={12} /> Limpar seleção
               </button>
             </div>
           )}
-          <div className="rounded-2xl overflow-x-auto overflow-y-clip" style={{ border: '1px solid var(--brand-border)' }}>
+          <div className="rounded-xl overflow-x-auto overflow-y-clip" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
             <table className="w-full min-w-[1100px] text-left">
-              <thead className="sticky top-0 z-10" style={{ background: 'var(--brand-surface)' }}>
-                <tr style={{ background: 'var(--brand-surface)', borderBottom: '1px solid var(--brand-border)' }}>
+              <thead className="sticky top-0 z-10" style={{ background: 'var(--surface-sunken)' }}>
+                <tr style={{ background: 'var(--surface-sunken)', borderBottom: '1px solid var(--border)' }}>
                   <th className="w-8 pl-3">
                     <input type="checkbox"
                       className="w-4 h-4 rounded accent-cyan-400 cursor-pointer"
-                      checked={selectedProjectIds.size > 0 && (multiContratual ? filteredRows : filtered).every(p => selectedProjectIds.has(p.id))}
+                      checked={selectedProjectIds.size > 0 && (multiContratual ? filteredRows : sortedFiltered).every(p => selectedProjectIds.has(p.id))}
                       onChange={e => {
-                        const all = (multiContratual ? filteredRows : filtered).map(p => p.id)
+                        const all = (multiContratual ? filteredRows : sortedFiltered).map(p => p.id)
                         setSelectedProjectIds(e.target.checked ? new Set(all) : new Set())
                       }}
                     />
                   </th>
                   <th className="w-8 pl-2" />
                   <th className="w-1" />
-                  <th className="py-3 pr-4 pl-2 text-xs font-semibold" style={{ color: 'var(--brand-muted)' }}>Projeto</th>
-                  <th className="py-3 pr-4 text-xs font-semibold" style={{ color: 'var(--brand-muted)' }}>Cliente</th>
-                  <th className="py-3 pr-4 text-xs font-semibold" style={{ color: 'var(--brand-muted)' }}>Tipo Contrato</th>
-                  <th className="py-3 pr-4 text-xs font-semibold" style={{ color: 'var(--brand-muted)' }}>Tipo Serviço</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-center" style={{ color: 'var(--brand-muted)' }}>Hs Mensais</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-center" style={{ color: 'var(--brand-muted)' }}>HS Vendidas</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-center" style={{ color: 'var(--brand-muted)' }}>Total Cont.</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-center" style={{ color: 'var(--brand-muted)' }}>HS Consumidas</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-center" style={{ color: 'var(--brand-muted)' }}>Saldo</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-center" style={{ color: 'var(--brand-muted)', minWidth: 140 }}>% Uso</th>
-                  <th className="py-3 text-xs font-semibold" style={{ color: 'var(--brand-muted)' }}>Status</th>
+                  <SortableTh sortKey={sortKey} sortDir={sortDir} columnKey="name"          onSort={toggleSort} disabled={multiContratual} className="py-3 pr-4 pl-2">Projeto</SortableTh>
+                  <SortableTh sortKey={sortKey} sortDir={sortDir} columnKey="customer"      onSort={toggleSort} disabled={multiContratual} className="py-3 pr-4">Cliente</SortableTh>
+                  <SortableTh sortKey={sortKey} sortDir={sortDir} columnKey="contract_type" onSort={toggleSort} disabled={multiContratual} className="py-3 pr-4">Tipo Contrato</SortableTh>
+                  <SortableTh sortKey={sortKey} sortDir={sortDir} columnKey="service_type"  onSort={toggleSort} disabled={multiContratual} className="py-3 pr-4">Tipo Serviço</SortableTh>
+                  <SortableTh sortKey={sortKey} sortDir={sortDir} columnKey="monthly_hours" onSort={toggleSort} disabled={multiContratual} className="py-3 px-4" align="center">Hs Mensais</SortableTh>
+                  <SortableTh sortKey={sortKey} sortDir={sortDir} columnKey="sold_hours"    onSort={toggleSort} disabled={multiContratual} className="py-3 px-4" align="center">HS Vendidas</SortableTh>
+                  <SortableTh sortKey={sortKey} sortDir={sortDir} columnKey="total_cont"    onSort={toggleSort} disabled={multiContratual} className="py-3 px-4" align="center">Total Cont.</SortableTh>
+                  <SortableTh sortKey={sortKey} sortDir={sortDir} columnKey="consumed"      onSort={toggleSort} disabled={multiContratual} className="py-3 px-4" align="center">HS Consumidas</SortableTh>
+                  <SortableTh sortKey={sortKey} sortDir={sortDir} columnKey="balance"       onSort={toggleSort} disabled={multiContratual} className="py-3 px-4" align="center">Saldo</SortableTh>
+                  <SortableTh sortKey={sortKey} sortDir={sortDir} columnKey="pct"           onSort={toggleSort} disabled={multiContratual} className="py-3 px-4" align="center" minWidth={140}>% Uso</SortableTh>
+                  <SortableTh sortKey={sortKey} sortDir={sortDir} columnKey="coord"         onSort={toggleSort} disabled={multiContratual} className="py-3 px-4" align="center" minWidth={140}>Coord.</SortableTh>
+                  <th className="py-3 text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Status</th>
                 </tr>
               </thead>
-              <tbody style={{ background: 'var(--brand-bg)' }}>
-                {(multiContratual ? filteredRows : filtered).map(project => {
+              <tbody>
+                {(multiContratual ? filteredRows : sortedFiltered).map(project => {
                   const tr = multiContratual ? (project as TreeRow) : undefined
                   return (
                     <ProjectRow
@@ -2122,7 +2856,7 @@ export default function GestaoProjetosPage() {
                       onDelete={canDelete ? p => setDeleteProject(p) : undefined}
                       hasUnread={unreadProjectIds.has(project.id)}
                       treeRow={tr}
-                      onTreeToggle={tr ? () => toggleTree(tr) : undefined}
+                      onTreeToggle={tr ? () => { toggleTree(tr); toggleExpand(project.id) } : undefined}
                       isSelected={selectedProjectIds.has(project.id)}
                       onSelect={toggleProjectSelect}
                       onConsultantManualToggle={canEdit ? (userId, allow) => handleConsultantManualToggle(project.id, userId, allow) : undefined}
@@ -2136,13 +2870,13 @@ export default function GestaoProjetosPage() {
         )}
 
         {/* ── Legenda ── */}
-        {!loading && (multiContratual ? filteredRows : filtered).length > 0 && (
+        {!loading && (multiContratual ? filteredRows : sortedFiltered).length > 0 && (
           <div className="flex items-center gap-5 mt-4">
-            <span className="text-[11px]" style={{ color: 'var(--brand-subtle)' }}>Saúde:</span>
+            <span className="text-[11px]" style={{ color: 'var(--text-light)' }}>Saúde:</span>
             {(['green', 'yellow', 'red'] as const).map(c => (
               <div key={c} className="flex items-center gap-1.5">
                 <div className="w-2.5 h-2.5 rounded-full" style={{ background: healthStyles[c].bar }} />
-                <span className="text-[11px]" style={{ color: 'var(--brand-subtle)' }}>
+                <span className="text-[11px]" style={{ color: 'var(--text-light)' }}>
                   {c === 'green' ? 'Saudável (<70%)' : c === 'yellow' ? 'Atenção (70–90%)' : 'Crítico (>90%)'}
                 </span>
               </div>
@@ -2152,35 +2886,35 @@ export default function GestaoProjetosPage() {
       </div>
       {/* ── Modal de Custos ── */}
       {costProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
-          <div className="flex flex-col rounded-2xl w-full max-w-2xl max-h-[90vh]" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="flex flex-col rounded-2xl w-full max-w-2xl max-h-[90vh]" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>{costProject.code}</p>
-                <h2 className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>{costProject.name}</h2>
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-light)' }}>{costProject.code}</p>
+                <h2 className="text-base font-bold" style={{ color: 'var(--text)' }}>{costProject.name}</h2>
               </div>
-              <button onClick={() => setCostProject(null)} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"><X size={16} style={{ color: 'var(--brand-muted)' }} /></button>
+              <button onClick={() => setCostProject(null)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] transition-colors"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5">
-              {costLoading && <p className="text-xs text-center py-8" style={{ color: 'var(--brand-subtle)' }}>Calculando custos...</p>}
-              {!costLoading && !costSummary && <p className="text-xs text-center py-8" style={{ color: 'var(--brand-subtle)' }}>Nenhum dado disponível.</p>}
+              {costLoading && <p className="text-xs text-center py-8" style={{ color: 'var(--text-light)' }}>Calculando custos...</p>}
+              {!costLoading && !costSummary && <p className="text-xs text-center py-8" style={{ color: 'var(--text-light)' }}>Nenhum dado disponível.</p>}
               {!costLoading && costSummary && (() => {
                 const { project_info: pi, hours_summary: hs, cost_calculation: cc, consultant_breakdown: cb } = costSummary
                 const isPositive = cc.margin >= 0
-                const marginColor = isPositive ? '#22c55e' : '#ef4444'
+                const marginColor = isPositive ? 'var(--success-border)' : 'var(--danger-border)'
                 const hoursIniciais = Number((pi as any).initial_hours_consumed) || Math.abs(Number(pi.initial_hours_balance) || 0)
                 const horasConsumidas = hoursIniciais + hs.total_logged_hours
                 const totalDisp = hs.total_available_hours ?? pi.total_available_hours ?? 0
                 const horasRestantes = Math.max(0, totalDisp - horasConsumidas)
                 const pctUso = totalDisp > 0 ? Math.min(100, (horasConsumidas / totalDisp) * 100) : 0
-                const hoursBarColor = pctUso >= 90 ? '#ef4444' : pctUso >= 70 ? '#f59e0b' : '#22c55e'
+                const hoursBarColor = pctUso >= 90 ? 'var(--danger-border)' : pctUso >= 70 ? 'var(--warning-border)' : 'var(--success-border)'
                 const showHistorico = hoursIniciais !== 0 || (pi.initial_cost ?? 0) !== 0
                 const isOnDemand = cc.is_on_demand
                 return (
                   <div className="space-y-4">
                     {/* Bloco 1 — RECEITA */}
-                    <div className="rounded-xl p-4" style={{ background: 'rgba(0,245,255,0.04)', border: '1px solid rgba(0,245,255,0.18)' }}>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: '#00F5FF' }}>
+                    <div className="rounded-xl p-4" style={{ background: 'var(--primary-soft)', border: '1px solid var(--ring)' }}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--primary)' }}>
                         <DollarSign size={11} />Receita {isOnDemand && <span className="text-[9px] font-normal ml-1 opacity-70">(On Demand — horas × R$/h)</span>}
                       </p>
                       <div className="grid grid-cols-3 gap-3">
@@ -2189,17 +2923,17 @@ export default function GestaoProjetosPage() {
                           { label: 'Aportes',        value: formatBRL(cc.aportes_total) },
                           { label: 'Receita Total',  value: formatBRL(cc.receita_total), highlight: true },
                         ].map(c => (
-                          <div key={c.label} className="rounded-lg p-2.5" style={{ background: 'var(--brand-bg)', border: `1px solid ${c.highlight ? 'rgba(0,245,255,0.35)' : 'var(--brand-border)'}` }}>
-                            <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>{c.label}</p>
-                            <p className="text-sm font-bold tabular-nums" style={{ color: c.highlight ? '#00F5FF' : 'var(--brand-text)' }}>{c.value}</p>
+                          <div key={c.label} className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: `1px solid ${c.highlight ? 'var(--ring)' : 'var(--border)'}` }}>
+                            <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>{c.label}</p>
+                            <p className="text-sm font-bold tabular-nums" style={{ color: c.highlight ? 'var(--primary)' : 'var(--text)' }}>{c.value}</p>
                           </div>
                         ))}
                       </div>
                     </div>
 
                     {/* Bloco 2 — CUSTO */}
-                    <div className="rounded-xl p-4" style={{ background: 'rgba(245,158,11,0.04)', border: '1px solid rgba(245,158,11,0.18)' }}>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: '#f59e0b' }}>
+                    <div className="rounded-xl p-4" style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning-border)' }}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--warning-border)' }}>
                         <TrendingUp size={11} />Custo
                       </p>
                       <div className="grid grid-cols-3 gap-3">
@@ -2208,29 +2942,29 @@ export default function GestaoProjetosPage() {
                           { label: 'Custo Operacional', value: formatBRL(cc.custo_operacional) },
                           { label: 'Custo Total',        value: formatBRL(cc.custo_total), highlight: true },
                         ].map(c => (
-                          <div key={c.label} className="rounded-lg p-2.5" style={{ background: 'var(--brand-bg)', border: `1px solid ${c.highlight ? 'rgba(245,158,11,0.35)' : 'var(--brand-border)'}` }}>
-                            <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>{c.label}</p>
-                            <p className="text-sm font-bold tabular-nums" style={{ color: c.highlight ? '#f59e0b' : 'var(--brand-text)' }}>{c.value}</p>
+                          <div key={c.label} className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: `1px solid ${c.highlight ? 'var(--warning-border)' : 'var(--border)'}` }}>
+                            <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>{c.label}</p>
+                            <p className="text-sm font-bold tabular-nums" style={{ color: c.highlight ? 'var(--warning-border)' : 'var(--text)' }}>{c.value}</p>
                           </div>
                         ))}
                       </div>
                     </div>
 
                     {/* Bloco 3 — RESULTADO */}
-                    <div className="rounded-xl p-4" style={{ background: isPositive ? 'rgba(34,197,94,0.04)' : 'rgba(239,68,68,0.04)', border: `1px solid ${isPositive ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)'}` }}>
+                    <div className="rounded-xl p-4" style={{ background: isPositive ? 'var(--success-bg)' : 'var(--danger-bg)', border: `1px solid ${isPositive ? 'var(--success-border)' : 'var(--danger-border)'}` }}>
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5" style={{ color: marginColor }}>
                         <BarChart2 size={11} />Resultado
                       </p>
-                      <p className="text-[10px] tabular-nums mb-3" style={{ color: 'var(--brand-subtle)' }}>
+                      <p className="text-[10px] tabular-nums mb-3" style={{ color: 'var(--text-light)' }}>
                         {formatBRL(cc.receita_total)} <span className="opacity-50">−</span> {formatBRL(cc.custo_total)} <span className="opacity-50">=</span> <span style={{ color: marginColor }}>{formatBRL(cc.margin)}</span>
                       </p>
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="rounded-lg p-3.5" style={{ background: 'var(--brand-bg)', border: `1px solid ${isPositive ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
-                          <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>Margem R$</p>
+                        <div className="rounded-lg p-3.5" style={{ background: 'var(--bg)', border: `1px solid ${isPositive ? 'var(--success-border)' : 'var(--danger-border)'}` }}>
+                          <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>Margem R$</p>
                           <p className="text-xl font-bold tabular-nums" style={{ color: marginColor }}>{formatBRL(cc.margin)}</p>
                         </div>
-                        <div className="rounded-lg p-3.5" style={{ background: 'var(--brand-bg)', border: `1px solid ${isPositive ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
-                          <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>Margem %</p>
+                        <div className="rounded-lg p-3.5" style={{ background: 'var(--bg)', border: `1px solid ${isPositive ? 'var(--success-border)' : 'var(--danger-border)'}` }}>
+                          <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>Margem %</p>
                           <p className="text-xl font-bold tabular-nums" style={{ color: marginColor }}>{cc.margin_percentage.toFixed(1)}%</p>
                         </div>
                       </div>
@@ -2238,88 +2972,88 @@ export default function GestaoProjetosPage() {
 
                     {/* Bloco 4 — COORDENADOR (condicional) */}
                     {cc.coordinator_percentage > 0 && (
-                      <div className="rounded-xl p-4" style={{ background: 'rgba(167,139,250,0.04)', border: '1px solid rgba(167,139,250,0.18)' }}>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: '#a78bfa' }}>
+                      <div className="rounded-xl p-4" style={{ background: 'var(--surface-hover)', border: '1px solid var(--brand-purple)' }}>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--brand-purple)' }}>
                           <UserCheck size={11} />Coordenador
                         </p>
                         <div className="grid grid-cols-2 gap-3">
-                          <div className="rounded-lg p-2.5" style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)' }}>
-                            <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>% da Margem</p>
-                            <p className="text-sm font-bold tabular-nums" style={{ color: '#a78bfa' }}>{cc.coordinator_percentage.toFixed(1)}%</p>
+                          <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                            <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>% da Margem</p>
+                            <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-purple)' }}>{cc.coordinator_percentage.toFixed(1)}%</p>
                           </div>
-                          <div className="rounded-lg p-2.5" style={{ background: 'var(--brand-bg)', border: '1px solid rgba(167,139,250,0.35)' }}>
-                            <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>Valor a Receber</p>
-                            <p className="text-sm font-bold tabular-nums" style={{ color: '#a78bfa' }}>{formatBRL(cc.valor_coordenador)}</p>
+                          <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--brand-purple)' }}>
+                            <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>Valor a Receber</p>
+                            <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-purple)' }}>{formatBRL(cc.valor_coordenador)}</p>
                           </div>
                         </div>
                       </div>
                     )}
 
                     {/* Bloco 5 — HORAS */}
-                    <div className="rounded-xl p-4" style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)' }}>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--brand-subtle)' }}>Horas</p>
+                    <div className="rounded-xl p-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-light)' }}>Horas</p>
                       <div className="grid grid-cols-5 gap-2 mb-3">
                         {[
-                          { label: 'Iniciais',    value: `${hoursIniciais.toFixed(1)}h`,          color: 'var(--brand-text)' },
-                          { label: 'Apontadas',   value: `${hs.total_logged_hours.toFixed(1)}h`,  color: 'var(--brand-text)' },
-                          { label: 'Consumido',   value: `${horasConsumidas.toFixed(1)}h`,        color: 'var(--brand-text)' },
+                          { label: 'Iniciais',    value: `${hoursIniciais.toFixed(1)}h`,          color: 'var(--text)' },
+                          { label: 'Apontadas',   value: `${hs.total_logged_hours.toFixed(1)}h`,  color: 'var(--text)' },
+                          { label: 'Consumido',   value: `${horasConsumidas.toFixed(1)}h`,        color: 'var(--text)' },
                           { label: '% Uso',       value: `${pctUso.toFixed(1)}%`,                 color: hoursBarColor },
-                          { label: 'Restantes',   value: `${horasRestantes.toFixed(1)}h`,         color: horasRestantes < 10 ? '#ef4444' : 'var(--brand-text)' },
+                          { label: 'Restantes',   value: `${horasRestantes.toFixed(1)}h`,         color: horasRestantes < 10 ? 'var(--danger-border)' : 'var(--text)' },
                         ].map(c => (
                           <div key={c.label}>
-                            <p className="text-[9px]" style={{ color: 'var(--brand-subtle)' }}>{c.label}</p>
+                            <p className="text-[9px]" style={{ color: 'var(--text-light)' }}>{c.label}</p>
                             <p className="font-bold tabular-nums mt-0.5 text-xs" style={{ color: c.color }}>{c.value}</p>
                           </div>
                         ))}
                       </div>
-                      <div className="w-full rounded-full h-1.5 mb-1" style={{ background: 'var(--brand-border)' }}>
+                      <div className="w-full rounded-full h-1.5 mb-1" style={{ background: 'var(--border)' }}>
                         <div className="h-1.5 rounded-full transition-all" style={{ width: `${pctUso}%`, background: hoursBarColor }} />
                       </div>
-                      <p className="text-[10px] tabular-nums" style={{ color: 'var(--brand-subtle)' }}>{pctUso.toFixed(1)}% das horas utilizadas</p>
+                      <p className="text-[10px] tabular-nums" style={{ color: 'var(--text-light)' }}>{pctUso.toFixed(1)}% das horas utilizadas</p>
                     </div>
 
                     {/* Bloco 6 — HISTÓRICO */}
                     {showHistorico && (
-                      <div className="rounded-xl px-4 py-3 flex flex-wrap gap-x-6 gap-y-1" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--brand-border)' }}>
-                        <p className="text-[9px] font-semibold uppercase tracking-wider w-full mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Saldo do sistema anterior</p>
-                        <span className="text-xs tabular-nums" style={{ color: 'var(--brand-subtle)' }}>HS consumidas iniciais: <strong>{hoursIniciais.toFixed(1)}h</strong></span>
-                        <span className="text-xs tabular-nums" style={{ color: 'var(--brand-subtle)' }}>Custo inicial: <strong>{formatBRL(pi.initial_cost ?? 0)}</strong></span>
+                      <div className="rounded-xl px-4 py-3 flex flex-wrap gap-x-6 gap-y-1" style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                        <p className="text-[9px] font-semibold uppercase tracking-wider w-full mb-0.5" style={{ color: 'var(--text-light)' }}>Saldo do sistema anterior</p>
+                        <span className="text-xs tabular-nums" style={{ color: 'var(--text-light)' }}>HS consumidas iniciais: <strong>{hoursIniciais.toFixed(1)}h</strong></span>
+                        <span className="text-xs tabular-nums" style={{ color: 'var(--text-light)' }}>Custo inicial: <strong>{formatBRL(pi.initial_cost ?? 0)}</strong></span>
                       </div>
                     )}
 
                     {/* Tabela de custo por consultor */}
                     {cb.length > 0 && (
-                      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--brand-border)' }}>
-                        <div className="px-4 py-3" style={{ background: 'var(--brand-surface)' }}>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'var(--brand-subtle)' }}>
+                      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                        <div className="px-4 py-3" style={{ background: 'var(--surface)' }}>
+                          <p className="text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'var(--text-light)' }}>
                             <UserCheck size={11} />Custo por Consultor
                           </p>
                         </div>
                         <table className="w-full text-xs">
                           <thead>
-                            <tr style={{ background: 'var(--brand-bg)', borderBottom: '1px solid var(--brand-border)' }}>
+                            <tr style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
                               {['Consultor','Hs Total','Aprovadas','Pendentes','Taxa/h','Custo'].map(h => (
-                                <th key={h} className="px-3 py-2 text-left font-semibold text-[10px] uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{h}</th>
+                                <th key={h} className="px-3 py-2 text-left font-semibold text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-light)' }}>{h}</th>
                               ))}
                             </tr>
                           </thead>
                           <tbody>
                             {cb.map((c, i) => (
-                              <tr key={i} style={{ borderBottom: '1px solid var(--brand-border)' }}>
-                                <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--brand-text)' }}>{c.consultant_name}</td>
-                                <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--brand-text)' }}>{c.total_hours.toFixed(1)}h</td>
-                                <td className="px-3 py-2.5 tabular-nums" style={{ color: '#22c55e' }}>{c.approved_hours.toFixed(1)}h</td>
-                                <td className="px-3 py-2.5 tabular-nums" style={{ color: '#f59e0b' }}>{c.pending_hours.toFixed(1)}h</td>
-                                <td className="px-3 py-2.5 tabular-nums text-[11px]" style={{ color: 'var(--brand-muted)' }}>
+                              <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                                <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--text)' }}>{c.consultant_name}</td>
+                                <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--text)' }}>{c.total_hours.toFixed(1)}h</td>
+                                <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--success-border)' }}>{c.approved_hours.toFixed(1)}h</td>
+                                <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--warning-border)' }}>{c.pending_hours.toFixed(1)}h</td>
+                                <td className="px-3 py-2.5 tabular-nums text-[11px]" style={{ color: 'var(--text-muted)' }}>
                                   {c.consultant_hourly_rate != null ? formatBRL(c.consultant_hourly_rate) : '—'}
                                   {c.consultant_rate_type === 'monthly' && <span className="ml-1 opacity-60">÷180</span>}
                                 </td>
-                                <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--brand-text)' }}>{formatBRL(c.cost)}</td>
+                                <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text)' }}>{formatBRL(c.cost)}</td>
                               </tr>
                             ))}
-                            <tr style={{ background: 'rgba(0,245,255,0.04)', borderTop: '1px solid var(--brand-border)' }}>
-                              <td className="px-3 py-2.5 font-bold text-[11px] uppercase" style={{ color: 'var(--brand-subtle)' }} colSpan={5}>Total Operacional</td>
-                              <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: '#00F5FF' }}>{formatBRL(cc.custo_operacional)}</td>
+                            <tr style={{ background: 'var(--primary-soft)', borderTop: '1px solid var(--border)' }}>
+                              <td className="px-3 py-2.5 font-bold text-[11px] uppercase" style={{ color: 'var(--text-light)' }} colSpan={5}>Total Operacional</td>
+                              <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: 'var(--primary)' }}>{formatBRL(cc.custo_operacional)}</td>
                             </tr>
                           </tbody>
                         </table>
@@ -2329,8 +3063,8 @@ export default function GestaoProjetosPage() {
                 )
               })()}
             </div>
-            <div className="flex justify-end px-6 py-4 shrink-0" style={{ borderTop: '1px solid var(--brand-border)' }}>
-              <button onClick={() => setCostProject(null)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Fechar</button>
+            <div className="flex justify-end px-6 py-4 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+              <button onClick={() => setCostProject(null)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Fechar</button>
             </div>
           </div>
         </div>
@@ -2338,58 +3072,58 @@ export default function GestaoProjetosPage() {
 
       {/* ── Modal de Equipe ── */}
       {teamProject && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
-          <div className="flex flex-col rounded-2xl w-full max-w-md max-h-[80vh]" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="flex flex-col rounded-2xl w-full max-w-md max-h-[80vh]" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Equipe</p>
-                <h2 className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>{teamProject.name}</h2>
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-light)' }}>Equipe</p>
+                <h2 className="text-base font-bold" style={{ color: 'var(--text)' }}>{teamProject.name}</h2>
               </div>
-              <button onClick={() => setTeamProject(null)} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"><X size={16} style={{ color: 'var(--brand-muted)' }} /></button>
+              <button onClick={() => setTeamProject(null)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] transition-colors"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
             </div>
             {/* Tabs */}
-            <div className="flex border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+            <div className="flex border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
               {(['consultores', 'grupos'] as const).map(tab => (
                 <button key={tab} onClick={() => setTeamTab(tab)}
-                  className={`px-5 py-2.5 text-xs font-semibold capitalize transition-colors ${teamTab === tab ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-zinc-400 hover:text-zinc-200'}`}
+                  className={`px-5 py-2.5 text-xs font-semibold capitalize transition-colors ${teamTab === tab ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
                   style={{ marginBottom: -1 }}>
                   {tab === 'consultores' ? 'Consultores' : 'Grupos de Consultores'}
                 </button>
               ))}
             </div>
-            <div className="px-4 py-3 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+            <div className="px-4 py-3 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
               <div className="relative">
-                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--brand-subtle)' }} />
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-light)' }} />
                 <input value={teamSearch} onChange={e => setTeamSearch(e.target.value)}
                   placeholder={teamTab === 'consultores' ? 'Buscar consultor...' : 'Buscar grupo...'}
                   className="w-full pl-8 pr-3 py-2 rounded-lg text-xs outline-none"
-                  style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }} />
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }} />
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-4 py-3">
               {teamTab === 'consultores' && allConsultants.filter(c => c.name.toLowerCase().includes(teamSearch.toLowerCase())).map(c => (
-                <label key={c.id} className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
+                <label key={c.id} className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[var(--surface-hover)] transition-colors">
                   <input type="checkbox" checked={selectedIds.has(c.id)} onChange={() => setSelectedIds(prev => { const n = new Set(prev); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n })} className="w-4 h-4 rounded accent-cyan-400" />
-                  <span className="text-sm" style={{ color: 'var(--brand-text)' }}>{c.name}</span>
+                  <span className="text-sm" style={{ color: 'var(--text)' }}>{c.name}</span>
                 </label>
               ))}
               {teamTab === 'grupos' && consultantGroups.filter(g => g.name.toLowerCase().includes(teamSearch.toLowerCase())).map(g => (
-                <label key={g.id} className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
+                <label key={g.id} className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[var(--surface-hover)] transition-colors">
                   <input type="checkbox" checked={selectedGroupIds.has(g.id)} onChange={() => setSelectedGroupIds(prev => { const n = new Set(prev); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n })} className="w-4 h-4 rounded accent-cyan-400" />
-                  <span className="text-sm" style={{ color: 'var(--brand-text)' }}>{g.name}</span>
+                  <span className="text-sm" style={{ color: 'var(--text)' }}>{g.name}</span>
                 </label>
               ))}
               {teamTab === 'grupos' && consultantGroups.length === 0 && (
-                <p className="text-xs text-center py-6" style={{ color: 'var(--brand-subtle)' }}>Nenhum grupo disponível</p>
+                <p className="text-xs text-center py-6" style={{ color: 'var(--text-light)' }}>Nenhum grupo disponível</p>
               )}
             </div>
-            <div className="flex justify-between items-center px-6 py-4 shrink-0" style={{ borderTop: '1px solid var(--brand-border)' }}>
-              <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>
+            <div className="flex justify-between items-center px-6 py-4 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+              <span className="text-xs" style={{ color: 'var(--text-light)' }}>
                 {selectedIds.size} consultor(es) · {selectedGroupIds.size} grupo(s)
               </span>
               <div className="flex gap-2">
-                <button onClick={() => setTeamProject(null)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
-                <button onClick={saveTeam} disabled={teamSaving} className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:opacity-90 disabled:opacity-50" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.2)' }}>{teamSaving ? 'Salvando...' : 'Salvar'}</button>
+                <button onClick={() => setTeamProject(null)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancelar</button>
+                <button onClick={saveTeam} disabled={teamSaving} className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:opacity-90 disabled:opacity-50" style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}>{teamSaving ? 'Salvando...' : 'Salvar'}</button>
               </div>
             </div>
           </div>
@@ -2398,31 +3132,39 @@ export default function GestaoProjetosPage() {
 
       {/* ── Modal de Aportes ── */}
       {aportesProject && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
-          <div className="flex flex-col rounded-2xl w-full max-w-2xl max-h-[90vh]" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="flex flex-col rounded-2xl w-full max-w-2xl max-h-[90vh]" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Aportes de Horas</p>
-                <h2 className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>{aportesProject.name}</h2>
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-light)' }}>Aportes de Horas</p>
+                <h2 className="text-base font-bold" style={{ color: 'var(--text)' }}>{aportesProject.name}</h2>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => {
-                  setContribForm({ contributed_hours: '', hourly_rate: '', contributed_at: new Date().toISOString().slice(0, 10), description: '' })
+                  setContribForm({ contributed_hours: '', hourly_rate: '', contributed_at: new Date().toISOString().slice(0, 10), description: '', motivo: 'aporte' })
                   setContribModal({ open: true })
                 }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors hover:opacity-90"
-                  style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.2)' }}>
+                  style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}>
                   <Plus size={12} /> Adicionar
                 </button>
-                <button onClick={() => { setAportesProject(null); setContribModal({ open: false }) }} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"><X size={16} style={{ color: 'var(--brand-muted)' }} /></button>
+                <button onClick={() => { setAportesProject(null); setContribModal({ open: false }) }} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] transition-colors"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-5">
-              {contribLoading && <p className="text-xs text-center py-8" style={{ color: 'var(--brand-subtle)' }}>Carregando aportes...</p>}
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              {((aportesProject.contract_type_display ?? aportesProject.contract_type?.name ?? '').toLowerCase().includes('mensal')) && (
+                <MonthlyAccrualTable
+                  startDate={(aportesProject as any).start_date ?? null}
+                  hoursPerMonth={aportesProject.sold_hours ?? 0}
+                  accumulated={(aportesProject as any).accumulated_sold_hours ?? null}
+                  endDate={(aportesProject as any).encerramento_date ?? null}
+                />
+              )}
+              {contribLoading && <p className="text-xs text-center py-8" style={{ color: 'var(--text-light)' }}>Carregando aportes...</p>}
               {!contribLoading && contributions.length === 0 && (
                 <div className="text-center py-10">
-                  <TrendingUp size={32} className="mx-auto mb-3 opacity-20" style={{ color: 'var(--brand-subtle)' }} />
-                  <p className="text-sm" style={{ color: 'var(--brand-subtle)' }}>Nenhum aporte registrado</p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--brand-subtle)' }}>Clique em "+ Adicionar" para registrar</p>
+                  <TrendingUp size={32} className="mx-auto mb-3 opacity-20" style={{ color: 'var(--text-light)' }} />
+                  <p className="text-sm" style={{ color: 'var(--text-light)' }}>Nenhum aporte registrado</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-light)' }}>Clique em "+ Adicionar" para registrar</p>
                 </div>
               )}
               {!contribLoading && contributions.length > 0 && (() => {
@@ -2431,34 +3173,34 @@ export default function GestaoProjetosPage() {
                 return (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-xl p-3" style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)' }}>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>Total de Horas</p>
-                        <p className="text-lg font-bold tabular-nums" style={{ color: 'var(--brand-primary)' }}>{totalHoras.toFixed(1)}h</p>
+                      <div className="rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>Total de Horas</p>
+                        <p className="text-lg font-bold tabular-nums" style={{ color: 'var(--primary)' }}>{totalHoras.toFixed(1)}h</p>
                       </div>
-                      <div className="rounded-xl p-3" style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)' }}>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>Valor Total</p>
-                        <p className="text-lg font-bold tabular-nums" style={{ color: '#f59e0b' }}>{totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                      <div className="rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>Valor Total</p>
+                        <p className="text-lg font-bold tabular-nums" style={{ color: 'var(--warning-border)' }}>{totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                       </div>
                     </div>
-                    <div className="rounded-xl overflow-clip" style={{ border: '1px solid var(--brand-border)' }}>
+                    <div className="rounded-xl overflow-clip" style={{ border: '1px solid var(--border)' }}>
                       <table className="w-full text-xs">
-                        <thead className="sticky top-0 z-10" style={{ background: 'var(--brand-surface)' }}>
-                          <tr style={{ background: 'var(--brand-surface)', borderBottom: '1px solid var(--brand-border)' }}>
+                        <thead className="sticky top-0 z-10" style={{ background: 'var(--surface)' }}>
+                          <tr style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
                             {['Data','Horas','Valor/h','Total','Descrição',''].map(h => (
-                              <th key={h} className="px-3 py-2 text-left font-semibold text-[10px] uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{h}</th>
+                              <th key={h} className="px-3 py-2 text-left font-semibold text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-light)' }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {contributions.map(c => (
-                            <tr key={c.id} style={{ borderBottom: '1px solid var(--brand-border)' }}>
-                              <td className="px-3 py-2.5 tabular-nums whitespace-nowrap" style={{ color: 'var(--brand-muted)' }}>
+                            <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                              <td className="px-3 py-2.5 tabular-nums whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
                                 {c.contributed_at ? c.contributed_at.slice(0, 10).split('-').reverse().join('/') : '—'}
                               </td>
-                              <td className="px-3 py-2.5 tabular-nums font-semibold" style={{ color: 'var(--brand-primary)' }}>{c.contributed_hours.toFixed(1)}h</td>
-                              <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--brand-muted)' }}>{c.hourly_rate.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                              <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--brand-text)' }}>{(c.contributed_hours * c.hourly_rate).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                              <td className="px-3 py-2.5 max-w-[160px] truncate" style={{ color: 'var(--brand-muted)' }}>{c.description ?? '—'}</td>
+                              <td className="px-3 py-2.5 tabular-nums font-semibold" style={{ color: 'var(--primary)' }}>{c.contributed_hours.toFixed(1)}h</td>
+                              <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--text-muted)' }}>{c.hourly_rate.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                              <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text)' }}>{(c.contributed_hours * c.hourly_rate).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                              <td className="px-3 py-2.5 max-w-[160px] truncate" style={{ color: 'var(--text-muted)' }}>{c.description ?? '—'}</td>
                               <td className="px-3 py-2.5">
                                 <div className="flex items-center gap-1">
                                   <button onClick={() => {
@@ -2468,8 +3210,9 @@ export default function GestaoProjetosPage() {
                                       hourly_rate: String(c.hourly_rate),
                                       contributed_at: c.contributed_at?.slice(0, 10) ?? '',
                                       description: c.description ?? '',
+                                      motivo: (c as any).motivo ?? 'aporte',
                                     })
-                                  }} className="p-1 rounded hover:bg-white/5 transition-colors" style={{ color: 'var(--brand-muted)' }}>
+                                  }} className="p-1 rounded hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)' }}>
                                     <Pencil size={12} />
                                   </button>
                                   <button onClick={() => setContribDeleteConfirm(c)} className="p-1 rounded hover:bg-red-500/10 transition-colors text-red-400">
@@ -2486,8 +3229,8 @@ export default function GestaoProjetosPage() {
                 )
               })()}
             </div>
-            <div className="flex justify-end px-6 py-4 shrink-0" style={{ borderTop: '1px solid var(--brand-border)' }}>
-              <button onClick={() => { setAportesProject(null); setContribModal({ open: false }) }} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Fechar</button>
+            <div className="flex justify-end px-6 py-4 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+              <button onClick={() => { setAportesProject(null); setContribModal({ open: false }) }} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Fechar</button>
             </div>
           </div>
         </div>
@@ -2495,60 +3238,71 @@ export default function GestaoProjetosPage() {
 
       {/* ── Sub-modal Adicionar/Editar Aporte ── */}
       {aportesProject && contribModal.open && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div className="rounded-2xl w-full max-w-sm" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
-              <h3 className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="rounded-2xl w-full max-w-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
+              <h3 className="text-sm font-bold" style={{ color: 'var(--text)' }}>
                 {contribModal.item ? 'Editar Aporte' : 'Novo Aporte'}
               </h3>
               <button onClick={() => {
                 setContribModal({ open: false })
-                setContribForm({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '' })
-              }} className="p-1 rounded hover:bg-white/5"><X size={14} style={{ color: 'var(--brand-muted)' }} /></button>
+                setContribForm({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '', motivo: 'aporte' })
+              }} className="p-1 rounded hover:bg-[var(--surface-hover)]"><X size={14} style={{ color: 'var(--text-muted)' }} /></button>
             </div>
             <div className="px-5 py-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--brand-subtle)' }}>Horas *</label>
+                  <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-light)' }}>Horas *</label>
                   <input type="number" step="0.5" min="0" value={contribForm.contributed_hours}
                     onChange={e => setContribForm(f => ({ ...f, contributed_hours: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg text-xs outline-none"
-                    style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
+                    style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}
                     placeholder="0.0" />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--brand-subtle)' }}>Valor/Hora *</label>
+                  <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-light)' }}>Valor/Hora *</label>
                   <input type="number" step="0.01" min="0" value={contribForm.hourly_rate}
                     onChange={e => setContribForm(f => ({ ...f, hourly_rate: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg text-xs outline-none"
-                    style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
+                    style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}
                     placeholder="0.00" />
                 </div>
               </div>
               <div>
-                <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--brand-subtle)' }}>Data *</label>
+                <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-light)' }}>Data *</label>
                 <input type="date" value={contribForm.contributed_at}
                   onChange={e => setContribForm(f => ({ ...f, contributed_at: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg text-xs outline-none"
-                  style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)', colorScheme: 'dark' }} />
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', colorScheme: 'dark' }} />
               </div>
               <div>
-                <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--brand-subtle)' }}>Descrição</label>
+                <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-light)' }}>Motivo *</label>
+                <select value={contribForm.motivo}
+                  onChange={e => setContribForm(f => ({ ...f, motivo: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg text-xs outline-none"
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+                  <option value="aporte">Aporte</option>
+                  <option value="excedentes">Excedentes</option>
+                  <option value="absorvidas">Absorvidas</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-light)' }}>Descrição</label>
                 <input type="text" value={contribForm.description}
                   onChange={e => setContribForm(f => ({ ...f, description: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg text-xs outline-none"
-                  style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}
                   placeholder="Opcional" />
               </div>
             </div>
-            <div className="flex justify-end gap-2 px-5 py-4" style={{ borderTop: '1px solid var(--brand-border)' }}>
+            <div className="flex justify-end gap-2 px-5 py-4" style={{ borderTop: '1px solid var(--border)' }}>
               <button onClick={() => {
                 setContribModal({ open: false })
-                setContribForm({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '' })
-              }} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
+                setContribForm({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '', motivo: 'aporte' })
+              }} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancelar</button>
               <button onClick={saveContrib} disabled={contribSaving}
                 className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:opacity-90 disabled:opacity-50"
-                style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.2)' }}>
+                style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}>
                 {contribSaving ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
@@ -2558,15 +3312,15 @@ export default function GestaoProjetosPage() {
 
       {/* ── Confirmação de exclusão de aporte ── */}
       {contribDeleteConfirm && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div className="rounded-2xl w-full max-w-xs p-6 text-center" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="rounded-2xl w-full max-w-xs p-6 text-center" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <Trash2 size={28} className="mx-auto mb-3 text-red-400" />
-            <p className="text-sm font-semibold mb-1" style={{ color: 'var(--brand-text)' }}>Excluir aporte?</p>
-            <p className="text-xs mb-5" style={{ color: 'var(--brand-subtle)' }}>
+            <p className="text-sm font-semibold mb-1" style={{ color: 'var(--text)' }}>Excluir aporte?</p>
+            <p className="text-xs mb-5" style={{ color: 'var(--text-light)' }}>
               {contribDeleteConfirm.contributed_hours}h em {contribDeleteConfirm.contributed_at?.slice(0, 10).split('-').reverse().join('/')}. Esta ação não pode ser desfeita.
             </p>
             <div className="flex gap-2 justify-center">
-              <button onClick={() => setContribDeleteConfirm(null)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
+              <button onClick={() => setContribDeleteConfirm(null)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancelar</button>
               <button onClick={() => doDeleteContrib(contribDeleteConfirm)} className="px-4 py-2 rounded-xl text-sm font-bold bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors">Excluir</button>
             </div>
           </div>
@@ -2575,34 +3329,34 @@ export default function GestaoProjetosPage() {
 
       {/* ── Modal: Alterar Status ── */}
       {statusModal.open && statusModal.project && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
-          <div className="rounded-2xl w-full max-w-sm p-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="rounded-2xl w-full max-w-sm p-6" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>Alterar Status</h3>
-              <button onClick={() => setStatusModal({ open: false, project: null, newStatus: '' })} style={{ color: 'var(--brand-subtle)' }}><X size={16} /></button>
+              <h3 className="text-sm font-bold" style={{ color: 'var(--text)' }}>Alterar Status</h3>
+              <button onClick={() => setStatusModal({ open: false, project: null, newStatus: '' })} style={{ color: 'var(--text-light)' }}><X size={16} /></button>
             </div>
-            <p className="text-xs mb-4" style={{ color: 'var(--brand-muted)' }}>
-              Projeto: <strong style={{ color: 'var(--brand-text)' }}>{statusModal.project.name}</strong>
+            <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
+              Projeto: <strong style={{ color: 'var(--text)' }}>{statusModal.project.name}</strong>
             </p>
             <select
               value={statusModal.newStatus}
               onChange={e => setStatusModal(s => ({ ...s, newStatus: e.target.value }))}
               className="w-full appearance-none px-3 py-2.5 rounded-xl text-sm outline-none mb-5"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
+              style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)', color: 'var(--text)' }}
             >
               {PROJECT_STATUSES.map(s => (
-                <option key={s.value} value={s.value} style={{ background: '#161618' }}>{s.label}</option>
+                <option key={s.value} value={s.value} style={{ background: 'var(--surface)' }}>{s.label}</option>
               ))}
             </select>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setStatusModal({ open: false, project: null, newStatus: '' })}
                 className="px-4 py-2 rounded-xl text-sm font-medium"
-                style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>
+                style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
                 Cancelar
               </button>
               <button onClick={handleChangeStatus} disabled={statusSaving || statusModal.newStatus === statusModal.project.status}
                 className="px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
-                style={{ background: 'var(--brand-primary)', color: 'var(--primary-fg)' }}>
+                style={{ background: 'var(--primary)', color: 'var(--primary-fg)' }}>
                 {statusSaving ? 'Salvando...' : 'Confirmar'}
               </button>
             </div>
@@ -2626,56 +3380,56 @@ export default function GestaoProjetosPage() {
         const fmtDate = (d?: string | null) => d ? d.slice(0,10).split('-').reverse().join('/') : '—'
         const fmtBRL  = (v?: number | null) => v != null ? v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'
         const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
-          <div className="flex items-start justify-between py-2 border-b last:border-0" style={{ borderColor: 'var(--brand-border)' }}>
-            <span className="text-xs shrink-0 w-40" style={{ color: 'var(--brand-subtle)' }}>{label}</span>
-            <span className="text-xs font-semibold text-right" style={{ color: 'var(--brand-text)' }}>{value ?? '—'}</span>
+          <div className="flex items-start justify-between py-2 border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
+            <span className="text-xs shrink-0 w-40" style={{ color: 'var(--text-light)' }}>{label}</span>
+            <span className="text-xs font-semibold text-right" style={{ color: 'var(--text)' }}>{value ?? '—'}</span>
           </div>
         )
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
-            <div className="flex flex-col rounded-2xl w-full max-w-3xl max-h-[92vh]" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+            <div className="flex flex-col rounded-2xl w-full max-w-3xl max-h-[92vh]" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
 
               {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+              <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
                 <div className="flex items-center gap-3">
                   <div className="w-1.5 h-12 rounded-full" style={{ background: hs.bar }} />
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>{p.code}</p>
-                    <h2 className="text-lg font-bold" style={{ color: 'var(--brand-text)' }}>{p.name}</h2>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-light)' }}>{p.code}</p>
+                    <h2 className="text-lg font-bold" style={{ color: 'var(--text)' }}>{p.name}</h2>
                     {p.parent_project && (
-                      <p className="text-[11px] mt-0.5" style={{ color: 'var(--brand-subtle)' }}>Subprojeto de: {p.parent_project.name} ({p.parent_project.code})</p>
+                      <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-light)' }}>Subprojeto de: {p.parent_project.name} ({p.parent_project.code})</p>
                     )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => { setDataModal({ project: base, tab: 'timesheets' }) }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}><Clock size={11} /> Apontamentos</button>
-                  <button onClick={() => { setDataModal({ project: base, tab: 'expenses' }) }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}><BarChart2 size={11} /> Despesas</button>
-                  <button onClick={() => { setMessagesProject(base) }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}><MessageCircle size={11} /> Mensagens</button>
+                  <button onClick={() => { setDataModal({ project: base, tab: 'timesheets' }) }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}><Clock size={11} /> Apontamentos</button>
+                  <button onClick={() => { setDataModal({ project: base, tab: 'expenses' }) }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}><BarChart2 size={11} /> Despesas</button>
+                  <button onClick={() => { setMessagesProject(base) }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}><MessageCircle size={11} /> Mensagens</button>
                   {canEdit && (
-                    <button onClick={() => { setEditProjectId(p.id) }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.2)' }}><Edit2 size={11} /> Editar</button>
+                    <button onClick={() => { setEditProjectId(p.id) }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}><Edit2 size={11} /> Editar</button>
                   )}
-                  <button onClick={() => { setViewProject(null); setViewProjectFull(null) }} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"><X size={16} style={{ color: 'var(--brand-muted)' }} /></button>
+                  <button onClick={() => { setViewProject(null); setViewProjectFull(null) }} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] transition-colors"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
                 </div>
               </div>
 
               {/* Status badge row */}
-              <div className="flex items-center gap-3 px-6 py-3 border-b shrink-0 flex-wrap" style={{ borderColor: 'var(--brand-border)', background: 'rgba(0,0,0,0.2)' }}>
+              <div className="flex items-center gap-3 px-6 py-3 border-b shrink-0 flex-wrap" style={{ borderColor: 'var(--border)', background: 'var(--surface-hover)' }}>
                 <span className="px-2.5 py-1 rounded-full text-xs font-bold"
                   style={{
-                    background: p.status === 'started' ? 'rgba(0,245,255,0.10)' : p.status === 'paused' ? 'rgba(245,158,11,0.12)' : p.status === 'cancelled' ? 'rgba(239,68,68,0.12)' : p.status === 'finished' ? 'rgba(161,161,170,0.12)' : 'rgba(139,92,246,0.12)',
-                    color: p.status === 'started' ? '#00F5FF' : p.status === 'paused' ? '#F59E0B' : p.status === 'cancelled' ? '#EF4444' : p.status === 'finished' ? '#71717A' : '#8B5CF6',
+                    background: p.status === 'started' ? 'var(--primary-soft)' : p.status === 'paused' ? 'var(--warning-bg)' : p.status === 'cancelled' ? 'var(--danger-bg)' : p.status === 'finished' ? 'var(--surface-hover)' : 'var(--surface-hover)',
+                    color: p.status === 'started' ? 'var(--primary)' : p.status === 'paused' ? 'var(--warning-border)' : p.status === 'cancelled' ? 'var(--danger-border)' : p.status === 'finished' ? 'var(--text-light)' : 'var(--brand-purple)',
                   }}>
                   {p.status_display ?? statusLabel[p.status] ?? p.status}
                 </span>
-                {p.customer?.name && <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)' }}>{p.customer.name}</span>}
-                {(p.contract_type_display ?? p.contract_type?.name) && <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)' }}>{p.contract_type_display ?? p.contract_type?.name}</span>}
-                {p.service_type?.name && <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)' }}>{p.service_type.name}</span>}
-                {viewProjectLoading && <span className="text-[10px] animate-pulse" style={{ color: 'var(--brand-subtle)' }}>Carregando detalhes...</span>}
+                {p.customer?.name && <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>{p.customer.name}</span>}
+                {(p.contract_type_display ?? p.contract_type?.name) && <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>{p.contract_type_display ?? p.contract_type?.name}</span>}
+                {p.service_type?.name && <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>{p.service_type.name}</span>}
+                {viewProjectLoading && <span className="text-[10px] animate-pulse" style={{ color: 'var(--text-light)' }}>Carregando detalhes...</span>}
               </div>
 
               {/* Tab nav */}
-              <div className="flex gap-1 px-6 border-b" style={{ borderColor: 'var(--brand-border)' }}>
-                {(['overview', 'cost'] as const).map(t => (
+              <div className="flex gap-1 px-6 border-b" style={{ borderColor: 'var(--border)' }}>
+                {(['overview', 'cost'] as const).filter(t => t !== 'cost' || user?.type !== 'coordenador').map(t => (
                   <button key={t} onClick={() => {
                     setViewProjectTab(t)
                     if (t === 'cost' && !viewCostSummary && !viewCostLoading) {
@@ -2695,27 +3449,27 @@ export default function GestaoProjetosPage() {
 
               {/* Body */}
               <div className="flex-1 overflow-y-auto">
-                {viewProjectTab === 'cost' && (
+                {viewProjectTab === 'cost' && user?.type !== 'coordenador' && (
                   <div className="p-6 space-y-5">
-                    {viewCostLoading && <p className="text-xs text-center py-8" style={{ color: 'var(--brand-subtle)' }}>Calculando custos...</p>}
-                    {!viewCostLoading && !viewCostSummary && <p className="text-xs text-center py-8" style={{ color: 'var(--brand-subtle)' }}>Nenhum dado de custo disponível.</p>}
+                    {viewCostLoading && <p className="text-xs text-center py-8" style={{ color: 'var(--text-light)' }}>Calculando custos...</p>}
+                    {!viewCostLoading && !viewCostSummary && <p className="text-xs text-center py-8" style={{ color: 'var(--text-light)' }}>Nenhum dado de custo disponível.</p>}
                     {!viewCostLoading && viewCostSummary && (() => {
                       const { project_info: pi, hours_summary: hs, cost_calculation: cc, consultant_breakdown: cb } = viewCostSummary
                       const isPositive = cc.margin >= 0
-                      const marginColor = isPositive ? '#22c55e' : '#ef4444'
+                      const marginColor = isPositive ? 'var(--success-border)' : 'var(--danger-border)'
                       const hoursIniciais = Number((pi as any).initial_hours_consumed) || Math.abs(Number(pi.initial_hours_balance) || 0)
                       const horasConsumidas = hoursIniciais + hs.total_logged_hours
                       const totalDisp = hs.total_available_hours ?? pi.total_available_hours ?? 0
                       const horasRestantes = Math.max(0, totalDisp - horasConsumidas)
                       const pctUso = totalDisp > 0 ? Math.min(100, (horasConsumidas / totalDisp) * 100) : 0
-                      const hoursBarColor = pctUso >= 90 ? '#ef4444' : pctUso >= 70 ? '#f59e0b' : '#22c55e'
+                      const hoursBarColor = pctUso >= 90 ? 'var(--danger-border)' : pctUso >= 70 ? 'var(--warning-border)' : 'var(--success-border)'
                       const showHistorico = hoursIniciais !== 0 || (pi.initial_cost ?? 0) !== 0
                       const isOnDemand = cc.is_on_demand
                       return (
                         <>
                           {/* Bloco 1 — RECEITA */}
-                          <div className="rounded-xl p-4" style={{ background: 'rgba(0,245,255,0.04)', border: '1px solid rgba(0,245,255,0.18)' }}>
-                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: '#00F5FF' }}>
+                          <div className="rounded-xl p-4" style={{ background: 'var(--primary-soft)', border: '1px solid var(--ring)' }}>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--primary)' }}>
                               <DollarSign size={11} />Receita {isOnDemand && <span className="text-[9px] font-normal ml-1 opacity-70">(On Demand — horas × R$/h)</span>}
                             </p>
                             <div className="grid grid-cols-3 gap-3">
@@ -2724,17 +3478,17 @@ export default function GestaoProjetosPage() {
                                 { label: 'Aportes',        value: fmtBRL(cc.aportes_total) },
                                 { label: 'Receita Total',  value: fmtBRL(cc.receita_total), highlight: true },
                               ].map(c => (
-                                <div key={c.label} className="rounded-lg p-2.5" style={{ background: 'var(--brand-bg)', border: `1px solid ${c.highlight ? 'rgba(0,245,255,0.35)' : 'var(--brand-border)'}` }}>
-                                  <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>{c.label}</p>
-                                  <p className="text-sm font-bold tabular-nums" style={{ color: c.highlight ? '#00F5FF' : 'var(--brand-text)' }}>{c.value}</p>
+                                <div key={c.label} className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: `1px solid ${c.highlight ? 'var(--ring)' : 'var(--border)'}` }}>
+                                  <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>{c.label}</p>
+                                  <p className="text-sm font-bold tabular-nums" style={{ color: c.highlight ? 'var(--primary)' : 'var(--text)' }}>{c.value}</p>
                                 </div>
                               ))}
                             </div>
                           </div>
 
                           {/* Bloco 2 — CUSTO */}
-                          <div className="rounded-xl p-4" style={{ background: 'rgba(245,158,11,0.04)', border: '1px solid rgba(245,158,11,0.18)' }}>
-                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: '#f59e0b' }}>
+                          <div className="rounded-xl p-4" style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning-border)' }}>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--warning-border)' }}>
                               <TrendingUp size={11} />Custo
                             </p>
                             <div className="grid grid-cols-3 gap-3">
@@ -2743,29 +3497,29 @@ export default function GestaoProjetosPage() {
                                 { label: 'Custo Operacional', value: fmtBRL(cc.custo_operacional) },
                                 { label: 'Custo Total',        value: fmtBRL(cc.custo_total), highlight: true },
                               ].map(c => (
-                                <div key={c.label} className="rounded-lg p-2.5" style={{ background: 'var(--brand-bg)', border: `1px solid ${c.highlight ? 'rgba(245,158,11,0.35)' : 'var(--brand-border)'}` }}>
-                                  <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>{c.label}</p>
-                                  <p className="text-sm font-bold tabular-nums" style={{ color: c.highlight ? '#f59e0b' : 'var(--brand-text)' }}>{c.value}</p>
+                                <div key={c.label} className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: `1px solid ${c.highlight ? 'var(--warning-border)' : 'var(--border)'}` }}>
+                                  <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>{c.label}</p>
+                                  <p className="text-sm font-bold tabular-nums" style={{ color: c.highlight ? 'var(--warning-border)' : 'var(--text)' }}>{c.value}</p>
                                 </div>
                               ))}
                             </div>
                           </div>
 
                           {/* Bloco 3 — RESULTADO */}
-                          <div className="rounded-xl p-4" style={{ background: isPositive ? 'rgba(34,197,94,0.04)' : 'rgba(239,68,68,0.04)', border: `1px solid ${isPositive ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)'}` }}>
+                          <div className="rounded-xl p-4" style={{ background: isPositive ? 'var(--success-bg)' : 'var(--danger-bg)', border: `1px solid ${isPositive ? 'var(--success-border)' : 'var(--danger-border)'}` }}>
                             <p className="text-[10px] font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5" style={{ color: marginColor }}>
                               <BarChart2 size={11} />Resultado
                             </p>
-                            <p className="text-[10px] tabular-nums mb-3" style={{ color: 'var(--brand-subtle)' }}>
+                            <p className="text-[10px] tabular-nums mb-3" style={{ color: 'var(--text-light)' }}>
                               {fmtBRL(cc.receita_total)} <span className="opacity-50">−</span> {fmtBRL(cc.custo_total)} <span className="opacity-50">=</span> <span style={{ color: marginColor }}>{fmtBRL(cc.margin)}</span>
                             </p>
                             <div className="grid grid-cols-2 gap-4">
-                              <div className="rounded-lg p-3.5" style={{ background: 'var(--brand-bg)', border: `1px solid ${isPositive ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
-                                <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>Margem R$</p>
+                              <div className="rounded-lg p-3.5" style={{ background: 'var(--bg)', border: `1px solid ${isPositive ? 'var(--success-border)' : 'var(--danger-border)'}` }}>
+                                <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>Margem R$</p>
                                 <p className="text-xl font-bold tabular-nums" style={{ color: marginColor }}>{fmtBRL(cc.margin)}</p>
                               </div>
-                              <div className="rounded-lg p-3.5" style={{ background: 'var(--brand-bg)', border: `1px solid ${isPositive ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
-                                <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>Margem %</p>
+                              <div className="rounded-lg p-3.5" style={{ background: 'var(--bg)', border: `1px solid ${isPositive ? 'var(--success-border)' : 'var(--danger-border)'}` }}>
+                                <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>Margem %</p>
                                 <p className="text-xl font-bold tabular-nums" style={{ color: marginColor }}>{cc.margin_percentage.toFixed(1)}%</p>
                               </div>
                             </div>
@@ -2773,88 +3527,88 @@ export default function GestaoProjetosPage() {
 
                           {/* Bloco 4 — COORDENADOR (condicional) */}
                           {cc.coordinator_percentage > 0 && (
-                            <div className="rounded-xl p-4" style={{ background: 'rgba(167,139,250,0.04)', border: '1px solid rgba(167,139,250,0.18)' }}>
-                              <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: '#a78bfa' }}>
+                            <div className="rounded-xl p-4" style={{ background: 'var(--surface-hover)', border: '1px solid var(--brand-purple)' }}>
+                              <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--brand-purple)' }}>
                                 <UserCheck size={11} />Coordenador
                               </p>
                               <div className="grid grid-cols-2 gap-3">
-                                <div className="rounded-lg p-2.5" style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)' }}>
-                                  <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>% da Margem</p>
-                                  <p className="text-sm font-bold tabular-nums" style={{ color: '#a78bfa' }}>{cc.coordinator_percentage.toFixed(1)}%</p>
+                                <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                                  <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>% da Margem</p>
+                                  <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-purple)' }}>{cc.coordinator_percentage.toFixed(1)}%</p>
                                 </div>
-                                <div className="rounded-lg p-2.5" style={{ background: 'var(--brand-bg)', border: '1px solid rgba(167,139,250,0.35)' }}>
-                                  <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand-subtle)' }}>Valor a Receber</p>
-                                  <p className="text-sm font-bold tabular-nums" style={{ color: '#a78bfa' }}>{fmtBRL(cc.valor_coordenador)}</p>
+                                <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--brand-purple)' }}>
+                                  <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>Valor a Receber</p>
+                                  <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--brand-purple)' }}>{fmtBRL(cc.valor_coordenador)}</p>
                                 </div>
                               </div>
                             </div>
                           )}
 
                           {/* Bloco 5 — HORAS */}
-                          <div className="rounded-xl p-4" style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)' }}>
-                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--brand-subtle)' }}>Horas</p>
+                          <div className="rounded-xl p-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-light)' }}>Horas</p>
                             <div className="grid grid-cols-5 gap-2 mb-3">
                               {[
-                                { label: 'Iniciais',    value: `${hoursIniciais.toFixed(1)}h`,          color: 'var(--brand-text)' },
-                                { label: 'Apontadas',   value: `${hs.total_logged_hours.toFixed(1)}h`,  color: 'var(--brand-text)' },
-                                { label: 'Consumido',   value: `${horasConsumidas.toFixed(1)}h`,        color: 'var(--brand-text)' },
+                                { label: 'Iniciais',    value: `${hoursIniciais.toFixed(1)}h`,          color: 'var(--text)' },
+                                { label: 'Apontadas',   value: `${hs.total_logged_hours.toFixed(1)}h`,  color: 'var(--text)' },
+                                { label: 'Consumido',   value: `${horasConsumidas.toFixed(1)}h`,        color: 'var(--text)' },
                                 { label: '% Uso',       value: `${pctUso.toFixed(1)}%`,                 color: hoursBarColor },
-                                { label: 'Restantes',   value: `${horasRestantes.toFixed(1)}h`,         color: horasRestantes < 10 ? '#ef4444' : 'var(--brand-text)' },
+                                { label: 'Restantes',   value: `${horasRestantes.toFixed(1)}h`,         color: horasRestantes < 10 ? 'var(--danger-border)' : 'var(--text)' },
                               ].map(c => (
                                 <div key={c.label}>
-                                  <p className="text-[9px]" style={{ color: 'var(--brand-subtle)' }}>{c.label}</p>
+                                  <p className="text-[9px]" style={{ color: 'var(--text-light)' }}>{c.label}</p>
                                   <p className="font-bold tabular-nums mt-0.5 text-xs" style={{ color: c.color }}>{c.value}</p>
                                 </div>
                               ))}
                             </div>
-                            <div className="w-full rounded-full h-1.5 mb-1" style={{ background: 'var(--brand-border)' }}>
+                            <div className="w-full rounded-full h-1.5 mb-1" style={{ background: 'var(--border)' }}>
                               <div className="h-1.5 rounded-full transition-all" style={{ width: `${pctUso}%`, background: hoursBarColor }} />
                             </div>
-                            <p className="text-[10px] tabular-nums" style={{ color: 'var(--brand-subtle)' }}>{pctUso.toFixed(1)}% das horas utilizadas</p>
+                            <p className="text-[10px] tabular-nums" style={{ color: 'var(--text-light)' }}>{pctUso.toFixed(1)}% das horas utilizadas</p>
                           </div>
 
                           {/* Bloco 6 — HISTÓRICO */}
                           {showHistorico && (
-                            <div className="rounded-xl px-4 py-3 flex flex-wrap gap-x-6 gap-y-1" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--brand-border)' }}>
-                              <p className="text-[9px] font-semibold uppercase tracking-wider w-full mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Saldo do sistema anterior</p>
-                              <span className="text-xs tabular-nums" style={{ color: 'var(--brand-subtle)' }}>HS consumidas iniciais: <strong>{hoursIniciais.toFixed(1)}h</strong></span>
-                              <span className="text-xs tabular-nums" style={{ color: 'var(--brand-subtle)' }}>Custo inicial: <strong>{fmtBRL(pi.initial_cost ?? 0)}</strong></span>
+                            <div className="rounded-xl px-4 py-3 flex flex-wrap gap-x-6 gap-y-1" style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                              <p className="text-[9px] font-semibold uppercase tracking-wider w-full mb-0.5" style={{ color: 'var(--text-light)' }}>Saldo do sistema anterior</p>
+                              <span className="text-xs tabular-nums" style={{ color: 'var(--text-light)' }}>HS consumidas iniciais: <strong>{hoursIniciais.toFixed(1)}h</strong></span>
+                              <span className="text-xs tabular-nums" style={{ color: 'var(--text-light)' }}>Custo inicial: <strong>{fmtBRL(pi.initial_cost ?? 0)}</strong></span>
                             </div>
                           )}
 
                           {/* Tabela de custo por consultor */}
                           {cb.length > 0 && (
-                            <div className="rounded-xl overflow-clip" style={{ border: '1px solid var(--brand-border)' }}>
-                              <div className="px-4 py-3" style={{ background: 'var(--brand-surface)' }}>
-                                <p className="text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'var(--brand-subtle)' }}>
+                            <div className="rounded-xl overflow-clip" style={{ border: '1px solid var(--border)' }}>
+                              <div className="px-4 py-3" style={{ background: 'var(--surface)' }}>
+                                <p className="text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'var(--text-light)' }}>
                                   <UserCheck size={11} />Custo por Consultor
                                 </p>
                               </div>
                               <table className="w-full text-xs">
-                                <thead className="sticky top-0 z-10" style={{ background: 'var(--brand-bg)' }}>
-                                  <tr style={{ background: 'var(--brand-bg)', borderBottom: '1px solid var(--brand-border)' }}>
+                                <thead className="sticky top-0 z-10" style={{ background: 'var(--bg)' }}>
+                                  <tr style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
                                     {['Consultor','Hs Total','Aprovadas','Pendentes','Taxa/h','Custo'].map(h => (
-                                      <th key={h} className="px-3 py-2 text-left font-semibold text-[10px] uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{h}</th>
+                                      <th key={h} className="px-3 py-2 text-left font-semibold text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-light)' }}>{h}</th>
                                     ))}
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {cb.map((c, i) => (
-                                    <tr key={i} style={{ borderBottom: '1px solid var(--brand-border)' }}>
-                                      <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--brand-text)' }}>{c.consultant_name}</td>
-                                      <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--brand-text)' }}>{c.total_hours.toFixed(1)}h</td>
-                                      <td className="px-3 py-2.5 tabular-nums" style={{ color: '#22c55e' }}>{c.approved_hours.toFixed(1)}h</td>
-                                      <td className="px-3 py-2.5 tabular-nums" style={{ color: '#f59e0b' }}>{c.pending_hours.toFixed(1)}h</td>
-                                      <td className="px-3 py-2.5 tabular-nums text-[11px]" style={{ color: 'var(--brand-muted)' }}>
+                                    <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                                      <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--text)' }}>{c.consultant_name}</td>
+                                      <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--text)' }}>{c.total_hours.toFixed(1)}h</td>
+                                      <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--success-border)' }}>{c.approved_hours.toFixed(1)}h</td>
+                                      <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--warning-border)' }}>{c.pending_hours.toFixed(1)}h</td>
+                                      <td className="px-3 py-2.5 tabular-nums text-[11px]" style={{ color: 'var(--text-muted)' }}>
                                         {c.consultant_hourly_rate != null ? fmtBRL(c.consultant_hourly_rate) : '—'}
                                         {c.consultant_rate_type === 'monthly' && <span className="ml-1 opacity-60">÷180</span>}
                                       </td>
-                                      <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--brand-text)' }}>{fmtBRL(c.cost)}</td>
+                                      <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text)' }}>{fmtBRL(c.cost)}</td>
                                     </tr>
                                   ))}
-                                  <tr style={{ background: 'rgba(0,245,255,0.04)', borderTop: '1px solid var(--brand-border)' }}>
-                                    <td className="px-3 py-2.5 font-bold text-[11px] uppercase" style={{ color: 'var(--brand-subtle)' }} colSpan={5}>Total Operacional</td>
-                                    <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: '#00F5FF' }}>{fmtBRL(cc.custo_operacional)}</td>
+                                  <tr style={{ background: 'var(--primary-soft)', borderTop: '1px solid var(--border)' }}>
+                                    <td className="px-3 py-2.5 font-bold text-[11px] uppercase" style={{ color: 'var(--text-light)' }} colSpan={5}>Total Operacional</td>
+                                    <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: 'var(--primary)' }}>{fmtBRL(cc.custo_operacional)}</td>
                                   </tr>
                                 </tbody>
                               </table>
@@ -2866,16 +3620,16 @@ export default function GestaoProjetosPage() {
                   </div>
                 )}
                 {viewProjectTab === 'overview' && (
-                <div className="grid grid-cols-2 gap-0 divide-x" style={{ borderColor: 'var(--brand-border)' }}>
+                <div className="grid grid-cols-2 gap-0 divide-x" style={{ borderColor: 'var(--border)' }}>
 
                   {/* Coluna esquerda */}
                   <div className="p-5 space-y-5">
 
                     {/* Identificação */}
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Identificação</p>
-                      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--brand-border)' }}>
-                        <div className="divide-y" style={{ borderColor: 'var(--brand-border)' }}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>Identificação</p>
+                      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                        <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
                           <Row label="Código" value={<span className="font-mono">{p.code}</span>} />
                           <Row label="Cliente" value={p.customer?.name} />
                           <Row label="Tipo de Serviço" value={p.service_type?.name} />
@@ -2887,26 +3641,35 @@ export default function GestaoProjetosPage() {
                       </div>
                     </div>
 
+                    {/* Contatos do cliente */}
+                    <CustomerContactsSection customerId={p.customer?.id ?? p.customer_id} customerName={p.customer?.name} />
+
                     {/* Descrição */}
                     {p.description && (
                       <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Descrição</p>
-                        <div className="rounded-xl p-3 text-xs leading-relaxed" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--brand-border)', color: 'var(--brand-muted)' }}>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>Descrição</p>
+                        <div className="rounded-xl p-3 text-xs leading-relaxed" style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
                           {p.description}
                         </div>
                       </div>
                     )}
 
-                    {/* Financeiro */}
+                    {/* Financeiro — oculto p/ coordenador (acesso restrito a valores R$) */}
+                    {user?.type !== 'coordenador' && (
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Financeiro</p>
-                      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--brand-border)' }}>
-                        <div className="divide-y" style={{ borderColor: 'var(--brand-border)' }}>
-                          <Row label="Valor do Projeto" value={<span style={{ color: '#00F5FF' }}>{fmtBRL(p.project_value)}</span>} />
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>Financeiro</p>
+                      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                        <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                          <Row label="Valor do Projeto" value={<span style={{ color: 'var(--primary)' }}>{fmtBRL(p.project_value)}</span>} />
                           {p.total_project_value != null && p.total_project_value !== p.project_value && (
-                            <Row label="Valor Total (c/ aportes)" value={<span style={{ color: '#00F5FF' }}>{fmtBRL(p.total_project_value)}</span>} />
+                            <Row label="Valor Total (c/ aportes)" value={<span style={{ color: 'var(--primary)' }}>{fmtBRL(p.total_project_value)}</span>} />
                           )}
-                          <Row label="Valor da Hora" value={fmtBRL(p.hourly_rate)} />
+                          <Row label="Valor da Hora" value={
+                            <span className="inline-flex items-center gap-2">
+                              {fmtBRL(p.hourly_rate)}
+                              <button type="button" onClick={() => openRateHistory(p.id)} className="text-[11px] font-medium hover:underline" style={{ color: 'var(--primary)' }}>Histórico de valores</button>
+                            </span>
+                          } />
                           {p.weighted_hourly_rate != null && <Row label="Taxa Média Ponderada" value={fmtBRL(p.weighted_hourly_rate)} />}
                           <Row label="Hora Adicional" value={fmtBRL(p.additional_hourly_rate)} />
                           <Row label="Custo Inicial" value={fmtBRL(p.initial_cost)} />
@@ -2916,39 +3679,73 @@ export default function GestaoProjetosPage() {
                         </div>
                       </div>
                     </div>
+                    )}
                   </div>
 
                   {/* Coluna direita */}
                   <div className="p-5 space-y-5">
 
-                    {/* Horas */}
+                    {/* Horas — swap p/ coordenação quando o usuário logado é coordenador do projeto */}
+                    {(() => {
+                      const vp = viewProject
+                      const operationalVendidas = ((vp?.vendidas_projeto_hours ?? p.sold_hours) ?? 0) + (vp?.vendidas_aporte_hours ?? 0)
+                      const isCoordView = isCoordinatorOf(p, user?.id)
+                      const cm = isCoordView ? coordinationMeta(p, operationalVendidas) : null
+                      const cardVendidas = isCoordView ? cm!.bank : operationalVendidas
+                      const cardConsumed = isCoordView ? cm!.consumed : (vp?.consumed_hours ?? p.consumed_hours ?? consumed)
+                      const cardTotal    = cardVendidas
+                      const cardSaldo    = isCoordView ? cm!.saldo : (vp?.general_hours_balance ?? (cardVendidas - cardConsumed))
+                      const cardPct      = cardTotal > 0 ? (cardConsumed / cardTotal) * 100 : 0
+                      const barColor     = isCoordView ? cm!.color : hs.bar
+                      const textColor    = isCoordView ? cm!.color : hs.text
+                      const headerLabel  = isCoordView ? 'Horas de Coordenação' : 'Horas'
+                      return (
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Horas</p>
-                      {/* Barra principal */}
-                      <div className="rounded-xl p-4 mb-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--brand-border)' }}>
-                        <div className="grid grid-cols-3 gap-3 mb-4">
-                          {[
-                            { label: 'Vendidas',   value: fmt(p.sold_hours) + 'h',              color: 'var(--brand-text)' },
-                            { label: 'Consumidas', value: fmt(consumed, 1) + 'h',               color: 'var(--brand-muted)' },
-                            { label: 'Saldo',      value: fmt(p.general_hours_balance, 1) + 'h', color: (p.general_hours_balance ?? 0) < 0 ? '#ef4444' : '#22c55e' },
-                          ].map(it => (
-                            <div key={it.label} className="text-center">
-                              <p className="text-[10px] mb-1" style={{ color: 'var(--brand-subtle)' }}>{it.label}</p>
-                              <p className="text-base font-bold tabular-nums" style={{ color: it.color }}>{it.value}</p>
-                            </div>
-                          ))}
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>{headerLabel}</p>
+                      <div className="rounded-xl p-4 mb-3" style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                        <div className="grid grid-cols-3 gap-3 mb-4 items-start">
+                          {/* Vendidas */}
+                          <div className="text-center flex flex-col items-center leading-tight">
+                            <p className="text-[10px] mb-1" style={{ color: 'var(--text-light)' }}>Vendidas</p>
+                            <p className="text-base font-bold tabular-nums" style={{ color: 'var(--text)' }}>{fmt(cardVendidas, 1) + 'h'}</p>
+                            {!isCoordView && (vp?.vendidas_aporte_hours ?? 0) > 0 && (
+                              <>
+                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Projeto {fmt(vp?.vendidas_projeto_hours ?? 0, 1)}</span>
+                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Aporte {fmt(vp?.vendidas_aporte_hours ?? 0, 1)}</span>
+                              </>
+                            )}
+                            {isCoordView && !cm!.explicit && (
+                              <span style={{ fontSize: 10, color: 'var(--text-light)' }}>(fallback p/ vendidas)</span>
+                            )}
+                          </div>
+                          {/* Consumidas */}
+                          <div className="text-center flex flex-col items-center leading-tight">
+                            <p className="text-[10px] mb-1" style={{ color: 'var(--text-light)' }}>Consumidas</p>
+                            <p className="text-base font-bold tabular-nums" style={{ color: 'var(--text-muted)' }}>{fmt(cardConsumed, 1) + 'h'}</p>
+                            {!isCoordView && (vp?.children_consumed_hours ?? 0) > 0 && (
+                              <>
+                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Pai {fmt(vp?.own_consumed_hours ?? 0, 1)}</span>
+                                <span style={{ fontSize: 10, color: 'var(--text-light)' }}>Filhos {fmt(vp?.children_consumed_hours ?? 0, 1)}</span>
+                              </>
+                            )}
+                          </div>
+                          {/* Saldo */}
+                          <div className="text-center flex flex-col items-center leading-tight">
+                            <p className="text-[10px] mb-1" style={{ color: 'var(--text-light)' }}>Saldo</p>
+                            <p className="text-base font-bold tabular-nums" style={{ color: cardSaldo < 0 ? 'var(--danger-border)' : 'var(--success-border)' }}>{fmt(cardSaldo, 1) + 'h'}</p>
+                          </div>
                         </div>
-                        <div className="w-full h-2 rounded-full overflow-hidden mb-1" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                          <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, background: hs.bar }} />
+                        <div className="w-full h-2 rounded-full overflow-hidden mb-1" style={{ background: 'var(--surface-hover)' }}>
+                          <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(cardPct, 100)}%`, background: barColor }} />
                         </div>
-                        <div className="flex justify-between text-[10px]" style={{ color: hs.text }}>
-                          <span>{totalAvail > 0 ? `${Math.round(pct)}% consumido` : 'Sem horas'}</span>
-                          <span>{fmt(totalAvail, 1)}h disponíveis</span>
+                        <div className="flex justify-between text-[10px]" style={{ color: textColor }}>
+                          <span>{cardTotal > 0 ? `${Math.round(cardPct)}% consumido` : 'Sem horas'}</span>
+                          <span>{(isCoordView && cm!.alertText) || `${fmt(cardSaldo, 1)}h disponíveis`}</span>
                         </div>
                       </div>
                       {/* Detalhes de horas */}
-                      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--brand-border)' }}>
-                        <div className="divide-y" style={{ borderColor: 'var(--brand-border)' }}>
+                      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                        <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
                           <Row label="Horas Contratadas" value={p.sold_hours != null ? `${p.sold_hours}h` : null} />
                           {p.hour_contribution != null && p.hour_contribution > 0 && <Row label="Aporte Inicial" value={`${p.hour_contribution}h`} />}
                           {viewProjectFull?.full_contributions_hours != null && viewProjectFull.full_contributions_hours > 0 && <Row label="Total Aportes" value={`${fmt(viewProjectFull.full_contributions_hours, 1)}h`} />}
@@ -2960,40 +3757,105 @@ export default function GestaoProjetosPage() {
                         </div>
                       </div>
                     </div>
+                      )
+                    })()}
+
+                    {/* Horas mensais incrementadas (acúmulo do banco mensal) — só BH Mensal */}
+                    {((p.contract_type_display ?? p.contract_type?.name ?? '').toLowerCase().includes('mensal')) && (
+                      <MonthlyAccrualTable
+                        startDate={(p as any).start_date ?? null}
+                        hoursPerMonth={p.sold_hours ?? 0}
+                        accumulated={(p as any).accumulated_sold_hours ?? null}
+                        endDate={(p as any).encerramento_date ?? null}
+                      />
+                    )}
+
+                    {/* Horas de Coordenação — card de governança p/ admin (quando há banco explícito).
+                        Pro coordenador o TOP Horas já faz o swap, então omite aqui. */}
+                    {!((p.contract_type_display ?? p.contract_type?.name ?? '').toLowerCase().includes('on demand')) && (() => {
+                      const cm = coordinationMeta(p, totalAvail)
+                      if (!cm.explicit) return null
+                      if (isCoordinatorOf(p, user?.id)) return null
+                      return (
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>Horas de Coordenação</p>
+                          <div className="rounded-xl p-4" style={{ border: `1px solid ${cm.color}55`, background: 'var(--surface)' }}>
+                            <div className="grid grid-cols-3 gap-2 mb-3">
+                              <div><p className="text-[10px]" style={{ color: 'var(--text-light)' }}>Vendidas</p><p className="text-sm font-bold" style={{ color: 'var(--text)' }}>{fmt(cm.bank, 1)}h</p></div>
+                              <div><p className="text-[10px]" style={{ color: 'var(--text-light)' }}>Consumidas</p><p className="text-sm font-bold" style={{ color: 'var(--text)' }}>{fmt(cm.consumed, 1)}h</p></div>
+                              <div><p className="text-[10px]" style={{ color: 'var(--text-light)' }}>Saldo</p><p className="text-sm font-bold" style={{ color: cm.saldo < 0 ? 'var(--danger-border)' : 'var(--text)' }}>{fmt(cm.saldo, 1)}h</p></div>
+                            </div>
+                            <div className="w-full rounded-full h-1.5 mb-1" style={{ background: 'var(--border)' }}>
+                              <div className="h-1.5 rounded-full transition-all" style={{ width: `${Math.min(cm.pct, 100)}%`, background: cm.color }} />
+                            </div>
+                            <div className="flex justify-between text-[10px]" style={{ color: cm.color }}>
+                              <span>{Math.round(cm.pct)}% consumido</span>
+                              <span>{cm.alertText || `${fmt(cm.saldo, 1)}h disponíveis`}</span>
+                            </div>
+                            {!cm.explicit && <p className="text-[10px] mt-2" style={{ color: 'var(--text-light)' }}>Sem banco próprio — usando as horas vendidas do projeto.</p>}
+                          </div>
+                        </div>
+                      )
+                    })()}
 
                     {/* Equipe */}
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Equipe</p>
-                      <div className="rounded-xl p-3 space-y-3" style={{ border: '1px solid var(--brand-border)' }}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>Equipe</p>
+                      <div className="rounded-xl p-3 space-y-3" style={{ border: '1px solid var(--border)' }}>
                         {(p.coordinators?.length ?? 0) > 0 && (
                           <div>
-                            <p className="text-[10px] mb-1.5 font-medium" style={{ color: 'var(--brand-subtle)' }}>Coordenadores</p>
+                            <p className="text-[10px] mb-1.5 font-medium" style={{ color: 'var(--text-light)' }}>Coordenadores</p>
                             <div className="flex flex-wrap gap-1.5">
-                              {p.coordinators!.map(u => <span key={u.id} className="text-xs px-2.5 py-1 rounded-lg font-medium" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{u.name}</span>)}
+                              {p.coordinators!.map(u => <span key={u.id} className="text-xs px-2.5 py-1 rounded-lg font-medium" style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}>{u.name}</span>)}
                             </div>
                           </div>
                         )}
                         {(p.consultants?.length ?? 0) > 0 && (
                           <div>
-                            <p className="text-[10px] mb-1.5 font-medium" style={{ color: 'var(--brand-subtle)' }}>Consultores</p>
+                            <p className="text-[10px] mb-1.5 font-medium" style={{ color: 'var(--text-light)' }}>Consultores</p>
                             <div className="flex flex-wrap gap-1.5">
-                              {p.consultants!.map(u => <span key={u.id} className="text-xs px-2.5 py-1 rounded-lg font-medium" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)' }}>{u.name}</span>)}
+                              {p.consultants!.map(u => <span key={u.id} className="text-xs px-2.5 py-1 rounded-lg font-medium" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>{u.name}</span>)}
                             </div>
                           </div>
                         )}
                         {(viewProjectFull?.approvers?.length ?? 0) > 0 && (
                           <div>
-                            <p className="text-[10px] mb-1.5 font-medium" style={{ color: 'var(--brand-subtle)' }}>Aprovadores</p>
+                            <p className="text-[10px] mb-1.5 font-medium" style={{ color: 'var(--text-light)' }}>Aprovadores</p>
                             <div className="flex flex-wrap gap-1.5">
-                              {viewProjectFull!.approvers!.map(u => <span key={u.id} className="text-xs px-2.5 py-1 rounded-lg font-medium" style={{ background: 'rgba(139,92,246,0.10)', color: '#8B5CF6' }}>{u.name}</span>)}
+                              {viewProjectFull!.approvers!.map(u => <span key={u.id} className="text-xs px-2.5 py-1 rounded-lg font-medium" style={{ background: 'var(--surface-hover)', color: 'var(--brand-purple)' }}>{u.name}</span>)}
                             </div>
                           </div>
                         )}
                         {(p.coordinators?.length ?? 0) === 0 && (p.consultants?.length ?? 0) === 0 && (
-                          <p className="text-xs text-center py-2" style={{ color: 'var(--brand-subtle)' }}>Sem equipe cadastrada</p>
+                          <p className="text-xs text-center py-2" style={{ color: 'var(--text-light)' }}>Sem equipe cadastrada</p>
                         )}
                       </div>
                     </div>
+
+                    {/* Anexos — oculto p/ coordenador */}
+                    {user?.type !== 'coordenador' && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Anexos</p>
+                      {viewAttachments.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {viewAttachments.map(att => (
+                            <div key={att.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--brand-border)' }}>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <FileText size={13} className="shrink-0" style={{ color: 'var(--brand-subtle)' }} />
+                                <div className="min-w-0">
+                                  <p className="text-xs truncate" style={{ color: 'var(--brand-text)' }}>{att.original_name}</p>
+                                  <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{att.type ?? 'anexo'}{att.source === 'contract' ? ' · do contrato' : ''}</p>
+                                </div>
+                              </div>
+                              <button type="button" onClick={() => downloadViewAtt(p.id, att)} title="Baixar" className="p-1 rounded transition-colors hover:bg-white/10" style={{ color: 'var(--brand-subtle)' }}><Download size={13} /></button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhum anexo</p>
+                      )}
+                    </div>
+                    )}
 
                   </div>
                 </div>
@@ -3001,28 +3863,81 @@ export default function GestaoProjetosPage() {
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-between px-6 py-3 shrink-0" style={{ borderTop: '1px solid var(--brand-border)' }}>
+              <div className="flex items-center justify-between px-6 py-3 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
                 <div className="flex gap-2">
-                  <button onClick={() => { handleMenuAction('aportes', base) }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}><TrendingUp size={11} /> Aportes</button>
-                  <button onClick={() => { handleMenuAction('team', base) }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}><Users size={11} /> Equipe</button>
+                  <button onClick={() => { handleMenuAction('aportes', base) }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}><TrendingUp size={11} /> Aportes</button>
+                  <button onClick={() => { handleMenuAction('team', base) }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}><Users size={11} /> Equipe</button>
                 </div>
-                <button onClick={() => { setViewProject(null); setViewProjectFull(null) }} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Fechar</button>
+                <button onClick={() => { setViewProject(null); setViewProjectFull(null) }} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Fechar</button>
               </div>
             </div>
           </div>
         )
       })()}
 
+      {/* ── Histórico de valores-hora (somente leitura) ── */}
+      {rateHistoryOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="w-full max-w-lg rounded-2xl p-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Histórico de valores</p>
+              <button onClick={() => setRateHistoryOpen(false)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] transition-colors"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
+            </div>
+            {rateHistoryLoading ? (
+              <p className="text-sm py-6 text-center animate-pulse" style={{ color: 'var(--text-light)' }}>Carregando...</p>
+            ) : rateHistory.length === 0 ? (
+              <p className="text-sm py-6 text-center" style={{ color: 'var(--text-light)' }}>Nenhuma alteração registrada.</p>
+            ) : (
+              <div className="max-h-[60vh] overflow-y-auto rounded-xl" style={{ border: '1px solid var(--border)' }}>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr style={{ background: 'var(--surface-hover)', color: 'var(--text-light)' }}>
+                      <th className="text-left font-semibold px-3 py-2">Vigência</th>
+                      <th className="text-left font-semibold px-3 py-2">Valor</th>
+                      <th className="text-left font-semibold px-3 py-2">Por</th>
+                      <th className="text-left font-semibold px-3 py-2">Em</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rateHistory.filter((h: any, i: number, a: any[]) => a.findIndex((x: any) => String(x.created_at ?? '').slice(0, 10) === String(h.created_at ?? '').slice(0, 10)) === i).map((h, i) => (
+                      <tr key={h.id ?? i} style={{ borderTop: '1px solid var(--border)', color: 'var(--text)' }}>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {h.effective_from
+                            ? (() => { const [y, m] = String(h.effective_from).slice(0, 7).split('-'); return `${m}/${y}` })()
+                            : <span title="vigência não informada (legado)" style={{ color: 'var(--text-light)' }}>—</span>}
+                        </td>
+                        <td className="px-3 py-2 tabular-nums whitespace-nowrap">
+                          {h.old_value != null ? formatBRL(Number(h.old_value)) : '—'}
+                          <span style={{ color: 'var(--text-light)' }}> → </span>
+                          {h.new_value != null ? formatBRL(Number(h.new_value)) : '—'}
+                        </td>
+                        <td className="px-3 py-2">{h.changed_by_user?.name ?? '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
+                          {h.created_at ? new Date(h.created_at).toLocaleDateString('pt-BR') : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex items-center justify-end mt-5">
+              <button onClick={() => setRateHistoryOpen(false)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal de Mensagens ── */}
       {messagesProject && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)' }}>
-          <div className="flex flex-col rounded-2xl w-full max-w-2xl max-h-[85vh]" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-            <div className="flex items-center justify-between px-5 py-3.5 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="flex flex-col rounded-2xl w-full max-w-2xl max-h-[85vh]" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between px-5 py-3.5 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Mensagens</p>
-                <p className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{messagesProject.name}</p>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-light)' }}>Mensagens</p>
+                <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>{messagesProject.name}</p>
               </div>
-              <button onClick={() => setMessagesProject(null)} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"><X size={16} style={{ color: 'var(--brand-muted)' }} /></button>
+              <button onClick={() => setMessagesProject(null)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] transition-colors"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
             </div>
             <div className="flex-1 overflow-hidden">
               <ProjectMessages projectId={messagesProject.id} userRole={user?.type ?? undefined} />
@@ -3053,21 +3968,21 @@ export default function GestaoProjetosPage() {
 
       {/* ── Modal de Exclusão de Projeto ── */}
       {deleteProject && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70">
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid rgba(239,68,68,0.4)' }}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/45">
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--danger-border)' }}>
             <div className="px-6 py-5 flex items-center gap-3">
               <Trash2 size={20} className="text-red-400 shrink-0" />
               <div>
                 <p className="font-semibold text-white">Excluir Projeto</p>
-                <p className="text-xs text-zinc-400 mt-0.5">{deleteProject.name} · {deleteProject.code}</p>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">{deleteProject.name} · {deleteProject.code}</p>
               </div>
             </div>
             <div className="px-6 pb-4">
-              <p className="text-sm text-zinc-300">Tem certeza? Esta ação não pode ser desfeita.</p>
+              <p className="text-sm text-[var(--text-muted)]">Tem certeza? Esta ação não pode ser desfeita.</p>
             </div>
-            <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+            <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: 'var(--border)' }}>
               <button onClick={() => setDeleteProject(null)} disabled={deleting}
-                className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-white transition-colors">
+                className="px-4 py-2 rounded-lg text-sm text-[var(--text-muted)] hover:text-white transition-colors">
                 Cancelar
               </button>
               <button disabled={deleting} onClick={async () => {
@@ -3082,7 +3997,7 @@ export default function GestaoProjetosPage() {
                 } finally { setDeleting(false) }
               }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
+                style={{ background: 'var(--danger-bg)', color: 'var(--danger-border)', border: '1px solid var(--danger-border)' }}>
                 <Trash2 size={14} /> {deleting ? 'Excluindo...' : 'Excluir'}
               </button>
             </div>
@@ -3092,26 +4007,26 @@ export default function GestaoProjetosPage() {
 
       {/* ── Modal: Desvincular Projeto Filho do Pai ── */}
       {detachModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70">
-          <div className="rounded-2xl w-full max-w-md overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/45">
+          <div className="rounded-2xl w-full max-w-md overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <div className="px-6 py-5 flex items-center gap-3">
-              <Layers size={20} style={{ color: 'var(--brand-primary)' }} className="shrink-0" />
+              <Layers size={20} style={{ color: 'var(--primary)' }} className="shrink-0" />
               <div>
                 <p className="font-semibold text-white">Desvincular projeto do pai</p>
-                <p className="text-xs text-zinc-400 mt-0.5">{detachModal.project.name} · {detachModal.project.code}</p>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">{detachModal.project.name} · {detachModal.project.code}</p>
               </div>
             </div>
             <div className="px-6 pb-4 space-y-3">
-              <ul className="text-xs text-zinc-400 list-disc list-inside space-y-1">
-                <li>O pai recupera as horas vendidas atuais do filho ({Number(detachModal.project.sold_hours ?? 0).toFixed(2)}h).</li>
-                <li>O filho fica independente, com horas vendidas igual ao consumido (apontamentos).</li>
-                <li>Ação irreversível.</li>
+              <ul className="text-xs text-[var(--text-muted)] list-disc list-inside space-y-1">
+                <li>O <b>sold_hours</b> do pai e do filho <b>não muda</b> — vínculo é apenas estrutural.</li>
+                <li>O consumo do filho <b>deixa de ser contabilizado</b> no consumed_hours do pai (saldo do pai aumenta).</li>
+                <li>O filho continua independente com o mesmo sold_hours que tinha.</li>
               </ul>
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">
                   Novo código <span className="text-red-400">*</span>
                   {detachModal.suggestedCode && (
-                    <span className="ml-2 text-zinc-500">
+                    <span className="ml-2 text-[var(--text-light)]">
                       (sugestão: <button type="button" onClick={() => setDetachModal(p => p ? { ...p, newCode: p.suggestedCode, codeError: '' } : p)} className="text-cyan-400 hover:text-cyan-300 font-mono">{detachModal.suggestedCode}</button>)
                     </span>
                   )}
@@ -3123,9 +4038,9 @@ export default function GestaoProjetosPage() {
                   placeholder="Ex: AAM004-25"
                   className="w-full px-3 py-2 rounded-lg text-sm font-mono outline-none"
                   style={{
-                    background: 'var(--brand-bg)',
-                    border: `1px solid ${detachModal.codeError ? '#EF4444' : 'var(--brand-border)'}`,
-                    color: 'var(--brand-text)',
+                    background: 'var(--bg)',
+                    border: `1px solid ${detachModal.codeError ? 'var(--danger-border)' : 'var(--border)'}`,
+                    color: 'var(--text)',
                   }}
                 />
                 {detachModal.codeError && (
@@ -3133,9 +4048,9 @@ export default function GestaoProjetosPage() {
                 )}
               </div>
             </div>
-            <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+            <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: 'var(--border)' }}>
               <button onClick={() => setDetachModal(null)} disabled={detaching}
-                className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-white transition-colors">
+                className="px-4 py-2 rounded-lg text-sm text-[var(--text-muted)] hover:text-white transition-colors">
                 Cancelar
               </button>
               <button disabled={detaching || !detachModal.newCode} onClick={async () => {
@@ -3161,7 +4076,7 @@ export default function GestaoProjetosPage() {
                 } finally { setDetaching(false) }
               }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                style={{ background: 'var(--brand-primary)', color: '#000' }}>
+                style={{ background: 'var(--primary)', color: '#000' }}>
                 <Layers size={14} /> {detaching ? 'Desvinculando...' : 'Desvincular'}
               </button>
             </div>
@@ -3171,38 +4086,39 @@ export default function GestaoProjetosPage() {
 
       {/* ── Modal: Vincular Projeto Independente como Filho ── */}
       {attachModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70">
-          <div className="rounded-2xl w-full max-w-md overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/45">
+          <div className="rounded-2xl w-full max-w-md overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <div className="px-6 py-5 flex items-center gap-3">
-              <Layers size={20} style={{ color: 'var(--brand-primary)' }} className="shrink-0" />
+              <Layers size={20} style={{ color: 'var(--primary)' }} className="shrink-0" />
               <div>
                 <p className="font-semibold text-white">Vincular como filho</p>
-                <p className="text-xs text-zinc-400 mt-0.5">{attachModal.project.name} · {attachModal.project.code}</p>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">{attachModal.project.name} · {attachModal.project.code}</p>
               </div>
             </div>
             <div className="px-6 pb-4 space-y-3">
-              <ul className="text-xs text-zinc-400 list-disc list-inside space-y-1">
-                <li><b>Fechado</b>: o pai entrega o sold_hours total do filho.</li>
-                <li><b>Banco de horas / outros</b>: o pai entrega só as horas consumidas.</li>
-                <li>O filho mantém seu próprio orçamento como sub-projeto do pai.</li>
+              <ul className="text-xs text-[var(--text-muted)] list-disc list-inside space-y-1">
+                <li>O <b>sold_hours</b> do pai e do filho <b>não muda</b> — vínculo é apenas estrutural.</li>
+                <li><b>Fechado</b>: pai consome (no saldo) o <b>sold_hours + aportes</b> do filho no ato.</li>
+                <li><b>BH Fixo</b>: pai consome (no saldo) o efetivamente apontado pelo filho.</li>
+                <li>BH Mensal e On Demand <b>não podem</b> ser filhos.</li>
               </ul>
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">
                   Projeto pai <span className="text-red-400">*</span>
                 </label>
                 {attachModal.loading ? (
-                  <div className="text-xs text-zinc-500">Carregando projetos disponíveis...</div>
+                  <div className="text-xs text-[var(--text-light)]">Carregando projetos disponíveis...</div>
                 ) : attachModal.parents.length === 0 ? (
-                  <div className="text-xs text-zinc-500">Nenhum projeto pai disponível pra este cliente.</div>
+                  <div className="text-xs text-[var(--text-light)]">Nenhum projeto pai disponível pra este cliente.</div>
                 ) : (
                   <select
                     value={attachModal.parentId}
                     onChange={e => setAttachModal(p => p ? { ...p, parentId: e.target.value } : p)}
                     className="w-full px-3 py-2 rounded-lg text-sm outline-none"
                     style={{
-                      background: 'var(--brand-bg)',
-                      border: '1px solid var(--brand-border)',
-                      color: 'var(--brand-text)',
+                      background: 'var(--bg)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text)',
                     }}
                   >
                     <option value="">Selecione um projeto pai</option>
@@ -3213,9 +4129,9 @@ export default function GestaoProjetosPage() {
                 )}
               </div>
             </div>
-            <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+            <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: 'var(--border)' }}>
               <button onClick={() => setAttachModal(null)} disabled={attaching}
-                className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-white transition-colors">
+                className="px-4 py-2 rounded-lg text-sm text-[var(--text-muted)] hover:text-white transition-colors">
                 Cancelar
               </button>
               <button disabled={attaching || !attachModal.parentId} onClick={async () => {
@@ -3231,7 +4147,7 @@ export default function GestaoProjetosPage() {
                 } finally { setAttaching(false) }
               }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                style={{ background: 'var(--brand-primary)', color: '#000' }}>
+                style={{ background: 'var(--primary)', color: '#000' }}>
                 <Layers size={14} /> {attaching ? 'Vinculando...' : 'Vincular'}
               </button>
             </div>
@@ -3241,14 +4157,14 @@ export default function GestaoProjetosPage() {
 
       {/* ── Modal A: Alocar Equipe em Massa ── */}
       {bulkAllocOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)' }}>
-          <div className="flex flex-col rounded-2xl w-full max-w-md max-h-[80vh]" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="flex flex-col rounded-2xl w-full max-w-md max-h-[80vh]" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>Alocação em Massa</p>
-                <h2 className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>{selectedProjectIds.size} projeto(s) selecionado(s)</h2>
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-light)' }}>Alocação em Massa</p>
+                <h2 className="text-base font-bold" style={{ color: 'var(--text)' }}>{selectedProjectIds.size} projeto(s) selecionado(s)</h2>
               </div>
-              <button onClick={() => setBulkAllocOpen(false)} className="p-1.5 rounded-lg hover:bg-white/5"><X size={16} style={{ color: 'var(--brand-muted)' }} /></button>
+              <button onClick={() => setBulkAllocOpen(false)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)]"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
             </div>
 
             {/* Modo: adicionar ou substituir */}
@@ -3257,18 +4173,18 @@ export default function GestaoProjetosPage() {
                 <button key={m} onClick={() => setBulkAllocMode(m)}
                   className="flex-1 py-2 rounded-lg text-xs font-semibold transition-colors"
                   style={bulkAllocMode === m
-                    ? { background: 'rgba(0,245,255,0.12)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.3)' }
-                    : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid var(--brand-border)' }}>
+                    ? { background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }
+                    : { background: 'transparent', color: 'var(--text-light)', border: '1px solid var(--border)' }}>
                   {m === 'add' ? '+ Adicionar à equipe' : '↺ Substituir equipe'}
                 </button>
               ))}
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b mt-4 shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+            <div className="flex border-b mt-4 shrink-0" style={{ borderColor: 'var(--border)' }}>
               {(['consultores', 'grupos'] as const).map(tab => (
                 <button key={tab} onClick={() => setBulkAllocTab(tab)}
-                  className={`px-5 py-2.5 text-xs font-semibold capitalize transition-colors ${bulkAllocTab === tab ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-zinc-400 hover:text-zinc-200'}`}
+                  className={`px-5 py-2.5 text-xs font-semibold capitalize transition-colors ${bulkAllocTab === tab ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
                   style={{ marginBottom: -1 }}>
                   {tab === 'consultores' ? `Consultores (${bulkAllocConsIds.size})` : `Grupos (${bulkAllocGrpIds.size})`}
                 </button>
@@ -3276,13 +4192,13 @@ export default function GestaoProjetosPage() {
             </div>
 
             {/* Busca */}
-            <div className="px-4 py-3 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+            <div className="px-4 py-3 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
               <div className="relative">
-                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--brand-subtle)' }} />
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-light)' }} />
                 <input value={bulkAllocSearch} onChange={e => setBulkAllocSearch(e.target.value)}
                   placeholder="Buscar..."
                   className="w-full pl-8 pr-3 py-2 rounded-lg text-xs outline-none"
-                  style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }} />
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }} />
               </div>
             </div>
 
@@ -3291,36 +4207,36 @@ export default function GestaoProjetosPage() {
               {bulkAllocTab === 'consultores' && allConsultants
                 .filter(c => c.name.toLowerCase().includes(bulkAllocSearch.toLowerCase()))
                 .map(c => (
-                  <label key={c.id} className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
+                  <label key={c.id} className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[var(--surface-hover)] transition-colors">
                     <input type="checkbox" checked={bulkAllocConsIds.has(c.id)}
                       onChange={() => setBulkAllocConsIds(prev => { const n = new Set(prev); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n })}
                       className="w-4 h-4 rounded accent-cyan-400" />
-                    <span className="text-sm" style={{ color: 'var(--brand-text)' }}>{c.name}</span>
+                    <span className="text-sm" style={{ color: 'var(--text)' }}>{c.name}</span>
                   </label>
                 ))}
               {bulkAllocTab === 'grupos' && consultantGroups
                 .filter(g => g.name.toLowerCase().includes(bulkAllocSearch.toLowerCase()))
                 .map(g => (
-                  <label key={g.id} className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
+                  <label key={g.id} className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[var(--surface-hover)] transition-colors">
                     <input type="checkbox" checked={bulkAllocGrpIds.has(g.id)}
                       onChange={() => setBulkAllocGrpIds(prev => { const n = new Set(prev); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n })}
                       className="w-4 h-4 rounded accent-cyan-400" />
-                    <span className="text-sm" style={{ color: 'var(--brand-text)' }}>{g.name}</span>
+                    <span className="text-sm" style={{ color: 'var(--text)' }}>{g.name}</span>
                   </label>
                 ))}
             </div>
 
-            <div className="flex justify-between items-center px-6 py-4 shrink-0" style={{ borderTop: '1px solid var(--brand-border)' }}>
-              <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>
+            <div className="flex justify-between items-center px-6 py-4 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+              <span className="text-xs" style={{ color: 'var(--text-light)' }}>
                 {bulkAllocConsIds.size} consultor(es) · {bulkAllocGrpIds.size} grupo(s)
               </span>
               <div className="flex gap-2">
                 <button onClick={() => setBulkAllocOpen(false)}
-                  className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors"
-                  style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
+                  className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors"
+                  style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancelar</button>
                 <button onClick={executeBulkAlloc} disabled={bulkAllocSaving || (bulkAllocConsIds.size === 0 && bulkAllocGrpIds.size === 0)}
                   className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:opacity-90 disabled:opacity-50"
-                  style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.2)' }}>
+                  style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}>
                   {bulkAllocSaving ? 'Salvando...' : 'Alocar'}
                 </button>
               </div>
@@ -3331,74 +4247,74 @@ export default function GestaoProjetosPage() {
 
       {/* ── Modal B: Alocar por Recurso ── */}
       {byResOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)' }}>
-          <div className="flex flex-col rounded-2xl w-full max-w-lg max-h-[85vh]" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="flex flex-col rounded-2xl w-full max-w-lg max-h-[85vh]" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-light)' }}>
                   Alocar por Recurso — Passo {byResStep}/2
                 </p>
-                <h2 className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>
+                <h2 className="text-base font-bold" style={{ color: 'var(--text)' }}>
                   {byResStep === 1 ? 'Selecione o recurso' : 'Selecione os projetos'}
                 </h2>
               </div>
-              <button onClick={() => setByResOpen(false)} className="p-1.5 rounded-lg hover:bg-white/5"><X size={16} style={{ color: 'var(--brand-muted)' }} /></button>
+              <button onClick={() => setByResOpen(false)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)]"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
             </div>
 
             {/* ── Step 1: escolher recurso ── */}
             {byResStep === 1 && (<>
-              <div className="flex border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+              <div className="flex border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
                 {(['consultor', 'grupo'] as const).map(tab => (
                   <button key={tab} onClick={() => { setByResTab(tab); setByResConsId(null); setByResGroupId(null) }}
-                    className={`px-5 py-2.5 text-xs font-semibold capitalize transition-colors ${byResTab === tab ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-zinc-400 hover:text-zinc-200'}`}
+                    className={`px-5 py-2.5 text-xs font-semibold capitalize transition-colors ${byResTab === tab ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
                     style={{ marginBottom: -1 }}>
                     {tab === 'consultor' ? 'Consultor' : 'Grupo de Consultores'}
                   </button>
                 ))}
               </div>
-              <div className="px-4 py-3 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+              <div className="px-4 py-3 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
                 <div className="relative">
-                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--brand-subtle)' }} />
+                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-light)' }} />
                   <input value={byResSearch} onChange={e => setByResSearch(e.target.value)}
                     placeholder="Buscar..."
                     className="w-full pl-8 pr-3 py-2 rounded-lg text-xs outline-none"
-                    style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }} />
+                    style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }} />
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto px-4 py-3">
                 {byResTab === 'consultor' && allConsultants
                   .filter(c => c.name.toLowerCase().includes(byResSearch.toLowerCase()))
                   .map(c => (
-                    <label key={c.id} className="flex items-center gap-3 py-2.5 px-2 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
+                    <label key={c.id} className="flex items-center gap-3 py-2.5 px-2 rounded-lg cursor-pointer hover:bg-[var(--surface-hover)] transition-colors">
                       <input type="radio" name="byres-cons" checked={byResConsId === c.id}
                         onChange={() => setByResConsId(c.id)}
                         className="w-4 h-4 accent-cyan-400" />
-                      <span className="text-sm" style={{ color: 'var(--brand-text)' }}>{c.name}</span>
+                      <span className="text-sm" style={{ color: 'var(--text)' }}>{c.name}</span>
                     </label>
                   ))}
                 {byResTab === 'grupo' && consultantGroups
                   .filter(g => g.name.toLowerCase().includes(byResSearch.toLowerCase()))
                   .map(g => (
-                    <label key={g.id} className="flex items-center gap-3 py-2.5 px-2 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
+                    <label key={g.id} className="flex items-center gap-3 py-2.5 px-2 rounded-lg cursor-pointer hover:bg-[var(--surface-hover)] transition-colors">
                       <input type="radio" name="byres-grp" checked={byResGroupId === g.id}
                         onChange={() => setByResGroupId(g.id)}
                         className="w-4 h-4 accent-cyan-400" />
                       <div>
-                        <span className="text-sm" style={{ color: 'var(--brand-text)' }}>{g.name}</span>
-                        <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>grupo completo</span>
+                        <span className="text-sm" style={{ color: 'var(--text)' }}>{g.name}</span>
+                        <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded" style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}>grupo completo</span>
                       </div>
                     </label>
                   ))}
               </div>
-              <div className="flex justify-end gap-2 px-6 py-4 shrink-0" style={{ borderTop: '1px solid var(--brand-border)' }}>
+              <div className="flex justify-end gap-2 px-6 py-4 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
                 <button onClick={() => setByResOpen(false)}
-                  className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors"
-                  style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
+                  className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors"
+                  style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancelar</button>
                 <button
                   disabled={byResTab === 'consultor' ? !byResConsId : !byResGroupId}
                   onClick={() => { setByResSearch(''); setByResStep(2) }}
                   className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:opacity-90 disabled:opacity-40"
-                  style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.2)' }}>
+                  style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}>
                   Próximo →
                 </button>
               </div>
@@ -3412,8 +4328,8 @@ export default function GestaoProjetosPage() {
                   <button key={m} onClick={() => setByResMode(m)}
                     className="flex-1 py-2 rounded-lg text-xs font-semibold transition-colors"
                     style={byResMode === m
-                      ? { background: 'rgba(0,245,255,0.12)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.3)' }
-                      : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid var(--brand-border)' }}>
+                      ? { background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }
+                      : { background: 'transparent', color: 'var(--text-light)', border: '1px solid var(--border)' }}>
                     {m === 'add' ? '+ Adicionar à equipe' : '↺ Substituir equipe'}
                   </button>
                 ))}
@@ -3421,7 +4337,7 @@ export default function GestaoProjetosPage() {
 
               {/* Recurso selecionado */}
               <div className="mx-6 mt-3 px-3 py-2 rounded-lg text-xs shrink-0 flex items-center justify-between"
-                style={{ background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.15)', color: 'var(--brand-primary)' }}>
+                style={{ background: 'var(--primary-soft)', border: '1px solid var(--primary-soft)', color: 'var(--primary)' }}>
                 <span>
                   {byResTab === 'consultor'
                     ? allConsultants.find(c => c.id === byResConsId)?.name
@@ -3431,20 +4347,20 @@ export default function GestaoProjetosPage() {
               </div>
 
               {/* Busca projetos */}
-              <div className="px-4 py-3 border-b mt-3 shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+              <div className="px-4 py-3 border-b mt-3 shrink-0" style={{ borderColor: 'var(--border)' }}>
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1">
-                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--brand-subtle)' }} />
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-light)' }} />
                     <input value={byResSearch} onChange={e => setByResSearch(e.target.value)}
                       placeholder="Buscar projeto..."
                       className="w-full pl-8 pr-3 py-2 rounded-lg text-xs outline-none"
-                      style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }} />
+                      style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }} />
                   </div>
                   <button onClick={() => {
                     const all = filtered.map(p => p.id)
                     setByResProjIds(byResProjIds.size === all.length ? new Set() : new Set(all))
                   }} className="text-xs px-2 py-1.5 rounded-lg whitespace-nowrap"
-                    style={{ color: 'var(--brand-subtle)', border: '1px solid var(--brand-border)' }}>
+                    style={{ color: 'var(--text-light)', border: '1px solid var(--border)' }}>
                     {byResProjIds.size === filtered.length ? 'Desmarcar todos' : 'Selecionar todos'}
                   </button>
                 </div>
@@ -3455,27 +4371,27 @@ export default function GestaoProjetosPage() {
                 {filtered
                   .filter(p => !byResSearch || p.name.toLowerCase().includes(byResSearch.toLowerCase()) || (p.code ?? '').toLowerCase().includes(byResSearch.toLowerCase()))
                   .map(p => (
-                    <label key={p.id} className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
+                    <label key={p.id} className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[var(--surface-hover)] transition-colors">
                       <input type="checkbox" checked={byResProjIds.has(p.id)}
                         onChange={() => setByResProjIds(prev => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n })}
                         className="w-4 h-4 rounded accent-cyan-400" />
                       <div>
-                        <span className="text-sm" style={{ color: 'var(--brand-text)' }}>{p.name}</span>
-                        <span className="ml-2 font-mono text-[11px]" style={{ color: 'var(--brand-subtle)' }}>{p.code}</span>
+                        <span className="text-sm" style={{ color: 'var(--text)' }}>{p.name}</span>
+                        <span className="ml-2 font-mono text-[11px]" style={{ color: 'var(--text-light)' }}>{p.code}</span>
                       </div>
                     </label>
                   ))}
               </div>
 
-              <div className="flex justify-between items-center px-6 py-4 shrink-0" style={{ borderTop: '1px solid var(--brand-border)' }}>
-                <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>{byResProjIds.size} projeto(s)</span>
+              <div className="flex justify-between items-center px-6 py-4 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+                <span className="text-xs" style={{ color: 'var(--text-light)' }}>{byResProjIds.size} projeto(s)</span>
                 <div className="flex gap-2">
                   <button onClick={() => { setByResStep(1); setByResSearch('') }}
-                    className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors"
-                    style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>← Voltar</button>
+                    className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors"
+                    style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>← Voltar</button>
                   <button onClick={executeByRes} disabled={byResSaving || byResProjIds.size === 0}
                     className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:opacity-90 disabled:opacity-50"
-                    style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.2)' }}>
+                    style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--ring)' }}>
                     {byResSaving ? 'Alocando...' : 'Alocar'}
                   </button>
                 </div>
@@ -3597,7 +4513,7 @@ function OpenPeriodModal({ project, onClose, onRefresh }: {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.55)' }}
+      style={{ background: 'rgba(0,0,0,0.45)' }}
       onClick={onClose}
     >
       <div
@@ -3608,7 +4524,7 @@ function OpenPeriodModal({ project, onClose, onRefresh }: {
         <button onClick={onClose} className="absolute top-3 right-3 p-1 transition-colors" style={{ color: 'var(--text-muted)' }}><X size={14} /></button>
         <div className="p-5">
           <div className="flex items-center gap-2 mb-1">
-            <CalendarPlus size={14} style={{ color: '#F97316' }} />
+            <CalendarPlus size={14} style={{ color: 'var(--warning-border)' }} />
             <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Períodos Abertos</h3>
           </div>
           <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
@@ -3620,14 +4536,14 @@ function OpenPeriodModal({ project, onClose, onRefresh }: {
               <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Meses atualmente abertos:</p>
               {openPeriods.length > 0 ? openPeriods.map(p => (
                 <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs"
-                  style={{ background: 'rgba(249,115,22,0.10)', border: '1px solid #F97316', color: '#9A3412', fontWeight: 600 }}>
-                  <CalendarPlus size={11} style={{ color: '#F97316' }} />
+                  style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', color: 'var(--warning)', fontWeight: 600 }}>
+                  <CalendarPlus size={11} style={{ color: 'var(--warning-border)' }} />
                   {fmtMonth(p.year_month)}
                 </div>
               )) : (
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs"
-                  style={{ background: 'rgba(249,115,22,0.10)', border: '1px solid #F97316', color: '#9A3412', fontWeight: 600 }}>
-                  <CalendarPlus size={11} style={{ color: '#F97316' }} />
+                  style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', color: 'var(--warning)', fontWeight: 600 }}>
+                  <CalendarPlus size={11} style={{ color: 'var(--warning-border)' }} />
                   Há mês(es) aberto(s) neste projeto
                 </div>
               )}
@@ -3672,7 +4588,7 @@ function OpenPeriodModal({ project, onClose, onRefresh }: {
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
                 style={hasOpenPeriods
                   ? { background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)' }
-                  : { background: '#F97316', color: '#FFFFFF', border: '1px solid #F97316' }}
+                  : { background: 'var(--warning-border)', color: 'var(--surface)', border: '1px solid var(--warning-border)' }}
               >
                 {saving ? 'Abrindo...' : 'Abrir Mês'}
               </button>

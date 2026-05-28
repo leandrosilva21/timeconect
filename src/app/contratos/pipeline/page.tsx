@@ -2,8 +2,11 @@
 
 import { AppLayout } from '@/components/layout/app-layout'
 import { useEffect, useState, useCallback, useRef } from 'react'
+import Link from 'next/link'
+import { ProjectStagesSidePanel } from '@/components/projects/project-stages-side-panel'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
+import { previewText } from '@/lib/sanitize'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
@@ -11,9 +14,11 @@ import { List, Plus, ExternalLink, AlertCircle, AlertTriangle, Clock, ChevronRig
 import { ProjectMessages } from '@/components/shared/ProjectMessages'
 import { ContractMessages } from '@/components/shared/ContractMessages'
 import { ContractCreateModal } from '@/components/shared/ContractCreateModal'
+import { AporteDetailModal } from '@/components/shared/AporteDetailModal'
 import { ProjectDataModal } from '@/components/shared/ProjectDataModal'
 import { ContractFormModal } from '@/components/contracts/ContractFormModal'
 import { MultiSelect } from '@/components/ui/multi-select'
+import { CustomerContactsSection } from '@/components/ui/customer-contacts-section'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,6 +65,8 @@ interface ProjectCard {
   expected_end_date?: string | null
   coordinator_ids?: number[]
   coordinators?: string[]
+  coordination_hours?: number | null
+  coordination_consumed_hours?: number
   consultants?: string[]
   contract_type?: string | null
   service_type?: string | null
@@ -137,6 +144,30 @@ interface Column {
   color?: string
 }
 
+// Card de aporte na coluna "Aporte" do pipeline.
+// Lê de hour_contributions; só renderiza pra projetos PAI.
+interface AporteCard {
+  id: number
+  kind: 'aporte'
+  customer_id: number | null
+  customer_name: string | null
+  project_id: number
+  project_code: string | null
+  project_name: string | null
+  project_status: string | null
+  horas: number
+  valor_hora: number
+  total: number
+  motivo: 'aporte' | 'excedentes' | 'absorvidas' | string | null
+  description: string | null
+  kanban_status: 'novo_contrato' | 'aporte' | string
+  contributed_by: string | null
+  contributed_at: string | null
+  created_at: string | null
+}
+
+const APORTE_COLOR = '#22c55e'
+
 // ─── Column Definitions ───────────────────────────────────────────────────────
 
 const DEMAND_COLS: Column[] = [
@@ -155,26 +186,36 @@ const TRANSITION_COL: Column = {
   id: 'inicio_autorizado', label: 'Início Autorizado', phase: 'transition',
 }
 
+// Fase Projeto enxuta (2026-05-21): andamento fino (planejamento/execução/homologação)
+// fica no CRONOGRAMA atrás do card → "Em Andamento" agrupa os status ativos.
+// Backend mantém todos os project.status; aqui é só reagrupamento do kanban.
+const ACTIVE_PROJECT_STATUSES = ['planning', 'awaiting_start', 'started', 'liberado_para_testes']
+
 const PROJECT_COLS: Column[] = [
-  { id: 'em_andamento',        label: 'Em Andamento',        phase: 'project', projectStatuses: ['awaiting_start', 'started'] },
-  { id: 'liberado_para_testes',label: 'Liberado p/ Testes',  phase: 'project', projectStatuses: ['liberado_para_testes'] },
-  { id: 'encerrado',           label: 'Encerrado',           phase: 'project', projectStatuses: ['finished'],   color: '#22c55e' },
+  { id: 'proj_backlog',        label: 'Backlog',             phase: 'project', projectStatuses: ['backlog'],         color: '#94a3b8' },
+  { id: 'em_andamento',        label: 'Em Andamento',        phase: 'project', projectStatuses: ACTIVE_PROJECT_STATUSES, color: '#60a5fa' },
   { id: 'pausado',             label: 'Pausado',             phase: 'project', projectStatuses: ['paused'],     color: '#eab308' },
+  { id: 'encerrado',           label: 'Encerrado',           phase: 'project', projectStatuses: ['finished'],   color: '#22c55e' },
   { id: 'cancelado',           label: 'Cancelado',           phase: 'project', projectStatuses: ['cancelled'],  color: '#ef4444' },
 ]
 
 const PROJECT_STATUS_TO_COL: Record<string, string> = {
+  backlog:              'proj_backlog',
+  planning:             'em_andamento',
   awaiting_start:       'em_andamento',
   started:              'em_andamento',
-  liberado_para_testes: 'liberado_para_testes',
+  liberado_para_testes: 'em_andamento',
   paused:               'pausado',
   cancelled:            'cancelado',
   finished:             'encerrado',
 }
 
+// Status setado ao SOLTAR numa coluna. Em "Em Andamento" usa-se 'started' como
+// default só quando o card vem de FORA dos status ativos (ver handleProjectMove,
+// que preserva o sub-status quando o card já está ativo — gerido pelo cronograma).
 const PROJECT_COL_TO_STATUS: Record<string, string> = {
+  proj_backlog:         'backlog',
   em_andamento:         'started',
-  liberado_para_testes: 'liberado_para_testes',
   pausado:              'paused',
   cancelado:            'cancelled',
   encerrado:            'finished',
@@ -190,8 +231,10 @@ const TIPO_LABEL: Record<string, string> = {
 
 const STATUS_LABEL: Record<string, string> = {
   awaiting_start:       'Aguardando',
-  started:              'Em Andamento',
-  liberado_para_testes: 'Em Testes',
+  backlog:              'Backlog',
+  planning:             'Planejamento',
+  started:              'Em Execução',
+  liberado_para_testes: 'Homologação',
   finished:             'Encerrado',
   paused:               'Pausado',
   cancelled:            'Cancelado',
@@ -245,6 +288,7 @@ function ContractKanbanCard({
   card, index, canDrag, onClick, onAction, onMove, availableColumns, isNew, canWrite,
 }: { card: ContractCard; index: number; canDrag: boolean; onClick: () => void; onAction?: (action: string) => void
     onMove?: (toCol: string) => void; availableColumns?: { id: string; label: string }[]; isNew?: boolean; canWrite?: boolean }) {
+  const { user: viewerUser } = useAuth()
   const isIncomplete = !card.is_complete
   const isTransition = card.kanban_status === 'inicio_autorizado'
   const [menuOpen, setMenuOpen] = useState(false)
@@ -317,7 +361,7 @@ function ContractKanbanCard({
                   {menuOpen && (
                     <div className="absolute right-0 top-6 z-[100] w-44 rounded-xl overflow-hidden shadow-2xl"
                       style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-                      {CONTRACT_MENU_ITEMS.filter(item => !item.adminOnly || canWrite).map(item => {
+                      {CONTRACT_MENU_ITEMS.filter(item => (!item.adminOnly || canWrite) && (!(item as any).coordHidden || viewerUser?.type !== 'coordenador')).map(item => {
                         const Icon = item.icon
                         return (
                           <button key={item.action}
@@ -468,6 +512,7 @@ function RequestKanbanCard({ card, onView }: { card: RequestCard; onView?: (e: R
 // ─── List view action menu ────────────────────────────────────────────────────
 
 function ListActionMenu({ card, onAction, canWrite }: { card: ContractCard; onAction: (action: string) => void; canWrite?: boolean }) {
+  const { user: viewerUser } = useAuth()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -479,14 +524,14 @@ function ListActionMenu({ card, onAction, canWrite }: { card: ContractCard; onAc
   return (
     <div ref={ref} className="relative inline-block">
       <button onClick={e => { e.stopPropagation(); setOpen(v => !v) }}
-        className="p-1.5 rounded-lg opacity-0 group-hover/row:opacity-100 transition-opacity hover:bg-white/10"
+        className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
         style={{ color: 'var(--brand-subtle)' }}>
         <MoreVertical size={14} />
       </button>
       {open && (
         <div className="absolute right-0 top-7 z-[100] w-44 rounded-xl overflow-hidden shadow-2xl"
           style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-          {CONTRACT_MENU_ITEMS.filter(item => !item.adminOnly || canWrite).map(item => {
+          {CONTRACT_MENU_ITEMS.filter(item => (!item.adminOnly || canWrite) && (!(item as any).coordHidden || viewerUser?.type !== 'coordenador')).map(item => {
             const Icon = item.icon
             return (
               <button key={item.action}
@@ -505,6 +550,7 @@ function ListActionMenu({ card, onAction, canWrite }: { card: ContractCard; onAc
 }
 
 function ListProjectActionMenu({ onAction, canWrite }: { onAction: (action: string) => void; canWrite?: boolean }) {
+  const { user: viewerUser } = useAuth()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -516,14 +562,14 @@ function ListProjectActionMenu({ onAction, canWrite }: { onAction: (action: stri
   return (
     <div ref={ref} className="relative inline-block">
       <button onClick={e => { e.stopPropagation(); setOpen(v => !v) }}
-        className="p-1.5 rounded-lg opacity-0 group-hover/row:opacity-100 transition-opacity hover:bg-white/10"
+        className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
         style={{ color: 'var(--brand-subtle)' }}>
         <MoreVertical size={14} />
       </button>
       {open && (
         <div className="absolute right-0 top-7 z-[100] w-48 rounded-xl overflow-hidden shadow-2xl"
           style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-          {PROJECT_MENU_ITEMS.filter(item => !item.adminOnly || canWrite).map(item => {
+          {PROJECT_MENU_ITEMS.filter(item => (!item.adminOnly || canWrite) && (!(item as any).coordHidden || viewerUser?.type !== 'coordenador')).map(item => {
             const Icon = item.icon
             const isDanger = (item as any).danger
             return (
@@ -557,7 +603,7 @@ const PROJECT_MENU_ITEMS = [
   { action: 'edit',       label: 'Editar',            icon: Pencil,        clientVisible: false, adminOnly: true },
   { action: 'chat',       label: 'Chat',              icon: MessageSquare, clientVisible: true  },
   { action: 'status',     label: 'Alterar Status',    icon: Layers,        clientVisible: false },
-  { action: 'cost',       label: 'Custo',             icon: DollarSign,    clientVisible: false },
+  { action: 'cost',       label: 'Custo',             icon: DollarSign,    clientVisible: false, coordHidden: true },
   { action: 'timesheets', label: 'Apont. & Despesas', icon: Clock,         clientVisible: false },
   { action: 'aportes',    label: 'Aportes',           icon: TrendingUp,    clientVisible: false, adminOnly: true },
   { action: 'team',       label: 'Selecionar Equipe', icon: Users,         clientVisible: false },
@@ -578,6 +624,7 @@ function ProjectKanbanCard({
     onMove?: (toCol: string) => void; availableColumns?: { id: string; label: string }[]; isCliente?: boolean; hasUnread?: boolean; isNew?: boolean; canWrite?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const { user: viewerUser } = useAuth()
 
   useEffect(() => {
     if (!menuOpen) return
@@ -642,7 +689,7 @@ function ProjectKanbanCard({
                 {menuOpen && (
                   <div className="absolute right-0 top-6 z-[100] w-48 rounded-xl overflow-hidden shadow-2xl"
                     style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-                    {PROJECT_MENU_ITEMS.filter(item => (!isCliente || item.clientVisible) && (!item.adminOnly || canWrite)).map(item => {
+                    {PROJECT_MENU_ITEMS.filter(item => (!isCliente || item.clientVisible) && (!item.adminOnly || canWrite) && (!(item as any).coordHidden || viewerUser?.type !== 'coordenador')).map(item => {
                       const Icon = item.icon
                       return (
                         <button
@@ -688,6 +735,34 @@ function ProjectKanbanCard({
               )}
             </div>
           )}
+          {(() => {
+            // Lente do coordenador: se o usuário logado é coordenador do projeto e há banco
+            // de coordenação, mostra consumo/banco de coordenação no lugar do operacional.
+            const isCoordViewer = !!viewerUser?.id && (card.coordinator_ids ?? []).includes(viewerUser.id) && Number(card.coordination_hours ?? 0) > 0
+            const sold = isCoordViewer ? Number(card.coordination_hours ?? 0) : Number(card.sold_hours ?? 0)
+            const consumed = isCoordViewer ? Number(card.coordination_consumed_hours ?? 0) : Number(card.consumed_hours ?? 0)
+            const pct = sold > 0 ? Math.min(100, Math.round((consumed / sold) * 100)) : 0
+            const barColor = pct >= 100 ? '#ef4444' : pct >= 90 ? '#f97316' : pct >= 70 ? '#eab308' : '#22c55e'
+            const consultantCount = card.consultants?.length ?? 0
+            if (sold <= 0 && consumed <= 0) return null
+            return (
+              <div className="mt-2 mb-1">
+                <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: barColor, transition: 'width .2s ease' }} />
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>
+                    {Math.round(consumed)}h / {Math.round(sold)}h
+                  </span>
+                  <span className="text-[10px]" style={{ color: barColor }}>{pct}%</span>
+                </div>
+                <div className="flex items-center gap-1 mt-1">
+                  <Users size={10} style={{ color: 'var(--brand-subtle)' }} />
+                  <span className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{consultantCount}</span>
+                </div>
+              </div>
+            )
+          })()}
           <div className="flex items-center justify-between mt-1 pt-2" style={{ borderTop: '1px solid rgba(99,102,241,0.15)' }}>
             <div className="flex items-center gap-2">
               {card.coordinators && card.coordinators.length > 0 && (
@@ -833,6 +908,7 @@ function ContractDetailModal({ card, onClose, onGenerate, coordinators, canGener
     }
   }, [tab, card.id, logsLoaded])
 
+  const isCliente = userRole === 'cliente'
   const tabStyle = (t: string) => tab === t
     ? { background: 'rgba(234,179,8,0.12)', color: '#eab308', border: '1px solid rgba(234,179,8,0.3)' }
     : { color: 'var(--brand-subtle)', border: '1px solid transparent' }
@@ -861,7 +937,7 @@ function ContractDetailModal({ card, onClose, onGenerate, coordinators, canGener
               <ExternalLink size={11} /> Detalhes
             </button>
             <button onClick={() => setTab('chat')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all" style={tabStyle('chat')}>
-              <MessageSquare size={11} /> Chat
+              <MessageSquare size={11} /> {isCliente ? 'Histórico de Mensagens' : 'Chat'}
             </button>
             <button onClick={() => setTab('log')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all" style={tabStyle('log')}>
               <Clock size={11} /> Histórico
@@ -874,7 +950,7 @@ function ContractDetailModal({ card, onClose, onGenerate, coordinators, canGener
           </div>
         ) : tab === 'chat' ? (
           <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-            <ContractMessages contractId={card.id} userRole={userRole} />
+            <ContractMessages contractId={card.id} userRole={userRole} readOnly={isCliente} />
           </div>
         ) : (
         <>
@@ -1008,10 +1084,11 @@ function ProjectDetailModal({ card, onClose, userRole, initialTab }: { card: Pro
     } catch { toast.error('Erro ao abrir arquivo') }
   }
 
+  const isCliente = userRole === 'cliente'
   const tabs = [
     { id: 'details', label: 'Detalhes', icon: <ExternalLink size={11} /> },
     ...(hasReq ? [{ id: 'req', label: 'Requisição', icon: <Layers size={11} /> }] : []),
-    { id: 'chat', label: 'Chat', icon: <MessageSquare size={11} /> },
+    { id: 'chat', label: isCliente ? 'Histórico de Mensagens' : 'Chat', icon: <MessageSquare size={11} /> },
     { id: 'log', label: 'Histórico', icon: <Clock size={11} /> },
   ] as const
 
@@ -1030,6 +1107,7 @@ function ProjectDetailModal({ card, onClose, userRole, initialTab }: { card: Pro
               <span className="text-xs px-2 py-1 rounded-full shrink-0 font-semibold" style={{ background: `${color}20`, color }}>
                 {STATUS_LABEL[card.status] ?? card.status}
               </span>
+              {/* Botão "Workspace" (etapas/cronograma) removido de prod — rotina em teste só no dev. */}
               <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10" style={{ color: 'var(--brand-subtle)' }}><X size={16} /></button>
             </div>
           </div>
@@ -1193,6 +1271,8 @@ function ProjectDetailModal({ card, onClose, userRole, initialTab }: { card: Pro
                   </div>
                 ))}
               </div>
+              {/* Contatos do cliente */}
+              <CustomerContactsSection customerId={card.customer_id} customerName={card.customer_name} />
             </div>
             <div className="flex justify-end gap-3 px-6 py-4 border-t shrink-0" style={{ borderColor: 'rgba(99,102,241,0.2)' }}>
               <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm" style={{ color: 'var(--brand-muted)' }}>Fechar</button>
@@ -1209,7 +1289,7 @@ function ProjectDetailModal({ card, onClose, userRole, initialTab }: { card: Pro
           </>
         ) : (
           <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-            <ProjectMessages projectId={card.id} userRole={userRole} />
+            <ProjectMessages projectId={card.id} userRole={userRole} readOnly={isCliente} />
           </div>
         )}
       </div>
@@ -1825,9 +1905,10 @@ const STATUS_BADGE: Record<string, { label: string; color: string; bg: string }>
   inicio_autorizado:      { label: 'Início Autorizado',        color: '#eab308', bg: 'rgba(234,179,8,0.12)'   },
   alocado:                { label: 'Início Autorizado',        color: '#eab308', bg: 'rgba(234,179,8,0.12)'   },
   // project statuses
-  awaiting_start:         { label: 'Em Andamento',             color: '#818cf8', bg: 'rgba(99,102,241,0.12)'  },
-  started:                { label: 'Em Andamento',             color: '#818cf8', bg: 'rgba(99,102,241,0.12)'  },
-  liberado_para_testes:   { label: 'Lib. p/ Testes',           color: '#38bdf8', bg: 'rgba(56,189,248,0.12)'  },
+  awaiting_start:         { label: 'Aguardando',               color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' },
+  planning:               { label: 'Planejamento',             color: '#60a5fa', bg: 'rgba(96,165,250,0.12)'  },
+  started:                { label: 'Em Execução',              color: '#818cf8', bg: 'rgba(99,102,241,0.12)'  },
+  liberado_para_testes:   { label: 'Homologação',              color: '#38bdf8', bg: 'rgba(56,189,248,0.12)'  },
   paused:                 { label: 'Pausado',                  color: '#eab308', bg: 'rgba(234,179,8,0.12)'   },
   finished:               { label: 'Encerrado',                color: '#22c55e', bg: 'rgba(34,197,94,0.12)'   },
   cancelled:              { label: 'Cancelado',                color: '#ef4444', bg: 'rgba(239,68,68,0.12)'   },
@@ -1949,13 +2030,16 @@ interface TimesheetEntry {
 function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projectId: number; onClose: () => void; userRole?: string; initialTab?: string }) {
   const [p, setP] = useState<ProjectFull | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'overview' | 'financial' | 'consultants' | 'timesheets' | 'cost'>((initialTab as any) ?? 'overview')
+  const [tab, setTab] = useState<'overview' | 'financial' | 'consultants' | 'timesheets' | 'cost' | 'aportes'>((initialTab as any) ?? 'overview')
   const [breakdown, setBreakdown] = useState<ConsultantBreakdown[]>([])
   const [costSummary, setCostSummary] = useState<CostSummary | null>(null)
   const [timesheets, setTimesheets] = useState<TimesheetEntry[]>([])
   const [tsLoading, setTsLoading] = useState(false)
   const [tsLoaded, setTsLoaded] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
+  const [aportesList, setAportesList] = useState<any[]>([])
+  const [aportesLoading, setAportesLoading] = useState(false)
+  const [aportesLoaded, setAportesLoaded]   = useState(false)
 
   const reload = () => {
     setLoading(true)
@@ -1987,7 +2071,17 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
         .catch(() => {})
         .finally(() => setTsLoading(false))
     }
-  }, [tab, projectId, tsLoaded])
+    if (tab === 'aportes' && !aportesLoaded) {
+      setAportesLoading(true)
+      api.get<any>(`/projects/${projectId}/hour-contributions`)
+        .then(r => {
+          const list = Array.isArray(r) ? r : Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
+          setAportesList(list); setAportesLoaded(true)
+        })
+        .catch(() => {})
+        .finally(() => setAportesLoading(false))
+    }
+  }, [tab, projectId, tsLoaded, aportesLoaded])
 
   const fmt = (n: number | null | undefined, dec = 0) =>
     n == null ? '—' : n.toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec })
@@ -2020,9 +2114,18 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
     </div>
   )
 
+  const { user: viewerUser } = useAuth()
   const consumed = p?.consumed_hours ?? 0
   const totalAvail = p?.total_available_hours ?? ((p?.sold_hours ?? 0) + (p?.hour_contribution ?? 0))
-  const pct = totalAvail > 0 ? (consumed / totalAvail) * 100 : 0
+  // Lente do coordenador (swap KPIs/risco) — coordenador do projeto + banco explícito.
+  const coordHoursBank = Number((p as any)?.coordination_hours ?? 0)
+  const isCoordViewer = !!viewerUser?.id && !!p?.coordinators?.some((c: any) => c.id === viewerUser.id) && coordHoursBank > 0
+  const coordConsumedVal = Number((p as any)?.coordination_consumed_hours ?? 0)
+  const cardVendidas = isCoordViewer ? coordHoursBank : (p?.sold_hours ?? 0)
+  const cardConsumed = isCoordViewer ? coordConsumedVal : consumed
+  const cardSaldo    = isCoordViewer ? Math.round((cardVendidas - cardConsumed) * 100) / 100 : (p?.general_hours_balance ?? 0)
+  const pct = isCoordViewer ? (cardVendidas > 0 ? (cardConsumed / cardVendidas) * 100 : 0)
+                            : (totalAvail > 0 ? (consumed / totalAvail) * 100 : 0)
   const bar = healthColor(pct)
   const sc = p ? (statusColors[p.status] ?? statusColors.awaiting_start) : statusColors.awaiting_start
 
@@ -2039,12 +2142,16 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
   if ((p?.general_hours_balance ?? 0) < 0) alerts.push({ msg: 'Saldo de horas negativo — projeto em déficit', color: '#ef4444' })
   if (topShare >= 60 && topConsultant) alerts.push({ msg: `${topConsultant.consultant_name} concentra ${Math.round(topShare)}% das horas`, color: '#f59e0b' })
 
+  const isCoordRole = viewerUser?.type === 'coordenador'
   const tabs = [
     { id: 'overview'    as const, label: 'Visão Geral' },
     { id: 'consultants' as const, label: `Consultores${breakdown.length > 0 ? ` (${breakdown.length})` : ''}` },
     { id: 'timesheets'  as const, label: 'Apontamentos' },
-    { id: 'financial'   as const, label: 'Financeiro' },
-    { id: 'cost'        as const, label: 'Custo' },
+    { id: 'aportes'     as const, label: `Aportes${aportesList.length > 0 ? ` (${aportesList.length})` : ''}` },
+    ...(isCoordRole ? [] : [
+      { id: 'financial'   as const, label: 'Financeiro' },
+      { id: 'cost'        as const, label: 'Custo' },
+    ]),
   ]
 
   return (
@@ -2112,11 +2219,12 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
                 {/* KPI strip */}
                 <div className="grid grid-cols-4 gap-3">
                   {[
-                    { label: 'Horas Vendidas',   value: fmt(p.sold_hours, 1) + 'h',  color: 'var(--brand-text)', bg: 'rgba(255,255,255,0.03)' },
-                    { label: 'Horas Consumidas', value: fmt(consumed, 1) + 'h',       color: 'var(--brand-muted)', bg: 'rgba(255,255,255,0.03)' },
-                    { label: 'Saldo',            value: fmt(p.general_hours_balance, 1) + 'h',
-                      color: (p.general_hours_balance ?? 0) < 0 ? '#ef4444' : '#22c55e',
-                      bg: (p.general_hours_balance ?? 0) < 0 ? 'rgba(239,68,68,0.06)' : 'rgba(34,197,94,0.06)' },
+                    { label: isCoordViewer ? 'Horas Vendidas (Coord.)' : 'Horas Vendidas',
+                      value: fmt(cardVendidas, 1) + 'h',  color: 'var(--brand-text)', bg: 'rgba(255,255,255,0.03)' },
+                    { label: 'Horas Consumidas', value: fmt(cardConsumed, 1) + 'h',       color: 'var(--brand-muted)', bg: 'rgba(255,255,255,0.03)' },
+                    { label: 'Saldo',            value: fmt(cardSaldo, 1) + 'h',
+                      color: cardSaldo < 0 ? '#ef4444' : '#22c55e',
+                      bg: cardSaldo < 0 ? 'rgba(239,68,68,0.06)' : 'rgba(34,197,94,0.06)' },
                     { label: 'Consultores c/h',  value: String(breakdown.length || (p.consultants?.length ?? 0)), color: '#a78bfa', bg: 'rgba(139,92,246,0.06)' },
                   ].map(it => (
                     <div key={it.label} className="rounded-xl p-4 text-center" style={{ background: it.bg, border: '1px solid var(--brand-border)' }}>
@@ -2164,6 +2272,31 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
                     <span>{fmt(totalAvail, 1)}h disponíveis</span>
                   </div>
                 </div>
+
+                {/* Horas de Coordenação — pro admin/governança (banco explícito). Coord vê via swap dos KPIs. */}
+                {!isCoordViewer && coordHoursBank > 0 && (() => {
+                  const cBank = coordHoursBank
+                  const cCons = coordConsumedVal
+                  const cSaldo = Math.round((cBank - cCons) * 100) / 100
+                  const cPct = cBank > 0 ? (cCons / cBank) * 100 : 0
+                  const cBar = cPct >= 91 ? '#ef4444' : cPct >= 71 ? '#f59e0b' : '#22c55e'
+                  return (
+                    <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${cBar}33` }}>
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Horas de Coordenação</span>
+                        <span className="text-xs font-bold tabular-nums" style={{ color: cBar }}>{cBank > 0 ? `${Math.round(cPct)}% consumido` : 'Sem horas'}</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+                        <div><p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>Vendidas</p><p className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{fmt(cBank, 1)}h</p></div>
+                        <div><p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>Consumidas</p><p className="text-sm font-bold" style={{ color: 'var(--brand-muted)' }}>{fmt(cCons, 1)}h</p></div>
+                        <div><p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>Saldo</p><p className="text-sm font-bold" style={{ color: cSaldo < 0 ? '#ef4444' : '#22c55e' }}>{fmt(cSaldo, 1)}h</p></div>
+                      </div>
+                      <div className="w-full h-3 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                        <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(cPct, 100)}%`, background: cBar }} />
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {/* Alerts */}
                 {alerts.length > 0 && (
@@ -2273,6 +2406,9 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
                   </div>
                 </div>
 
+                {/* Contatos do cliente */}
+                <CustomerContactsSection customerId={p.customer?.id} customerName={p.customer?.name} />
+
                 {p.description && (
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Descrição</p>
@@ -2325,11 +2461,13 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
                             <div className="w-full h-2.5 rounded-full overflow-hidden mb-2" style={{ background: 'rgba(255,255,255,0.06)' }}>
                               <div className="h-full rounded-full" style={{ width: `${share}%`, background: col }} />
                             </div>
-                            <div className="grid grid-cols-4 gap-2 text-[10px]">
+                            <div className={`grid gap-2 text-[10px] ${isCoordRole ? 'grid-cols-2' : 'grid-cols-4'}`}>
                               <div><span style={{ color: 'var(--brand-subtle)' }}>Aprovadas</span><br/><span style={{ color: '#22c55e' }}>{fmt(c.approved_hours, 1)}h</span></div>
                               <div><span style={{ color: 'var(--brand-subtle)' }}>Pendentes</span><br/><span style={{ color: c.pending_hours > 0 ? '#f59e0b' : 'var(--brand-subtle)' }}>{fmt(c.pending_hours, 1)}h</span></div>
+                              {!isCoordRole && <>
                               <div><span style={{ color: 'var(--brand-subtle)' }}>Taxa/h</span><br/><span style={{ color: 'var(--brand-muted)' }}>{fmtBRL(c.consultant_hourly_rate)}</span></div>
                               <div><span style={{ color: 'var(--brand-subtle)' }}>Custo</span><br/><span style={{ color: '#00F5FF' }}>{fmtBRL(c.cost)}</span></div>
+                              </>}
                             </div>
                           </div>
                         )
@@ -2421,7 +2559,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
                                   </div>
                                 </div>
                                 {ts.observation && (
-                                  <p className="text-xs leading-relaxed line-clamp-2" style={{ color: 'var(--brand-muted)' }}>{ts.observation}</p>
+                                  <p className="text-xs leading-relaxed line-clamp-2" style={{ color: 'var(--brand-muted)' }}>{previewText(ts.observation)}</p>
                                 )}
                               </div>
                             </div>
@@ -2434,8 +2572,75 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
               </div>
             )}
 
+            {/* ── APORTES ── */}
+            {tab === 'aportes' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--brand-subtle)' }}>
+                    Aportes do projeto
+                  </p>
+                  <span className="text-[11px]" style={{ color: 'var(--brand-subtle)' }}>
+                    Para criar/editar/excluir, acesse Gestão de Projetos
+                  </span>
+                </div>
+                {aportesLoading && (
+                  <p className="text-xs text-center py-8" style={{ color: 'var(--brand-subtle)' }}>Carregando aportes…</p>
+                )}
+                {!aportesLoading && aportesList.length === 0 && (
+                  <p className="text-xs text-center py-8" style={{ color: 'var(--brand-subtle)' }}>Nenhum aporte registrado.</p>
+                )}
+                {!aportesLoading && aportesList.length > 0 && (
+                  <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--brand-border)' }}>
+                    <table className="w-full text-xs">
+                      <thead style={{ background: 'rgba(255,255,255,0.04)' }}>
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--brand-subtle)' }}>Data</th>
+                          <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--brand-subtle)' }}>Motivo</th>
+                          <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--brand-subtle)' }}>Horas</th>
+                          <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--brand-subtle)' }}>Valor/h</th>
+                          <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--brand-subtle)' }}>Total</th>
+                          <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--brand-subtle)' }}>Status</th>
+                          <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--brand-subtle)' }}>Autor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {aportesList.map((a: any) => {
+                          const h = Number(a.contributed_hours)
+                          const r = Number(a.hourly_rate)
+                          const total = h * r
+                          const motivoLabel: Record<string, string> = { aporte: 'Aporte', excedentes: 'Excedentes', absorvidas: 'Absorvidas' }
+                          const isNovo = a.kanban_status === 'novo_contrato'
+                          return (
+                            <tr key={a.id} style={{ borderTop: '1px solid var(--brand-border)' }}>
+                              <td className="px-3 py-2" style={{ color: 'var(--brand-text)' }}>
+                                {a.contributed_at ? new Date(a.contributed_at).toLocaleDateString('pt-BR') : '—'}
+                              </td>
+                              <td className="px-3 py-2" style={{ color: 'var(--brand-text)' }}>{motivoLabel[a.motivo] ?? a.motivo}</td>
+                              <td className="px-3 py-2 text-right tabular-nums" style={{ color: 'var(--brand-text)' }}>{h.toFixed(1)}h</td>
+                              <td className="px-3 py-2 text-right tabular-nums" style={{ color: 'var(--brand-text)' }}>{r.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 2 })}</td>
+                              <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: '#22c55e' }}>{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                              <td className="px-3 py-2">
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                                  style={{
+                                    background: isNovo ? 'rgba(245,158,11,0.18)' : 'rgba(34,197,94,0.18)',
+                                    color: isNovo ? '#f59e0b' : '#22c55e',
+                                  }}>
+                                  {isNovo ? 'Em revisão' : 'Confirmado'}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2" style={{ color: 'var(--brand-subtle)' }}>{a.contributed_by?.name ?? a.contributed_by ?? '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ── FINANCEIRO ── */}
-            {tab === 'financial' && (
+            {tab === 'financial' && !isCoordRole && (
               <div className="space-y-5">
                 <div className="grid grid-cols-3 gap-3">
                   {[
@@ -2483,7 +2688,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
               </div>
             )}
 
-            {tab === 'cost' && (
+            {tab === 'cost' && !isCoordRole && (
               <div className="space-y-5">
                 {!costSummary ? (
                   <p className="text-xs text-center py-8" style={{ color: 'var(--brand-subtle)' }}>Nenhum dado de custo disponível.</p>
@@ -2674,6 +2879,8 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 <label style={labelStyle}>Descrição</label>
                 <textarea value={form.description} onChange={setF('description')} style={{ ...inputStyle, resize: 'vertical', minHeight: '80px' }} placeholder="Descrição do projeto" />
               </div>
+              {/* Contatos do cliente */}
+              <CustomerContactsSection customerId={project.customer?.id} customerName={project.customer?.name} />
             </div>
           </div>
 
@@ -2884,12 +3091,12 @@ function ProjectExpensesModal({ projectId, projectName, onClose }: { projectId: 
 
 // ─── ProjectAportesModal ───────────────────────────────────────────────────────
 
-interface HourContrib { id: number; contributed_hours: number; hourly_rate: number; contributed_at: string; description?: string | null; contributed_by_user?: { name: string }; total_value?: number }
+interface HourContrib { id: number; contributed_hours: number; hourly_rate: number; contributed_at: string; description?: string | null; motivo?: string; contributed_by_user?: { name: string }; total_value?: number }
 
 function ProjectAportesModal({ projectId, projectName, onClose }: { projectId: number; projectName: string; onClose: () => void }) {
   const [items, setItems] = useState<HourContrib[]>([])
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '' })
+  const [form, setForm] = useState({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '', motivo: 'aporte' })
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<HourContrib | null>(null)
   const [saving, setSaving] = useState(false)
@@ -2911,14 +3118,14 @@ function ProjectAportesModal({ projectId, projectName, onClose }: { projectId: n
   }
   useEffect(() => { load() }, [projectId])
 
-  const openAdd = () => { setEditing(null); setForm({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '' }); setFormOpen(true) }
-  const openEdit = (c: HourContrib) => { setEditing(c); setForm({ contributed_hours: String(c.contributed_hours), hourly_rate: String(c.hourly_rate), contributed_at: c.contributed_at.slice(0,10), description: c.description ?? '' }); setFormOpen(true) }
+  const openAdd = () => { setEditing(null); setForm({ contributed_hours: '', hourly_rate: '', contributed_at: '', description: '', motivo: 'aporte' }); setFormOpen(true) }
+  const openEdit = (c: HourContrib) => { setEditing(c); setForm({ contributed_hours: String(c.contributed_hours), hourly_rate: String(c.hourly_rate), contributed_at: c.contributed_at.slice(0,10), description: c.description ?? '', motivo: c.motivo ?? 'aporte' }); setFormOpen(true) }
 
   const handleSave = async () => {
     if (!form.contributed_hours || !form.hourly_rate || !form.contributed_at) { toast.error('Preencha horas, valor/hora e data'); return }
     setSaving(true)
     try {
-      const payload = { contributed_hours: Number(form.contributed_hours), hourly_rate: Number(form.hourly_rate), contributed_at: form.contributed_at, description: form.description || null }
+      const payload = { contributed_hours: Number(form.contributed_hours), hourly_rate: Number(form.hourly_rate), contributed_at: form.contributed_at, description: form.description || null, motivo: form.motivo || 'aporte' }
       if (editing) await api.put(`/projects/${projectId}/hour-contributions/${editing.id}`, payload)
       else await api.post(`/projects/${projectId}/hour-contributions`, payload)
       toast.success(editing ? 'Aporte atualizado' : 'Aporte adicionado')
@@ -2954,7 +3161,8 @@ function ProjectAportesModal({ projectId, projectName, onClose }: { projectId: n
               <div><label className="block text-[10px] mb-1" style={{ color: 'var(--brand-subtle)' }}>Horas *</label><input type="number" value={form.contributed_hours} onChange={e => setForm(f => ({...f, contributed_hours: e.target.value}))} style={inputS} placeholder="0" /></div>
               <div><label className="block text-[10px] mb-1" style={{ color: 'var(--brand-subtle)' }}>Valor/Hora (R$) *</label><input type="number" value={form.hourly_rate} onChange={e => setForm(f => ({...f, hourly_rate: e.target.value}))} style={inputS} placeholder="0.00" step="0.01" /></div>
               <div><label className="block text-[10px] mb-1" style={{ color: 'var(--brand-subtle)' }}>Data *</label><input type="date" value={form.contributed_at} onChange={e => setForm(f => ({...f, contributed_at: e.target.value}))} style={inputS} /></div>
-              <div><label className="block text-[10px] mb-1" style={{ color: 'var(--brand-subtle)' }}>Descrição</label><input value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} style={inputS} placeholder="Motivo do aporte..." /></div>
+              <div><label className="block text-[10px] mb-1" style={{ color: 'var(--brand-subtle)' }}>Motivo *</label><select value={form.motivo} onChange={e => setForm(f => ({...f, motivo: e.target.value}))} style={inputS}><option value="aporte">Aporte</option><option value="excedentes">Excedentes</option><option value="absorvidas">Absorvidas</option></select></div>
+              <div><label className="block text-[10px] mb-1" style={{ color: 'var(--brand-subtle)' }}>Descrição</label><input value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} style={inputS} placeholder="Observação..." /></div>
             </div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setFormOpen(false)} className="px-3 py-1.5 rounded-lg text-xs" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
@@ -2975,13 +3183,14 @@ function ProjectAportesModal({ projectId, projectName, onClose }: { projectId: n
                   <div className="rounded-xl overflow-clip" style={{ border: '1px solid var(--brand-border)' }}>
                     <table className="w-full text-xs">
                       <thead className="sticky top-0 z-10" style={{ background: 'rgba(0,0,0,0.2)' }}><tr style={{ background: 'rgba(0,0,0,0.2)', borderBottom: '1px solid var(--brand-border)' }}>
-                        {['Data','Horas','Valor/h','Total','Descrição',''].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{h}</th>)}
+                        {['Data','Horas','Motivo','Valor/h','Total','Descrição',''].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{h}</th>)}
                       </tr></thead>
                       <tbody>
                         {items.map((c, i) => (
                           <tr key={c.id} style={{ borderBottom: i < items.length - 1 ? '1px solid var(--brand-border)' : undefined }}>
                             <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--brand-muted)' }}>{fmtDate(c.contributed_at)}</td>
                             <td className="px-3 py-2.5 tabular-nums font-semibold" style={{ color: '#a78bfa' }}>{c.contributed_hours.toLocaleString('pt-BR', { minimumFractionDigits: 1 })}h</td>
+                            <td className="px-3 py-2.5" style={{ color: 'var(--brand-muted)' }}>{({aporte:'Aporte',excedentes:'Excedentes',absorvidas:'Absorvidas'} as Record<string,string>)[c.motivo ?? 'aporte'] ?? 'Aporte'}</td>
                             <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--brand-muted)' }}>{fmtBRL(c.hourly_rate)}</td>
                             <td className="px-3 py-2.5 tabular-nums font-semibold" style={{ color: '#00F5FF' }}>{fmtBRL(c.total_value ?? 0)}</td>
                             <td className="px-3 py-2.5 max-w-[160px] truncate" style={{ color: 'var(--brand-muted)' }}>{c.description ?? '—'}</td>
@@ -3026,7 +3235,7 @@ function ProjectTeamModal({ projectId, projectName, onClose, onSaved }: { projec
   useEffect(() => {
     Promise.all([
       api.get<any>(`/projects/${projectId}`),
-      api.get<any>('/users?type=consultor&pageSize=200'),
+      api.get<any>('/users?type=consultor,parceiro_admin&pageSize=200'),
       api.get<any>('/consultant-groups?pageSize=100&active=1'),
     ]).then(([proj, usrs, grps]) => {
       setAllConsultants(usrs?.items ?? usrs?.data ?? [])
@@ -3379,12 +3588,12 @@ function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () 
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2 mb-0.5">
-                      <span className="text-xs font-semibold" style={{ color: '#FAFAFA' }}>{msg.author?.name ?? 'Usuário'}</span>
+                      <span className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>{msg.author?.name ?? 'Usuário'}</span>
                       <span className="text-[10px]" style={{ color: 'var(--brand-muted)' }}>
                         {new Date(msg.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                    <p className="text-sm leading-relaxed break-words" style={{ color: '#D4D4D8' }}>{msg.message}</p>
+                    <p className="text-sm leading-relaxed break-words" style={{ color: 'var(--brand-text)' }}>{msg.message}</p>
                     {msg.attachments && msg.attachments.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-1.5">
                         {msg.attachments.map(att => (
@@ -3444,7 +3653,7 @@ function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () 
                     {filteredMentions.map(u => (
                       <button key={u.id} onClick={() => insertMention(u)}
                         className="w-full text-left px-3 py-2 text-sm hover:opacity-80 transition-opacity"
-                        style={{ color: '#FAFAFA' }}>
+                        style={{ color: 'var(--brand-text)' }}>
                         <span className="text-[#a78bfa] font-semibold">@</span>{u.name}
                       </button>
                     ))}
@@ -3462,7 +3671,7 @@ function RequestDetailModal({ card, onClose }: { card: RequestCard; onClose: () 
                     placeholder="Escreva um comentário... Use @ para mencionar"
                     rows={2}
                     className="flex-1 resize-none rounded-lg px-3 py-2 text-sm outline-none"
-                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(139,92,246,0.25)', color: '#FAFAFA' }}
+                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(139,92,246,0.25)', color: 'var(--brand-text)' }}
                   />
                   <div className="flex flex-col gap-1 shrink-0">
                     <button onClick={() => fileInputRef.current?.click()}
@@ -3535,34 +3744,34 @@ function KanbanColumn({
   const projectColor = isProject && col.color ? col.color : null
 
   const borderColor = isTransition
-    ? 'rgba(234,179,8,0.25)'
+    ? 'var(--warning-border)'
     : projectColor
-    ? `${projectColor}40`
+    ? `${projectColor}55`
     : isProject
-    ? 'rgba(99,102,241,0.25)'
+    ? 'var(--info-border)'
     : isClientCol
-    ? '#14B8A6'
-    : 'var(--brand-border)'
+    ? 'var(--success-border)'
+    : 'var(--border)'
 
   const headerColor = isTransition
-    ? '#eab308'
+    ? 'var(--warning)'
     : projectColor
     ? projectColor
     : isProject
-    ? '#818cf8'
+    ? 'var(--info)'
     : isClientCol
-    ? '#0F766E'
-    : 'var(--brand-text)'
+    ? 'var(--success)'
+    : 'var(--text)'
 
   const bg = isTransition
-    ? 'rgba(234,179,8,0.02)'
+    ? 'var(--warning-bg)'
     : projectColor
-    ? `${projectColor}08`
+    ? `${projectColor}14`
     : isProject
-    ? 'rgba(99,102,241,0.02)'
+    ? 'var(--info-bg)'
     : isClientCol
-    ? 'rgba(20,184,166,0.04)'
-    : 'rgba(255,255,255,0.02)'
+    ? 'var(--success-bg)'
+    : 'var(--surface)'
 
   return (
     <div
@@ -3572,28 +3781,28 @@ function KanbanColumn({
       <div className="px-4 py-3 shrink-0 border-b" style={{ borderColor }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {isTransition && <Rocket size={13} style={{ color: '#eab308' }} />}
-            {isProject && <FolderKanban size={13} style={{ color: '#818cf8' }} />}
-            {isClientCol && !isTransition && !isProject && <Layers size={13} style={{ color: '#0F766E' }} />}
-            {!isTransition && !isProject && !isClientCol && <Layers size={13} style={{ color: 'var(--brand-subtle)' }} />}
+            {isTransition && <Rocket size={13} style={{ color: 'var(--warning)' }} />}
+            {isProject && <FolderKanban size={13} style={{ color: 'var(--info)' }} />}
+            {isClientCol && !isTransition && !isProject && <Layers size={13} style={{ color: 'var(--success)' }} />}
+            {!isTransition && !isProject && !isClientCol && <Layers size={13} style={{ color: 'var(--text-muted)' }} />}
             <p className="text-sm font-semibold" style={{ color: headerColor }}>{col.label}</p>
             {isClientCol && (
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: '#CCFBF1', color: '#0F766E', border: '1px solid #14B8A6' }}>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-border)' }}>
                 C
               </span>
             )}
           </div>
-          <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>
+          <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
             {totalCards}
           </span>
         </div>
         {isTransition && (
-          <p className="text-[10px] mt-1" style={{ color: 'var(--brand-subtle)' }}>
+          <p className="text-[10px] mt-1 font-medium" style={{ color: 'var(--warning)' }}>
             Aguardando geração de projeto
           </p>
         )}
         {isClientCol && (
-          <p className="text-[10px] mt-1" style={{ color: 'rgba(45,212,191,0.6)' }}>
+          <p className="text-[10px] mt-1 font-medium" style={{ color: 'var(--success)' }}>
             Visível e interativa para o cliente
           </p>
         )}
@@ -3691,6 +3900,117 @@ function PhaseSeparator({ label, icon }: { label: string; icon: React.ReactNode 
   )
 }
 
+// ─── Coluna "Aporte" (read-only) ──────────────────────────────────────────────
+// Renderiza os cards de aporte (vindos de hour_contributions onde projeto é PAI).
+// Coluna estática à direita do board; sem drop, sem drag — só visualização +
+// clique pra abrir o modal de aportes do projeto.
+function AporteKanbanColumnPipeline({ aportes, onAporteClick }: {
+  aportes: AporteCard[]
+  onAporteClick: (a: AporteCard) => void
+}) {
+  const MOTIVO_LABEL: Record<string, string> = {
+    aporte:     'Aporte',
+    excedentes: 'Excedentes',
+    absorvidas: 'Absorvidas',
+  }
+  return (
+    <div className="flex flex-col rounded-2xl shrink-0 h-full" style={{
+      width: 264,
+      background: 'var(--surface)',
+      border: `1px solid ${APORTE_COLOR}45`,
+      boxShadow: 'var(--brand-card-shadow)',
+    }}>
+      {/* Header */}
+      <div className="px-4 py-3 shrink-0 border-b rounded-t-2xl"
+        style={{ borderColor: `${APORTE_COLOR}45`, background: 'var(--bg)' }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base">💰</span>
+            <p className="text-sm font-semibold" style={{ color: APORTE_COLOR, fontWeight: 600 }}>Aporte</p>
+          </div>
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+            style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}>
+            {aportes.length}
+          </span>
+        </div>
+        <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-sm"
+          style={{ background: `${APORTE_COLOR}15`, color: APORTE_COLOR, letterSpacing: '0.1em' }}>
+          APORTE
+        </span>
+        <p className="text-[10px] mt-0.5" style={{ color: APORTE_COLOR, opacity: 0.75 }}>
+          Cards de aporte em projetos pai (geram proposta comercial)
+        </p>
+      </div>
+
+      {/* Cards */}
+      <div className="overflow-y-auto p-3 space-y-2.5"
+        style={{ minHeight: 80, maxHeight: 'calc(100vh - 220px)' }}>
+        {aportes.map(a => {
+          const motivo = a.motivo ?? 'aporte'
+          return (
+            <div key={`apt-${a.id}`}
+              onClick={() => onAporteClick(a)}
+              className="rounded-xl p-3 cursor-pointer transition-all hover:scale-[1.01]"
+              style={{
+                background: 'var(--surface-hover)',
+                border: `1px solid ${APORTE_COLOR}45`,
+                boxShadow: 'var(--brand-card-shadow)',
+              }}
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold truncate"
+                    style={{ color: 'var(--text-light)' }}>{a.customer_name ?? '—'}</p>
+                  <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>
+                    {a.project_name ?? '—'}
+                  </p>
+                  {a.project_code && (
+                    <p className="font-mono text-[10px]" style={{ color: 'var(--brand-primary)' }}>{a.project_code}</p>
+                  )}
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-sm shrink-0"
+                  style={{ background: `${APORTE_COLOR}20`, color: APORTE_COLOR }}>
+                  {MOTIVO_LABEL[motivo] ?? motivo}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5 mb-2">
+                <div className="rounded-md px-2 py-1.5 text-center" style={{ background: `${APORTE_COLOR}10` }}>
+                  <p className="text-[9px]" style={{ color: 'var(--text-light)' }}>Horas</p>
+                  <p className="text-xs font-bold tabular-nums" style={{ color: APORTE_COLOR }}>{Number(a.horas).toFixed(1)}h</p>
+                </div>
+                <div className="rounded-md px-2 py-1.5 text-center" style={{ background: `${APORTE_COLOR}10` }}>
+                  <p className="text-[9px]" style={{ color: 'var(--text-light)' }}>Valor/h</p>
+                  <p className="text-xs font-bold tabular-nums" style={{ color: APORTE_COLOR }}>
+                    {Number(a.valor_hora).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
+                  </p>
+                </div>
+                <div className="rounded-md px-2 py-1.5 text-center" style={{ background: `${APORTE_COLOR}20` }}>
+                  <p className="text-[9px]" style={{ color: 'var(--text-light)' }}>Total</p>
+                  <p className="text-xs font-bold tabular-nums" style={{ color: APORTE_COLOR }}>
+                    {Number(a.total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
+                  </p>
+                </div>
+              </div>
+              {a.description && (
+                <p className="text-[10px] mt-1.5 line-clamp-2" style={{ color: 'var(--text-muted)' }}>{a.description}</p>
+              )}
+              <div className="flex items-center justify-between mt-1.5 text-[9px]" style={{ color: 'var(--text-light)' }}>
+                <span>{a.contributed_by ?? '—'}</span>
+                <span>{a.contributed_at ? new Date(a.contributed_at).toLocaleDateString('pt-BR') : ''}</span>
+              </div>
+            </div>
+          )
+        })}
+        {aportes.length === 0 && (
+          <p className="text-center text-xs py-6" style={{ color: 'var(--text-light)' }}>
+            Nenhum aporte registrado ainda
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 function KanbanContent() {
@@ -3701,6 +4021,8 @@ function KanbanContent() {
   const [demandCards,     setDemandCards]     = useState<ContractCard[]>([])
   const [transitionCards, setTransitionCards] = useState<ContractCard[]>([])
   const [projectCards,    setProjectCards]    = useState<ProjectCard[]>([])
+  const [aporteCards,     setAporteCards]     = useState<AporteCard[]>([])
+  const [selectedAporte,  setSelectedAporte]  = useState<AporteCard | null>(null)
   const [requestCards,    setRequestCards]    = useState<RequestCard[]>([])
   const [coordinators,    setCoordinators]    = useState<Coordinator[]>([])
   const [userRole,        setUserRole]        = useState<string>('admin')
@@ -3716,6 +4038,7 @@ function KanbanContent() {
   const [contractFilhoCard,     setContractFilhoCard]     = useState<ContractCard | null>(null)
   const [contractCreateForDecision, setContractCreateForDecision] = useState<ContractCard | null>(null)
   const [selectedProject,       setSelectedProject]       = useState<ProjectCard | null>(null)
+  const [stagesPanelProject,   setStagesPanelProject]   = useState<ProjectCard | null>(null)
   const [generateTarget,       setGenerateTarget]       = useState<ContractCard | null>(null)
   const [projectAction,    setProjectAction]    = useState<{ card: ProjectCard; action: string } | null>(null)
   const [viewMode,         setViewMode]         = useState<'kanban' | 'list'>('kanban')
@@ -3727,6 +4050,11 @@ function KanbanContent() {
   const [filterExecutivos,    setFilterExecutivos]    = useState<string[]>([])
   const [filterCoordinators,  setFilterCoordinators]  = useState<string[]>([])
   const [filterProjectNames,  setFilterProjectNames]  = useState<string[]>([])
+  const [saudeFilter,         setSaudeFilter]         = useState<'' | 'green' | 'yellow' | 'red'>('')
+  type SortKey = 'customer' | 'project' | 'contract_type' | 'service_type' | 'phase' | 'vendidas' | 'consumed' | 'saldo' | 'saude' | 'coord' | 'status'
+  const [sortKey,             setSortKey]             = useState<SortKey | ''>('')
+  const [sortDir,             setSortDir]             = useState<'asc' | 'desc'>('asc')
+  const toggleSort = (k: SortKey) => { setSortKey(prev => prev === k ? k : k); setSortDir(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc') }
   const [listTab,             setListTab]             = useState<'contratos' | 'projetos' | 'requisicoes'>('projetos')
   const [unreadContractIds, setUnreadContractIds] = useState<number[]>([])
   const [seenProjectIds, setSeenProjectIds] = useState<Set<number>>(() => {
@@ -3814,10 +4142,11 @@ function KanbanContent() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await api.get<KanbanResponse>('/contracts/kanban')
+      const r = await api.get<KanbanResponse & { aporte_cards?: AporteCard[] }>('/contracts/kanban')
       setDemandCards(r.demand_cards ?? [])
       setTransitionCards(r.transition_cards ?? [])
       setProjectCards(r.project_cards ?? [])
+      setAporteCards(r.aporte_cards ?? [])
       setRequestCards(r.request_cards ?? [])
       setCoordinators(r.coordinators ?? [])
       setUserRole(r.user_role ?? 'admin')
@@ -4059,6 +4388,10 @@ function KanbanContent() {
   }
 
   const handleProjectMove = async (cardId: number, toCol: string) => {
+    const card = projectCards.find(p => p.id === cardId)
+    // "Em Andamento" agrupa os status ativos: se o card já está num deles (sub-status
+    // gerido pelo cronograma), não sobrescreve — só aplica default ao entrar de fora.
+    if (toCol === 'em_andamento' && card && ACTIVE_PROJECT_STATUSES.includes(card.status)) return
     const newStatus = PROJECT_COL_TO_STATUS[toCol]
     if (!newStatus) return
     setProjectCards(prev => prev.map(p => p.id === cardId ? { ...p, status: newStatus } : p))
@@ -4163,7 +4496,8 @@ function KanbanContent() {
     }
   }
 
-  const totalColumns = visibleDemandCols.length + (showTransition ? 1 : 0) + visibleProjectCols.length
+  const showAporteCol = !isConsultor
+  const totalColumns = visibleDemandCols.length + (showTransition ? 1 : 0) + visibleProjectCols.length + (showAporteCol ? 1 : 0)
   const boardMinWidth = totalColumns * 264 + (totalColumns - 1) * 12 + (showTransition ? 60 : 0) + 64
 
   if (loading) {
@@ -4190,56 +4524,60 @@ function KanbanContent() {
           <div className="flex items-center gap-2">
             {!isConsultor && (
               <button onClick={() => router.push('/portal-cliente/nova-requisicao')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-80"
-                style={{ background: 'rgba(0,245,255,0.08)', border: '1px solid rgba(0,245,255,0.2)', color: '#00F5FF' }}>
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors"
+                style={{ background: 'var(--primary)', border: '1px solid var(--primary)', color: 'var(--primary-fg)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--primary-hover)'; e.currentTarget.style.borderColor = 'var(--primary-hover)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--primary)'; e.currentTarget.style.borderColor = 'var(--primary)' }}>
                 <Plus size={13} /> Nova Requisição
               </button>
             )}
             <button onClick={() => setViewMode(viewMode === 'kanban' ? 'list' : 'kanban')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-opacity hover:opacity-80"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--brand-border)', color: 'var(--brand-muted)' }}>
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; e.currentTarget.style.borderColor = 'var(--border-strong)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--surface)'; e.currentTarget.style.borderColor = 'var(--border)' }}>
               {viewMode === 'kanban' ? <><List size={13} /> Lista de Projetos</> : <><FolderKanban size={13} /> Kanban</>}
             </button>
           </div>
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-6 px-6 py-2 shrink-0 border-b text-[11px]" style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-subtle)' }}>
+        <div className="flex items-center gap-6 px-6 py-2 shrink-0 border-b text-[11px] font-medium" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
           {!isConsultor && !isCoord && (
             <>
               <span className="flex items-center gap-1.5">
-                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded" style={{ background: 'var(--brand-border)' }}><Layers size={8} /></span>
+                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}><Layers size={8} /></span>
                 Fase Demanda
               </span>
               <span className="flex items-center gap-1.5">
-                <Rocket size={11} style={{ color: '#eab308' }} />
+                <Rocket size={11} style={{ color: 'var(--warning)' }} />
                 Início Autorizado
               </span>
             </>
           )}
           <span className="flex items-center gap-1.5">
-            <FolderKanban size={11} style={{ color: '#818cf8' }} />
+            <FolderKanban size={11} style={{ color: 'var(--info)' }} />
             Projetos em Execução
           </span>
-          {isConsultor && <span className="ml-auto opacity-50">Visualização somente leitura</span>}
-          {isCliente && <span className="ml-auto opacity-50">Pode mover somente nas colunas marcadas [C]</span>}
-          {!isConsultor && !isCliente && <span className="ml-auto opacity-50">Arraste para mover entre colunas</span>}
+          {isConsultor && <span className="ml-auto" style={{ color: 'var(--text-light)' }}>Visualização somente leitura</span>}
+          {isCliente && <span className="ml-auto" style={{ color: 'var(--text-light)' }}>Pode mover somente nas colunas marcadas [C]</span>}
+          {!isConsultor && !isCliente && <span className="ml-auto" style={{ color: 'var(--text-light)' }}>Arraste para mover entre colunas</span>}
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-2 px-6 py-2 shrink-0 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+        <div className="flex flex-wrap items-center gap-2 px-6 py-2 shrink-0 border-b" style={{ borderColor: 'var(--border)' }}>
           <div className="relative">
-            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--brand-subtle)' }} />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
             <input
               value={filterSearch}
               onChange={e => setFilterSearch(e.target.value)}
               placeholder="Buscar nome ou descrição..."
-              className="pl-7 pr-7 py-1.5 rounded-lg text-xs outline-none w-56"
-              style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
+              className="pr-7 py-1.5 rounded-lg text-xs outline-none w-56 ds-input"
+              style={{ paddingLeft: '34px' }}
             />
             {filterSearch && (
               <button onClick={() => setFilterSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2">
-                <X size={10} style={{ color: 'var(--brand-subtle)' }} />
+                <X size={10} style={{ color: 'var(--text-muted)' }} />
               </button>
             )}
           </div>
@@ -4279,10 +4617,40 @@ function KanbanContent() {
               wide
             />
           )}
-          {(filterSearch || filterCustomers.length > 0 || filterExecutivos.length > 0 || filterCoordinators.length > 0 || filterProjectNames.length > 0) && (
-            <button onClick={() => { setFilterSearch(''); setFilterCustomers([]); setFilterExecutivos([]); setFilterCoordinators([]); setFilterProjectNames([]) }}
-              className="text-xs px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
-              style={{ color: 'var(--brand-subtle)' }}>
+          {/* Filtro de saúde — chips coloridos + legenda */}
+          {listTab === 'projetos' && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-0.5 rounded-full p-1"
+                style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border)' }}>
+                {([
+                  { id: '',       label: 'Todos',    bg: 'var(--primary)',         fg: 'var(--primary-fg)' },
+                  { id: 'green',  label: 'Saudável', bg: 'var(--success-border)',  fg: 'var(--surface)' },
+                  { id: 'yellow', label: 'Atenção',  bg: 'var(--warning-border)', fg: 'var(--surface)' },
+                  { id: 'red',    label: 'Crítico',  bg: 'var(--danger-border)',   fg: 'var(--surface)' },
+                ] as const).map(opt => {
+                  const active = saudeFilter === opt.id
+                  return (
+                    <button key={opt.id} type="button" onClick={() => setSaudeFilter(opt.id)}
+                      className="px-3 py-1 rounded-full text-xs font-semibold transition-all whitespace-nowrap"
+                      style={active ? { background: opt.bg, color: opt.fg } : { background: 'transparent', color: 'var(--text-muted)' }}>
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="flex items-center gap-2 text-[10px]" style={{ color: 'var(--text-light)' }}>
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--success-border)' }} />&lt;70%</span>
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--warning-border)' }} />70–90%</span>
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--danger-border)' }} />&gt;90%</span>
+              </div>
+            </div>
+          )}
+          {(filterSearch || filterCustomers.length > 0 || filterExecutivos.length > 0 || filterCoordinators.length > 0 || filterProjectNames.length > 0 || saudeFilter) && (
+            <button onClick={() => { setFilterSearch(''); setFilterCustomers([]); setFilterExecutivos([]); setFilterCoordinators([]); setFilterProjectNames([]); setSaudeFilter('') }}
+              className="text-xs font-medium px-2 py-1.5 rounded-lg transition-colors"
+              style={{ color: 'var(--primary)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
               Limpar
             </button>
           )}
@@ -4364,33 +4732,94 @@ function KanbanContent() {
               </div>
 
               {/* Tab: Projetos */}
-              {listTab === 'projetos' && (
-                <div className="rounded-xl border overflow-clip" style={{ borderColor: 'var(--brand-border)' }}>
-                  <table className="w-full text-sm">
+              {listTab === 'projetos' && (() => {
+                // Helpers do row p/ saúde + on-demand
+                const rowHealth = (p: ProjectCard): 'green' | 'yellow' | 'red' => {
+                  const isCoordRow = !!user?.id && (p.coordinator_ids ?? []).includes(user.id) && Number(p.coordination_hours ?? 0) > 0
+                  const sold = isCoordRow ? Number(p.coordination_hours ?? 0) : Number(p.sold_hours ?? 0)
+                  const cons = isCoordRow ? Number(p.coordination_consumed_hours ?? 0) : Number(p.consumed_hours ?? 0)
+                  const pct = sold > 0 ? (cons / sold) * 100 : 0
+                  return pct >= 90 ? 'red' : pct >= 70 ? 'yellow' : 'green'
+                }
+                const isOnDemand = (p: ProjectCard) => (p.contract_type ?? '').toLowerCase().includes('on demand')
+                // Aplica saudeFilter + sort
+                let rows = allProjects
+                if (saudeFilter) rows = rows.filter(p => rowHealth(p) === saudeFilter)
+                if (sortKey) {
+                  const getVal = (p: ProjectCard): string | number => {
+                    const isCoordRow = !!user?.id && (p.coordinator_ids ?? []).includes(user.id) && Number(p.coordination_hours ?? 0) > 0
+                    switch (sortKey) {
+                      case 'customer':      return (p.customer_name ?? '').toLowerCase()
+                      case 'project':       return (p.project_name ?? '').toLowerCase()
+                      case 'contract_type': return (p.contract_type ?? '').toLowerCase()
+                      case 'service_type':  return (p.service_type ?? '').toLowerCase()
+                      case 'phase':         return (PROJECT_COLS.find(c => c.id === PROJECT_STATUS_TO_COL[p.status])?.label ?? 'Projeto').toLowerCase()
+                      case 'vendidas':      return isCoordRow ? Number(p.coordination_hours ?? 0) : Number(p.sold_hours ?? 0)
+                      case 'consumed':      return isCoordRow ? Number(p.coordination_consumed_hours ?? 0) : Number(p.consumed_hours ?? 0)
+                      case 'saldo':         return isOnDemand(p) ? -Infinity : (isCoordRow ? (Number(p.coordination_hours ?? 0) - Number(p.coordination_consumed_hours ?? 0)) : Number(p.general_hours_balance ?? 0))
+                      case 'saude':         return rowHealth(p) === 'green' ? 0 : rowHealth(p) === 'yellow' ? 1 : 2
+                      case 'coord':         {
+                                              const bank = Number(p.coordination_hours ?? 0)
+                                              if (bank <= 0) return -1
+                                              return (Number(p.coordination_consumed_hours ?? 0) / bank) * 100
+                                            }
+                      case 'status':        return (p.status ?? '')
+                    }
+                  }
+                  rows = [...rows].sort((a, b) => {
+                    const va = getVal(a) as any, vb = getVal(b) as any
+                    if (va < vb) return sortDir === 'asc' ? -1 : 1
+                    if (va > vb) return sortDir === 'asc' ?  1 : -1
+                    return 0
+                  })
+                }
+                const arrow = (k: SortKey) => sortKey !== k ? '' : sortDir === 'asc' ? ' ▲' : ' ▼'
+                const SortTh = ({ k, label, align = 'left' }: { k: SortKey; label: string; align?: 'left' | 'center' }) => (
+                  <th onClick={() => toggleSort(k)} className={`text-${align} px-4 py-3 text-zinc-400 font-medium cursor-pointer select-none hover:text-zinc-200`}>{label}{arrow(k)}</th>
+                )
+                return (
+                <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--brand-border)' }}>
+                  <table className="w-full text-sm min-w-[1100px]">
                     <thead className="sticky top-0 z-10" style={{ background: 'var(--brand-surface)' }}>
                       <tr style={{ background: 'var(--brand-surface)', borderBottom: '1px solid var(--brand-border)' }}>
-                        <th className="text-left px-4 py-3 text-zinc-400 font-medium">Cliente</th>
-                        <th className="text-left px-4 py-3 text-zinc-400 font-medium">Projeto</th>
-                        <th className="text-left px-4 py-3 text-zinc-400 font-medium">Tipo Contrato</th>
-                        <th className="text-left px-4 py-3 text-zinc-400 font-medium">Tipo Serviço</th>
-                        <th className="text-left px-4 py-3 text-zinc-400 font-medium">Fase</th>
-                        <th className="text-center px-4 py-3 text-zinc-400 font-medium">Horas</th>
-                        <th className="text-center px-4 py-3 text-zinc-400 font-medium">HS Consumidas</th>
-                        <th className="text-center px-4 py-3 text-zinc-400 font-medium">Saldo</th>
-                        <th className="text-center px-4 py-3 text-zinc-400 font-medium">Status</th>
-                        {!isCliente && <th className="px-4 py-3" />}
+                        {!isCliente && <th className="px-2 py-3 w-10" />}
+                        <SortTh k="customer" label="Cliente" />
+                        <SortTh k="project" label="Projeto" />
+                        <SortTh k="contract_type" label="Tipo Contrato" />
+                        <SortTh k="service_type" label="Tipo Serviço" />
+                        <SortTh k="phase" label="Fase" />
+                        <SortTh k="vendidas" label="Horas" align="center" />
+                        {!isCliente && <SortTh k="consumed" label="HS Consumidas" align="center" />}
+                        {!isCliente && <SortTh k="saldo" label="Saldo" align="center" />}
+                        {!isCliente && <SortTh k="saude" label="Saúde" align="center" />}
+                        {!isCliente && <SortTh k="coord" label="Coord." align="center" />}
+                        <SortTh k="status" label="Status" align="center" />
                       </tr>
                     </thead>
                     <tbody>
-                      {allProjects.length === 0 && (
-                        <tr><td colSpan={isCliente ? 7 : 8} className="px-4 py-8 text-center text-zinc-600 text-xs">Nenhum projeto.</td></tr>
+                      {rows.length === 0 && (
+                        <tr><td colSpan={isCliente ? 7 : 12} className="px-4 py-8 text-center text-zinc-600 text-xs">Nenhum projeto.</td></tr>
                       )}
-                      {allProjects.map(p => {
+                      {rows.map(p => {
                         const isClosed  = p.status === 'finished' || p.status === 'cancelled'
                         const hideHours = isCliente && isClosed
+                        const onDemand  = isOnDemand(p)
+                        // Lente do coordenador: swap Horas/HS Consumidas/Saldo p/ banco de coordenação
+                        // quando o usuário logado é coordenador do projeto + banco explícito.
+                        const isCoordRow = !!user?.id && (p.coordinator_ids ?? []).includes(user.id) && Number(p.coordination_hours ?? 0) > 0
+                        const rowVendidas = isCoordRow ? Number(p.coordination_hours) : (p.sold_hours ?? null)
+                        const rowConsumed = isCoordRow ? Number(p.coordination_consumed_hours ?? 0) : (p.consumed_hours ?? null)
+                        const rowSaldo    = isCoordRow ? (Number(rowVendidas) - Number(rowConsumed)) : (p.general_hours_balance ?? null)
+                        const saude       = rowHealth(p)
+                        const saudeColor  = saude === 'red' ? 'var(--danger-border)' : saude === 'yellow' ? 'var(--warning-border)' : 'var(--success-border)'
                         return (
                           <tr key={`p-${p.id}`} onClick={() => setSelectedProject(p)} className="cursor-pointer hover:bg-zinc-800/40 transition-colors group/row"
                             style={{ borderTop: '1px solid var(--brand-border)' }}>
+                            {!isCliente && (
+                              <td className="px-2 py-3 w-10" onClick={e => e.stopPropagation()}>
+                                <ListProjectActionMenu onAction={action => setProjectAction({ card: p, action })} canWrite={canWrite} />
+                              </td>
+                            )}
                             <td className="px-4 py-3 text-white font-medium">{p.customer_name}</td>
                             <td className="px-4 py-3 text-zinc-300 text-xs">
                               <p className="text-zinc-300 text-sm">{p.project_name}</p>
@@ -4399,31 +4828,60 @@ function KanbanContent() {
                             <td className="px-4 py-3 text-zinc-400 text-xs">{p.contract_type ?? '—'}</td>
                             <td className="px-4 py-3 text-zinc-400 text-xs">{p.service_type ?? '—'}</td>
                             <td className="px-4 py-3 text-zinc-400 text-xs">{PROJECT_COLS.find(c => c.id === PROJECT_STATUS_TO_COL[p.status])?.label ?? 'Projeto'}</td>
-                            <td className="px-4 py-3 text-center text-zinc-300">{p.sold_hours != null ? `${p.sold_hours}h` : '—'}</td>
-                            <td className="px-4 py-3 text-center text-zinc-300">
-                              {hideHours ? '—' : p.consumed_hours != null ? `${p.consumed_hours.toFixed(1)}h` : '—'}
+                            <td className="px-4 py-3 text-center text-zinc-300" title={isCoordRow ? 'Horas de Coordenação' : undefined}>
+                              {rowVendidas != null ? `${rowVendidas}h${isCoordRow ? ' *' : ''}` : '—'}
                             </td>
-                            <td className="px-4 py-3 text-center"
-                              style={{ color: !hideHours && (p.general_hours_balance ?? 0) < 0 ? '#ef4444' : 'rgb(212 212 216)' }}>
-                              {hideHours ? '—' : p.general_hours_balance != null ? `${p.general_hours_balance.toFixed(1)}h` : '—'}
-                            </td>
+                            {!isCliente && (
+                              <td className="px-4 py-3 text-center text-zinc-300">
+                                {hideHours ? '—' : rowConsumed != null ? `${Number(rowConsumed).toFixed(1)}h` : '—'}
+                              </td>
+                            )}
+                            {!isCliente && (
+                              <td className="px-4 py-3 text-center"
+                                style={{ color: !hideHours && !onDemand && (rowSaldo ?? 0) < 0 ? '#ef4444' : 'rgb(212 212 216)' }}>
+                                {hideHours || onDemand ? '—' : rowSaldo != null ? `${Number(rowSaldo).toFixed(1)}h` : '—'}
+                              </td>
+                            )}
+                            {!isCliente && (
+                              <td className="px-4 py-3 text-center">
+                                <span className="inline-block w-3 h-3 rounded-full" style={{ background: saudeColor }} title={saude === 'red' ? 'Crítico (>90%)' : saude === 'yellow' ? 'Atenção (70–90%)' : 'Saudável (<70%)'} />
+                              </td>
+                            )}
+                            {!isCliente && (() => {
+                              const cBank = Number(p.coordination_hours ?? 0)
+                              if (cBank <= 0) return <td className="px-4 py-3 text-center text-zinc-600 text-xs">—</td>
+                              const cCons = Number(p.coordination_consumed_hours ?? 0)
+                              const cPct  = (cCons / cBank) * 100
+                              const cColor = cPct >= 90 ? 'var(--danger-border)' : cPct >= 70 ? 'var(--warning-border)' : 'var(--success-border)'
+                              const cSaldo = cBank - cCons
+                              return (
+                                <td className="px-4 py-3 min-w-[140px]"
+                                  title={`Coordenação: ${cCons.toFixed(1)}h de ${cBank.toFixed(1)}h (${Math.round(cPct)}%) · saldo ${cSaldo.toFixed(1)}h`}>
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                                      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(cPct, 100)}%`, background: cColor }} />
+                                    </div>
+                                    <span className="text-[10px] tabular-nums font-semibold shrink-0" style={{ color: cColor }}>{Math.round(cPct)}%</span>
+                                  </div>
+                                  <div className="text-[9px] mt-0.5 tabular-nums" style={{ color: 'var(--text-light)' }}>
+                                    {cCons.toFixed(1)}h / {cBank.toFixed(1)}h
+                                  </div>
+                                </td>
+                              )
+                            })()}
                             <td className="px-4 py-3 text-center">
                               {(() => { const b = STATUS_BADGE[p.status] ?? { label: p.status, color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' }; return (
                                 <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: b.bg, color: b.color }}>{b.label}</span>
                               )})()}
                             </td>
-                            {!isCliente && (
-                              <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                                <ListProjectActionMenu onAction={action => setProjectAction({ card: p, action })} canWrite={canWrite} />
-                              </td>
-                            )}
                           </tr>
                         )
                       })}
                     </tbody>
                   </table>
                 </div>
-              )}
+                )
+              })()}
 
               {/* Tab: Contratos */}
               {listTab === 'contratos' && (
@@ -4634,10 +5092,61 @@ function KanbanContent() {
                   getProjectCols={getAvailableProjectCols}
                 />
               ))}
+
+              {/* ── Coluna Aporte (sempre na ponta direita; só admin/coord/cliente vê) ── */}
+              {/* Mostra apenas aportes FINALIZADOS (kanban_status='aporte'). Aportes recém-criados
+                  (kanban_status='novo_contrato') vivem só no Kanban Contratos para revisão. */}
+              {showAporteCol && (() => {
+                const aporteList = aporteCards.filter(a => a.kanban_status === 'aporte').filter(a => {
+                  if (filterCustomers.length > 0 && !filterCustomers.includes(a.customer_name ?? '')) return false
+                  if (filterSearch) {
+                    const q = filterSearch.toLowerCase()
+                    return (a.customer_name ?? '').toLowerCase().includes(q) || (a.project_name ?? '').toLowerCase().includes(q)
+                  }
+                  return true
+                })
+                return (
+                  <AporteKanbanColumnPipeline
+                    aportes={aporteList}
+                    onAporteClick={a => setSelectedAporte(a)}
+                  />
+                )
+              })()}
             </div>
           </div>
         </DragDropContext>}
       </div>
+
+      {/* Aporte Detail Modal — abre ao clicar num card de aporte */}
+      {selectedAporte && (
+        <AporteDetailModal
+          aporte={selectedAporte}
+          canWrite={canWrite}
+          onClose={() => setSelectedAporte(null)}
+          onViewInProject={() => {
+            // Abre o modal do projeto direto na aba "Aportes" (sem sair da página).
+            // Mesma UX do "Visualizar" — usuário pode trocar de aba dentro do modal.
+            const syntheticCard = {
+              id: selectedAporte.project_id,
+              customer_name: selectedAporte.customer_name,
+              project_name: selectedAporte.project_name,
+              code: selectedAporte.project_code,
+              status: selectedAporte.project_status,
+            } as any
+            setSelectedAporte(null)
+            setProjectAction({ card: syntheticCard, action: 'aportes' })
+          }}
+          onMoveToFinal={selectedAporte.kanban_status === 'novo_contrato' ? async () => {
+            try {
+              await api.patch(`/projects/${selectedAporte.project_id}/hour-contributions/${selectedAporte.id}/move`, { kanban_status: 'aporte' })
+              setAporteCards(prev => prev.map(x => x.id === selectedAporte.id ? { ...x, kanban_status: 'aporte' } : x))
+              toast.success('Aporte movido para a coluna Aporte')
+            } catch {
+              toast.error('Erro ao mover aporte')
+            }
+          } : undefined}
+        />
+      )}
 
       {/* Modals */}
       {selectedContract && (
@@ -4668,7 +5177,15 @@ function KanbanContent() {
         />
       )}
       {selectedProject && (
-        <ProjectDetailModal card={selectedProject} onClose={() => setSelectedProject(null)} userRole={userRole} />
+        <ProjectViewModal projectId={selectedProject.id} onClose={() => setSelectedProject(null)} userRole={userRole} initialTab="overview" />
+      )}
+      {stagesPanelProject && (
+        <ProjectStagesSidePanel
+          projectId={stagesPanelProject.id}
+          projectName={stagesPanelProject.project_name}
+          customerName={stagesPanelProject.customer_name}
+          onClose={() => setStagesPanelProject(null)}
+        />
       )}
       {selectedRequest && (
         <RequestDetailModal card={selectedRequest} onClose={() => setSelectedRequest(null)} />
@@ -4825,7 +5342,7 @@ function KanbanContent() {
         if (action === 'cost')       return <ProjectViewModal projectId={card.id} onClose={close} userRole={userRole} initialTab="consultants" />
         if (action === 'timesheets') return <ProjectDataModal projectId={card.id} projectName={card.project_name} initialTab="timesheets" onClose={close} />
         if (action === 'expenses')   return <ProjectDataModal projectId={card.id} projectName={card.project_name} initialTab="expenses"   onClose={close} />
-        if (action === 'aportes')    return <ProjectAportesModal projectId={card.id} projectName={card.project_name} onClose={close} />
+        if (action === 'aportes')    return <ProjectViewModal projectId={card.id} onClose={close} userRole={userRole} initialTab="aportes" />
         if (action === 'team')       return <ProjectTeamModal projectId={card.id} projectName={card.project_name} onClose={close} onSaved={close} />
         if (action === 'chat')       return <ProjectDetailModal card={card} onClose={() => { close(); if (card.contract_id) setUnreadContractIds(prev => prev.filter(id => id !== card.contract_id)) }} userRole={userRole} initialTab="chat" />
         return null

@@ -33,13 +33,16 @@ import {
   Tag,
   CreditCard,
   FileText,
+  FileSpreadsheet,
   Contact,
   LayoutGrid,
   DollarSign,
   Webhook,
-  Activity,
-  Inbox as InboxIcon,
-  Bot,
+  Ticket,
+  Briefcase,
+  UserPlus,
+  Search,
+  Inbox,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
@@ -60,15 +63,29 @@ type NavItem = {
   matchPaths?: string[]
   exactMatch?: boolean
 }
+type NavLink = { label: string; href: string; icon: LucideIcon; exactMatch?: boolean }
+type NavSubGroup = {
+  kind: 'subgroup'
+  label: string
+  icon: LucideIcon
+  items: NavLink[]
+}
 type NavGroup = {
   type: 'group'
   label: string
   icon: LucideIcon
-  items: { label: string; href: string; icon: LucideIcon; exactMatch?: boolean }[]
+  items: (NavLink | NavSubGroup)[]
 }
 type NavEntry = NavItem | NavGroup
 
+// Meus Cards e Capacidade ainda em desenvolvimento — só DEV1
+const IS_DEV1 = process.env.NEXT_PUBLIC_APP_ENV === 'dev'
+
 const NAV_COORDINATOR: NavEntry[] = [
+  ...(IS_DEV1 ? [
+    { type: 'item' as const, label: 'Meus Cards', href: '/meus-cards', icon: Inbox },
+    { type: 'item' as const, label: 'Capacidade', href: '/capacidade', icon: Users },
+  ] : []),
   {
     type: 'group',
     label: 'Apontamentos & Despesas',
@@ -82,28 +99,14 @@ const NAV_COORDINATOR: NavEntry[] = [
   },
 ]
 
-const NAV_CLIENTE: NavEntry[] = [
-  { type: 'item', label: 'Visão Executiva', href: '/portal-cliente', icon: Building2 },
-  { type: 'item', label: 'Apontamentos',  href: '/timesheets',     icon: Clock },
-  { type: 'item', label: 'Despesas',      href: '/expenses',       icon: Receipt },
-  {
-    type: 'group',
-    label: 'Dashboards',
-    icon: BarChart2,
-    items: [
-      { label: 'Banco de Horas Fixo',    href: '/dashboards/bank-hours-fixed',   icon: BarChart2 },
-      { label: 'Banco de Horas Mensais', href: '/dashboards/bank-hours-monthly', icon: CalendarClock },
-      { label: 'On Demand',              href: '/dashboards/on-demand',           icon: Zap },
-      { label: 'Fechado',                href: '/dashboards/fechado',             icon: CheckSquare },
-    ],
-  },
-]
 
 const NAV: NavEntry[] = [
-  { type: 'item', label: 'Início',                href: '/dashboard',       icon: Home },
-  { type: 'item', label: 'Inbox',                 href: '/inbox',           icon: InboxIcon },
   { type: 'item', label: 'Meu Painel',            href: '/meu-painel',      icon: LayoutDashboard },
-  { type: 'item', label: 'Histórico Operacional', href: '/feed-operacional', icon: Activity },
+  { type: 'item', label: 'Início',                href: '/dashboard',       icon: Home },
+  ...(IS_DEV1 ? [
+    { type: 'item' as const, label: 'Meus Cards', href: '/meus-cards', icon: Inbox },
+    { type: 'item' as const, label: 'Capacidade', href: '/capacidade', icon: Users },
+  ] : []),
   {
     type: 'group',
     label: 'Projetos',
@@ -113,7 +116,6 @@ const NAV: NavEntry[] = [
       { label: 'Kanban Contratos',         href: '/contratos/kanban',         icon: LayoutGrid },
       { label: 'Demandas e Projetos',      href: '/contratos/pipeline',       icon: Layers },
       { label: 'Investimento Interno',      href: '/investimento-comercial',   icon: TrendingUp },
-      { label: 'Visão Executiva',          href: '/portal-cliente',           icon: Building2 },
     ],
   },
   {
@@ -137,13 +139,39 @@ const NAV: NavEntry[] = [
   },
   {
     type: 'group',
-    label: 'Dashboards',
+    label: 'Visão Externa',
     icon: BarChart2,
     items: [
-      { label: 'Banco de Horas Fixo',    href: '/dashboards/bank-hours-fixed',   icon: BarChart2 },
-      { label: 'Banco de Horas Mensais', href: '/dashboards/bank-hours-monthly', icon: CalendarClock },
-      { label: 'On Demand',              href: '/dashboards/on-demand',           icon: Zap },
-      { label: 'Fechado',                href: '/dashboards/fechado',             icon: CheckSquare },
+      {
+        kind: 'subgroup',
+        label: 'Cliente',
+        icon: Building2,
+        items: [
+          { label: 'Home do Cliente',        href: '/portal-cliente',                icon: Building2 },
+          { label: 'Banco de Horas Fixo',    href: '/dashboards/bank-hours-fixed',   icon: BarChart2 },
+          { label: 'Banco de Horas Mensais', href: '/dashboards/bank-hours-monthly', icon: CalendarClock },
+          { label: 'On Demand',              href: '/dashboards/on-demand',           icon: Zap },
+          { label: 'Fechado',                href: '/dashboards/fechado',             icon: CheckSquare },
+        ],
+      },
+      {
+        kind: 'subgroup',
+        label: 'Consultor',
+        icon: UserCheck,
+        items: [
+          { label: 'Meu Painel',     href: '/meu-painel',  icon: UserCheck },
+        ],
+      },
+      {
+        kind: 'subgroup',
+        label: 'Parceiro',
+        icon: Handshake,
+        items: [
+          { label: 'Painel do Parceiro',  href: '/partner-dashboard',   icon: Handshake },
+          // 'Fechamento Parceiro' removido: era duplicata de Fechamento → Parceiros
+          // (mesma rota /fechamento/parceiro), causava 2 itens acesos ao mesmo tempo.
+        ],
+      },
     ],
   },
   {
@@ -155,7 +183,9 @@ const NAV: NavEntry[] = [
       { label: 'Clientes',            href: '/fechamento/cliente',      icon: Building2  },
       { label: 'Parceiros',           href: '/fechamento/parceiro',     icon: Handshake  },
       { label: 'Consultores',         href: '/fechamento/consultor',    icon: UserCheck  },
+      { label: 'Folha Cooperativa',   href: '/fechamento/folha',        icon: FileSpreadsheet },
       { label: 'Contratos',           href: '/fechamento/contratos',    icon: FileText   },
+      { label: 'Reajuste de Contrato', href: '/fechamento/reajustes',   icon: TrendingUp },
       { label: 'Pagamento Despesas',  href: '/pagamento-despesas',      icon: DollarSign },
     ],
   },
@@ -167,8 +197,14 @@ const NAV: NavEntry[] = [
       { label: 'Apontamentos', href: '/relatorios/apontamentos', icon: Clock },
     ],
   },
-  { type: 'item', label: 'Matriz de Conhecimento', href: '/matriz-conhecimento', icon: Star },
-  { type: 'item', label: 'Cobertura de Skills',    href: '/projetos/cobertura-skills', icon: UserCheck },
+  // 🧪 Features experimentais — só em DEV1 (escondidas em homolog/prod)
+  ...(process.env.NEXT_PUBLIC_APP_ENV === 'dev' ? [
+    { type: 'item' as const, label: 'Matriz de Conhecimento', href: '/matriz-conhecimento', icon: Star },
+    { type: 'item' as const, label: 'Cobertura de Skills',    href: '/projetos/cobertura-skills', icon: UserCheck },
+    { type: 'item' as const, label: 'Candidatos',             href: '/candidatos',                icon: Briefcase },
+    { type: 'item' as const, label: 'Busca Avançada',         href: '/busca',                     icon: Search },
+    { type: 'item' as const, label: 'Novo Candidato',         href: '/candidato/cadastro',        icon: UserPlus },
+  ] : []),
   {
     type: 'group',
     label: 'Cadastros',
@@ -185,19 +221,12 @@ const NAV: NavEntry[] = [
       { label: 'Tipos de Despesa',      href: '/cadastros?tab=expense_types',     icon: Receipt },
       { label: 'Formas de Pagamento',   href: '/cadastros?tab=payment_methods',   icon: CreditCard },
       { label: 'Parceiros',             href: '/partners',                        icon: Handshake },
+      { label: 'Saldo Inicial de Tickets', href: '/cadastros/saldo-inicial-tickets', icon: Ticket },
       { label: 'Integração Movidesk',   href: '/configuracoes/movidesk',          icon: Webhook },
     ],
   },
   { type: 'item', label: 'Usuários',      href: '/users',    icon: Users },
-  {
-    type: 'group',
-    label: 'Configurações',
-    icon: Settings,
-    items: [
-      { label: 'Geral',         href: '/settings',                   icon: Settings },
-      { label: 'BOT Minutor',   href: '/configuracoes/bot-minutor',  icon: Bot },
-    ],
-  },
+  { type: 'item', label: 'Configurações', href: '/settings', icon: Settings },
 ]
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -216,16 +245,7 @@ function SidebarInner({ user }: { user: User }) {
   const pathname     = usePathname()
   const searchParams = useSearchParams()
   const [collapsed,   setCollapsed]   = useState(false)
-  const [openGroups,  setOpenGroups]  = useState<string[]>(() => {
-    // Abre automaticamente apenas o grupo que contém a rota atual
-    const active: string[] = []
-    for (const entry of NAV) {
-      if (entry.type === 'group' && entry.items.some(i => pathname === i.href.split('?')[0] || pathname.startsWith(i.href.split('?')[0] + '/'))) {
-        active.push(entry.label)
-      }
-    }
-    return active
-  })
+  const [openGroups,  setOpenGroups]  = useState<string[]>([])
 
   const isConsultor        = user?.type === 'consultor'
   const isCoordenador      = user?.type === 'coordenador'
@@ -234,17 +254,40 @@ function SidebarInner({ user }: { user: User }) {
   const isParceiroGestor   = isParceiroAdmin && !!user?.is_executive
   const isAdministrativo   = user?.type === 'administrativo'
   // permissions = lista resolvida pelo backend (base + extra + grupos); fallback para extra_permissions
-  const ep: string[] = (user as any)?.permissions ?? user?.extra_permissions ?? []
+  // Estabilizada com useMemo pra não causar re-render do visibleNav em cada ciclo
+  const ep: string[] = useMemo(
+    () => (user as any)?.permissions ?? user?.extra_permissions ?? [],
+    [(user as any)?.permissions, user?.extra_permissions]
+  )
 
   // Para clientes: carrega os códigos de tipo de contrato dos seus projetos
-  const [clienteContractCodes, setClienteContractCodes] = useState<Set<string>>(new Set())
+  // PRINCIPAIS (sem parent_project_id). Filhos herdam o item do menu via parent
+  // — não deveriam expor entrada extra no menu.
+  // Cacheado em sessionStorage pra evitar flicker do grupo "Contratos" ao trocar de rota.
+  const cacheKey = isCliente && user?.customer_id ? `minutor:contract_codes:${user.customer_id}` : null
+  const [clienteContractCodes, setClienteContractCodes] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined' || !cacheKey) return new Set()
+    try {
+      const raw = window.sessionStorage.getItem(cacheKey)
+      if (raw) return new Set(JSON.parse(raw) as string[])
+    } catch { /* ignore */ }
+    return new Set()
+  })
   useEffect(() => {
     if (!isCliente || !user?.customer_id) return
     api.get<any>(`/projects?customer_id=${user.customer_id}&pageSize=200`)
       .then(r => {
         const items: any[] = Array.isArray(r?.items) ? r.items : []
-        const codes = new Set(items.map(p => p.contract_type?.code).filter(Boolean) as string[])
+        const codes = new Set(
+          items
+            .filter(p => !p.parent_project_id)            // só projetos principais
+            .map(p => p.contract_type?.code)
+            .filter(Boolean) as string[]
+        )
         setClienteContractCodes(codes)
+        if (cacheKey) {
+          try { window.sessionStorage.setItem(cacheKey, JSON.stringify(Array.from(codes))) } catch { /* ignore */ }
+        }
       })
       .catch(() => {})
   }, [isCliente, user?.customer_id])
@@ -254,20 +297,22 @@ function SidebarInner({ user }: { user: User }) {
       const has = (p: string) => ep.includes(p)
       const nav: NavEntry[] = [...NAV_COORDINATOR]
 
-      // Grupo Projetos — somente para coordenadores do tipo "projetos"
-      if (user?.coordinator_type === 'projetos') {
-        nav.splice(1, 0, {
-          type: 'group',
-          label: 'Projetos',
-          icon: FolderOpen,
-          items: [
-            { label: 'Gestão de Projetos',  href: '/gestao-projetos',    icon: Layers },
-            { label: 'Demandas e Projetos', href: '/contratos/pipeline', icon: LayoutGrid },
-          ],
-        })
+      // Permissão via grupo libera "Gestão de Projetos" pra coordenadores que NÃO
+      // sejam do tipo "projetos" (esses entram via Demandas e Projetos abaixo).
+      if (user?.coordinator_type !== 'projetos' && (ep.includes('gestao_projetos.view') || ep.includes('gestao_projetos.update'))) {
+        nav.splice(1, 0, { type: 'item', label: 'Gestão de Projetos', href: '/gestao-projetos', icon: Layers })
       }
 
-      // Portal de Sustentação + Meu Painel — somente para coordenadores do tipo "sustentacao"
+      // Meu Painel — primeiro item para TODOS os coordenadores
+      nav.unshift({ type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard })
+
+      // Demandas e Projetos — posição 2 para coordenador de projetos
+      // ("Gestão de Projetos" foi removida — governança ficou no painel/Demandas)
+      if (user?.coordinator_type === 'projetos') {
+        nav.splice(1, 0, { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline', icon: LayoutGrid })
+      }
+
+      // Portal de Sustentação — somente para coordenadores do tipo "sustentacao"
       if (user?.coordinator_type === 'sustentacao') {
         nav.splice(1, 0, {
           type: 'group',
@@ -277,7 +322,6 @@ function SidebarInner({ user }: { user: User }) {
             { label: 'Portal', href: '/sustentacao', icon: Headphones, exactMatch: true },
           ],
         })
-        nav.splice(1, 0, { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard })
       }
 
 
@@ -285,12 +329,22 @@ function SidebarInner({ user }: { user: User }) {
       const hasProjectsAction = ['projects.create','projects.update','projects.delete','projects.view_financial'].some(p => ep.includes(p))
       const hasAnyUserPerm = ['users.view_all','users.create','users.update','users.reset_password'].some(p => ep.includes(p))
 
-      // Cadastros — monta apenas os subitens concedidos
+      // Cadastros — monta apenas os subitens concedidos.
+      // Pra clientes: além de 'customers.manage' (pacote completo), permissões
+      // granulares (create/update/delete) também liberam o menu — concedidas
+      // via PermissionGroup ou extra_permissions.
+      // Clientes: qualquer permissão de customers libera o item (view sozinho basta).
+      // Contatos de Clientes: mais restritivo — exige nível de edição/gerência.
+      const hasCustomersView = ['customers.view', 'customers.create', 'customers.update', 'customers.delete', 'customers.manage'].some(p => ep.includes(p))
+      const hasCustomersEdit = ['customers.create', 'customers.update', 'customers.delete', 'customers.manage'].some(p => ep.includes(p))
+      // Coordenador de projetos: nunca vê cadastro de Clientes/Contatos de Clientes
+      // (governança de clientes fica fora do escopo dele).
+      const isCoordProjetos = user?.coordinator_type === 'projetos'
       const cadastrosItems: { label: string; href: string; icon: typeof Users }[] = []
       if (has('contracts.manage'))          cadastrosItems.push({ label: 'Tipos de Contrato',     href: '/cadastros?tab=contracts',          icon: FileType })
       if (has('services.manage'))           cadastrosItems.push({ label: 'Tipos de Serviço',      href: '/cadastros?tab=services',           icon: Wrench })
-      if (has('customers.manage'))          cadastrosItems.push({ label: 'Clientes',              href: '/clientes',                         icon: Users })
-      if (has('customers.manage'))          cadastrosItems.push({ label: 'Contatos de Clientes',  href: '/cadastros?tab=customer_contacts',   icon: Contact })
+      if (!isCoordProjetos && hasCustomersView) cadastrosItems.push({ label: 'Clientes',              href: '/clientes',                         icon: Users })
+      if (!isCoordProjetos && hasCustomersEdit) cadastrosItems.push({ label: 'Contatos de Clientes',  href: '/cadastros?tab=customer_contacts',   icon: Contact })
       if (has('executives.manage'))         cadastrosItems.push({ label: 'Executivos',            href: '/cadastros?tab=executives',         icon: Star })
       if (has('groups.manage'))             cadastrosItems.push({ label: 'Grupos de Consultor',   href: '/cadastros?tab=groups',             icon: UserCheck })
       if (has('holidays.manage'))           cadastrosItems.push({ label: 'Feriados',              href: '/cadastros?tab=holidays',           icon: CalendarDays })
@@ -298,11 +352,14 @@ function SidebarInner({ user }: { user: User }) {
       if (has('expense_types.manage'))      cadastrosItems.push({ label: 'Tipos de Despesa',      href: '/cadastros?tab=expense_types',      icon: Receipt })
       if (has('payment_methods.manage'))    cadastrosItems.push({ label: 'Formas de Pagamento',   href: '/cadastros?tab=payment_methods',    icon: CreditCard })
       if (has('partners.manage'))   cadastrosItems.push({ label: 'Parceiros',           href: '/partners',                 icon: Handshake })
+      // Coordenador de projetos: vê "Usuários" sob Cadastros com função restrita a
+      // reset de senhas (a tela /users gateia as ações pra esse perfil).
+      if (isCoordProjetos)                  cadastrosItems.push({ label: 'Usuários',              href: '/users',                            icon: Users })
       // 'Projetos' foi removido — inclusão agora é feita via Kanban (pipeline)
       if (cadastrosItems.length > 0) nav.push({ type: 'group', label: 'Cadastros', icon: Database, items: cadastrosItems })
 
-      // Usuários — após Cadastros
-      if (hasAnyUserPerm) nav.push({ type: 'item', label: 'Usuários', href: '/users', icon: Users })
+      // Usuários — após Cadastros (perfis com permissão dedicada; coord_projetos já entra via Cadastros acima)
+      if (!isCoordProjetos && hasAnyUserPerm) nav.push({ type: 'item', label: 'Usuários', href: '/users', icon: Users })
 
       // Configurações
       if (has('settings.view')) nav.push({ type: 'item', label: 'Configurações', href: '/settings', icon: Settings })
@@ -310,7 +367,7 @@ function SidebarInner({ user }: { user: User }) {
       return nav
     }
     if (isAdministrativo) {
-      return [
+      const nav: NavEntry[] = [
         { type: 'item', label: 'Início', href: '/dashboard', icon: Home },
         {
           type: 'group',
@@ -329,7 +386,9 @@ function SidebarInner({ user }: { user: User }) {
             { label: 'Clientes',           href: '/fechamento/cliente',   icon: Building2 },
             { label: 'Parceiros',          href: '/fechamento/parceiro',  icon: Handshake },
             { label: 'Consultores',        href: '/fechamento/consultor', icon: Users },
+            { label: 'Folha Cooperativa',  href: '/fechamento/folha',     icon: FileSpreadsheet },
             { label: 'Contratos',          href: '/fechamento/contratos', icon: FileText  },
+            { label: 'Reajuste de Contrato', href: '/fechamento/reajustes', icon: TrendingUp },
             { label: 'Pagamento Despesas', href: '/pagamento-despesas',   icon: DollarSign },
           ],
         },
@@ -340,7 +399,12 @@ function SidebarInner({ user }: { user: User }) {
           ],
         },
         { type: 'item', label: 'Usuários',     href: '/users',    icon: Users },
-      ] as NavEntry[]
+      ]
+      // Gestão de Projetos — libera via permissão de grupo (mesmo padrão de outros perfis)
+      if (ep.includes('gestao_projetos.view') || ep.includes('gestao_projetos.update')) {
+        nav.splice(3, 0, { type: 'item', label: 'Gestão de Projetos', href: '/gestao-projetos', icon: Layers })
+      }
+      return nav
     }
     if (isCliente) {
       // Filtra dashboards pelos tipos de contrato que o cliente realmente possui
@@ -354,39 +418,32 @@ function SidebarInner({ user }: { user: User }) {
         .filter(([code]) => clienteContractCodes.has(code))
         .map(([, item]) => item)
       const nav: NavEntry[] = [
-        { type: 'item', label: 'Visão Executiva',     href: '/portal-cliente',      icon: Building2 },
+        { type: 'item', label: 'Home',                 href: '/portal-cliente',      icon: Building2 },
         { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline',  icon: LayoutGrid },
-        {
-          type: 'group',
-          label: 'Apontamentos & Despesas',
-          icon: Clock,
-          items: [
-            { label: 'Apontamentos', href: '/timesheets', icon: Clock },
-            { label: 'Despesas',     href: '/expenses',   icon: Receipt },
-          ],
-        },
       ]
       if (dashItems.length > 0) {
-        nav.push({ type: 'group', label: 'Dashboards', icon: BarChart2, items: dashItems })
+        nav.push({ type: 'group', label: 'Contratos', icon: FileText, items: dashItems })
+      }
+      // Indicadores da própria empresa (atualmente só Auster)
+      if (user?.customer_id === 220) {
+        nav.push({ type: 'item', label: 'Indicadores', href: '/indicadores/auster', icon: BarChart2 })
       }
       return nav
     }
     if (isConsultor) {
       const baseNav: NavEntry[] = [
-        { type: 'item', label: 'Início',     href: '/dashboard',  icon: Home },
         { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard },
+        ...(IS_DEV1 ? [{ type: 'item' as const, label: 'Meus Cards', href: '/meus-cards', icon: Inbox }] : []),
       ]
-      if (ep.includes('gestao_projetos.view') || ep.includes('gestao_projetos.update'))
-        baseNav.push({ type: 'item', label: 'Gestão de Projetos', href: '/gestao-projetos', icon: Layers })
 
-      // Itens extras concedidos por grupos de permissão
-      const hasAnyUserPerm = ['users.view_all','users.create','users.update','users.reset_password'].some(p => ep.includes(p))
+      // Consultor NUNCA vê Gestão de Projetos nem Usuários, mesmo com extra_permissions.
+      // Essas rotinas pertencem a coordenação/administração — escopo do consultor é executar
+      // atividade, apontar horas, validar apontamentos quando autorizado.
+
       if (ep.includes('timesheets.approve') || ep.includes('hours.view_all'))
         baseNav.push({ type: 'item', label: 'Apontamentos', href: '/timesheets', icon: Clock })
       if (ep.includes('approvals.view') || ep.includes('approvals.manage'))
         baseNav.push({ type: 'item', label: 'Aprovações', href: '/approvals', icon: CheckSquare })
-      if (hasAnyUserPerm)
-        baseNav.push({ type: 'item', label: 'Usuários', href: '/users', icon: Users })
       if (ep.includes('settings.view'))
         baseNav.push({ type: 'item', label: 'Configurações', href: '/settings', icon: Settings })
 
@@ -398,23 +455,44 @@ function SidebarInner({ user }: { user: User }) {
           { type: 'item', label: 'Painel do Parceiro', href: '/partner-dashboard', icon: Handshake },
         ] as NavEntry[]
       }
-      // Parceiro simples: meu painel + apontamentos + despesas
+      // Parceiro simples: apenas Meu Painel — apontamentos e despesas já são abas
+      // internas do próprio dashboard (Total Geral / Apontamentos / Despesas / Indicadores).
       return [
-        { type: 'item', label: 'Início',     href: '/dashboard',  icon: Home },
         { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard },
-        {
-          type: 'group',
-          label: 'Apontamentos & Despesas',
-          icon: Clock,
-          items: [
-            { label: 'Apontamentos', href: '/timesheets', icon: Clock },
-            { label: 'Despesas',     href: '/expenses',   icon: Receipt },
-          ],
-        },
       ] as NavEntry[]
     }
     return NAV
   }, [isCoordenador, isConsultor, isCliente, isParceiroAdmin, isParceiroGestor, isAdministrativo, clienteContractCodes, ep])
+
+  // Auto-abre o grupo (e o sub-grupo aninhado, se houver) que contém a rota atual,
+  // sem fechar os já abertos manualmente.
+  useEffect(() => {
+    const auto: string[] = []
+    const matchHref = (href: string) => {
+      const base = href.split('?')[0]
+      return pathname === base || pathname.startsWith(base + '/')
+    }
+    for (const entry of visibleNav) {
+      if (entry.type !== 'group') continue
+      for (const i of entry.items) {
+        if ('href' in i) {
+          if (matchHref(i.href)) { auto.push(entry.label); break }
+        } else {
+          // sub-grupo: abre o pai e o sub-grupo se algum leaf casar
+          if (i.items.some(leaf => matchHref(leaf.href))) {
+            auto.push(entry.label)
+            auto.push(`${entry.label}/${i.label}`)
+            break
+          }
+        }
+      }
+    }
+    if (auto.length === 0) return
+    setOpenGroups(prev => {
+      const merged = new Set([...prev, ...auto])
+      return merged.size === prev.length ? prev : Array.from(merged)
+    })
+  }, [pathname, visibleNav])
 
   // First two letters of name for avatar
   const initials = user?.name
@@ -437,7 +515,11 @@ function SidebarInner({ user }: { user: User }) {
     }
     return true
   }
-  const groupActive = (g: NavGroup) => g.items.some(i => isActive(i.href, undefined, i.exactMatch))
+  const isNavLink = (x: NavLink | NavSubGroup): x is NavLink => (x as any).href !== undefined
+  const subGroupActive = (sg: NavSubGroup) => sg.items.some(i => isActive(i.href, undefined, i.exactMatch))
+  const groupActive = (g: NavGroup) => g.items.some(i =>
+    isNavLink(i) ? isActive(i.href, undefined, i.exactMatch) : subGroupActive(i)
+  )
 
   return (
     <aside
@@ -524,10 +606,14 @@ function SidebarInner({ user }: { user: User }) {
           const active = groupActive(group)
           const open   = openGroups.includes(group.label)
 
+          // Lista plana de links (descendo recursivamente em subgrupos) — usada no modo collapsed.
+          const flatLinks = (entries: (NavLink | NavSubGroup)[]): NavLink[] =>
+            entries.flatMap(e => isNavLink(e) ? [e] : e.items)
+
           if (collapsed) {
             return (
               <div key={group.label} className="space-y-0.5">
-                {group.items.map(sub => {
+                {flatLinks(group.items).map(sub => {
                   const SubIcon = sub.icon
                   const subActive = isActive(sub.href, undefined, sub.exactMatch)
                   const subItem = (
@@ -567,6 +653,48 @@ function SidebarInner({ user }: { user: User }) {
               {open && (
                 <div className="ml-3 mt-0.5 space-y-0.5 border-l pl-2" style={{ borderColor: 'var(--brand-border)' }}>
                   {group.items.map(sub => {
+                    // Sub-grupo aninhado
+                    if (!isNavLink(sub)) {
+                      const subgroupKey = `${group.label}/${sub.label}`
+                      const SubGroupIcon = sub.icon
+                      const sgOpen = openGroups.includes(subgroupKey)
+                      const sgActive = subGroupActive(sub)
+                      return (
+                        <div key={sub.label}>
+                          <button
+                            onClick={() => toggleGroup(subgroupKey)}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium sidebar-item"
+                            style={sgActive ? { color: 'var(--text)' } : undefined}
+                          >
+                            <SubGroupIcon size={14} className="shrink-0" />
+                            <span className="flex-1 text-left">{sub.label}</span>
+                            <ChevronDown size={11} className={cn('transition-transform duration-200', sgOpen && 'rotate-180')} />
+                          </button>
+                          {sgOpen && (
+                            <div className="ml-3 mt-0.5 space-y-0.5 border-l pl-2" style={{ borderColor: 'var(--brand-border)' }}>
+                              {sub.items.map(leaf => {
+                                const LeafIcon = leaf.icon
+                                const leafActive = isActive(leaf.href, undefined, leaf.exactMatch)
+                                return (
+                                  <Link
+                                    key={leaf.href}
+                                    href={leaf.href}
+                                    className={cn(
+                                      'flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium sidebar-item',
+                                      leafActive && 'sidebar-item-active'
+                                    )}
+                                  >
+                                    <LeafIcon size={13} className="shrink-0" />
+                                    <span>{leaf.label}</span>
+                                  </Link>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    }
+                    // Link folha tradicional
                     const SubIcon = sub.icon
                     const subActive = isActive(sub.href, undefined, sub.exactMatch)
                     return (
@@ -598,8 +726,7 @@ function SidebarInner({ user }: { user: User }) {
             alt="ERPServ"
             width={90}
             height={36}
-            className="object-contain opacity-40"
-            style={{ filter: 'grayscale(1) invert(1) brightness(10)' }}
+            className="object-contain sidebar-erpserv-logo"
           />
         </div>
       )}

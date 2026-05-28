@@ -37,6 +37,14 @@ export interface Customer {
   code_prefix?: string | null
 }
 
+export interface ChildConsumptionBreakdown {
+  id: number
+  code: string
+  name: string
+  contract_type?: string | null
+  consumed_hours: number
+}
+
 export interface Project {
   id: number
   name: string
@@ -57,6 +65,13 @@ export interface Project {
   total_contributions_hours?: number
   total_available_hours?: number | null
   hour_contribution?: number
+  vendidas_projeto_hours?: number
+  vendidas_aporte_hours?: number
+  own_consumed_hours?: number
+  children_consumed_hours?: number
+  coordination_hours?: number | null
+  coordination_consumed_hours?: number
+  children_consumption_breakdown?: ChildConsumptionBreakdown[]
   child_projects?: Project[]
   node_state?: 'ACTIVE' | 'DISABLED' | null
   proj_sequence?: number | null
@@ -80,6 +95,7 @@ export interface Timesheet {
   effort_hours: string
   observation?: string
   ticket?: string
+  ticket_total_minutes?: number | null
   ticket_subject?: string
   ticket_solicitante?: { name?: string; email?: string; organization?: string } | null
   status: 'pending' | 'approved' | 'rejected' | 'conflicted' | 'adjustment_requested' | 'internal' | 'released'
@@ -214,6 +230,7 @@ export interface Expense {
   status: string
   charge_client: boolean
   is_paid: boolean
+  pagar_no_fechamento?: boolean
   paid_by?: number
   paid_at?: string
   receipt_path?: string

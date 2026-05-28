@@ -32,12 +32,20 @@ type FormState = {
   valor_hora: string
   hora_adicional: string
   pct_horas_coordenador: string
+  horas_coordenacao: string
   horas_consultor: string
   expectativa_inicio: string
   condicao_pagamento: string
   executivo_conta_id: string
   vendedor_id: string
   observacoes: string
+  // Aporte v2 — toggle "É aporte?" no topo (cria hour_contribution, não contrato)
+  is_aporte: boolean
+  aporte_target_project_id: string
+  aporte_horas: string
+  aporte_valor_hora: string
+  aporte_motivo: 'aporte' | 'excedentes' | 'absorvidas'
+  aporte_descricao: string
 }
 
 const CURRENT_YEAR_2D = new Date().getFullYear().toString().slice(-2)
@@ -49,9 +57,11 @@ const EMPTY_FORM: FormState = {
   cobra_despesa_cliente: false, limite_despesa: '',
   architect_id: '', tipo_alocacao: 'remoto',
   horas_contratadas: '', valor_projeto: '', valor_hora: '',
-  hora_adicional: '', pct_horas_coordenador: '', horas_consultor: '',
+  hora_adicional: '', pct_horas_coordenador: '', horas_coordenacao: '', horas_consultor: '',
   expectativa_inicio: '', condicao_pagamento: '',
   executivo_conta_id: '', vendedor_id: '', observacoes: '',
+  is_aporte: false, aporte_target_project_id: '', aporte_horas: '',
+  aporte_valor_hora: '', aporte_motivo: 'aporte', aporte_descricao: '',
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -76,25 +86,30 @@ const isSustentacaoName = (name: string) => {
 }
 
 // Regra de combinação Tipo de Serviço × Tipo de Contrato:
-// - Projeto     → permite: BH Fixo, BH Mensal, Fechado          (proíbe: On Demand, SaaS, Cloud)
-// - Sustentação → permite: BH Fixo, BH Mensal, On Demand, Cloud (proíbe: Fechado, SaaS)
-// - Bizify      → permite: BH Fixo, Fechado, On Demand, SaaS    (proíbe: BH Mensal, Cloud)
+// - Projeto     → permite: BH Fixo, BH Mensal, Fechado, On Demand (proíbe: SaaS, Cloud)
+// - Sustentação → permite: BH Fixo, BH Mensal, On Demand, Cloud   (proíbe: Fechado, SaaS)
+// - Bizify      → permite: BH Fixo, Fechado, On Demand, SaaS      (proíbe: BH Mensal, Cloud)
+// Subprojeto (filho) → adicionalmente proíbe BH Mensal, SaaS e Cloud (mensalidade
+// fica no projeto pai; filho herda regra de cobrança). Filho On Demand consome
+// do pai via apontamentos (horas_contratadas=0, valor cobrado por hora apontada).
 // O contract_type atualmente selecionado é sempre mantido visível (caso de edição
 // de contrato pré-existente que viole a nova regra).
 const allowedForService = (
   contractTypes: SelectOption[],
   serviceTypeName: string | null | undefined,
   selectedContractTypeId: string | number | null | undefined,
+  isSubproject: boolean = false,
 ): SelectOption[] => {
   const sn = (serviceTypeName ?? '').toLowerCase()
   const isProjeto = sn.includes('projeto')
   const isSustenta = sn.includes('sustenta')
   const isBizify = sn.includes('bizify')
-  if (!isProjeto && !isSustenta && !isBizify) return contractTypes
+  if (!isProjeto && !isSustenta && !isBizify && !isSubproject) return contractTypes
   return contractTypes.filter(ct => {
     if (String(ct.id) === String(selectedContractTypeId ?? '')) return true
     const n = String(ct.name ?? '').toLowerCase()
-    if (isProjeto && (n.includes('on demand') || n.includes('saas') || n === 'cloud')) return false
+    if (isSubproject && (n.includes('banco de horas mensal') || n.includes('saas') || n === 'cloud')) return false
+    if (isProjeto && (n.includes('saas') || n === 'cloud')) return false
     if (isSustenta && (n.includes('fechado') || n.includes('saas'))) return false
     if (isBizify && (n.includes('banco de horas mensal') || n === 'cloud')) return false
     return true
@@ -113,6 +128,7 @@ export function ContractCreateModal({
   const TABS = ['Cliente', 'Classificação', 'Faturamento', 'Despesas', 'Operacional', 'Contatos', 'Financeiro', 'Comercial', 'Observações']
   const [activeTab, setActiveTab] = useState(customerReadOnly ? 1 : 0)
   const [saving, setSaving] = useState(false)
+  const [clientApprovalFile, setClientApprovalFile] = useState<File | null>(null)
 
   const [customers, setCustomers]         = useState<SelectOption[]>([])
   const [users, setUsers]                 = useState<SelectOption[]>([])
@@ -120,6 +136,10 @@ export function ContractCreateModal({
   const [contractTypes, setContractTypes] = useState<SelectOption[]>([])
   const [customerContacts, setCustomerContacts] = useState<CustomerContact[]>([])
   const [parentProjects, setParentProjects]     = useState<SelectOption[]>([])
+  // Aporte v2 — TODOS os projetos do cliente (pai + filho) usado no select do aporte.
+  // `hourly_rate` é o do projeto; pra FILHO, usamos `parent_hourly_rate` (herdado do pai).
+  const [aporteProjects, setAporteProjects] = useState<Array<{ id: string; name: string; is_child: boolean; parent_code?: string; parent_name?: string; hourly_rate?: number | null; parent_hourly_rate?: number | null }>>([])
+  const [pendingProposta, setPendingProposta] = useState<File | null>(null)
 
   const [form, setForm] = useState<FormState>({
     ...EMPTY_FORM,
@@ -183,7 +203,7 @@ export function ContractCreateModal({
   }, [form.parent_project_id])
 
   useEffect(() => {
-    if (!form.customer_id) { setCustomerContacts([]); setParentProjects([]); return }
+    if (!form.customer_id) { setCustomerContacts([]); setParentProjects([]); setAporteProjects([]); return }
     api.get<CustomerContact[]>(`/customer-contacts?customer_id=${form.customer_id}`)
       .then(r => setCustomerContacts(Array.isArray(r) ? r : []))
       .catch(() => setCustomerContacts([]))
@@ -197,7 +217,109 @@ export function ContractCreateModal({
         )
       })
       .catch(() => setParentProjects([]))
+    // TODOS os projetos (pai + filho) — usado pelo select do aporte.
+    // Ordena pais alfabético e filhos imediatamente abaixo do pai (indented).
+    api.get<any>(`/projects?customer_id=${form.customer_id}&pageSize=200`)
+      .then(r => {
+        const list: any[] = r?.items ?? (Array.isArray(r) ? r : [])
+        const byId = new Map<number, any>(list.map(p => [p.id, p]))
+        const parents = list.filter(p => !p.parent_project_id).sort((a, b) => String(a.code).localeCompare(String(b.code)))
+        const childrenByParent = new Map<number, any[]>()
+        for (const p of list) {
+          if (p.parent_project_id) {
+            const arr = childrenByParent.get(p.parent_project_id) ?? []
+            arr.push(p)
+            childrenByParent.set(p.parent_project_id, arr)
+          }
+        }
+        // Filhos órfãos (pai não está no resultset) — joga no fim
+        const orphans = list.filter(p => p.parent_project_id && !byId.has(p.parent_project_id))
+        const ordered: any[] = []
+        for (const par of parents) {
+          ordered.push({ ...par, _is_child: false })
+          const kids = (childrenByParent.get(par.id) ?? []).sort((a, b) => String(a.code).localeCompare(String(b.code)))
+          for (const k of kids) ordered.push({ ...k, _is_child: true, _parent: par })
+        }
+        for (const o of orphans) ordered.push({ ...o, _is_child: true, _parent: byId.get(o.parent_project_id) })
+
+        setAporteProjects(ordered.map(p => {
+          const parent = p._parent
+          const ownRate = Number(p.hourly_rate ?? p.valor_hora ?? 0) || null
+          const parentRate = parent ? (Number(parent.hourly_rate ?? parent.valor_hora ?? 0) || null) : null
+          return {
+            id: String(p.id),
+            name: p._is_child && parent
+              ? `   └─ ${p.code} — ${p.name}  (filho de ${parent.code})`
+              : `${p.code} — ${p.name}`,
+            is_child: p._is_child,
+            parent_code: parent?.code,
+            parent_name: parent?.name,
+            hourly_rate: ownRate,
+            parent_hourly_rate: parentRate,
+          }
+        }))
+      })
+      .catch(() => setAporteProjects([]))
   }, [form.customer_id])
+
+  // Aporte v2 — auto-preencher Valor da hora ao selecionar projeto.
+  // Regra: pai → usa valor_hora dele; filho → herda valor_hora do pai.
+  // Fallback: se a listagem não trouxe o rate, faz GET no projeto certo.
+  useEffect(() => {
+    if (!form.is_aporte || !form.aporte_target_project_id) return
+    const sel = aporteProjects.find(p => p.id === form.aporte_target_project_id)
+    if (!sel) return
+    // Pra filho, prioriza o valor do pai; pra pai, o próprio.
+    let candidate = sel.is_child ? (sel.parent_hourly_rate ?? null) : (sel.hourly_rate ?? null)
+    if (candidate && candidate > 0) {
+      setForm(f => ({ ...f, aporte_valor_hora: String(candidate) }))
+      return
+    }
+    // Fallback: busca direto no projeto certo (pai se filho, próprio se pai)
+    let cancelled = false
+    // pra filho preciso descobrir o id do pai. Como guardo só parent_code/name, vou fetcher pelo project_id
+    api.get<any>(`/projects/${form.aporte_target_project_id}`)
+      .then(p => {
+        if (cancelled) return
+        const ownRate = Number(p?.hourly_rate ?? p?.valor_hora ?? 0)
+        if (sel.is_child && p?.parent_project_id) {
+          // Busca o pai pra herdar o rate
+          api.get<any>(`/projects/${p.parent_project_id}`)
+            .then(parent => {
+              if (cancelled) return
+              const parentRate = Number(parent?.hourly_rate ?? parent?.valor_hora ?? 0)
+              if (parentRate > 0) setForm(f => ({ ...f, aporte_valor_hora: String(parentRate) }))
+              else if (ownRate > 0) setForm(f => ({ ...f, aporte_valor_hora: String(ownRate) }))
+            })
+            .catch(() => {})
+        } else if (ownRate > 0) {
+          setForm(f => ({ ...f, aporte_valor_hora: String(ownRate) }))
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.aporte_target_project_id, form.is_aporte])
+
+  // Sugere próximo code_seq quando customer muda (modo projeto raiz)
+  useEffect(() => {
+    if (!form.customer_id || form.is_subproject) return
+    api.get<{ seq?: string; year?: string }>(`/projects/next-code?customer_id=${form.customer_id}`)
+      .then(r => {
+        if (r?.seq) setForm(f => ({ ...f, code_seq: r.seq!, code_year: r.year ?? f.code_year }))
+      })
+      .catch(() => {})
+  }, [form.customer_id, form.is_subproject])
+
+  // Sugere próximo sub_seq quando projeto pai muda (modo subprojeto)
+  useEffect(() => {
+    if (!form.is_subproject || !form.parent_project_id) return
+    api.get<{ sub_seq?: string }>(`/projects/next-code?parent_project_id=${form.parent_project_id}`)
+      .then(r => {
+        if (r?.sub_seq) setForm(f => ({ ...f, sub_seq: r.sub_seq! }))
+      })
+      .catch(() => {})
+  }, [form.parent_project_id, form.is_subproject])
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -208,6 +330,7 @@ export function ContractCreateModal({
   const isOnDemand = selectedContractType?.name.toLowerCase().trim() === 'on demand'
   const isBankHours = selectedContractType?.name.toLowerCase().includes('banco de horas') ?? false
   const ctNameLower = selectedContractType?.name.toLowerCase().trim() ?? ''
+  const isBhFixo = isBankHours && ctNameLower.includes('fixo')
   // Mensalidade: Cloud e SaaS — só "Valor do Contrato" como mensalidade fixa.
   const isMensalidade = ctNameLower === 'cloud' || ctNameLower === 'saas'
   const isFechado = !!selectedContractType && !isOnDemand && !isBankHours && !isMensalidade
@@ -257,6 +380,7 @@ export function ContractCreateModal({
       case 0: // Cliente
         if (!form.customer_id)          { toast.error('Selecione o cliente'); return false }
         if (!form.project_name.trim())  { toast.error('Informe o nome do projeto'); return false }
+        if (!clientApprovalFile)        { toast.error('Anexe a aprovação do cliente / proposta assinada'); return false }
         return true
 
       case 1: // Classificação
@@ -273,7 +397,9 @@ export function ContractCreateModal({
         if (isMensalidade && !form.valor_projeto)                            { toast.error('Informe o Valor do Contrato (mensalidade)'); return false }
         if (isOnDemand && !isMensalidade && !form.valor_projeto)             { toast.error('Informe o Valor do Projeto'); return false }
         if (!isMensalidade && !isOnDemand && !form.valor_hora)               { toast.error('Informe o Valor da Hora'); return false }
-        if (form.parent_project_id && parentBalance && !parentBalance.allow_negative) {
+        // On Demand consome do pai por apontamento (horas_contratadas=0, cobrado por hora
+        // apontada) — não reserva bloco de horas, então não valida o saldo do pai.
+        if (form.parent_project_id && parentBalance && !parentBalance.allow_negative && !isOnDemand) {
           const childHours = Number(form.horas_contratadas) || 0
           if (childHours > parentBalance.balance) {
             toast.error(`Horas (${childHours.toLocaleString('pt-BR', { minimumFractionDigits: 1 })}h) excedem o saldo do projeto pai (${parentBalance.balance.toLocaleString('pt-BR', { minimumFractionDigits: 1 })}h)`)
@@ -282,11 +408,12 @@ export function ContractCreateModal({
         }
         return true
 
+      case 6: // Financeiro
+        if (!form.condicao_pagamento.trim()) { toast.error('Informe a Condição de Pagamento'); return false }
+        return true
+
       case 8: // Observações
-        if (form.observacoes.trim().length < 50) {
-          toast.error(`Observações obrigatórias — mínimo 50 caracteres (${form.observacoes.trim().length}/50)`)
-          return false
-        }
+        if (!form.observacoes.trim()) { toast.error('Observações obrigatórias'); return false }
         return true
 
       default:
@@ -345,9 +472,52 @@ export function ContractCreateModal({
   // ── Save ──────────────────────────────────────────────────────────────────
 
   const save = async () => {
+    // ── Ramo APORTE — cria hour_contribution (não cria contract/project) ──
+    if (form.is_aporte) {
+      if (!form.customer_id)                                              { toast.error('Selecione o cliente'); return }
+      if (!form.aporte_target_project_id)                                  { toast.error('Selecione o projeto que recebe o aporte'); return }
+      if (!form.aporte_horas || Number(form.aporte_horas) <= 0)            { toast.error('Informe a quantidade de horas'); return }
+      if (!form.aporte_valor_hora || Number(form.aporte_valor_hora) <= 0)  { toast.error('Informe o valor da hora'); return }
+      const selProj = aporteProjects.find(p => p.id === form.aporte_target_project_id)
+      const isChildTarget = !!selProj?.is_child
+      if (!isChildTarget && !pendingProposta) {
+        toast.error('Anexe a aprovação/proposta — obrigatório para aporte em projeto pai')
+        return
+      }
+      setSaving(true)
+      try {
+        const fd = new FormData()
+        fd.append('contributed_hours', String(Number(form.aporte_horas)))
+        fd.append('hourly_rate',       String(Number(form.aporte_valor_hora)))
+        fd.append('motivo',            form.aporte_motivo)
+        if (form.aporte_descricao) fd.append('description', form.aporte_descricao)
+        if (!isChildTarget && pendingProposta) fd.append('proposta', pendingProposta)
+        const res = await fetch(`/api/v1/projects/${form.aporte_target_project_id}/hour-contributions`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: fd,
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          toast.error((err as any)?.message ?? 'Erro ao criar aporte')
+          return
+        }
+        toast.success(isChildTarget
+          ? 'Aporte registrado no projeto filho (consumindo do saldo do pai)'
+          : 'Aporte criado — card disponível no Kanban')
+        // onSuccess espera um contractId; aporte não cria contract → passa 0 e o caller recarrega
+        onSuccess(0)
+      } catch (e: any) {
+        toast.error(e?.message ?? 'Erro ao criar aporte')
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+
     // Revalidate all required tabs before saving
     const checks: [number, () => boolean][] = [
-      [0, () => !!form.customer_id && !!form.project_name.trim()],
+      [0, () => !!form.customer_id && !!form.project_name.trim() && !!clientApprovalFile],
       [1, () => !!form.service_type_id],
       [2, () => !!form.contract_type_id],
       [4, () => {
@@ -355,7 +525,8 @@ export function ContractCreateModal({
         if (isOnDemand)    return !!form.expectativa_inicio && !!form.valor_projeto
         return !!form.horas_contratadas && !!form.expectativa_inicio && !!form.valor_hora
       }],
-      [8, () => form.observacoes.trim().length >= 50],
+      [6, () => !!form.condicao_pagamento.trim()],
+      [8, () => !!form.observacoes.trim()],
     ]
     for (const [tab, check] of checks) {
       if (!check()) {
@@ -365,7 +536,8 @@ export function ContractCreateModal({
       }
     }
 
-    if (form.parent_project_id && parentBalance && !parentBalance.allow_negative) {
+    // On Demand não reserva horas do pai (consome por apontamento) — não bloqueia por saldo.
+    if (form.parent_project_id && parentBalance && !parentBalance.allow_negative && !isOnDemand) {
       const childHours = Number(form.horas_contratadas) || 0
       if (childHours > parentBalance.balance) {
         toast.error(`Horas (${childHours.toLocaleString('pt-BR', { minimumFractionDigits: 1 })}h) excedem o saldo do projeto pai (${parentBalance.balance.toLocaleString('pt-BR', { minimumFractionDigits: 1 })}h)`)
@@ -393,6 +565,7 @@ export function ContractCreateModal({
         valor_hora:            form.valor_hora ? Number(form.valor_hora) : null,
         hora_adicional:        form.hora_adicional ? Number(form.hora_adicional) : null,
         pct_horas_coordenador: form.pct_horas_coordenador ? Number(form.pct_horas_coordenador) : null,
+        horas_coordenacao:     form.horas_coordenacao ? Number(form.horas_coordenacao) : null,
         horas_consultor:       form.horas_consultor ? Math.round(Number(form.horas_consultor)) : null,
         expectativa_inicio:    form.expectativa_inicio || null,
         condicao_pagamento:    form.condicao_pagamento || null,
@@ -403,6 +576,19 @@ export function ContractCreateModal({
       }
 
       const contract = await api.post<{ id: number }>('/contracts', payload)
+
+      if (clientApprovalFile) {
+        const fd = new FormData()
+        fd.append('file', clientApprovalFile)
+        fd.append('type', 'aprovacao_cliente')
+        const res = await fetch(`/api/v1/contracts/${contract.id}/attachments`, {
+          method: 'POST', credentials: 'same-origin', body: fd,
+        })
+        if (!res.ok) {
+          toast.error('Contrato criado, mas falha ao enviar aprovação. Anexe manualmente na edição.')
+        }
+      }
+
       toast.success('Contrato criado com sucesso')
       onSuccess(contract.id)
     } catch (e: any) {
@@ -447,19 +633,30 @@ export function ContractCreateModal({
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 transition-colors"><X size={18} /></button>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs (escondidas quando is_aporte — form de aporte é single-page) */}
+        {!form.is_aporte && (
         <div className="flex border-b overflow-x-auto shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
           {tabsToShow.map((t, i) => {
             const realIdx = i + tabOffset
             return (
-              <button key={t} onClick={() => setActiveTab(realIdx)}
+              <button
+                key={t}
+                type="button"
+                disabled={activeTab !== realIdx}
+                title={activeTab !== realIdx ? 'Use Próximo / Anterior para navegar' : undefined}
                 className="px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors shrink-0"
-                style={{ color: activeTab === realIdx ? 'var(--text)' : 'var(--text-muted)', borderBottom: activeTab === realIdx ? '2px solid var(--primary)' : '2px solid transparent' }}>
+                style={{
+                  color: activeTab === realIdx ? 'var(--text)' : 'var(--text-muted)',
+                  borderBottom: activeTab === realIdx ? '2px solid var(--primary)' : '2px solid transparent',
+                  cursor: activeTab === realIdx ? 'default' : 'not-allowed',
+                  opacity: activeTab === realIdx ? 1 : 0.55,
+                }}>
                 {t}
               </button>
             )
           })}
         </div>
+        )}
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
@@ -467,6 +664,143 @@ export function ContractCreateModal({
           {/* Tab 0: Cliente */}
           {activeTab === 0 && (
             <div className="space-y-5">
+              {/* ── Toggle "É aporte?" — primeira opção do form (Aporte v2) ── */}
+              <div className="rounded-xl p-3 flex items-center justify-between gap-3"
+                style={{ background: form.is_aporte ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.03)',
+                         border: `1px solid ${form.is_aporte ? 'rgba(34,197,94,0.45)' : 'rgba(255,255,255,0.10)'}` }}>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold" style={{ color: form.is_aporte ? '#22c55e' : 'white' }}>
+                    É aporte?
+                  </p>
+                  <p className="text-[11px] text-zinc-500">
+                    Aporte de horas em projeto existente — sem criar novo projeto/contrato.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, is_aporte: !f.is_aporte }))}
+                  className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors"
+                  style={{ background: form.is_aporte ? '#22c55e' : 'rgba(255,255,255,0.18)' }}
+                >
+                  <span className="pointer-events-none inline-block h-5 w-5 mt-0.5 ml-0.5 rounded-full bg-white shadow transition-transform"
+                    style={{ transform: form.is_aporte ? 'translateX(20px)' : 'translateX(0)' }} />
+                </button>
+              </div>
+
+              {/* ── Form simplificado de APORTE (substitui o resto do form) ── */}
+              {form.is_aporte && (() => {
+                const selectedAporteProj = aporteProjects.find(p => p.id === form.aporte_target_project_id)
+                const isChildTarget = !!selectedAporteProj?.is_child
+                const total = (Number(form.aporte_horas) || 0) * (Number(form.aporte_valor_hora) || 0)
+                return (
+                  <div className="space-y-5">
+                    <div>
+                      <label className={labelCls}>Cliente <span className="text-red-400">*</span></label>
+                      <SearchSelect
+                        value={form.customer_id}
+                        onChange={v => setForm(f => ({ ...f, customer_id: v, aporte_target_project_id: '' }))}
+                        options={customers}
+                        placeholder="Buscar cliente..."
+                      />
+                    </div>
+
+                    {form.customer_id && (
+                      <div>
+                        <label className={labelCls}>Projeto que recebe o aporte <span className="text-red-400">*</span></label>
+                        {aporteProjects.length === 0
+                          ? <p className="text-xs text-amber-400 italic px-3 py-2 rounded-lg" style={inputStyle}>Nenhum projeto disponível para este cliente</p>
+                          : <SearchSelect
+                              value={form.aporte_target_project_id}
+                              onChange={v => setForm(f => ({ ...f, aporte_target_project_id: v }))}
+                              options={aporteProjects.map(p => ({ id: p.id, name: p.name }))}
+                              placeholder="Selecionar projeto..."
+                            />
+                        }
+                      </div>
+                    )}
+
+                    {isChildTarget && selectedAporteProj && (
+                      <div className="rounded-xl p-3 flex items-start gap-2"
+                        style={{ background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.45)' }}>
+                        <span className="text-base" style={{ color: '#38bdf8' }}>ℹ</span>
+                        <div className="text-[11px]" style={{ color: '#38bdf8' }}>
+                          Este aporte será registrado no projeto <span className="font-semibold">{selectedAporteProj.name}</span>,
+                          consumindo do saldo do pai <span className="font-semibold">{selectedAporteProj.parent_code} — {selectedAporteProj.parent_name}</span>.
+                          <br/>
+                          <span style={{ opacity: 0.85 }}>Não criará card no Kanban (cards só geram proposta comercial para projetos pai).</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className={labelCls}>Horas <span className="text-red-400">*</span></label>
+                        <input type="number" min="0.01" step="0.5"
+                          value={form.aporte_horas}
+                          onChange={e => setForm(f => ({ ...f, aporte_horas: e.target.value }))}
+                          placeholder="0" className={inputCls} style={inputStyle} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Valor da hora (R$) <span className="text-red-400">*</span></label>
+                        <input type="number" min="0.01" step="0.01"
+                          value={form.aporte_valor_hora}
+                          onChange={e => setForm(f => ({ ...f, aporte_valor_hora: e.target.value }))}
+                          placeholder="0,00" className={inputCls} style={inputStyle} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Total do aporte</label>
+                        <div className="px-3 py-2 rounded-lg text-sm font-semibold tabular-nums"
+                          style={{ ...inputStyle, background: 'rgba(34,197,94,0.10)', color: '#22c55e', borderColor: 'rgba(34,197,94,0.4)' }}>
+                          {total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className={labelCls}>Motivo do aporte <span className="text-red-400">*</span></label>
+                      <select
+                        value={form.aporte_motivo}
+                        onChange={e => setForm(f => ({ ...f, aporte_motivo: e.target.value as FormState['aporte_motivo'] }))}
+                        className={inputCls} style={inputStyle}
+                      >
+                        <option value="aporte">Aporte</option>
+                        <option value="excedentes">Excedentes</option>
+                        <option value="absorvidas">Absorvidas</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className={labelCls}>Descrição</label>
+                      <textarea rows={3}
+                        value={form.aporte_descricao}
+                        onChange={e => setForm(f => ({ ...f, aporte_descricao: e.target.value }))}
+                        placeholder="Detalhamento do aporte (opcional)"
+                        className={`${inputCls} resize-none`} style={inputStyle}
+                      />
+                    </div>
+
+                    {!isChildTarget && (
+                      <div>
+                        <label className={labelCls}>Aprovação do Cliente / Proposta Assinada <span className="text-red-400">*</span></label>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt,.csv,.zip"
+                          onChange={e => setPendingProposta(e.target.files?.[0] ?? null)}
+                          className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-1 focus:ring-cyan-500/40 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:bg-cyan-500/10 file:text-cyan-300 hover:file:bg-cyan-500/20 file:cursor-pointer"
+                          style={inputStyle}
+                        />
+                        {pendingProposta
+                          ? <p className="text-[11px] text-emerald-400 mt-1">✓ {pendingProposta.name} ({Math.round(pendingProposta.size / 1024)} KB)</p>
+                          : <p className="text-[10px] mt-1 text-red-400">Anexe a aprovação formal — gera proposta comercial pro projeto pai (PDF, imagem, etc. — máx 20 MB)</p>
+                        }
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* ── Form padrão (contrato comum) — só quando NÃO é aporte ── */}
+              {!form.is_aporte && (<>
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className={labelCls} style={{ marginBottom: 0 }}>Cliente *</label>
@@ -570,6 +904,21 @@ export function ContractCreateModal({
                   style={{ ...inputStyle, ...(!form.project_name.trim() ? { borderColor: 'rgba(239,68,68,0.5)' } : {}) }} />
               </div>
 
+              <div>
+                <label className={labelCls}>Aprovação do Cliente / Proposta Assinada <span style={{ color: '#ef4444' }}>*</span></label>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt,.csv,.zip"
+                  onChange={e => setClientApprovalFile(e.target.files?.[0] ?? null)}
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-1 focus:ring-cyan-500/40 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:bg-cyan-500/10 file:text-cyan-300 hover:file:bg-cyan-500/20 file:cursor-pointer"
+                  style={{ ...inputStyle, ...(!clientApprovalFile ? { borderColor: 'rgba(239,68,68,0.5)' } : {}) }}
+                />
+                {clientApprovalFile
+                  ? <p className="text-[11px] text-emerald-400 mt-1">✓ {clientApprovalFile.name} ({Math.round(clientApprovalFile.size / 1024)} KB)</p>
+                  : <p className="text-[10px] mt-1" style={{ color: '#f87171' }}>Anexe a aprovação formal (PDF, imagem ou e-mail exportado) — máx 20 MB</p>
+                }
+              </div>
+
               {form.customer_id && form.is_subproject && (
                 <div className="space-y-1.5">
                   <label className={labelCls}>Projeto Pai <span style={{ color: '#ef4444' }}>*</span></label>
@@ -598,11 +947,12 @@ export function ContractCreateModal({
                   })()}
                 </div>
               )}
+              </>)}
             </div>
           )}
 
-          {/* Tab 1: Classificação */}
-          {activeTab === 1 && (
+          {/* Tab 1: Classificação (oculta quando is_aporte) */}
+          {activeTab === 1 && !form.is_aporte && (
             <div className="space-y-4">
               <div>
                 <label className={labelCls}>
@@ -611,7 +961,7 @@ export function ContractCreateModal({
                 <SearchSelect
                   value={form.service_type_id}
                   onChange={v => setForm(f => ({ ...f, service_type_id: v }))}
-                  options={excludeSustentacao ? serviceTypes.filter(s => !isSustentacaoName(String(s.name))) : serviceTypes}
+                  options={(excludeSustentacao ? serviceTypes.filter(s => !isSustentacaoName(String(s.name))) : serviceTypes).filter(s => !String(s.name ?? '').toLowerCase().includes('arquitetura'))}
                   placeholder="Selecionar tipo de serviço..."
                 />
                 {!form.service_type_id && (
@@ -633,7 +983,7 @@ export function ContractCreateModal({
                     ? contractTypes.filter(ct => !isSustentacaoName(String(ct.name)))
                     : contractTypes
                   const serviceName = serviceTypes.find(s => String(s.id) === String(form.service_type_id))?.name
-                  return allowedForService(base, serviceName, form.contract_type_id)
+                  return allowedForService(base, serviceName, form.contract_type_id, !!form.is_subproject)
                 })().map(ct => (
                   <label key={ct.id} className="flex items-center gap-2 cursor-pointer">
                     <input type="radio" name="contract_type_id" value={ct.id}
@@ -715,7 +1065,15 @@ export function ContractCreateModal({
                           {parentBalance.balance.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}h
                         </p>
                       </div>
-                      {parentBalance.balance <= 0 && (
+                      {isOnDemand && (
+                        <div className="text-right">
+                          <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>On Demand</p>
+                          <p className="text-xs font-semibold" style={{ color: '#22c55e' }}>
+                            Não consome saldo do pai
+                          </p>
+                        </div>
+                      )}
+                      {!isOnDemand && parentBalance.balance <= 0 && (
                         <div className="text-right">
                           <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>Saldo negativo</p>
                           <p className="text-xs font-semibold"
@@ -724,7 +1082,7 @@ export function ContractCreateModal({
                           </p>
                         </div>
                       )}
-                      {parentBalance.balance > 0 && Number(form.horas_contratadas) > 0 && (
+                      {!isOnDemand && parentBalance.balance > 0 && Number(form.horas_contratadas) > 0 && (
                         <div className="text-right">
                           <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>Este subprojeto</p>
                           <p className="text-xs font-semibold"
@@ -803,19 +1161,26 @@ export function ContractCreateModal({
                       <input {...numInput('pct_horas_coordenador')} placeholder="0,00" />
                     </div>
                   )}
+                  {!isOnDemand && (
+                    <div>
+                      <label className={labelCls}>Horas de Coordenação</label>
+                      <input {...numInput('horas_coordenacao')} placeholder="0,00" />
+                      <p className="text-[10px] mt-1 text-zinc-500">Banco fixo de horas do coordenador (governança). Copiado pro projeto ao gerar.</p>
+                    </div>
+                  )}
+                  {(isFechado || isBhFixo) && (
+                    <div>
+                      <label className={labelCls}>Horas Consultor</label>
+                      <input {...numInput('horas_consultor')} placeholder="0,00" />
+                    </div>
+                  )}
                   {isFechado && (
-                    <>
-                      <div>
-                        <label className={labelCls}>Horas Consultor</label>
-                        <input {...numInput('horas_consultor')} placeholder="0,00" />
-                      </div>
-                      <div>
-                        <label className={labelCls}>Save ERPSERV</label>
-                        <input readOnly
-                          value={saveErpserv != null ? saveErpserv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
-                          className={inputCls} style={{ ...inputStyle, opacity: 0.5, cursor: 'not-allowed' }} />
-                      </div>
-                    </>
+                    <div>
+                      <label className={labelCls}>Save ERPSERV</label>
+                      <input readOnly
+                        value={saveErpserv != null ? saveErpserv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
+                        className={inputCls} style={{ ...inputStyle, opacity: 0.5, cursor: 'not-allowed' }} />
+                    </div>
                   )}
                 </div>
               </div>
@@ -886,11 +1251,15 @@ export function ContractCreateModal({
           {/* Tab 6: Financeiro */}
           {activeTab === 6 && (
             <div>
-              <label className={labelCls}>Condição de Pagamento</label>
+              <label className={labelCls}>Condição de Pagamento <span style={{ color: '#ef4444' }}>*</span></label>
               <textarea value={form.condicao_pagamento}
                 onChange={e => setForm(f => ({ ...f, condicao_pagamento: e.target.value }))}
                 rows={5} placeholder="Ex: 30 dias após entrega da NF..."
-                className={inputCls} style={{ ...inputStyle, resize: 'vertical' }} />
+                className={inputCls}
+                style={{ ...inputStyle, resize: 'vertical', ...(!form.condicao_pagamento.trim() ? { borderColor: 'rgba(239,68,68,0.5)' } : {}) }} />
+              {!form.condicao_pagamento.trim() && (
+                <p className="text-[10px] mt-1" style={{ color: '#f87171' }}>Obrigatório</p>
+              )}
             </div>
           )}
 
@@ -918,14 +1287,10 @@ export function ContractCreateModal({
                 onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
                 rows={10} placeholder="Descreva o escopo, premissas, restrições..."
                 className={inputCls}
-                style={{ ...inputStyle, resize: 'vertical', borderColor: form.observacoes.trim().length < 50 ? 'rgba(239,68,68,0.5)' : undefined }} />
-              <div className="flex items-center justify-between mt-1">
-                <p className="text-[10px]" style={{ color: form.observacoes.trim().length >= 50 ? '#71717a' : '#f87171' }}>
-                  {form.observacoes.trim().length < 50
-                    ? `Mínimo 50 caracteres — faltam ${50 - form.observacoes.trim().length}`
-                    : `${form.observacoes.trim().length} caracteres`}
-                </p>
-              </div>
+                style={{ ...inputStyle, resize: 'vertical', borderColor: !form.observacoes.trim() ? 'rgba(239,68,68,0.5)' : undefined }} />
+              {!form.observacoes.trim() && (
+                <p className="text-[10px] mt-1" style={{ color: '#f87171' }}>Obrigatório</p>
+              )}
             </div>
           )}
         </div>
@@ -933,14 +1298,14 @@ export function ContractCreateModal({
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
           <div className="flex items-center gap-2">
-            {activeTab > tabOffset && (
+            {!form.is_aporte && activeTab > tabOffset && (
               <button onClick={() => setActiveTab(t => t - 1)}
                 className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-white transition-colors"
                 style={{ border: '1px solid var(--brand-border)' }}>
                 ← Anterior
               </button>
             )}
-            {activeTab < TABS.length - 1 && (
+            {!form.is_aporte && activeTab < TABS.length - 1 && (
               <button onClick={() => { if (validateCurrentTab()) setActiveTab(t => t + 1) }}
                 className="px-4 py-2 rounded-lg text-sm text-zinc-300 hover:text-white transition-colors"
                 style={{ border: '1px solid var(--brand-border)' }}>
@@ -952,11 +1317,15 @@ export function ContractCreateModal({
             <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-white transition-colors">
               Cancelar
             </button>
-            {activeTab === TABS.length - 1 && (
+            {(form.is_aporte || activeTab === TABS.length - 1) && (
               <button onClick={save} disabled={saving || codeExists}
                 className="px-5 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-                style={{ background: 'rgba(0,245,255,0.15)', border: '1px solid rgba(0,245,255,0.3)', color: '#00F5FF' }}>
-                {saving ? 'Criando...' : 'Criar Contrato'}
+                style={{
+                  background: form.is_aporte ? 'rgba(34,197,94,0.15)' : 'rgba(0,245,255,0.15)',
+                  border: `1px solid ${form.is_aporte ? 'rgba(34,197,94,0.45)' : 'rgba(0,245,255,0.3)'}`,
+                  color: form.is_aporte ? '#22c55e' : '#00F5FF',
+                }}>
+                {saving ? (form.is_aporte ? 'Criando aporte...' : 'Criando...') : form.is_aporte ? 'Criar aporte' : 'Criar Contrato'}
               </button>
             )}
           </div>
