@@ -669,14 +669,16 @@ export function ContractCreateModal({
           {activeTab === 0 && (
             <div className="space-y-5">
               {/* ── Toggle "É aporte?" — primeira opção do form (Aporte v2) ── */}
+              {/* Cores via tokens do design system: o hardcode dark (white /
+                  rgba branco) sumia no tema claro — título e chave invisíveis. */}
               <div className="rounded-xl p-3 flex items-center justify-between gap-3"
-                style={{ background: form.is_aporte ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.03)',
-                         border: `1px solid ${form.is_aporte ? 'rgba(34,197,94,0.45)' : 'rgba(255,255,255,0.10)'}` }}>
+                style={{ background: form.is_aporte ? 'var(--success-bg)' : 'var(--surface-sunken)',
+                         border: `1px solid ${form.is_aporte ? 'var(--success-border)' : 'var(--border)'}` }}>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold" style={{ color: form.is_aporte ? '#22c55e' : 'white' }}>
+                  <p className="text-sm font-semibold" style={{ color: form.is_aporte ? 'var(--success)' : 'var(--text)' }}>
                     É aporte?
                   </p>
-                  <p className="text-[11px] text-zinc-500">
+                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                     Aporte de horas em projeto existente — sem criar novo projeto/contrato.
                   </p>
                 </div>
@@ -684,10 +686,10 @@ export function ContractCreateModal({
                   type="button"
                   onClick={() => setForm(f => ({ ...f, is_aporte: !f.is_aporte }))}
                   className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors"
-                  style={{ background: form.is_aporte ? '#22c55e' : 'rgba(255,255,255,0.18)' }}
+                  style={{ background: form.is_aporte ? 'var(--success-border)' : 'var(--text-light)' }}
                 >
-                  <span className="pointer-events-none inline-block h-5 w-5 mt-0.5 ml-0.5 rounded-full bg-white shadow transition-transform"
-                    style={{ transform: form.is_aporte ? 'translateX(20px)' : 'translateX(0)' }} />
+                  <span className="pointer-events-none inline-block h-5 w-5 mt-0.5 ml-0.5 rounded-full shadow transition-transform"
+                    style={{ background: '#fff', transform: form.is_aporte ? 'translateX(20px)' : 'translateX(0)' }} />
                 </button>
               </div>
 
