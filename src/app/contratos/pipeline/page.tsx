@@ -4081,6 +4081,9 @@ function KanbanContent() {
   const [filterCoordinators,  setFilterCoordinators]  = useState<string[]>([])
   const [filterProjectNames,  setFilterProjectNames]  = useState<string[]>([])
   const [saudeFilter,         setSaudeFilter]         = useState<'' | 'green' | 'yellow' | 'red'>('')
+  // Coordenador: chip "Meus projetos / Todos". Default 'meus' — filtra pelos projetos
+  // onde o coordenador logado está em `coordinator_ids`. Esconde de outros perfis.
+  const [coordScope,          setCoordScope]          = useState<'meus' | 'todos'>('meus')
   type SortKey = 'customer' | 'project' | 'contract_type' | 'service_type' | 'phase' | 'vendidas' | 'consumed' | 'saldo' | 'saude' | 'coord' | 'status'
   const [sortKey,             setSortKey]             = useState<SortKey | ''>('')
   const [sortDir,             setSortDir]             = useState<'asc' | 'desc'>('asc')
@@ -4372,6 +4375,8 @@ function KanbanContent() {
       .filter(p => !p.contract_id || !sustContractIds.has(p.contract_id))
       .filter(p => !p.contract_id || !kanbanBornNotAllocatedIds.has(p.contract_id))
       .filter(p => !isCoord || !isSustType(p.service_type))
+      // Chip "Meus projetos / Todos" — coordenador logado em coordinator_ids
+      .filter(p => !isCoord || coordScope === 'todos' || (!!user?.id && (p.coordinator_ids ?? []).includes(user.id)))
       .filter(p => filterCoordinators.length === 0 || (p.coordinators ?? []).some(c => filterCoordinators.includes(c)))
       .filter(p => filterProjectNames.length === 0 || filterProjectNames.includes(String(p.id)))
       .filter(p => matchFilter(p.customer_name, p.project_name))
@@ -4596,7 +4601,27 @@ function KanbanContent() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {!isConsultor && (
+            {/* Chips "Meus projetos / Todos" — apenas coordenador */}
+            {isCoord && (
+              <div className="inline-flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                {(['meus', 'todos'] as const).map(opt => {
+                  const active = coordScope === opt
+                  return (
+                    <button key={opt} onClick={() => setCoordScope(opt)}
+                      className="px-3 py-1.5 text-xs font-semibold transition-colors"
+                      style={{
+                        background: active ? 'var(--primary)' : 'var(--surface)',
+                        color: active ? 'var(--primary-fg)' : 'var(--text-muted)',
+                        borderRight: opt === 'meus' ? '1px solid var(--border)' : undefined,
+                      }}>
+                      {opt === 'meus' ? 'Meus projetos' : 'Todos'}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {/* Nova Requisição — não-coord/não-consultor (admin/administrativo/cliente) */}
+            {!isConsultor && !isCoord && (
               <button onClick={() => router.push('/portal-cliente/nova-requisicao')}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors"
                 style={{ background: 'var(--primary)', border: '1px solid var(--primary)', color: 'var(--primary-fg)' }}
@@ -4758,6 +4783,8 @@ function KanbanContent() {
             })
           const allProjects = projectCards
             .filter(p => !isCoord || !isSustType(p.service_type))
+            // Chip "Meus projetos / Todos" — coordenador logado em coordinator_ids
+            .filter(p => !isCoord || coordScope === 'todos' || (!!user?.id && (p.coordinator_ids ?? []).includes(user.id)))
             .filter(p => filterCoordinators.length === 0 || (p.coordinators ?? []).some(c => filterCoordinators.includes(c)))
             .filter(p => filterProjectNames.length === 0 || filterProjectNames.includes(String(p.id)))
             .filter(p => {
