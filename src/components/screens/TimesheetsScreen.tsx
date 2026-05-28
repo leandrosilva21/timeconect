@@ -435,6 +435,109 @@ function ExtraPctModal({ ids, initialClientPct, initialConsultantPct, isBillable
   )
 }
 
+// ─── Modal: ajuste em massa de Cliente/Projeto ───────────────────────────────
+// Reatribui cliente+projeto dos apontamentos selecionados (incl. APROVADOS — o
+// endpoint bulk-update-project-customer não checa status). Cores via tokens DS.
+function BulkProjectCustomerModal({ ids, customers, approvedCount, onClose, onSaved }: {
+  ids: number[]
+  customers: SelectOption[]
+  approvedCount: number
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [customerId, setCustomerId] = useState('')
+  const [projectId, setProjectId]   = useState('')
+  const [projects, setProjects]     = useState<SelectOption[]>([])
+  const [loadingProjects, setLoadingProjects] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  // Projetos do cliente escolhido (mesmo endpoint minimal usado nos filtros).
+  useEffect(() => {
+    setProjectId('')
+    setProjects([])
+    if (!customerId) return
+    setLoadingProjects(true)
+    const items = (r: any) => Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
+    api.get<any>(`/projects?minimal=true&pageSize=2000&customer_id=${customerId}`)
+      .then(r => setProjects(items(r).map((p: any) => ({ id: p.id, name: p.code ? `${p.code} — ${p.name}` : p.name }))))
+      .catch(() => setProjects([]))
+      .finally(() => setLoadingProjects(false))
+  }, [customerId])
+
+  const save = async () => {
+    if (!customerId) { toast.error('Selecione o cliente'); return }
+    if (!projectId)  { toast.error('Selecione o projeto'); return }
+    setSaving(true)
+    try {
+      await api.put('/timesheets/bulk-update-project-customer', {
+        ids,
+        customer_id: Number(customerId),
+        project_id:  Number(projectId),
+      })
+      toast.success(`Cliente/projeto atualizado em ${ids.length} apontamento${ids.length > 1 ? 's' : ''}`)
+      onSaved()
+      onClose()
+    } catch {
+      toast.error('Erro ao atualizar cliente/projeto')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative rounded-2xl p-6 w-full max-w-md mx-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+            Alterar Cliente/Projeto — {ids.length} apontamento{ids.length > 1 ? 's' : ''}
+          </h3>
+          <button onClick={onClose} className="p-1 rounded-lg transition-colors hover:opacity-70" style={{ color: 'var(--text-muted)' }}>
+            <X size={14} />
+          </button>
+        </div>
+
+        {approvedCount > 0 && (
+          <p className="text-[11px] mb-3" style={{ color: 'var(--warning)' }}>
+            ⚠ {approvedCount} aprovado{approvedCount > 1 ? 's' : ''} na seleção — também {approvedCount > 1 ? 'serão alterados' : 'será alterado'}.
+          </p>
+        )}
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs" style={{ color: 'var(--text-muted)' }}>Cliente</label>
+            <div className="mt-1">
+              <SearchSelect value={customerId} onChange={setCustomerId} options={customers} placeholder="Selecionar cliente..." />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs" style={{ color: 'var(--text-muted)' }}>Projeto</label>
+            <div className="mt-1">
+              <SearchSelect
+                value={projectId}
+                onChange={setProjectId}
+                options={projects}
+                placeholder={!customerId ? 'Escolha o cliente primeiro' : loadingProjects ? 'Carregando…' : 'Selecionar projeto...'}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-5 justify-end">
+          <button onClick={onClose}
+            className="px-3 py-2 rounded-xl text-xs transition-colors"
+            style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+            Cancelar
+          </button>
+          <button onClick={save} disabled={saving || !customerId || !projectId}
+            className="px-4 py-2 rounded-xl text-xs font-semibold disabled:opacity-40 transition-all"
+            style={{ background: 'var(--brand-primary)', color: 'var(--primary-fg)' }}>
+            {saving ? 'Salvando...' : 'Aplicar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Row actions ─────────────────────────────────────────────────────────────
 
 interface RowMenuItem { label: string; icon: React.ReactNode; onClick: () => void; danger?: boolean }
@@ -768,6 +871,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
   const [viewLoading, setViewLoading] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [extraPctModalData, setExtraPctModalData] = useState<{ ids: number[]; ts?: Timesheet } | null>(null)
+  const [bulkPcOpen, setBulkPcOpen] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
   const [reprocessResult, setReprocessResult] = useState<string | null>(null)
   const [reverseRejectionModal, setReverseRejectionModal] = useState<{ open: boolean; tsId?: number }>({ open: false })
@@ -1027,6 +1131,10 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
 
   const selectedMinutes = useMemo(
     () => (data?.items ?? []).filter(ts => selectedIds.has(ts.id)).reduce((sum, ts) => sum + ts.effort_minutes, 0),
+    [data?.items, selectedIds]
+  )
+  const selectedApprovedCount = useMemo(
+    () => (data?.items ?? []).filter(ts => selectedIds.has(ts.id) && ts.status === 'approved').length,
     [data?.items, selectedIds]
   )
 
@@ -1649,6 +1757,13 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
             <span style={{ color: 'var(--brand-primary)', fontWeight: 600 }}>{formatMinutes(selectedMinutes)}</span>
           </span>
           <button
+            onClick={() => setBulkPcOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all"
+            style={{ background: '#3f3f46', color: '#e4e4e7' }}
+          >
+            <FolderOpen size={11} /> Cliente/Projeto
+          </button>
+          <button
             onClick={() => setExtraPctModalData({ ids: Array.from(selectedIds) })}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all"
             style={{ background: 'var(--brand-primary)', color: 'var(--primary-fg)' }}
@@ -1670,6 +1785,17 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
             <X size={14} className="text-zinc-400" />
           </button>
         </div>
+      )}
+
+      {/* Bulk Cliente/Projeto Modal */}
+      {bulkPcOpen && (
+        <BulkProjectCustomerModal
+          ids={Array.from(selectedIds)}
+          customers={customers}
+          approvedCount={selectedApprovedCount}
+          onClose={() => setBulkPcOpen(false)}
+          onSaved={() => { refetch(); setSelectedIds(new Set()) }}
+        />
       )}
 
       {/* ExtraPct Modal */}
