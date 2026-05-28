@@ -52,6 +52,7 @@ interface Contract {
   valor_hora: number | null
   hora_adicional: number | null
   pct_horas_coordenador: number | null
+  horas_coordenacao?: number | null
   horas_consultor: number | null
   expectativa_inicio: string | null
   condicao_pagamento: string | null
@@ -131,12 +132,22 @@ type FormState = {
   valor_hora: string
   hora_adicional: string
   pct_horas_coordenador: string
+  horas_coordenacao: string
   horas_consultor: string
   expectativa_inicio: string
   condicao_pagamento: string
   executivo_conta_id: string
   vendedor_id: string
   observacoes: string
+  // Aporte v2 — fluxo alternativo (toggle "É aporte?" no topo da tab Cliente).
+  // Aporte não vira projeto/contrato; abastece hour_contributions e renderiza
+  // como card na coluna "Aporte" do Kanban (somente quando projeto destino é pai).
+  is_aporte: boolean
+  aporte_target_project_id: string
+  aporte_horas: string
+  aporte_valor_hora: string
+  aporte_motivo: 'aporte' | 'excedentes' | 'absorvidas'
+  aporte_descricao: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -159,12 +170,19 @@ const EMPTY_FORM: FormState = {
   valor_hora: '',
   hora_adicional: '',
   pct_horas_coordenador: '',
+  horas_coordenacao: '',
   horas_consultor: '',
   expectativa_inicio: '',
   condicao_pagamento: '',
   executivo_conta_id: '',
   vendedor_id: '',
   observacoes: '',
+  is_aporte: false,
+  aporte_target_project_id: '',
+  aporte_horas: '',
+  aporte_valor_hora: '',
+  aporte_motivo: 'aporte',
+  aporte_descricao: '',
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -205,6 +223,12 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
 
   // Projetos pai disponíveis para o cliente selecionado
   const [parentProjects, setParentProjects] = useState<SelectOption[]>([])
+
+  // Aporte v2 — lista de TODOS os projetos (pai + filho) do cliente, usada quando
+  // is_aporte=true para escolher o projeto de destino. Cada item carrega o flag
+  // `is_child` pra UI mostrar o banner "será registrado no pai" + o `hourly_rate`
+  // do projeto/pai pra auto-preencher Valor da hora.
+  const [aporteProjects, setAporteProjects] = useState<Array<{ id: string; name: string; is_child: boolean; parent_code?: string; parent_name?: string; hourly_rate?: number | null; parent_hourly_rate?: number | null }>>([])
 
   // Attachments
   const [pendingFiles, setPendingFiles] = useState<{ file: File; type: 'proposta' | 'contrato' | 'logo' }[]>([])
@@ -260,12 +284,20 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
           valor_hora:            full.valor_hora != null ? String(full.valor_hora) : '',
           hora_adicional:        full.hora_adicional != null ? String(full.hora_adicional) : '',
           pct_horas_coordenador: full.pct_horas_coordenador != null ? String(full.pct_horas_coordenador) : '',
+          horas_coordenacao:     (full as any).horas_coordenacao != null ? String((full as any).horas_coordenacao) : '',
           horas_consultor:       full.horas_consultor != null ? String(full.horas_consultor) : '',
           expectativa_inicio:    full.expectativa_inicio ?? '',
           condicao_pagamento:    full.condicao_pagamento ?? '',
           executivo_conta_id:    full.executivo_conta_id ? String(full.executivo_conta_id) : '',
           vendedor_id:           full.vendedor_id ? String(full.vendedor_id) : '',
           observacoes:           full.observacoes ?? '',
+          // Aporte v2: edição de contrato existente nunca entra no fluxo aporte
+          is_aporte:                false,
+          aporte_target_project_id: '',
+          aporte_horas:             '',
+          aporte_valor_hora:        '',
+          aporte_motivo:            'aporte',
+          aporte_descricao:         '',
         })
         setContacts(full.contacts ?? [])
       }).catch(() => toast.error('Erro ao carregar contrato'))
@@ -279,14 +311,91 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
 
   // Carrega contatos e projetos pai do cliente selecionado
   useEffect(() => {
-    if (!form.customer_id) { setCustomerContacts([]); setParentProjects([]); return }
+    if (!form.customer_id) { setCustomerContacts([]); setParentProjects([]); setAporteProjects([]); return }
     api.get<CustomerContact[]>(`/customer-contacts?customer_id=${form.customer_id}`)
       .then(r => setCustomerContacts(Array.isArray(r) ? r : []))
       .catch(() => setCustomerContacts([]))
     api.get<any>(`/projects?customer_id=${form.customer_id}&parent_projects_only=true&pageSize=100`)
       .then(r => setParentProjects((r?.items ?? []).map((p: any) => ({ id: p.id, name: `${p.code} — ${p.name}` }))))
       .catch(() => setParentProjects([]))
+    // TODOS os projetos do cliente (pai + filho) para o select do form de aporte.
+    // Ordena pais alfabético e filhos imediatamente abaixo do pai (indented).
+    api.get<any>(`/projects?customer_id=${form.customer_id}&pageSize=200`)
+      .then(r => {
+        const list: any[] = r?.items ?? []
+        const byId = new Map<number, any>(list.map(p => [p.id, p]))
+        const parents = list.filter(p => !p.parent_project_id).sort((a, b) => String(a.code).localeCompare(String(b.code)))
+        const childrenByParent = new Map<number, any[]>()
+        for (const p of list) {
+          if (p.parent_project_id) {
+            const arr = childrenByParent.get(p.parent_project_id) ?? []
+            arr.push(p)
+            childrenByParent.set(p.parent_project_id, arr)
+          }
+        }
+        const orphans = list.filter(p => p.parent_project_id && !byId.has(p.parent_project_id))
+        const ordered: any[] = []
+        for (const par of parents) {
+          ordered.push({ ...par, _is_child: false })
+          const kids = (childrenByParent.get(par.id) ?? []).sort((a, b) => String(a.code).localeCompare(String(b.code)))
+          for (const k of kids) ordered.push({ ...k, _is_child: true, _parent: par })
+        }
+        for (const o of orphans) ordered.push({ ...o, _is_child: true, _parent: byId.get(o.parent_project_id) })
+
+        setAporteProjects(ordered.map(p => {
+          const parent = p._parent
+          const ownRate = Number(p.hourly_rate ?? p.valor_hora ?? 0) || null
+          const parentRate = parent ? (Number(parent.hourly_rate ?? parent.valor_hora ?? 0) || null) : null
+          return {
+            id: String(p.id),
+            name: p._is_child && parent
+              ? `   └─ ${p.code} — ${p.name}  (filho de ${parent.code})`
+              : `${p.code} — ${p.name}`,
+            is_child: p._is_child,
+            parent_code: parent?.code,
+            parent_name: parent?.name,
+            hourly_rate: ownRate,
+            parent_hourly_rate: parentRate,
+          }
+        }))
+      })
+      .catch(() => setAporteProjects([]))
   }, [form.customer_id])
+
+  // Aporte v2 — auto-preencher Valor da hora ao selecionar projeto destino.
+  // Regra: pai → usa valor_hora dele; filho → herda valor_hora do pai.
+  useEffect(() => {
+    if (!form.is_aporte || !form.aporte_target_project_id) return
+    const sel = aporteProjects.find(p => p.id === form.aporte_target_project_id)
+    if (!sel) return
+    const candidate = sel.is_child ? (sel.parent_hourly_rate ?? null) : (sel.hourly_rate ?? null)
+    if (candidate && candidate > 0) {
+      setForm(f => ({ ...f, aporte_valor_hora: String(candidate) }))
+      return
+    }
+    // Fallback: GET no projeto certo (filho → busca pai)
+    let cancelled = false
+    api.get<any>(`/projects/${form.aporte_target_project_id}`)
+      .then(p => {
+        if (cancelled) return
+        const ownRate = Number(p?.hourly_rate ?? p?.valor_hora ?? 0)
+        if (sel.is_child && p?.parent_project_id) {
+          api.get<any>(`/projects/${p.parent_project_id}`)
+            .then(parent => {
+              if (cancelled) return
+              const parentRate = Number(parent?.hourly_rate ?? parent?.valor_hora ?? 0)
+              if (parentRate > 0) setForm(f => ({ ...f, aporte_valor_hora: String(parentRate) }))
+              else if (ownRate > 0) setForm(f => ({ ...f, aporte_valor_hora: String(ownRate) }))
+            })
+            .catch(() => {})
+        } else if (ownRate > 0) {
+          setForm(f => ({ ...f, aporte_valor_hora: String(ownRate) }))
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.aporte_target_project_id, form.is_aporte])
 
   // Subprojeto: pré-preenche "Valor da Hora" com o do projeto PAI (editável).
   // Só preenche se o campo estiver vazio → não sobrescreve subprojeto já existente em edição.
@@ -351,6 +460,50 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
   // ─── Save ─────────────────────────────────────────────────────────────────
 
   const save = async () => {
+    // ── Ramo APORTE — cria hour_contribution (não cria contract/project) ──
+    if (form.is_aporte && !internalEdit) {
+      if (!form.customer_id)                                  { toast.error('Selecione o cliente'); return }
+      if (!form.aporte_target_project_id)                     { toast.error('Selecione o projeto que recebe o aporte'); return }
+      if (!form.aporte_horas || Number(form.aporte_horas) <= 0)        { toast.error('Informe a quantidade de horas'); return }
+      if (!form.aporte_valor_hora || Number(form.aporte_valor_hora) <= 0) { toast.error('Informe o valor da hora'); return }
+      const selProj = aporteProjects.find(p => p.id === form.aporte_target_project_id)
+      const isChildTarget = !!selProj?.is_child
+      const pendProposta = pendingFiles.find(p => p.type === 'proposta')
+      if (!isChildTarget && !pendProposta) {
+        toast.error('Anexe a aprovação/proposta — obrigatório para aporte em projeto pai')
+        return
+      }
+      setSaving(true)
+      try {
+        const fd = new FormData()
+        fd.append('contributed_hours', String(Number(form.aporte_horas)))
+        fd.append('hourly_rate',       String(Number(form.aporte_valor_hora)))
+        fd.append('motivo',            form.aporte_motivo)
+        if (form.aporte_descricao) fd.append('description', form.aporte_descricao)
+        if (!isChildTarget && pendProposta) fd.append('proposta', pendProposta.file)
+        const res = await fetch(`/api/v1/projects/${form.aporte_target_project_id}/hour-contributions`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: fd,
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          toast.error(err?.message ?? 'Erro ao criar aporte')
+          return
+        }
+        toast.success(isChildTarget
+          ? 'Aporte registrado no projeto filho (consumindo do saldo do pai)'
+          : 'Aporte criado — card disponível no Kanban')
+        onSaved()
+        onClose()
+      } catch (e: any) {
+        toast.error(e?.message ?? 'Erro ao criar aporte')
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+
     if (!form.customer_id)                                               { toast.error('Selecione o cliente'); setActiveTab(0); return }
     if (!(form as any).project_name?.trim())                             { toast.error('Informe o nome do projeto'); setActiveTab(0); return }
     if (form.is_subproject && !form.parent_project_id)                   { toast.error('Selecione o projeto pai para o subprojeto'); setActiveTab(0); return }
@@ -377,6 +530,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
         valor_hora:            form.valor_hora ? Number(form.valor_hora) : null,
         hora_adicional:        form.hora_adicional ? Number(form.hora_adicional) : null,
         pct_horas_coordenador: form.pct_horas_coordenador ? Number(form.pct_horas_coordenador) : null,
+        horas_coordenacao:     form.horas_coordenacao ? Number(form.horas_coordenacao) : null,
         horas_consultor:       form.horas_consultor ? Number(form.horas_consultor) : null,
         expectativa_inicio:    form.expectativa_inicio || null,
         condicao_pagamento:    form.condicao_pagamento || null,
@@ -545,16 +699,18 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 transition-colors"><X size={18} /></button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b overflow-x-auto shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
-          {TABS.map((t, i) => (
-            <button key={t} onClick={() => setActiveTab(i)}
-              className="px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors shrink-0"
-              style={{ color: activeTab === i ? 'var(--text)' : 'var(--text-muted)', borderBottom: activeTab === i ? '2px solid var(--primary)' : '2px solid transparent' }}>
-              {t}
-            </button>
-          ))}
-        </div>
+        {/* Tabs (escondidas quando is_aporte — form de aporte é single-page) */}
+        {!form.is_aporte && (
+          <div className="flex border-b overflow-x-auto shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
+            {TABS.map((t, i) => (
+              <button key={t} onClick={() => setActiveTab(i)}
+                className="px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors shrink-0"
+                style={{ color: activeTab === i ? 'var(--text)' : 'var(--text-muted)', borderBottom: activeTab === i ? '2px solid var(--primary)' : '2px solid transparent' }}>
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
@@ -562,6 +718,160 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
           {/* Tab 0: Cliente */}
           {activeTab === 0 && (
             <div className="space-y-5">
+              {/* ── Toggle "É aporte?" — primeira opção do form (Aporte v2) ── */}
+              {!internalEdit && (
+                <div className="rounded-xl p-3 flex items-center justify-between gap-3"
+                  style={{ background: form.is_aporte ? 'rgba(34,197,94,0.08)' : 'var(--surface-hover)',
+                           border: `1px solid ${form.is_aporte ? 'rgba(34,197,94,0.45)' : 'var(--brand-border)'}` }}>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold" style={{ color: form.is_aporte ? '#22c55e' : 'var(--text)' }}>
+                      É aporte?
+                    </p>
+                    <p className="text-[11px]" style={{ color: 'var(--text-light)' }}>
+                      Aporte de horas em projeto existente — sem criar novo projeto/contrato.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, is_aporte: !f.is_aporte }))}
+                    className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors"
+                    style={{ background: form.is_aporte ? '#22c55e' : 'rgba(255,255,255,0.18)' }}
+                  >
+                    <span className="pointer-events-none inline-block h-5 w-5 mt-0.5 ml-0.5 rounded-full bg-white shadow transition-transform"
+                      style={{ transform: form.is_aporte ? 'translateX(20px)' : 'translateX(0)' }} />
+                  </button>
+                </div>
+              )}
+
+              {/* ── Form simplificado de APORTE ── */}
+              {form.is_aporte && !internalEdit && (() => {
+                const selectedAporteProj = aporteProjects.find(p => p.id === form.aporte_target_project_id)
+                const isChildTarget = !!selectedAporteProj?.is_child
+                const total = (Number(form.aporte_horas) || 0) * (Number(form.aporte_valor_hora) || 0)
+                const pendProposta = pendingFiles.find(p => p.type === 'proposta')
+                return (
+                  <div className="space-y-5">
+                    {/* Cliente */}
+                    <div>
+                      <label className={labelCls}>Cliente <span style={{ color: '#ef4444' }}>*</span></label>
+                      <SearchSelect
+                        value={form.customer_id}
+                        onChange={v => setForm(f => ({ ...f, customer_id: v, aporte_target_project_id: '' }))}
+                        options={customers}
+                        placeholder="Buscar cliente..."
+                      />
+                    </div>
+
+                    {/* Projeto destino (pai ou filho) */}
+                    {form.customer_id && (
+                      <div>
+                        <label className={labelCls}>Projeto que recebe o aporte <span style={{ color: '#ef4444' }}>*</span></label>
+                        {aporteProjects.length === 0
+                          ? <p className="text-xs text-amber-400 italic px-3 py-2 rounded-lg" style={inputStyle}>Nenhum projeto disponível para este cliente</p>
+                          : <SearchSelect
+                              value={form.aporte_target_project_id}
+                              onChange={v => setForm(f => ({ ...f, aporte_target_project_id: v }))}
+                              options={aporteProjects.map(p => ({ id: p.id, name: p.name }))}
+                              placeholder="Selecionar projeto..."
+                            />
+                        }
+                      </div>
+                    )}
+
+                    {/* Banner azul quando destino é projeto filho */}
+                    {isChildTarget && selectedAporteProj && (
+                      <div className="rounded-xl p-3 flex items-start gap-2"
+                        style={{ background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.45)' }}>
+                        <span className="text-base" style={{ color: '#38bdf8' }}>ℹ</span>
+                        <div className="text-[11px]" style={{ color: '#38bdf8' }}>
+                          Este aporte será registrado no projeto <span className="font-semibold">{selectedAporteProj.name}</span>,
+                          consumindo do saldo do pai <span className="font-semibold">{selectedAporteProj.parent_code} — {selectedAporteProj.parent_name}</span>.
+                          <br/>
+                          <span style={{ opacity: 0.85 }}>Não criará card no Kanban (cards só geram proposta comercial para projetos pai).</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Horas + Valor/hora + Total */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className={labelCls}>Quantidade de horas <span style={{ color: '#ef4444' }}>*</span></label>
+                        <input type="number" min="0.01" step="0.5"
+                          value={form.aporte_horas}
+                          onChange={e => setForm(f => ({ ...f, aporte_horas: e.target.value }))}
+                          placeholder="0"
+                          className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-1 focus:ring-cyan-500/40"
+                          style={inputStyle} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Valor da hora (R$) <span style={{ color: '#ef4444' }}>*</span></label>
+                        <input type="number" min="0.01" step="0.01"
+                          value={form.aporte_valor_hora}
+                          onChange={e => setForm(f => ({ ...f, aporte_valor_hora: e.target.value }))}
+                          placeholder="0,00"
+                          className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-1 focus:ring-cyan-500/40"
+                          style={inputStyle} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Total do aporte</label>
+                        <div className="px-3 py-2 rounded-lg text-sm font-semibold tabular-nums"
+                          style={{ ...inputStyle, background: 'rgba(34,197,94,0.10)', color: '#22c55e', borderColor: 'rgba(34,197,94,0.4)' }}>
+                          {total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Motivo (dropdown) */}
+                    <div>
+                      <label className={labelCls}>Motivo do aporte <span style={{ color: '#ef4444' }}>*</span></label>
+                      <select
+                        value={form.aporte_motivo}
+                        onChange={e => setForm(f => ({ ...f, aporte_motivo: e.target.value as FormState['aporte_motivo'] }))}
+                        className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-1 focus:ring-cyan-500/40"
+                        style={inputStyle}
+                      >
+                        <option value="aporte">Aporte</option>
+                        <option value="excedentes">Excedentes</option>
+                        <option value="absorvidas">Absorvidas</option>
+                      </select>
+                    </div>
+
+                    {/* Descrição */}
+                    <div>
+                      <label className={labelCls}>Descrição</label>
+                      <textarea
+                        rows={3}
+                        value={form.aporte_descricao}
+                        onChange={e => setForm(f => ({ ...f, aporte_descricao: e.target.value }))}
+                        placeholder="Detalhamento do aporte (opcional)"
+                        className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-1 focus:ring-cyan-500/40 resize-none"
+                        style={inputStyle}
+                      />
+                    </div>
+
+                    {/* Anexo "Proposta / Aprovação" — SÓ quando destino é projeto PAI */}
+                    {!isChildTarget && (
+                      <div>
+                        <label className={labelCls}>Aprovação do Cliente / Proposta Assinada <span style={{ color: '#ef4444' }}>*</span></label>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt,.csv,.zip"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) { setPendingFiles(p => [...p.filter(x => x.type !== 'proposta'), { file: f, type: 'proposta' }]); e.target.value = '' } }}
+                          className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-1 focus:ring-cyan-500/40 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:bg-cyan-500/10 file:text-cyan-300 hover:file:bg-cyan-500/20 file:cursor-pointer"
+                          style={inputStyle}
+                        />
+                        {pendProposta
+                          ? <p className="text-[11px] text-emerald-400 mt-1">✓ {pendProposta.file.name} ({Math.round(pendProposta.file.size / 1024)} KB)</p>
+                          : <p className="text-[10px] mt-1" style={{ color: '#f87171' }}>Anexe a aprovação formal — gera proposta comercial pro projeto pai (PDF, imagem, etc. — máx 20 MB)</p>
+                        }
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* ── Form padrão (contrato comum) — só quando NÃO é aporte ── */}
+              {!form.is_aporte && (<>
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className={labelCls} style={{ marginBottom: 0 }}>Cliente *</label>
@@ -725,11 +1035,12 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                   return <p className="text-[10px] mt-1" style={{ color: '#f87171' }}>Anexe a aprovação formal (PDF, imagem ou e-mail exportado) — máx 20 MB</p>
                 })()}
               </div>
+              </>)}
             </div>
           )}
 
-          {/* Tab 1: Classificação */}
-          {activeTab === 1 && (
+          {/* Tab 1: Classificação (oculta quando is_aporte) */}
+          {activeTab === 1 && !form.is_aporte && (
             <div>
               <label className={labelCls}>Tipo de Serviço</label>
               <SearchSelect
@@ -897,6 +1208,16 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                         className={inputCls} style={inputStyle} />
                     </div>
                   )}
+                  {!isOnDemand && (
+                    <div>
+                      <label className={labelCls}>Horas de Coordenação</label>
+                      <input type="number" min="0" step="0.5" placeholder="0"
+                        value={form.horas_coordenacao}
+                        onChange={e => setForm(f => ({ ...f, horas_coordenacao: e.target.value }))}
+                        className={inputCls} style={inputStyle} />
+                      <p className="text-[10px] mt-1 text-zinc-500">Banco fixo de horas do coordenador. Copiado pro projeto ao gerar.</p>
+                    </div>
+                  )}
                   {isFechado && (
                     <>
                       <div>
@@ -1061,12 +1382,12 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
           <div className="flex items-center gap-2">
-            {activeTab > 0 && (
+            {!form.is_aporte && activeTab > 0 && (
               <button onClick={() => setActiveTab(t => t - 1)} className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-white transition-colors" style={{ border: '1px solid var(--brand-border)' }}>
                 ← Anterior
               </button>
             )}
-            {activeTab < TABS.length - 1 && (
+            {!form.is_aporte && activeTab < TABS.length - 1 && (
               <button onClick={() => setActiveTab(t => t + 1)} className="px-4 py-2 rounded-lg text-sm text-zinc-300 hover:text-white transition-colors" style={{ border: '1px solid var(--brand-border)' }}>
                 Próximo →
               </button>
@@ -1076,11 +1397,15 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
             <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-white transition-colors">
               Cancelar
             </button>
-            {(internalEdit || activeTab === TABS.length - 1) && (
+            {(form.is_aporte || internalEdit || activeTab === TABS.length - 1) && (
               <button onClick={save} disabled={saving || uploading || codeExists}
                 className="px-5 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-                style={{ background: 'rgba(0,245,255,0.15)', border: '1px solid rgba(0,245,255,0.3)', color: '#00F5FF' }}>
-                {saving ? 'Salvando...' : uploading ? 'Enviando arquivos...' : internalEdit ? 'Salvar alterações' : 'Criar contrato'}
+                style={{
+                  background: form.is_aporte ? 'rgba(34,197,94,0.15)' : 'rgba(0,245,255,0.15)',
+                  border: `1px solid ${form.is_aporte ? 'rgba(34,197,94,0.45)' : 'rgba(0,245,255,0.3)'}`,
+                  color: form.is_aporte ? '#22c55e' : '#00F5FF',
+                }}>
+                {saving ? 'Salvando...' : uploading ? 'Enviando arquivos...' : form.is_aporte ? 'Criar aporte' : internalEdit ? 'Salvar alterações' : 'Criar contrato'}
               </button>
             )}
           </div>
