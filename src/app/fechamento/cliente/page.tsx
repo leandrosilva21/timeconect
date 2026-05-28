@@ -541,16 +541,25 @@ export default function FechamentoClientePage() {
     const avulsoFinal = draftClean && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(draftClean)
       ? Array.from(new Set([...avulsoEmails, draftClean]))
       : avulsoEmails
-    // Destinatários = cadastrados (chips) + avulsos (incluindo draft promovido), dedupe.
-    const emails = Array.from(new Set([...cadastradoEmails, ...avulsoFinal]))
+    // Idem para o campo cadastrado: promove o draft digitado e não confirmado.
+    const cadDraftClean = cadastradoDraft.trim().replace(/,$/, '').trim()
+    const cadastradoFinal = cadDraftClean && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cadDraftClean)
+      ? Array.from(new Set([...cadastradoEmails, cadDraftClean]))
+      : cadastradoEmails
+    // Destinatários = cadastrados (chips + draft) + avulsos (chips + draft), dedupe.
+    const emails = Array.from(new Set([...cadastradoFinal, ...avulsoFinal]))
     if (emails.length === 0) {
       toast.error('Informe ao menos um e-mail de destino antes de enviar.')
       return
     }
-    // Sincroniza estado: se promoveu o draft, persiste como chip e limpa o input.
+    // Sincroniza estado: se promoveu algum draft, persiste como chip e limpa o input.
     if (avulsoFinal !== avulsoEmails) {
       setAvulsoEmails(avulsoFinal)
       setAvulsoDraft('')
+    }
+    if (cadastradoFinal !== cadastradoEmails) {
+      setCadastradoEmails(cadastradoFinal)
+      setCadastradoDraft('')
     }
     setSendingEmail(true)
     try {
@@ -1510,16 +1519,17 @@ export default function FechamentoClientePage() {
                 size="sm"
                 icon={Send}
                 loading={sendingEmail}
-                // Conta o draft do campo avulso (mesmo sem ter virado chip) — assim o user
-                // que digitou um e-mail válido e não pressionou Enter já vê o botão habilitar.
+                // Conta o draft de QUALQUER campo (cadastrado ou avulso), mesmo sem ter
+                // virado chip — basta um e-mail válido digitado em um deles pra habilitar.
                 disabled={anexosExcedido || (
                   cadastradoEmails.length === 0
                   && avulsoEmails.length === 0
                   && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(avulsoDraft.trim())
+                  && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cadastradoDraft.trim())
                 )}
                 title={
                   anexosExcedido ? 'Anexos excedem o limite — remova arquivos para enviar.'
-                  : (cadastradoEmails.length === 0 && avulsoEmails.length === 0 && !avulsoDraft.trim())
+                  : (cadastradoEmails.length === 0 && avulsoEmails.length === 0 && !avulsoDraft.trim() && !cadastradoDraft.trim())
                     ? 'Cadastre ao menos um e-mail no cliente ou adicione um e-mail avulso para enviar.'
                     : undefined
                 }
