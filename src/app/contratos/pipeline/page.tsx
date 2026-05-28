@@ -4592,8 +4592,9 @@ function KanbanContent() {
 
           const TABS: { id: typeof listTab; label: string; count: number }[] = [
             { id: 'projetos',     label: 'Projetos',     count: allProjects.length },
-            ...(!isCliente ? [{ id: 'contratos' as const,   label: 'Contratos',    count: allContracts.length }] : []),
-            { id: 'requisicoes',  label: 'Requisições',  count: allRequests.length },
+            // Coordenador só vê a aba Projetos. Contratos e Requisições são de admin/cliente.
+            ...(!isCliente && !isCoord ? [{ id: 'contratos' as const,   label: 'Contratos',    count: allContracts.length }] : []),
+            ...(!isCoord ? [{ id: 'requisicoes' as const, label: 'Requisições',  count: allRequests.length }] : []),
           ]
 
           return (
