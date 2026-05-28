@@ -3689,7 +3689,10 @@ export default function GestaoProjetosPage() {
 
                     {/* Horas — swap p/ coordenação quando o usuário logado é coordenador do projeto */}
                     {(() => {
-                      const vp = viewProject
+                      // Preferir viewProjectFull (do /projects/{id}) sobre o cache da lista (viewProject)
+                      // — garante que mudanças no DB (ex: accumulated_sold_hours recalculado) chegam à modal
+                      // sem depender do TTL da listagem.
+                      const vp: any = viewProjectFull ?? viewProject
                       const operationalVendidas = ((vp?.vendidas_projeto_hours ?? p.sold_hours) ?? 0) + (vp?.vendidas_aporte_hours ?? 0)
                       const isCoordView = isCoordinatorOf(p, user?.id)
                       const cm = isCoordView ? coordinationMeta(p, operationalVendidas) : null
