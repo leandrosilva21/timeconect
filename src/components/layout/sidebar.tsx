@@ -296,24 +296,20 @@ function SidebarInner({ user }: { user: User }) {
       const has = (p: string) => ep.includes(p)
       const nav: NavEntry[] = [...NAV_COORDINATOR]
 
-      // Grupo Projetos — somente para coordenadores do tipo "projetos"
-      if (user?.coordinator_type === 'projetos') {
-        nav.splice(1, 0, {
-          type: 'group',
-          label: 'Projetos',
-          icon: FolderOpen,
-          items: [
-            { label: 'Gestão de Projetos',  href: '/gestao-projetos',    icon: Layers },
-            { label: 'Demandas e Projetos', href: '/contratos/pipeline', icon: LayoutGrid },
-          ],
-        })
-      } else if (ep.includes('gestao_projetos.view') || ep.includes('gestao_projetos.update')) {
-        // Permissão via grupo libera o item independente do coordinator_type
+      // Permissão via grupo libera "Gestão de Projetos" pra coordenadores que NÃO
+      // sejam do tipo "projetos" (esses entram via Demandas e Projetos abaixo).
+      if (user?.coordinator_type !== 'projetos' && (ep.includes('gestao_projetos.view') || ep.includes('gestao_projetos.update'))) {
         nav.splice(1, 0, { type: 'item', label: 'Gestão de Projetos', href: '/gestao-projetos', icon: Layers })
       }
 
       // Meu Painel — primeiro item para TODOS os coordenadores
       nav.unshift({ type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard })
+
+      // Demandas e Projetos — posição 2 para coordenador de projetos
+      // ("Gestão de Projetos" foi removida — governança ficou no painel/Demandas)
+      if (user?.coordinator_type === 'projetos') {
+        nav.splice(1, 0, { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline', icon: LayoutGrid })
+      }
 
       // Portal de Sustentação — somente para coordenadores do tipo "sustentacao"
       if (user?.coordinator_type === 'sustentacao') {
@@ -340,11 +336,14 @@ function SidebarInner({ user }: { user: User }) {
       // Contatos de Clientes: mais restritivo — exige nível de edição/gerência.
       const hasCustomersView = ['customers.view', 'customers.create', 'customers.update', 'customers.delete', 'customers.manage'].some(p => ep.includes(p))
       const hasCustomersEdit = ['customers.create', 'customers.update', 'customers.delete', 'customers.manage'].some(p => ep.includes(p))
+      // Coordenador de projetos: nunca vê cadastro de Clientes/Contatos de Clientes
+      // (governança de clientes fica fora do escopo dele).
+      const isCoordProjetos = user?.coordinator_type === 'projetos'
       const cadastrosItems: { label: string; href: string; icon: typeof Users }[] = []
       if (has('contracts.manage'))          cadastrosItems.push({ label: 'Tipos de Contrato',     href: '/cadastros?tab=contracts',          icon: FileType })
       if (has('services.manage'))           cadastrosItems.push({ label: 'Tipos de Serviço',      href: '/cadastros?tab=services',           icon: Wrench })
-      if (hasCustomersView)                 cadastrosItems.push({ label: 'Clientes',              href: '/clientes',                         icon: Users })
-      if (hasCustomersEdit)                 cadastrosItems.push({ label: 'Contatos de Clientes',  href: '/cadastros?tab=customer_contacts',   icon: Contact })
+      if (!isCoordProjetos && hasCustomersView) cadastrosItems.push({ label: 'Clientes',              href: '/clientes',                         icon: Users })
+      if (!isCoordProjetos && hasCustomersEdit) cadastrosItems.push({ label: 'Contatos de Clientes',  href: '/cadastros?tab=customer_contacts',   icon: Contact })
       if (has('executives.manage'))         cadastrosItems.push({ label: 'Executivos',            href: '/cadastros?tab=executives',         icon: Star })
       if (has('groups.manage'))             cadastrosItems.push({ label: 'Grupos de Consultor',   href: '/cadastros?tab=groups',             icon: UserCheck })
       if (has('holidays.manage'))           cadastrosItems.push({ label: 'Feriados',              href: '/cadastros?tab=holidays',           icon: CalendarDays })
@@ -352,11 +351,14 @@ function SidebarInner({ user }: { user: User }) {
       if (has('expense_types.manage'))      cadastrosItems.push({ label: 'Tipos de Despesa',      href: '/cadastros?tab=expense_types',      icon: Receipt })
       if (has('payment_methods.manage'))    cadastrosItems.push({ label: 'Formas de Pagamento',   href: '/cadastros?tab=payment_methods',    icon: CreditCard })
       if (has('partners.manage'))   cadastrosItems.push({ label: 'Parceiros',           href: '/partners',                 icon: Handshake })
+      // Coordenador de projetos: vê "Usuários" sob Cadastros com função restrita a
+      // reset de senhas (a tela /users gateia as ações pra esse perfil).
+      if (isCoordProjetos)                  cadastrosItems.push({ label: 'Usuários',              href: '/users',                            icon: Users })
       // 'Projetos' foi removido — inclusão agora é feita via Kanban (pipeline)
       if (cadastrosItems.length > 0) nav.push({ type: 'group', label: 'Cadastros', icon: Database, items: cadastrosItems })
 
-      // Usuários — após Cadastros
-      if (hasAnyUserPerm) nav.push({ type: 'item', label: 'Usuários', href: '/users', icon: Users })
+      // Usuários — após Cadastros (perfis com permissão dedicada; coord_projetos já entra via Cadastros acima)
+      if (!isCoordProjetos && hasAnyUserPerm) nav.push({ type: 'item', label: 'Usuários', href: '/users', icon: Users })
 
       // Configurações
       if (has('settings.view')) nav.push({ type: 'item', label: 'Configurações', href: '/settings', icon: Settings })

@@ -157,11 +157,19 @@ export default function UsersPage() {
 
   const isAdmin      = authUser?.type === 'admin'
   const ep: string[] = (authUser as any)?.permissions ?? authUser?.extra_permissions ?? []
-  const canCreate    = isAdmin || ep.includes('users.create')
-  const canView      = isAdmin || ep.includes('users.view_all')
-  const canEdit      = isAdmin || ep.includes('users.update')
-  const canDelete    = isAdmin
-  const canResetPwd  = isAdmin || ep.includes('users.reset_password')
+  // Coordenador de projetos acessa esta tela apenas para RESETAR SENHA.
+  // Nada de Visualizar/Editar/Criar/Excluir/Reenviar boas-vindas — só reset.
+  const isCoordProjetos = authUser?.type === 'coordenador' && authUser?.coordinator_type === 'projetos'
+  const canCreate    = !isCoordProjetos && (isAdmin || ep.includes('users.create'))
+  // canView: precisa ser true pra coord_projetos enxergar a lista de usuários
+  // (sem isso o backend filtra só o próprio user). A ação "Visualizar" do menu
+  // de linha é gateada à parte abaixo.
+  const canView      = isCoordProjetos || isAdmin || ep.includes('users.view_all')
+  const canViewDetail = !isCoordProjetos && canView
+  const canEdit      = !isCoordProjetos && (isAdmin || ep.includes('users.update'))
+  const canDelete    = !isCoordProjetos && isAdmin
+  const canResetPwd  = isCoordProjetos || isAdmin || ep.includes('users.reset_password')
+  const canResendWelcome = !isCoordProjetos && (isAdmin || ep.includes('users.reset_password'))
 
   const [users,     setUsers]     = useState<UserItem[]>([])
   const [customers, setCustomers] = useState<CustomerOption[]>([])
@@ -555,11 +563,11 @@ export default function UsersPage() {
                 )}
                 <td className="px-2 py-2.5 w-10">
                   <RowMenu items={[
-                    ...(canView     ? [{ label: 'Visualizar',           icon: <Eye      size={12} />, onClick: () => setViewUser(user) }] : []),
-                    ...(canEdit     ? [{ label: 'Editar',               icon: <Pencil   size={12} />, onClick: () => openEdit(user) }] : []),
-                    ...(canResetPwd ? [{ label: 'Resetar senha',        icon: <KeyRound size={12} />, onClick: () => resetPassword(user), disabled: resetting === user.id }] : []),
-                    ...(canResetPwd ? [{ label: 'Reenviar boas-vindas', icon: <Mail     size={12} />, onClick: () => resendWelcome(user), disabled: resending === user.id }] : []),
-                    ...(canDelete   ? [{ label: 'Excluir',              icon: <Trash2   size={12} />, onClick: () => remove(user.id), danger: true, disabled: deleting === user.id }] : []),
+                    ...(canViewDetail    ? [{ label: 'Visualizar',           icon: <Eye      size={12} />, onClick: () => setViewUser(user) }] : []),
+                    ...(canEdit          ? [{ label: 'Editar',               icon: <Pencil   size={12} />, onClick: () => openEdit(user) }] : []),
+                    ...(canResetPwd      ? [{ label: 'Resetar senha',        icon: <KeyRound size={12} />, onClick: () => resetPassword(user), disabled: resetting === user.id }] : []),
+                    ...(canResendWelcome ? [{ label: 'Reenviar boas-vindas', icon: <Mail     size={12} />, onClick: () => resendWelcome(user), disabled: resending === user.id }] : []),
+                    ...(canDelete        ? [{ label: 'Excluir',              icon: <Trash2   size={12} />, onClick: () => remove(user.id), danger: true, disabled: deleting === user.id }] : []),
                   ]} />
                 </td>
                 <td className="px-3 py-2.5 text-zinc-200 font-medium">{user.name}</td>

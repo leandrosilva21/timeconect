@@ -12,6 +12,7 @@ import { List, Plus, ExternalLink, CheckCircle, AlertCircle, AlertTriangle, Cloc
 import { MultiSelect } from '@/components/ui/multi-select'
 import { ContractFormModal } from '@/components/contracts/ContractFormModal'
 import { ContractCreateModal } from '@/components/shared/ContractCreateModal'
+import { AporteDetailModal } from '@/components/shared/AporteDetailModal'
 import { ContractMessages } from '@/components/shared/ContractMessages'
 import { ProjectDataModal } from '@/components/shared/ProjectDataModal'
 import { CustomerContactsSection } from '@/components/ui/customer-contacts-section'
@@ -152,12 +153,35 @@ interface ProjectEditForm {
 interface Column {
   id: string
   label: string
-  type: 'fixed' | 'coordinator' | 'project_status' | 'sustentacao' | 'bizify'
+  type: 'fixed' | 'coordinator' | 'project_status' | 'sustentacao' | 'bizify' | 'aporte'
   coordinatorId?: number
   emoji?: string
   projectStatus?: string
   color?: string
   sustentacaoValidator?: (card: ContractCard) => boolean
+}
+
+// Card de aporte (vem direto de hour_contributions; só renderiza no kanban
+// quando o projeto destino é PAI — aporte em filho não vira card).
+// Lifecycle: nasce em kanban_status='novo_contrato' e o admin move pra 'aporte'.
+interface AporteCard {
+  id: number
+  kind: 'aporte'
+  customer_id: number | null
+  customer_name: string | null
+  project_id: number
+  project_code: string | null
+  project_name: string | null
+  project_status: string | null
+  horas: number
+  valor_hora: number
+  total: number
+  motivo: 'aporte' | 'excedentes' | 'absorvidas' | string | null
+  description: string | null
+  kanban_status: 'novo_contrato' | 'aporte' | string
+  contributed_by: string | null
+  contributed_at: string | null
+  created_at: string | null
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -183,7 +207,7 @@ const PROJECT_MENU_ITEMS = [
   { action: 'edit',       label: 'Editar',            icon: Pencil,     adminOnly: true },
   { action: 'chat',       label: 'Chat',              icon: MessageSquare },
   { action: 'status',     label: 'Alterar Status',    icon: Layers },
-  { action: 'cost',       label: 'Custo',             icon: DollarSign },
+  { action: 'cost',       label: 'Custo',             icon: DollarSign, coordHidden: true },
   { action: 'timesheets', label: 'Apont. & Despesas', icon: Clock },
   { action: 'aportes',    label: 'Aportes',           icon: TrendingUp, adminOnly: true },
   { action: 'team',       label: 'Selecionar Equipe', icon: Users },
@@ -196,7 +220,7 @@ const CONTRACT_MENU_ITEMS = [
   { action: 'chat',       label: 'Chat',              icon: MessageSquare },
   { action: 'log',        label: 'Histórico',         icon: Clock },
   { action: 'status',     label: 'Alterar Status',    icon: Layers },
-  { action: 'cost',       label: 'Custo',             icon: DollarSign },
+  { action: 'cost',       label: 'Custo',             icon: DollarSign, coordHidden: true },
   { action: 'timesheets', label: 'Apont. & Despesas', icon: Clock },
   { action: 'aportes',    label: 'Aportes',           icon: TrendingUp, adminOnly: true },
   { action: 'team',       label: 'Selecionar Equipe', icon: Users },
@@ -274,6 +298,11 @@ const BIZIFY_COL: Column = {
   sustentacaoValidator: (c) => !!(c.service_type?.toLowerCase().includes('bizify') || c.contract_type?.toLowerCase().includes('bizify')),
 }
 
+const APORTE_COLOR = '#22c55e'
+const APORTE_COL: Column = {
+  id: 'aporte', label: 'Aporte', type: 'aporte', emoji: '💰', color: APORTE_COLOR,
+}
+
 const STATUS_PROJECT_COLUMNS: Column[] = [
   { id: 'col_encerrado', label: 'Encerrado', type: 'project_status', projectStatus: 'finished',  color: '#22c55e' },
   { id: 'col_pausado',   label: 'Pausado',   type: 'project_status', projectStatus: 'paused',    color: '#eab308' },
@@ -317,12 +346,16 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
 }) {
   const [p, setP] = useState<ProjectFull | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'overview' | 'financial' | 'consultants' | 'timesheets' | 'cost'>((initialTab as any) ?? 'overview')
+  const [tab, setTab] = useState<'overview' | 'financial' | 'consultants' | 'timesheets' | 'cost' | 'aportes'>((initialTab as any) ?? 'overview')
   const [breakdown, setBreakdown] = useState<ConsultantBreakdown[]>([])
   const [costSummary, setCostSummary] = useState<CostSummary | null>(null)
   const [timesheets, setTimesheets] = useState<TimesheetEntry[]>([])
   const [tsLoading, setTsLoading] = useState(false)
   const [tsLoaded, setTsLoaded] = useState(false)
+  // Aba Aportes (somente leitura aqui — admin gerencia em gestão de projetos)
+  const [aportesList, setAportesList]   = useState<any[]>([])
+  const [aportesLoading, setAportesLoading] = useState(false)
+  const [aportesLoaded, setAportesLoaded]   = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [viewAttachments, setViewAttachments] = useState<any[]>([])
   const downloadViewAtt = async (att: any) => {
@@ -359,7 +392,17 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
         .catch(() => {})
         .finally(() => setTsLoading(false))
     }
-  }, [tab, projectId, tsLoaded])
+    if (tab === 'aportes' && !aportesLoaded) {
+      setAportesLoading(true)
+      api.get<any>(`/projects/${projectId}/hour-contributions`)
+        .then(r => {
+          const list = Array.isArray(r) ? r : Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
+          setAportesList(list); setAportesLoaded(true)
+        })
+        .catch(() => {})
+        .finally(() => setAportesLoading(false))
+    }
+  }, [tab, projectId, tsLoaded, aportesLoaded])
 
   const fmt = (n: number | null | undefined, dec = 0) =>
     n == null ? '—' : n.toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec })
@@ -392,9 +435,19 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
     </div>
   )
 
+  const { user: viewerUser } = useAuth()
   const consumed = p?.consumed_hours ?? 0
   const totalAvail = p?.total_available_hours ?? ((p?.sold_hours ?? 0) + (p?.hour_contribution ?? 0))
-  const pct = totalAvail > 0 ? (consumed / totalAvail) * 100 : 0
+  // Lente do coordenador: se o usuário logado é coordenador do projeto e há banco de
+  // coordenação, troca KPIs/risco pro banco; admin/demais continuam vendo o operacional.
+  const coordHoursBank = Number((p as any)?.coordination_hours ?? 0)
+  const isCoordViewer = !!viewerUser?.id && !!p?.coordinators?.some((c: any) => c.id === viewerUser.id) && coordHoursBank > 0
+  const coordConsumedVal = Number((p as any)?.coordination_consumed_hours ?? 0)
+  const cardVendidas = isCoordViewer ? coordHoursBank : (p?.sold_hours ?? 0)
+  const cardConsumed = isCoordViewer ? coordConsumedVal : consumed
+  const cardSaldo    = isCoordViewer ? Math.round((cardVendidas - cardConsumed) * 100) / 100 : (p?.general_hours_balance ?? 0)
+  const pct = isCoordViewer ? (cardVendidas > 0 ? (cardConsumed / cardVendidas) * 100 : 0)
+                            : (totalAvail > 0 ? (consumed / totalAvail) * 100 : 0)
   const bar = healthColor(pct)
   const sc = p ? (statusColors[p.status] ?? statusColors.awaiting_start) : statusColors.awaiting_start
   const totalBreakdownHours = breakdown.reduce((s, c) => s + c.total_hours, 0)
@@ -407,12 +460,16 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
   else if (pct >= 70) alerts.push({ msg: `Atenção: ${Math.round(pct)}% das horas consumidas`, color: '#f59e0b' })
   if ((p?.general_hours_balance ?? 0) < 0) alerts.push({ msg: 'Saldo de horas negativo — projeto em déficit', color: '#ef4444' })
 
+  const isCoordRole = viewerUser?.type === 'coordenador'
   const tabs = [
     { id: 'overview'    as const, label: 'Visão Geral' },
     { id: 'consultants' as const, label: `Consultores${breakdown.length > 0 ? ` (${breakdown.length})` : ''}` },
     { id: 'timesheets'  as const, label: 'Apontamentos' },
-    { id: 'financial'   as const, label: 'Financeiro' },
-    { id: 'cost'        as const, label: 'Custo' },
+    { id: 'aportes'     as const, label: `Aportes${aportesList.length > 0 ? ` (${aportesList.length})` : ''}` },
+    ...(isCoordRole ? [] : [
+      { id: 'financial'   as const, label: 'Financeiro' },
+      { id: 'cost'        as const, label: 'Custo' },
+    ]),
   ]
 
   return (
@@ -469,11 +526,12 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
               <div className="space-y-5">
                 <div className="grid grid-cols-4 gap-3">
                   {[
-                    { label: 'Horas Vendidas',   value: fmt(p.sold_hours, 1) + 'h',  color: 'var(--brand-text)', bg: 'var(--surface-hover)' },
-                    { label: 'Horas Consumidas', value: fmt(consumed, 1) + 'h',       color: 'var(--brand-muted)', bg: 'var(--surface-hover)' },
-                    { label: 'Saldo',            value: fmt(p.general_hours_balance, 1) + 'h',
-                      color: (p.general_hours_balance ?? 0) < 0 ? '#ef4444' : '#22c55e',
-                      bg: (p.general_hours_balance ?? 0) < 0 ? 'rgba(239,68,68,0.06)' : 'rgba(34,197,94,0.06)' },
+                    { label: isCoordViewer ? 'Horas Vendidas (Coord.)' : 'Horas Vendidas',
+                      value: fmt(cardVendidas, 1) + 'h',  color: 'var(--brand-text)', bg: 'var(--surface-hover)' },
+                    { label: 'Horas Consumidas', value: fmt(cardConsumed, 1) + 'h',       color: 'var(--brand-muted)', bg: 'var(--surface-hover)' },
+                    { label: 'Saldo',            value: fmt(cardSaldo, 1) + 'h',
+                      color: cardSaldo < 0 ? '#ef4444' : '#22c55e',
+                      bg: cardSaldo < 0 ? 'rgba(239,68,68,0.06)' : 'rgba(34,197,94,0.06)' },
                     { label: 'Consultores c/h',  value: String(breakdown.length || (p.consultants?.length ?? 0)), color: '#a78bfa', bg: 'rgba(139,92,246,0.06)' },
                   ].map(it => (
                     <div key={it.label} className="rounded-xl p-4 text-center" style={{ background: it.bg, border: '1px solid var(--brand-border)' }}>
@@ -492,6 +550,32 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                     <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, background: bar }} />
                   </div>
                 </div>
+
+                {/* Horas de Coordenação — visível pro admin/governança (quando há banco explícito).
+                    Pro coordenador, o swap dos KPIs já mostra esses números, então omite aqui. */}
+                {!isCoordViewer && coordHoursBank > 0 && (() => {
+                  const cBank = coordHoursBank
+                  const cCons = coordConsumedVal
+                  const cSaldo = Math.round((cBank - cCons) * 100) / 100
+                  const cPct = cBank > 0 ? (cCons / cBank) * 100 : 0
+                  const cBar = cPct > 100 ? '#ef4444' : cPct >= 91 ? '#ef4444' : cPct >= 71 ? '#f59e0b' : '#22c55e'
+                  return (
+                    <div className="rounded-xl p-4" style={{ background: 'var(--surface-hover)', border: `1px solid ${cBar}33` }}>
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Horas de Coordenação</span>
+                        <span className="text-xs font-bold tabular-nums" style={{ color: cBar }}>{cBank > 0 ? `${Math.round(cPct)}% consumido` : 'Sem horas'}</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+                        <div><p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>Vendidas</p><p className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{fmt(cBank, 1)}h</p></div>
+                        <div><p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>Consumidas</p><p className="text-sm font-bold" style={{ color: 'var(--brand-muted)' }}>{fmt(cCons, 1)}h</p></div>
+                        <div><p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>Saldo</p><p className="text-sm font-bold" style={{ color: cSaldo < 0 ? '#ef4444' : '#22c55e' }}>{fmt(cSaldo, 1)}h</p></div>
+                      </div>
+                      <div className="w-full h-3 rounded-full overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
+                        <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(cPct, 100)}%`, background: cBar }} />
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {alerts.length > 0 && (
                   <div className="space-y-2">
@@ -526,6 +610,23 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                         })()}
                       </div>
                     </div>
+
+                    {/* Detalhes do Contrato — campos herdados do contrato original */}
+                    <p className="text-[10px] font-semibold uppercase tracking-wider mb-2 mt-4" style={{ color: 'var(--brand-subtle)' }}>Detalhes do Contrato</p>
+                    <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--brand-border)' }}>
+                      <div className="divide-y px-4" style={{ borderColor: 'var(--brand-border)' }}>
+                        <Row label="Tipo de Alocação"     value={(p as any).tipo_alocacao ?? '—'} />
+                        <Row label="Condição de Pagamento" value={(p as any).condicao_pagamento ?? '—'} />
+                        <Row label="Cobra Despesa"        value={(p as any).cobra_despesa_cliente ? 'Sim' : 'Não'} />
+                        <Row label="Limite de Despesa"    value={(p as any).limite_despesa != null ? fmtBRL(Number((p as any).limite_despesa)) : '—'} />
+                        <Row label="Arquiteto"            value={(p as any).architect?.name ?? '—'} />
+                        <Row label="Executivo de Conta"   value={(p as any).executivo_conta?.name ?? '—'} />
+                        <Row label="Vendedor"             value={(p as any).vendedor?.name ?? '—'} />
+                        {(p as any).observacoes_contrato && (
+                          <Row label="Observações" value={<span className="text-left whitespace-pre-wrap" style={{ color: 'var(--brand-text)' }}>{(p as any).observacoes_contrato}</span>} />
+                        )}
+                      </div>
+                    </div>
                   </div>
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Equipe</p>
@@ -556,7 +657,8 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                 {/* Contatos do cliente */}
                 <CustomerContactsSection customerId={p.customer?.id} customerName={p.customer?.name} />
 
-                {/* Anexos */}
+                {/* Anexos — oculto p/ coordenador */}
+                {!isCoordRole && (
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--brand-subtle)' }}>Anexos</p>
                   {viewAttachments.length > 0 ? (
@@ -578,6 +680,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                     <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhum anexo</p>
                   )}
                 </div>
+                )}
 
                 {breakdown.length > 0 && (
                   <div>
@@ -636,11 +739,13 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                             <div className="w-full h-2.5 rounded-full overflow-hidden mb-2" style={{ background: 'var(--surface-hover)' }}>
                               <div className="h-full rounded-full" style={{ width: `${share}%`, background: col }} />
                             </div>
-                            <div className="grid grid-cols-4 gap-2 text-[10px]">
+                            <div className={`grid gap-2 text-[10px] ${isCoordRole ? 'grid-cols-2' : 'grid-cols-4'}`}>
                               <div><span style={{ color: 'var(--brand-subtle)' }}>Aprovadas</span><br /><span style={{ color: '#22c55e' }}>{fmt(c.approved_hours, 1)}h</span></div>
                               <div><span style={{ color: 'var(--brand-subtle)' }}>Pendentes</span><br /><span style={{ color: c.pending_hours > 0 ? '#f59e0b' : 'var(--brand-subtle)' }}>{fmt(c.pending_hours, 1)}h</span></div>
+                              {!isCoordRole && <>
                               <div><span style={{ color: 'var(--brand-subtle)' }}>Taxa/h</span><br /><span style={{ color: 'var(--brand-muted)' }}>{fmtBRL(c.consultant_hourly_rate)}</span></div>
                               <div><span style={{ color: 'var(--brand-subtle)' }}>Custo</span><br /><span style={{ color: 'var(--primary)' }}>{fmtBRL(c.cost)}</span></div>
+                              </>}
                             </div>
                           </div>
                         )
@@ -696,7 +801,73 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
               </div>
             )}
 
-            {tab === 'financial' && (
+            {tab === 'aportes' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--brand-subtle)' }}>
+                    Aportes do projeto
+                  </p>
+                  <span className="text-[11px]" style={{ color: 'var(--brand-subtle)' }}>
+                    Para criar/editar/excluir, acesse Gestão de Projetos
+                  </span>
+                </div>
+                {aportesLoading && (
+                  <p className="text-xs text-center py-8" style={{ color: 'var(--brand-subtle)' }}>Carregando aportes…</p>
+                )}
+                {!aportesLoading && aportesList.length === 0 && (
+                  <p className="text-xs text-center py-8" style={{ color: 'var(--brand-subtle)' }}>Nenhum aporte registrado.</p>
+                )}
+                {!aportesLoading && aportesList.length > 0 && (
+                  <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--brand-border)' }}>
+                    <table className="w-full text-xs">
+                      <thead style={{ background: 'rgba(255,255,255,0.04)' }}>
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--brand-subtle)' }}>Data</th>
+                          <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--brand-subtle)' }}>Motivo</th>
+                          <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--brand-subtle)' }}>Horas</th>
+                          <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--brand-subtle)' }}>Valor/h</th>
+                          <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--brand-subtle)' }}>Total</th>
+                          <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--brand-subtle)' }}>Status</th>
+                          <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--brand-subtle)' }}>Autor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {aportesList.map((a: any) => {
+                          const h = Number(a.contributed_hours)
+                          const r = Number(a.hourly_rate)
+                          const total = h * r
+                          const motivoLabel: Record<string, string> = { aporte: 'Aporte', excedentes: 'Excedentes', absorvidas: 'Absorvidas' }
+                          const isNovo = a.kanban_status === 'novo_contrato'
+                          return (
+                            <tr key={a.id} style={{ borderTop: '1px solid var(--brand-border)' }}>
+                              <td className="px-3 py-2" style={{ color: 'var(--brand-text)' }}>
+                                {a.contributed_at ? new Date(a.contributed_at).toLocaleDateString('pt-BR') : '—'}
+                              </td>
+                              <td className="px-3 py-2" style={{ color: 'var(--brand-text)' }}>{motivoLabel[a.motivo] ?? a.motivo}</td>
+                              <td className="px-3 py-2 text-right tabular-nums" style={{ color: 'var(--brand-text)' }}>{h.toFixed(1)}h</td>
+                              <td className="px-3 py-2 text-right tabular-nums" style={{ color: 'var(--brand-text)' }}>{r.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 2 })}</td>
+                              <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: '#22c55e' }}>{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                              <td className="px-3 py-2">
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                                  style={{
+                                    background: isNovo ? 'rgba(245,158,11,0.18)' : 'rgba(34,197,94,0.18)',
+                                    color: isNovo ? '#f59e0b' : '#22c55e',
+                                  }}>
+                                  {isNovo ? 'Em revisão' : 'Confirmado'}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2" style={{ color: 'var(--brand-subtle)' }}>{a.contributed_by?.name ?? a.contributed_by ?? '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tab === 'financial' && !isCoordRole && (
               <div className="space-y-5">
                 <div className="grid grid-cols-3 gap-3">
                   {[
@@ -722,7 +893,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
               </div>
             )}
 
-            {tab === 'cost' && (
+            {tab === 'cost' && !isCoordRole && (
               <div className="space-y-4">
                 {!costSummary ? (
                   <p className="text-xs text-center py-8" style={{ color: 'var(--brand-subtle)' }}>Nenhum dado de custo disponível.</p>
@@ -1544,6 +1715,102 @@ function ProjectTeamModal({ projectId, projectName, onClose, onSaved }: { projec
   )
 }
 
+// Card de aporte (coluna "Novo Contrato" inicial, depois "Aporte").
+// Lê de hour_contributions; só renderiza pra projetos PAI (filhos não viram card).
+// Clique abre o modal de Aportes do projeto pai. Botão "Mover pra Aporte" só
+// aparece em kanban_status='novo_contrato' e movimenta pra coluna final.
+function AporteKanbanCard({ aporte, onClick, onMoveToFinal, canWrite }: {
+  aporte: AporteCard
+  onClick: () => void
+  onMoveToFinal?: () => void
+  canWrite?: boolean
+}) {
+  const MOTIVO_LABEL: Record<string, string> = {
+    aporte:     'Aporte',
+    excedentes: 'Excedentes',
+    absorvidas: 'Absorvidas',
+  }
+  const motivo = aporte.motivo ?? 'aporte'
+  return (
+    <div
+      onClick={onClick}
+      className="rounded-xl p-3 cursor-pointer transition-all hover:scale-[1.01]"
+      style={{
+        background: 'var(--surface-hover)',
+        border: `1px solid ${APORTE_COLOR}45`,
+        boxShadow: 'var(--brand-card-shadow)',
+      }}
+    >
+      {/* Top: cliente + total */}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] uppercase tracking-wider font-semibold truncate"
+            style={{ color: 'var(--text-light)' }}>
+            {aporte.customer_name ?? '—'}
+          </p>
+          <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>
+            {aporte.project_name ?? '—'}
+          </p>
+          {aporte.project_code && (
+            <p className="font-mono text-[10px]" style={{ color: 'var(--brand-primary)' }}>
+              {aporte.project_code}
+            </p>
+          )}
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-sm shrink-0"
+          style={{ background: `${APORTE_COLOR}20`, color: APORTE_COLOR }}>
+          {MOTIVO_LABEL[motivo] ?? motivo}
+        </span>
+      </div>
+
+      {/* Middle: horas e valor */}
+      <div className="grid grid-cols-3 gap-1.5 mb-2">
+        <div className="rounded-md px-2 py-1.5 text-center" style={{ background: `${APORTE_COLOR}10` }}>
+          <p className="text-[9px]" style={{ color: 'var(--text-light)' }}>Horas</p>
+          <p className="text-xs font-bold tabular-nums" style={{ color: APORTE_COLOR }}>
+            {Number(aporte.horas).toFixed(1)}h
+          </p>
+        </div>
+        <div className="rounded-md px-2 py-1.5 text-center" style={{ background: `${APORTE_COLOR}10` }}>
+          <p className="text-[9px]" style={{ color: 'var(--text-light)' }}>Valor/h</p>
+          <p className="text-xs font-bold tabular-nums" style={{ color: APORTE_COLOR }}>
+            {Number(aporte.valor_hora).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
+          </p>
+        </div>
+        <div className="rounded-md px-2 py-1.5 text-center" style={{ background: `${APORTE_COLOR}20` }}>
+          <p className="text-[9px]" style={{ color: 'var(--text-light)' }}>Total</p>
+          <p className="text-xs font-bold tabular-nums" style={{ color: APORTE_COLOR }}>
+            {Number(aporte.total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
+          </p>
+        </div>
+      </div>
+
+      {/* Footer: descrição + autor/data */}
+      {aporte.description && (
+        <p className="text-[10px] mt-1.5 line-clamp-2" style={{ color: 'var(--text-muted)' }}>
+          {aporte.description}
+        </p>
+      )}
+      <div className="flex items-center justify-between mt-1.5 text-[9px]" style={{ color: 'var(--text-light)' }}>
+        <span>{aporte.contributed_by ?? '—'}</span>
+        <span>{aporte.contributed_at ? new Date(aporte.contributed_at).toLocaleDateString('pt-BR') : ''}</span>
+      </div>
+
+      {/* Botão "Mover pra Aporte" — só em kanban_status='novo_contrato' */}
+      {aporte.kanban_status === 'novo_contrato' && canWrite && onMoveToFinal && (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); onMoveToFinal() }}
+          className="w-full mt-2 px-2 py-1.5 rounded-md text-[11px] font-semibold transition-colors"
+          style={{ background: `${APORTE_COLOR}20`, color: APORTE_COLOR, border: `1px solid ${APORTE_COLOR}55` }}
+        >
+          Mover pra coluna Aporte →
+        </button>
+      )}
+    </div>
+  )
+}
+
 function ContractKanbanCard({ card, index, onClick, onAction, onMove, availableColumns, canWrite }: {
   card: ContractCard; index: number; onClick: () => void; onAction?: (action: string) => void
   onMove?: (toCol: string) => void; availableColumns?: { id: string; label: string }[]; canWrite?: boolean
@@ -1551,6 +1818,7 @@ function ContractKanbanCard({ card, index, onClick, onAction, onMove, availableC
   const badge = statusBadge(card)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const { user: viewerUser } = useAuth()
 
   useEffect(() => {
     if (!menuOpen) return
@@ -1607,7 +1875,7 @@ function ContractKanbanCard({ card, index, onClick, onAction, onMove, availableC
                   {menuOpen && (
                     <div className="absolute right-0 top-6 z-[100] w-44 rounded-xl overflow-hidden"
                       style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)', boxShadow: 'var(--brand-card-shadow-md)' }}>
-                      {CONTRACT_MENU_ITEMS.filter(item => !item.adminOnly || canWrite).map(item => {
+                      {CONTRACT_MENU_ITEMS.filter(item => (!item.adminOnly || canWrite) && (!(item as any).coordHidden || viewerUser?.type !== 'coordenador')).map(item => {
                         const Icon = item.icon
                         const isDanger = (item as any).danger
                         return (
@@ -1709,6 +1977,7 @@ function ProjectKanbanCard({ card, index, onClick, onAction, onMove, availableCo
   card: ProjectCard; index: number; onClick: () => void; onAction: (action: string) => void
   onMove?: (toCol: string) => void; availableColumns?: { id: string; label: string }[]; canWrite?: boolean
 }) {
+  const { user: viewerUser } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -1785,7 +2054,7 @@ function ProjectKanbanCard({ card, index, onClick, onAction, onMove, availableCo
                 {menuOpen && (
                   <div className="absolute right-0 top-6 z-[100] w-44 rounded-xl overflow-hidden"
                     style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)', boxShadow: 'var(--brand-card-shadow-md)' }}>
-                    {PROJECT_MENU_ITEMS.filter(item => !item.adminOnly || canWrite).map(item => {
+                    {PROJECT_MENU_ITEMS.filter(item => (!item.adminOnly || canWrite) && (!(item as any).coordHidden || viewerUser?.type !== 'coordenador')).map(item => {
                       const Icon = item.icon
                       const isDanger = (item as any).danger
                       return (
@@ -2079,6 +2348,8 @@ function KanbanContent() {
 
   const [demandCards,       setDemandCards]       = useState<ContractCard[]>([])
   const [projectCards,      setProjectCards]       = useState<ProjectCard[]>([])
+  const [aporteCards,       setAporteCards]        = useState<AporteCard[]>([])
+  const [selectedAporte,    setSelectedAporte]     = useState<AporteCard | null>(null)
   const [coordinators,      setCoordinators]       = useState<Coordinator[]>([])
   const [sustGroups,        setSustGroups]         = useState<SustGroups>({
     sust_bh_fixo: [], sust_bh_mensal: [], sust_on_demand: [], sust_cloud: [], sust_bizify: [],
@@ -2105,6 +2376,7 @@ function KanbanContent() {
       const transitionExtra = (r.transition_cards ?? []).filter((c: any) => !demandIds.has(c.id))
       setDemandCards([...demandList, ...transitionExtra])
       setProjectCards(r.project_cards ?? [])
+      setAporteCards(r.aporte_cards ?? [])
       setCoordinators(r.coordinators ?? [])
       setSustGroups({
         sust_bh_fixo:   r.sustentacao_groups?.sust_bh_fixo   ?? [],
@@ -2145,6 +2417,7 @@ function KanbanContent() {
         ...SUSTENTACAO_COLS,
         BIZIFY_COL,
         ...STATUS_PROJECT_COLUMNS,
+        APORTE_COL,
       ]
 
   // ── Filtros ──────────────────────────────────────────────────────────────
@@ -2730,10 +3003,20 @@ function KanbanContent() {
                   const isCoord        = col.type === 'coordinator'
                   const isStatusCol    = col.type === 'project_status'
                   const isPronto       = col.id === 'pronto'
-                  const contractCards  = isStatusCol ? [] : contractsInCol(col.id)
+                  const isAporteCol    = col.type === 'aporte'
+                  const isNovoContratoCol = col.id === 'novo'
+                  const contractCards  = isStatusCol || isAporteCol ? [] : contractsInCol(col.id)
                   const activeProjects = isCoord ? activeProjectsInCoordCol(col.coordinatorId!) : []
                   const statusProjects = isStatusCol ? projectsInStatusCol(col.id) : []
-                  const totalCards     = contractCards.length + activeProjects.length + statusProjects.length
+                  // Cards de aporte vivem em DUAS colunas:
+                  //   - kanban_status='novo_contrato' → coluna "Novo Contrato" (governança/aprovação)
+                  //   - kanban_status='aporte'        → coluna "Aporte" (estado final)
+                  const aporteList     = isAporteCol
+                    ? aporteCards.filter(a => a.kanban_status === 'aporte' && matchFilter(a.customer_name, a.project_name))
+                    : isNovoContratoCol
+                      ? aporteCards.filter(a => a.kanban_status === 'novo_contrato' && matchFilter(a.customer_name, a.project_name))
+                      : []
+                  const totalCards     = contractCards.length + activeProjects.length + statusProjects.length + aporteList.length
 
                   const prevCol  = columns[colIdx - 1]
                   const isSust   = col.type === 'sustentacao'
@@ -2741,11 +3024,13 @@ function KanbanContent() {
                   const showSep  = (isStatusCol && prevCol?.type !== 'project_status') ||
                                    (isSust && prevCol?.type !== 'sustentacao') ||
                                    (isBizify && prevCol?.type !== 'bizify') ||
+                                   (isAporteCol) ||
                                    (isCoord && prevCol?.type === 'fixed')
 
                   const borderColor = isStatusCol ? `${col.color}30`
                     : isSust    ? `${col.color}35`
                     : isBizify  ? `${BIZIFY_COLOR}35`
+                    : isAporteCol ? `${APORTE_COLOR}45`
                     : isCoord   ? 'rgba(0,245,255,0.15)'
                     : isPronto  ? `${PRONTO_COLOR}40`
                     : 'var(--brand-border)'
@@ -2753,6 +3038,7 @@ function KanbanContent() {
                   const headerColor = isStatusCol ? col.color!
                     : isSust    ? col.color!
                     : isBizify  ? BIZIFY_COLOR
+                    : isAporteCol ? APORTE_COLOR
                     : isCoord   ? 'var(--brand-primary)'
                     : isPronto  ? PRONTO_COLOR
                     : 'var(--brand-text)'
@@ -2762,7 +3048,10 @@ function KanbanContent() {
                       {/* Separator */}
                       {showSep && (
                         <div className="self-stretch w-px shrink-0 mt-1"
-                          style={{ background: isSust ? SUST_COLOR : isBizify ? BIZIFY_COLOR : 'var(--brand-border)', opacity: (isSust || isBizify) ? 0.5 : 0.4 }} />
+                          style={{
+                            background: isSust ? SUST_COLOR : isBizify ? BIZIFY_COLOR : isAporteCol ? APORTE_COLOR : 'var(--brand-border)',
+                            opacity: (isSust || isBizify || isAporteCol) ? 0.5 : 0.4,
+                          }} />
                       )}
 
                       {/* Column — fundo unificado (var(--surface)); diferenciação
@@ -2826,13 +3115,24 @@ function KanbanContent() {
                               Arraste aqui → projeto criado automaticamente
                             </p>
                           )}
+                          {isAporteCol && (
+                            <>
+                              <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-sm"
+                                style={{ background: `${APORTE_COLOR}15`, color: APORTE_COLOR, letterSpacing: '0.1em' }}>
+                                APORTE
+                              </span>
+                              <p className="text-[10px] mt-0.5" style={{ color: APORTE_COLOR, opacity: 0.75 }}>
+                                Cards de aporte em projetos pai (geram proposta comercial)
+                              </p>
+                            </>
+                          )}
                         </div>
 
                         {/* Cards */}
                         <Droppable
                           droppableId={col.id}
                           isDropDisabled={
-                            isStatusCol && !['col_pausado', 'col_cancelado', 'col_encerrado'].includes(col.id)
+                            isAporteCol || (isStatusCol && !['col_pausado', 'col_cancelado', 'col_encerrado'].includes(col.id))
                           }
                         >
                           {(prov, snap) => (
@@ -2917,6 +3217,26 @@ function KanbanContent() {
                                   />
                                 )
                               })}
+                              {aporteList.map(a => {
+                                return (
+                                  <AporteKanbanCard
+                                    key={`apt-${a.id}`}
+                                    aporte={a}
+                                    canWrite={canWrite}
+                                    onClick={() => setSelectedAporte(a)}
+                                    onMoveToFinal={async () => {
+                                      try {
+                                        await api.patch(`/projects/${a.project_id}/hour-contributions/${a.id}/move`, { kanban_status: 'aporte' })
+                                        // Otimista: atualiza só o card movido
+                                        setAporteCards(prev => prev.map(x => x.id === a.id ? { ...x, kanban_status: 'aporte' } : x))
+                                        toast.success('Aporte movido para a coluna Aporte')
+                                      } catch {
+                                        toast.error('Erro ao mover aporte')
+                                      }
+                                    }}
+                                  />
+                                )
+                              })}
                               {prov.placeholder}
                               {totalCards === 0 && !snap.isDraggingOver && (
                                 <p className="text-center text-xs py-6" style={{ color: 'var(--text-light)' }}>
@@ -2924,7 +3244,9 @@ function KanbanContent() {
                                     ? 'Nenhum projeto alocado por aqui ainda'
                                     : (isSust || isBizify)
                                       ? 'Sem contratos nesta categoria'
-                                      : 'Arraste cards para esta coluna'}
+                                      : isAporteCol
+                                        ? 'Nenhum aporte registrado ainda'
+                                        : 'Arraste cards para esta coluna'}
                                 </p>
                               )}
                             </div>
@@ -2961,6 +3283,38 @@ function KanbanContent() {
         <ContractCreateModal
           onClose={() => setShowNewContract(false)}
           onSuccess={() => { setShowNewContract(false); load() }}
+        />
+      )}
+
+      {/* Aporte Detail Modal — abre ao clicar num card de aporte */}
+      {selectedAporte && (
+        <AporteDetailModal
+          aporte={selectedAporte}
+          canWrite={canWrite}
+          onClose={() => setSelectedAporte(null)}
+          onViewInProject={() => {
+            // Abre o modal do projeto (mesma UX do "Visualizar" no Kanban Contratos),
+            // direto na aba "Aportes". Sem sair da página; admin pode trocar de aba dentro.
+            // Card sintético — ProjectViewModal só precisa do project_id pra buscar.
+            const syntheticCard = {
+              id: selectedAporte.project_id,
+              customer_name: selectedAporte.customer_name,
+              project_name: selectedAporte.project_name,
+              code: selectedAporte.project_code,
+              status: selectedAporte.project_status,
+            } as any
+            setSelectedAporte(null)
+            setProjectAction({ card: syntheticCard, action: 'aportes' })
+          }}
+          onMoveToFinal={selectedAporte.kanban_status === 'novo_contrato' ? async () => {
+            try {
+              await api.patch(`/projects/${selectedAporte.project_id}/hour-contributions/${selectedAporte.id}/move`, { kanban_status: 'aporte' })
+              setAporteCards(prev => prev.map(x => x.id === selectedAporte.id ? { ...x, kanban_status: 'aporte' } : x))
+              toast.success('Aporte movido para a coluna Aporte')
+            } catch {
+              toast.error('Erro ao mover aporte')
+            }
+          } : undefined}
         />
       )}
 
@@ -3072,9 +3426,9 @@ function KanbanContent() {
           return <CardDetailModal card={chatCard} onClose={close} initialTab="chat" userRole={user?.type ?? undefined} />
         }
         if (action === 'aportes') {
-          router.push('/gestao-projetos')
-          close()
-          return null
+          // Abre o modal do projeto direto na aba "Aportes" (sem sair da página).
+          // Mesma navegação do "Visualizar" — usuário pode trocar de aba dentro do modal.
+          return <ProjectViewModal projectId={card.id} onClose={close} userRole={userType} initialTab="aportes" />
         }
         if (action === 'delete') {
           return (
