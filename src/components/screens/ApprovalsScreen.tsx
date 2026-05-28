@@ -16,7 +16,8 @@ import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { TimesheetViewModal } from '@/components/ui/timesheet-view-modal'
 import { TimesheetHoverTooltip, useTimesheetHover } from '@/components/ui/timesheet-hover-tooltip'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { api, ApiError, toRelativePath } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
+import { fetchAsBlob } from '@/lib/attachments'
 import { previewText } from '@/lib/sanitize'
 import { exportTimesheetsToExcel } from '@/lib/exportTimesheets'
 import { useAuth } from '@/hooks/use-auth'
@@ -285,16 +286,8 @@ function StatusPills({ value, onChange, options }: {
 
 // ─── Receipt helpers ──────────────────────────────────────────────────────────
 
-async function fetchReceipt(url: string): Promise<{ blobUrl: string; filename: string }> {
-  const res = await fetch(toRelativePath(url), { credentials: 'same-origin' })
-  if (!res.ok) throw new Error('not_found')
-  const blob = await res.blob()
-  const cd = res.headers.get('content-disposition') ?? ''
-  const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
-  const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg') ?? 'pdf'
-  const filename = match?.[1]?.replace(/['"]/g, '') ?? `comprovante.${ext}`
-  return { blobUrl: URL.createObjectURL(blob), filename }
-}
+// FASE 11.2.FE — Helper centralizado em src/lib/attachments.ts.
+const fetchReceipt = fetchAsBlob
 
 function triggerAnchor(href: string, download?: string) {
   const a = document.createElement('a')

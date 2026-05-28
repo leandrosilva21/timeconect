@@ -6,7 +6,8 @@ import {
   Tag, CreditCard, Paperclip, FileText, Eye, Download,
 } from 'lucide-react'
 import type { Expense } from '@/types'
-import { toRelativePath } from '@/lib/api'
+import { fetchAndOpenLegacyUrl } from '@/lib/attachments'
+import { EntityAttachmentsPanel } from '@/components/attachments'
 
 function formatDate(d: string | null | undefined) {
   if (!d) return '—'
@@ -39,23 +40,8 @@ const PAYMENT_LABEL_MAP: Record<string, string> = {
   bank_transfer: 'Transferência Bancária',
 }
 
-async function fetchAndOpenFile(url: string, download = false) {
-  const res = await fetch(toRelativePath(url), { credentials: 'same-origin' })
-  if (!res.ok) throw new Error('not_found')
-  const blob = await res.blob()
-  const cd = res.headers.get('content-disposition') ?? ''
-  const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
-  const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg') ?? 'pdf'
-  const filename = match?.[1]?.replace(/['"]/g, '') ?? `comprovante.${ext}`
-  const blobUrl = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = blobUrl
-  if (download) { a.download = filename } else { a.target = '_blank'; a.rel = 'noopener noreferrer' }
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
-}
+// FASE 11.2.FE — Helper centralizado em src/lib/attachments.ts.
+const fetchAndOpenFile = fetchAndOpenLegacyUrl
 
 function ReceiptLink({ url }: { url: string }) {
   const [loading, setLoading] = useState(false)
@@ -176,6 +162,21 @@ export function ExpenseViewModal({
                 : <span className="text-sm" style={{ color: 'var(--brand-subtle)' }}>Sem comprovante</span>
               }
             </InfoRow>
+            {/* FASE 11.2.FE — Painel composto: lista + upload de extras via nova camada.
+                Coexiste com receipt_url legado acima. Quando 11.4 deprecar legado,
+                a InfoRow "Comprovante" sai daqui e este painel é a fonte única. */}
+            <div className="px-5 py-3" style={{ borderTop: '1px solid var(--brand-border)' }}>
+              <EntityAttachmentsPanel
+                entityType="EXPENSE"
+                entityId={expense.id}
+                category="receipt"
+                title="Anexos adicionais"
+                accept="application/pdf,image/*"
+                maxMb={10}
+                hideWhenEmpty
+                variant="compact"
+              />
+            </div>
           </div>
 
           {/* Descrição */}

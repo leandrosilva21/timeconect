@@ -1,6 +1,7 @@
 'use client'
 
 import { X } from 'lucide-react'
+import { EntityAttachmentsPanel } from '@/components/attachments'
 
 export interface AporteDetail {
   id: number
@@ -118,6 +119,18 @@ export function AporteDetailModal({ aporte, onClose, onViewInProject, onMoveToFi
               </a>
             </div>
           )}
+
+          {/* FASE 11.2.FE — Painel composto (lista + upload). Coexiste com has_proposta legado. */}
+          <EntityAttachmentsPanel
+            entityType="HOUR_CONTRIBUTION"
+            entityId={aporte.id}
+            category="proposal"
+            title="Anexos adicionais"
+            accept="application/pdf,image/*,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip"
+            maxMb={20}
+            hideWhenEmpty
+            variant="compact"
+          />
 
           <div className="flex items-center justify-between text-[11px] pt-2 border-t" style={{ color: 'var(--text-light)', borderColor: 'var(--brand-border)' }}>
             <span>Criado por <span className="font-semibold" style={{ color: 'var(--text-muted)' }}>{aporte.contributed_by ?? '—'}</span></span>

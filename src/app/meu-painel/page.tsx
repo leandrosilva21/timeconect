@@ -2,7 +2,8 @@
 
 import { AppLayout } from '@/components/layout/app-layout'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
-import { api, ApiError, toRelativePath } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
+import { fetchAndOpenLegacyUrl } from '@/lib/attachments'
 import { NotasPjCell, type NotasPayload } from '@/components/fechamento/NotasPjCell'
 import { previewText, sanitizeHtml } from '@/lib/sanitize'
 import { formatBRL } from '@/lib/format'
@@ -591,23 +592,8 @@ function periodBounds(year: number, month: number): { startDate: string; endDate
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-async function fetchAndOpenFile(url: string, download = false) {
-  const res = await fetch(toRelativePath(url), { credentials: 'same-origin' })
-  if (!res.ok) throw new Error('not_found')
-  const blob = await res.blob()
-  const cd = res.headers.get('content-disposition') ?? ''
-  const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
-  const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg') ?? 'pdf'
-  const filename = match?.[1]?.replace(/['"]/g, '') ?? `comprovante.${ext}`
-  const blobUrl = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = blobUrl
-  if (download) { a.download = filename } else { a.target = '_blank'; a.rel = 'noopener noreferrer' }
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
-}
+// FASE 11.2.FE — Helper centralizado em src/lib/attachments.ts.
+const fetchAndOpenFile = fetchAndOpenLegacyUrl
 
 async function openReceiptUrl(url: string) {
   try { await fetchAndOpenFile(url) }

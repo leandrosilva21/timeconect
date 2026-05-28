@@ -8,6 +8,8 @@ import {
 import { Badge } from '@/components/ds'
 import type { Timesheet } from '@/types'
 import { sanitizeHtml } from '@/lib/sanitize'
+import { fetchAndOpenLegacyUrl } from '@/lib/attachments'
+import { EntityAttachmentsPanel } from '@/components/attachments'
 
 function formatDate(d: string | null | undefined) {
   if (!d) return '—'
@@ -15,18 +17,15 @@ function formatDate(d: string | null | undefined) {
   return `${day}/${m}/${y}`
 }
 
+// FASE 11.2.FE — Helper centralizado. AttachmentLink mantido como wrapper visual
+// (mesmo estilo do botão) pra preservar a UX existente; só a função de fetch
+// foi unificada.
 function AttachmentLink({ url }: { url: string }) {
   const [loading, setLoading] = useState(false)
   const open = async () => {
     setLoading(true)
-    try {
-      const res = await fetch(url, { credentials: 'same-origin' })
-      if (!res.ok) { alert('Anexo não encontrado no servidor'); return }
-      const blob = await res.blob()
-      const blobUrl = URL.createObjectURL(blob)
-      window.open(blobUrl, '_blank')
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
-    } catch { alert('Erro ao abrir anexo') }
+    try { await fetchAndOpenLegacyUrl(url, false) }
+    catch { alert('Erro ao abrir anexo') }
     finally { setLoading(false) }
   }
   return (
@@ -191,6 +190,19 @@ export function TimesheetViewModal({
                 : <span className="text-sm" style={{ color: 'var(--brand-subtle)' }}>Sem anexo</span>
               }
             </InfoRow>
+            {/* FASE 11.2.FE — Painel composto (lista + upload). Coexiste com attachment_url legado. */}
+            <div className="px-5 py-3" style={{ borderTop: '1px solid var(--brand-border)' }}>
+              <EntityAttachmentsPanel
+                entityType="TIMESHEET"
+                entityId={ts.id}
+                category="attachment"
+                title="Anexos adicionais"
+                accept="application/pdf,image/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain"
+                maxMb={10}
+                hideWhenEmpty
+                variant="compact"
+              />
+            </div>
           </div>
 
           {/* Observação */}
