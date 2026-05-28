@@ -689,6 +689,9 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
   const isAdmin        = user?.type === 'admin'
   const isCoordenador  = user?.type === 'coordenador'
   const canActAsUser   = isAdmin || isCoordenador
+  // Chip "Meus projetos / Todos" pra coordenador.
+  // Quando 'meus': injeta coordinator_id[]=user.id no fetch (filtro server-side).
+  const [coordScope, setCoordScope] = useState<'meus' | 'todos'>('meus')
   const isCliente      = user?.type === 'cliente'
   const searchParams = useSearchParams()
   const spProjectId  = searchParams.get('project_id') ?? ''
@@ -915,6 +918,11 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
     if (isCliente && user?.customer_id) p.set('customer_id', String(user.customer_id))
     else customerIds.forEach(v => p.append('customer_id[]', v))
     coordinatorIds.forEach(v => p.append('coordinator_id[]', v))
+    // Chip "Meus projetos" do coordenador: força coordinator_id = user.id quando ativo
+    // (evita duplicar se o coord já adicionou a si mesmo no filtro de coordenadores).
+    if (isCoordenador && coordScope === 'meus' && user?.id && !coordinatorIds.includes(String(user.id))) {
+      p.append('coordinator_id[]', String(user.id))
+    }
     executiveIds.forEach(v => p.append('executive_id[]', v))
     userIds.forEach(v => p.append('user_id[]', v))
     if (startDate)     p.set('start_date', startDate)
@@ -929,7 +937,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
     if (triagemPadrao) p.set('triagem_padrao', '1')
     if (triagemPadrao && triagemField) p.set('triagem_field', triagemField)
     return p.toString()
-  }, [page, status, origins, serviceTypeIds, contractTypeIds, categoriaServico, customerIds, coordinatorIds, executiveIds, userIds, projectId, projectIds, startDate, endDate, ticket, requester, ticketService, sortField, sortDir, isCliente, user?.customer_id, scope, triagemPadrao, triagemField])
+  }, [page, status, origins, serviceTypeIds, contractTypeIds, categoriaServico, customerIds, coordinatorIds, executiveIds, userIds, projectId, projectIds, startDate, endDate, ticket, requester, ticketService, sortField, sortDir, isCliente, user?.customer_id, user?.id, scope, triagemPadrao, triagemField, isCoordenador, coordScope])
 
   const { data, loading, error, refetch } = useApiQuery<PaginatedResponse<Timesheet>>(
     `/timesheets?${params}`, [params]
@@ -1031,6 +1039,25 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
           subtitle="Registro de horas por projeto e colaborador"
           actions={
             <>
+              {/* Chip "Meus projetos / Todos" — coordenador */}
+              {isCoordenador && (
+                <div className="inline-flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                  {(['meus', 'todos'] as const).map(opt => {
+                    const active = coordScope === opt
+                    return (
+                      <button key={opt} onClick={() => setCoordScope(opt)}
+                        className="px-3 py-1.5 text-xs font-semibold transition-colors"
+                        style={{
+                          background: active ? 'var(--primary)' : 'var(--surface)',
+                          color: active ? 'var(--primary-fg)' : 'var(--text-muted)',
+                          borderRight: opt === 'meus' ? '1px solid var(--border)' : undefined,
+                        }}>
+                        {opt === 'meus' ? 'Meus projetos' : 'Todos'}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
               <Button variant="ghost" size="sm" icon={RefreshCw} onClick={() => refetch()}>Atualizar</Button>
               <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={handleExport} loading={exporting}>
                 {exporting ? 'Exportando...' : 'Excel'}
