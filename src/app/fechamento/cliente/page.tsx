@@ -547,9 +547,18 @@ export default function FechamentoClientePage() {
         `/api/v1/fechamento-cliente/${customerId}/${toYM}/enviar-email`,
         { method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json' }, body: fd },
       )
-      const json = await res.json().catch(() => ({})) as { success?: boolean; message?: string }
+      const json = await res.json().catch(() => ({})) as {
+        success?: boolean
+        message?: string
+        errors?: Record<string, string[]>
+      }
       if (!res.ok || json?.success === false) {
-        throw new Error(json?.message || `Erro ${res.status}`)
+        // Laravel 422 traz errors{field:[msgs]}; preferir primeira msg de validação (mais
+        // amigável que 'validation.required'). Fallback: message do BE; depois HTTP code.
+        const firstFieldMsg = json?.errors
+          ? Object.values(json.errors).flat().find(m => typeof m === 'string' && !m.startsWith('validation.'))
+          : undefined
+        throw new Error(firstFieldMsg || json?.message || `Erro ${res.status}`)
       }
       toast.success(json?.message ?? 'Fechamento enviado por e-mail.')
       patchEnvio(customerId, new Date().toISOString(), (user as any)?.name ?? null)
