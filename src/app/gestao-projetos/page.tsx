@@ -165,6 +165,30 @@ function calcProjHours(p: ProjectWithTeam): { displaySold: number; consumedHours
   return { displaySold, consumedHours }
 }
 
+// Banco de horas de coordenação (lente do coordenador). "Vendidas" = coordination_hours;
+// se em branco, cai pro vendido operacional (displaySold). Consumido = apontamentos do
+// coordenador. 4 níveis de risco (saudável ≤70 / atenção 71-90 / crítico 91-100 / estourado >100).
+function coordinationMeta(p: ProjectWithTeam, displaySold: number) {
+  const raw = (p.coordination_hours != null && String(p.coordination_hours) !== '') ? Number(p.coordination_hours) : null
+  const explicit = raw != null && raw > 0
+  const bank = explicit ? raw! : displaySold
+  const consumed = Number(p.coordination_consumed_hours ?? 0)
+  const saldo = Math.round((bank - consumed) * 100) / 100
+  const pct = bank > 0 ? (consumed / bank) * 100 : 0
+  const risk: 'saudavel' | 'atencao' | 'critico' | 'estourado' =
+    pct > 100 ? 'estourado' : pct >= 91 ? 'critico' : pct >= 71 ? 'atencao' : 'saudavel'
+  const color = risk === 'saudavel' ? 'var(--success-border)'
+    : risk === 'atencao' ? 'var(--warning-border)' : 'var(--danger-border)'
+  const alertText = risk === 'estourado' ? `Coordenação excedida em ${fmt(Math.abs(saldo), 1)}h`
+    : risk === 'critico' ? 'Horas de coordenação esgotando'
+    : risk === 'atencao' ? 'Coordenação próxima do limite' : ''
+  return { bank, consumed, saldo, pct, risk, color, alertText, explicit }
+}
+
+function isCoordinatorOf(p: ProjectWithTeam, userId?: number | null): boolean {
+  return !!userId && !!p.coordinators?.some(c => c.id === userId)
+}
+
 const inputStyle = {
   background: 'var(--bg)',
   border: '1px solid var(--border)',
@@ -593,17 +617,31 @@ function ProjectRow({ project, expanded, onToggle, onMenuAction, canEdit, canCha
           {isOnDemand ? (
             <span className="text-xs" style={{ color: 'var(--text-light)' }}>—</span>
           ) : (
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${Math.min(pct, 100)}%`, background: hs.bar }}
-                />
+            <>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${Math.min(pct, 100)}%`, background: hs.bar }}
+                  />
+                </div>
+                <span className="text-xs tabular-nums w-9 text-center" style={{ color: hs.text }}>
+                  {displaySold > 0 ? `${Math.round(pct)}%` : '—'}
+                </span>
               </div>
-              <span className="text-xs tabular-nums w-9 text-center" style={{ color: hs.text }}>
-                {displaySold > 0 ? `${Math.round(pct)}%` : '—'}
-              </span>
-            </div>
+              {(() => {
+                const cm = coordinationMeta(project, displaySold)
+                if (!cm.explicit || cm.risk === 'saudavel') return null
+                return (
+                  <div className="mt-1" title={cm.alertText}>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap"
+                      style={{ color: cm.color, background: `${cm.color}22`, border: `1px solid ${cm.color}55` }}>
+                      Coord {Math.round(cm.pct)}%{cm.risk === 'estourado' ? ' ⛔' : ''}
+                    </span>
+                  </div>
+                )
+              })()}
+            </>
           )}
         </td>
 
@@ -724,7 +762,7 @@ interface ProjectEditForm {
   sold_hours: string; project_value: string
   hourly_rate: string; additional_hourly_rate: string
   initial_hours_consumed: string; initial_cost: string
-  consultant_hours: string; coordinator_hours: string
+  consultant_hours: string; coordinator_hours: string; coordination_hours: string
   parent_project_id: string
   service_type_id: string; contract_type_id: string
   tipo_faturamento: string; tipo_alocacao: string
@@ -782,6 +820,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     initial_cost:                    d.initial_cost != null ? String(d.initial_cost) : '',
     consultant_hours:                d.consultant_hours != null ? String(d.consultant_hours) : '',
     coordinator_hours:               d.coordinator_hours != null ? String(d.coordinator_hours) : '',
+    coordination_hours:              (d as any).coordination_hours != null ? String((d as any).coordination_hours) : '',
     parent_project_id:               d.parent_project_id ? String(d.parent_project_id) : '',
     service_type_id:                 d.service_type_id ? String(d.service_type_id) : (d.service_type?.id ? String(d.service_type.id) : ''),
     contract_type_id:                d.contract_type_id ? String(d.contract_type_id) : (d.contract_type?.id ? String(d.contract_type.id) : ''),
@@ -936,6 +975,11 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
   const handleSave = async (hourlyRateEffectiveFrom?: string) => {
     if (!form.name.trim()) { toast.error('Nome obrigatório'); return }
     if (codeExists) { toast.error('Código já existe em outro projeto. Altere o código antes de salvar.'); return }
+    // Horas de coordenação não podem exceder as horas vendidas (contratadas) do projeto.
+    if (form.coordination_hours !== '' && form.sold_hours !== '' && Number(form.coordination_hours) > Number(form.sold_hours)) {
+      toast.error(`Horas de coordenação não podem ser maiores que as horas vendidas (${form.sold_hours}h).`)
+      return
+    }
     setSaving(true)
     try {
       const payload: Record<string, unknown> = {
@@ -969,6 +1013,8 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       if (form.sold_hours !== '')            payload.sold_hours                   = Number(form.sold_hours)
       if (form.consultant_hours !== '')      payload.consultant_hours             = Number(form.consultant_hours)
       if (form.coordinator_hours !== '')     payload.coordinator_hours            = Number(form.coordinator_hours)
+      // '' envia 0 pra permitir zerar o banco de coordenação (volta ao fallback operacional).
+      payload.coordination_hours = form.coordination_hours === '' ? 0 : Number(form.coordination_hours)
       // initial_* sempre enviam: '' vira 0 pra permitir zerar valor existente.
       payload.initial_hours_consumed = form.initial_hours_consumed === '' ? 0 : Number(form.initial_hours_consumed)
       payload.initial_cost           = form.initial_cost === '' ? 0 : Number(form.initial_cost)
@@ -1319,8 +1365,27 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                   <div><label style={lStyle}>% Horas Coordenador</label><input type="number" value={form.coordinator_hours} onChange={setF('coordinator_hours')} style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
                 )}
                 {!isOnDemandForm && (
+                  <div>
+                    <label style={lStyle}>Horas de Coordenação</label>
+                    <input type="number" value={form.coordination_hours} onChange={setF('coordination_hours')} style={iStyle} placeholder="(usa vendidas)" step="0.5" min="0" max={form.sold_hours || undefined} />
+                    {form.coordination_hours !== '' && form.sold_hours !== '' && Number(form.coordination_hours) > Number(form.sold_hours) && (
+                      <p className="text-[10px] mt-1" style={{ color: 'var(--danger-border)' }}>Não pode exceder as horas vendidas ({form.sold_hours}h).</p>
+                    )}
+                  </div>
+                )}
+                {!isOnDemandForm && (
                   <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
                 )}
+                {!isOnDemandForm && (() => {
+                  // Sobra de horas (read-only): contratadas − consultor − (%coordenador × consultor).
+                  const sold = Number(form.sold_hours || 0)
+                  const cons = Number(form.consultant_hours || 0)
+                  const coordPct = Number(form.coordinator_hours || 0)
+                  const sobra = Math.round((sold - cons - (coordPct / 100) * cons) * 100) / 100
+                  return (
+                    <div><label style={lStyle}>Sobra de Horas</label><input type="text" value={isNaN(sobra) ? '—' : `${sobra}h`} readOnly tabIndex={-1} style={{ ...iStyle, opacity: 0.7, cursor: 'default' }} /></div>
+                  )
+                })()}
               </div>
               {/* Histórico: oculto em On Demand novo (sem valor); mostra em On Demand
                   legado pra permitir zerar valores migrados do sistema anterior.
@@ -1693,17 +1758,19 @@ export default function GestaoProjetosPage() {
       statusFilters:      [] as string[],
       clienteFilters:     [] as string[],
       saudeFilter:        '',
+      coordFilter:        '',
       filterContractType: '',
       filterServiceTypes: [] as string[],
       filterCoordinators: [] as string[],
       filterExecutives:   [] as string[],
     },
   )
-  const { search, statusFilters, clienteFilters, saudeFilter, filterContractType, filterServiceTypes, filterCoordinators, filterExecutives } = flt
+  const { search, statusFilters, clienteFilters, saudeFilter, coordFilter, filterContractType, filterServiceTypes, filterCoordinators, filterExecutives } = flt
   const setSearch             = (v: string)   => setFilter('search', v)
   const setStatus             = (v: string[]) => setFilter('statusFilters', v)
   const setCliente            = (v: string[]) => setFilter('clienteFilters', v)
   const setSaude              = (v: string)   => setFilter('saudeFilter', v)
+  const setCoord              = (v: string)   => setFilter('coordFilter', v)
   const setFilterContractType = (v: string)   => setFilter('filterContractType', v)
   const setFilterServiceType  = (v: string[]) => setFilter('filterServiceTypes', v)
   const setFilterCoordinators = (v: string[]) => setFilter('filterCoordinators', v)
@@ -1714,13 +1781,14 @@ export default function GestaoProjetosPage() {
     setStatus([])
     setCliente([])
     setSaude('')
+    setCoord('')
     setFilterContractType('')
     setFilterServiceType([])
     setFilterCoordinators([])
     setFilterExecutives([])
   }
 
-  const hasActiveFilters = !!(search || statusFilters.length || clienteFilters.length || saudeFilter || filterContractType || filterServiceTypes.length || filterCoordinators.length || filterExecutives.length)
+  const hasActiveFilters = !!(search || statusFilters.length || clienteFilters.length || saudeFilter || coordFilter || filterContractType || filterServiceTypes.length || filterCoordinators.length || filterExecutives.length)
 
   const [projects, setProjects]   = useState<ProjectWithTeam[]>([])
   const [showClosed, setShowClosed] = useState(false)
@@ -1955,6 +2023,10 @@ export default function GestaoProjetosPage() {
         const color = healthColor(pct)
         if (color !== saudeFilter) return false
       }
+      if (coordFilter) {
+        const cm = coordinationMeta(p, calcProjHours(p).displaySold)
+        if (!cm.explicit || cm.risk !== coordFilter) return false
+      }
       if (search) {
         const q = search.toLowerCase()
         return (
@@ -1965,7 +2037,7 @@ export default function GestaoProjetosPage() {
       }
       return true
     })
-  }, [projects, search, statusFilters, clienteFilters, saudeFilter, filterContractType, filterServiceTypes, filterCoordinators, filterExecutives, customerExecutiveMap, showClosed])
+  }, [projects, search, statusFilters, clienteFilters, saudeFilter, coordFilter, filterContractType, filterServiceTypes, filterCoordinators, filterExecutives, customerExecutiveMap, showClosed])
 
   const sortedFiltered = useMemo(() => {
     if (!sortKey) return filtered
@@ -2035,6 +2107,10 @@ export default function GestaoProjetosPage() {
         const { displaySold, consumedHours } = calcProjHours(p)
         const pct = displaySold > 0 ? (consumedHours / displaySold) * 100 : 0
         if (healthColor(pct) !== saudeFilter) return false
+      }
+      if (coordFilter) {
+        const cm = coordinationMeta(p, calcProjHours(p).displaySold)
+        if (!cm.explicit || cm.risk !== coordFilter) return false
       }
       if (search) {
         const q = search.toLowerCase()
@@ -2516,6 +2592,34 @@ export default function GestaoProjetosPage() {
                   }
                   onMouseEnter={isActive ? undefined : (e) => (e.currentTarget.style.color = 'var(--text)')}
                   onMouseLeave={isActive ? undefined : (e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+          {/* Filtro por risco do banco de coordenação */}
+          <div
+            className="flex items-center gap-0.5 rounded-full p-1"
+            style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border)' }}
+            title="Risco do banco de horas de coordenação"
+          >
+            <span className="px-2 text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-light)' }}>Coord</span>
+            {([
+              { id: '',          label: 'Todos',    activeBg: 'var(--primary)',        activeFg: 'var(--primary-fg)' },
+              { id: 'atencao',   label: 'Atenção',  activeBg: 'var(--warning-border)', activeFg: 'var(--surface)' },
+              { id: 'critico',   label: 'Crítica',  activeBg: 'var(--danger-border)',  activeFg: 'var(--surface)' },
+              { id: 'estourado', label: 'Excedida', activeBg: 'var(--danger-border)',  activeFg: 'var(--surface)' },
+            ] as const).map(opt => {
+              const isActive = coordFilter === opt.id
+              return (
+                <button key={opt.id} type="button"
+                  onClick={() => setCoord(opt.id)}
+                  className="px-3 py-1 rounded-full text-xs font-semibold transition-all whitespace-nowrap"
+                  style={isActive
+                    ? { background: opt.activeBg, color: opt.activeFg }
+                    : { background: 'transparent', color: 'var(--text-muted)' }
+                  }
                 >
                   {opt.label}
                 </button>
@@ -3590,6 +3694,32 @@ export default function GestaoProjetosPage() {
                         endDate={(p as any).encerramento_date ?? null}
                       />
                     )}
+
+                    {/* Horas de Coordenação — lente do coordenador (banco fixo; fallback = vendidas) */}
+                    {!((p.contract_type_display ?? p.contract_type?.name ?? '').toLowerCase().includes('on demand')) && (() => {
+                      const cm = coordinationMeta(p, totalAvail)
+                      if (!cm.explicit && !isCoordinatorOf(p, user?.id)) return null
+                      return (
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>Horas de Coordenação</p>
+                          <div className="rounded-xl p-4" style={{ border: `1px solid ${cm.color}55`, background: 'var(--surface)' }}>
+                            <div className="grid grid-cols-3 gap-2 mb-3">
+                              <div><p className="text-[10px]" style={{ color: 'var(--text-light)' }}>Vendidas</p><p className="text-sm font-bold" style={{ color: 'var(--text)' }}>{fmt(cm.bank, 1)}h</p></div>
+                              <div><p className="text-[10px]" style={{ color: 'var(--text-light)' }}>Consumidas</p><p className="text-sm font-bold" style={{ color: 'var(--text)' }}>{fmt(cm.consumed, 1)}h</p></div>
+                              <div><p className="text-[10px]" style={{ color: 'var(--text-light)' }}>Saldo</p><p className="text-sm font-bold" style={{ color: cm.saldo < 0 ? 'var(--danger-border)' : 'var(--text)' }}>{fmt(cm.saldo, 1)}h</p></div>
+                            </div>
+                            <div className="w-full rounded-full h-1.5 mb-1" style={{ background: 'var(--border)' }}>
+                              <div className="h-1.5 rounded-full transition-all" style={{ width: `${Math.min(cm.pct, 100)}%`, background: cm.color }} />
+                            </div>
+                            <div className="flex justify-between text-[10px]" style={{ color: cm.color }}>
+                              <span>{Math.round(cm.pct)}% consumido</span>
+                              <span>{cm.alertText || `${fmt(cm.saldo, 1)}h disponíveis`}</span>
+                            </div>
+                            {!cm.explicit && <p className="text-[10px] mt-2" style={{ color: 'var(--text-light)' }}>Sem banco próprio — usando as horas vendidas do projeto.</p>}
+                          </div>
+                        </div>
+                      )
+                    })()}
 
                     {/* Equipe */}
                     <div>

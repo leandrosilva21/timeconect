@@ -64,6 +64,8 @@ interface ProjectCard {
   expected_end_date?: string | null
   coordinator_ids?: number[]
   coordinators?: string[]
+  coordination_hours?: number | null
+  coordination_consumed_hours?: number
   consultants?: string[]
   contract_type?: string | null
   service_type?: string | null
@@ -594,6 +596,7 @@ function ProjectKanbanCard({
     onMove?: (toCol: string) => void; availableColumns?: { id: string; label: string }[]; isCliente?: boolean; hasUnread?: boolean; isNew?: boolean; canWrite?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const { user: viewerUser } = useAuth()
 
   useEffect(() => {
     if (!menuOpen) return
@@ -705,8 +708,11 @@ function ProjectKanbanCard({
             </div>
           )}
           {(() => {
-            const sold = Number(card.sold_hours ?? 0)
-            const consumed = Number(card.consumed_hours ?? 0)
+            // Lente do coordenador: se o usuário logado é coordenador do projeto e há banco
+            // de coordenação, mostra consumo/banco de coordenação no lugar do operacional.
+            const isCoordViewer = !!viewerUser?.id && (card.coordinator_ids ?? []).includes(viewerUser.id) && Number(card.coordination_hours ?? 0) > 0
+            const sold = isCoordViewer ? Number(card.coordination_hours ?? 0) : Number(card.sold_hours ?? 0)
+            const consumed = isCoordViewer ? Number(card.coordination_consumed_hours ?? 0) : Number(card.consumed_hours ?? 0)
             const pct = sold > 0 ? Math.min(100, Math.round((consumed / sold) * 100)) : 0
             const barColor = pct >= 100 ? '#ef4444' : pct >= 90 ? '#f97316' : pct >= 70 ? '#eab308' : '#22c55e'
             const consultantCount = card.consultants?.length ?? 0
