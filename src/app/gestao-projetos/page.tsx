@@ -1020,14 +1020,17 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     if (codeExists) { toast.error('Código já existe em outro projeto. Altere o código antes de salvar.'); return }
     // Horas de coordenação obrigatórias para projetos que não são On Demand
     // (no On Demand o campo nem aparece — backend recebe 0 como fallback).
-    const ctNameForSave = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase() ?? ''
+    const ctNameForSave = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase()
+      ?? (d.contract_type_display ?? d.contract_type?.name ?? '').toLowerCase()
     const isOnDemandSave = ctNameForSave.includes('on demand') || form.tipo_faturamento === 'on_demand'
-    if (!isOnDemandSave && form.coordination_hours === '') {
+    // BH Mensal não tem horas de coordenação — não exige nem valida.
+    const editIsBhMensal = ctNameForSave.includes('mensal')
+    if (!isOnDemandSave && !editIsBhMensal && form.coordination_hours === '') {
       toast.error('Horas de Coordenação obrigatórias.')
       return
     }
     // Horas de coordenação não podem exceder as horas vendidas (contratadas) do projeto.
-    if (form.coordination_hours !== '' && form.sold_hours !== '' && Number(form.coordination_hours) > Number(form.sold_hours)) {
+    if (!editIsBhMensal && form.coordination_hours !== '' && form.sold_hours !== '' && Number(form.coordination_hours) > Number(form.sold_hours)) {
       toast.error(`Horas de coordenação não podem ser maiores que as horas vendidas (${form.sold_hours}h).`)
       return
     }
@@ -1065,7 +1068,8 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       if (form.consultant_hours !== '')      payload.consultant_hours             = Number(form.consultant_hours)
       if (form.coordinator_hours !== '')     payload.coordinator_hours            = Number(form.coordinator_hours)
       // '' envia 0 pra permitir zerar o banco de coordenação (volta ao fallback operacional).
-      payload.coordination_hours = form.coordination_hours === '' ? 0 : Number(form.coordination_hours)
+      // BH Mensal nunca tem horas de coordenação → força 0 independente do valor antigo.
+      payload.coordination_hours = editIsBhMensal ? 0 : (form.coordination_hours === '' ? 0 : Number(form.coordination_hours))
       // initial_* sempre enviam: '' vira 0 pra permitir zerar valor existente.
       payload.initial_hours_consumed = form.initial_hours_consumed === '' ? 0 : Number(form.initial_hours_consumed)
       payload.initial_cost           = form.initial_cost === '' ? 0 : Number(form.initial_cost)
@@ -1362,8 +1366,11 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
               {/* Financeiro — On Demand mostra só Valor da Hora; demais tipos mostram tudo. */}
               <SecTitle>Financeiro</SecTitle>
               {(() => {
-                const ctNameForm = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase() ?? ''
+                const ctNameForm = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase()
+                  ?? (d.contract_type_display ?? d.contract_type?.name ?? '').toLowerCase()
                 const isOnDemandForm = ctNameForm.includes('on demand') || form.tipo_faturamento === 'on_demand'
+                // BH Mensal não tem horas de coordenação — esconde os dois campos.
+                const editIsBhMensal = ctNameForm.includes('mensal')
                 return (
               <>
               <div className="grid grid-cols-2 gap-3">
@@ -1412,10 +1419,10 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                     }))
                   }} style={iStyle} placeholder="0" step="1" /></div>
                 )}
-                {!isOnDemandForm && (
+                {!isOnDemandForm && !editIsBhMensal && (
                   <div><label style={lStyle}>% Horas Coordenador</label><input type="number" value={form.coordinator_hours} onChange={setF('coordinator_hours')} style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
                 )}
-                {!isOnDemandForm && (
+                {!isOnDemandForm && !editIsBhMensal && (
                   <div>
                     <label style={lStyle}>Horas de Coordenação <span style={{ color: 'var(--danger-border)' }}>*</span></label>
                     <input type="number" required value={form.coordination_hours} onChange={setF('coordination_hours')} style={iStyle} placeholder="0" step="0.5" min="0" max={form.sold_hours || undefined} />

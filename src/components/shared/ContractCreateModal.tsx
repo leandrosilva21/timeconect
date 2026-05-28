@@ -335,6 +335,8 @@ export function ContractCreateModal({
   const isBankHours = selectedContractType?.name.toLowerCase().includes('banco de horas') ?? false
   const ctNameLower = selectedContractType?.name.toLowerCase().trim() ?? ''
   const isBhFixo = isBankHours && ctNameLower.includes('fixo')
+  // BH Mensal: banco de horas que não é fixo. Não tem horas de coordenador.
+  const isBhMensal = isBankHours && !isBhFixo
   // Mensalidade: Cloud e SaaS — só "Valor do Contrato" como mensalidade fixa.
   const isMensalidade = ctNameLower === 'cloud' || ctNameLower === 'saas'
   const isFechado = !!selectedContractType && !isOnDemand && !isBankHours && !isMensalidade
@@ -568,8 +570,8 @@ export function ContractCreateModal({
         valor_projeto:         form.valor_projeto ? Number(form.valor_projeto) : null,
         valor_hora:            form.valor_hora ? Number(form.valor_hora) : null,
         hora_adicional:        form.hora_adicional ? Number(form.hora_adicional) : null,
-        pct_horas_coordenador: form.pct_horas_coordenador ? Number(form.pct_horas_coordenador) : null,
-        horas_coordenacao:     form.horas_coordenacao ? Number(form.horas_coordenacao) : null,
+        pct_horas_coordenador: isBhMensal ? null : (form.pct_horas_coordenador ? Number(form.pct_horas_coordenador) : null),
+        horas_coordenacao:     isBhMensal ? null : (form.horas_coordenacao ? Number(form.horas_coordenacao) : null),
         horas_consultor:       form.horas_consultor ? Math.round(Number(form.horas_consultor)) : null,
         expectativa_inicio:    form.expectativa_inicio || null,
         condicao_pagamento:    form.condicao_pagamento || null,
@@ -1163,13 +1165,13 @@ export function ContractCreateModal({
                       <input {...numInput('hora_adicional')} placeholder="0,00" />
                     </div>
                   )}
-                  {!isOnDemand && !isMensalidade && (
+                  {!isOnDemand && !isMensalidade && !isBhMensal && (
                     <div>
                       <label className={labelCls} style={{ color: 'var(--text-muted)' }}>% Horas Coordenador</label>
                       <input {...numInput('pct_horas_coordenador')} placeholder="0,00" />
                     </div>
                   )}
-                  {!isOnDemand && (
+                  {!isOnDemand && !isBhMensal && (
                     <div>
                       <label className={labelCls} style={{ color: 'var(--text-muted)' }}>Horas de Coordenação</label>
                       <input {...numInput('horas_coordenacao')} placeholder="0,00" />

@@ -431,6 +431,8 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
   // Mensalidade: Cloud e SaaS — só "Valor do Contrato" como mensalidade fixa.
   const isMensalidade = ctNameLower === 'cloud' || ctNameLower === 'saas'
   const isFechado   = !!selectedContractType && !isOnDemand && !isBankHours && !isMensalidade
+  // BH Mensal: banco de horas que não é fixo. Não tem horas de coordenador.
+  const isBhMensal  = isBankHours && !ctNameLower.includes('fixo')
 
   // saveErpserv (read-only calc for Fechado)
   const saveErpserv = useMemo(() => {
@@ -537,8 +539,8 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
         valor_projeto:         form.valor_projeto ? Number(form.valor_projeto) : null,
         valor_hora:            form.valor_hora ? Number(form.valor_hora) : null,
         hora_adicional:        form.hora_adicional ? Number(form.hora_adicional) : null,
-        pct_horas_coordenador: form.pct_horas_coordenador ? Number(form.pct_horas_coordenador) : null,
-        horas_coordenacao:     form.horas_coordenacao ? Number(form.horas_coordenacao) : null,
+        pct_horas_coordenador: isBhMensal ? null : (form.pct_horas_coordenador ? Number(form.pct_horas_coordenador) : null),
+        horas_coordenacao:     isBhMensal ? null : (form.horas_coordenacao ? Number(form.horas_coordenacao) : null),
         horas_consultor:       form.horas_consultor ? Number(form.horas_consultor) : null,
         expectativa_inicio:    form.expectativa_inicio || null,
         condicao_pagamento:    form.condicao_pagamento || null,
@@ -1207,7 +1209,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                         className={inputCls} style={inputStyle} />
                     </div>
                   )}
-                  {!isOnDemand && !isMensalidade && (
+                  {!isOnDemand && !isMensalidade && !isBhMensal && (
                     <div>
                       <label className={labelCls}>% Horas Coordenador</label>
                       <input type="number" min="0" max="100" step="1" placeholder="0"
@@ -1216,7 +1218,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                         className={inputCls} style={inputStyle} />
                     </div>
                   )}
-                  {!isOnDemand && (
+                  {!isOnDemand && !isBhMensal && (
                     <div>
                       <label className={labelCls}>Horas de Coordenação</label>
                       <input type="number" min="0" step="0.5" placeholder="0"
