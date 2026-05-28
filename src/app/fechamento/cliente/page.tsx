@@ -409,8 +409,14 @@ export default function FechamentoClientePage() {
       // O `api` helper sempre faz res.json(); pra blob usamos fetch direto no
       // mesmo proxy /api/v1 (o middleware injeta o Authorization via cookie).
       const modo = detailMode()
+      // Propaga o filtro de contrato (projetoFilter) — sem isso, o XLSX baixado
+      // trazia todos os contratos mesmo com 1 selecionado no header.
+      const qs = new URLSearchParams()
+      if (modo === 'despesa') qs.set('mode', 'despesa')
+      if (modo === 'servicos' && projetoFilter) qs.set('project_id', String(projetoFilter))
+      const qstr = qs.toString()
       const res = await fetch(
-        `/api/v1/fechamento-cliente/${customerId}/${toYM}/excel${modo === 'despesa' ? '?mode=despesa' : ''}`,
+        `/api/v1/fechamento-cliente/${customerId}/${toYM}/excel${qstr ? `?${qstr}` : ''}`,
         { credentials: 'same-origin', headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } },
       )
       if (!res.ok) throw new Error(`Erro ${res.status}`)
@@ -441,6 +447,11 @@ export default function FechamentoClientePage() {
     if (!customerId || !toYM) return
     setPreviewLoading(true)
     try {
+      // Propaga projetoFilter ao preview pra listar só o projeto filtrado no template.
+      const mode = detailMode()
+      const payload: Record<string, unknown> = { mode }
+      if (mensagem !== undefined) payload.mensagem = mensagem
+      if (mode === 'servicos' && projetoFilter) payload.project_id = projetoFilter
       const res = await api.post<{
         html: string
         mensagem_padrao: string
@@ -448,7 +459,7 @@ export default function FechamentoClientePage() {
         emails_administrativos?: string[]
       }>(
         `/fechamento-cliente/${customerId}/${toYM}/email-preview`,
-        mensagem !== undefined ? { mensagem, mode: detailMode() } : { mode: detailMode() },
+        payload,
       )
       setEmailPreviewHtml(res.html)
       if (!previewSeededRef.current) {
@@ -566,7 +577,11 @@ export default function FechamentoClientePage() {
       // multipart (FormData) para levar os anexos extras junto do PDF + Excel.
       const fd = new FormData()
       fd.append('mensagem', emailMensagem)
-      fd.append('mode', detailMode())
+      const mode = detailMode()
+      fd.append('mode', mode)
+      // Propaga filtro de contrato (projetoFilter) — sem isso o PDF/XLSX anexados ao
+      // e-mail traziam todos os contratos do cliente mesmo com 1 selecionado no header.
+      if (mode === 'servicos' && projetoFilter) fd.append('project_id', String(projetoFilter))
       emails.forEach(e => fd.append('emails[]', e))
       anexos.forEach(f => fd.append('anexos[]', f, f.name))
 
