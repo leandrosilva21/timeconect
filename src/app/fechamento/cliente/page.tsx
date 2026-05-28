@@ -231,15 +231,27 @@ export default function FechamentoClientePage() {
   const [avulsoDraft, setAvulsoDraft] = useState('')
   // Anexos extras (além do PDF + Excel) — só deste envio.
   const [anexos, setAnexos] = useState<File[]>([])
-  // Ref pro input file: permite disparar o picker via button.click() (mais robusto que
-  // <label> wrapping — alguns navegadores/CSPs ignoravam o clique no label invisível).
-  const anexoInputRef = useRef<HTMLInputElement | null>(null)
   const addAnexos = (files: FileList | null) => {
     if (!files?.length) return
     setAnexos(prev => {
       const seen = new Set(prev.map(f => `${f.name}:${f.size}`))
       return [...prev, ...Array.from(files).filter(f => !seen.has(`${f.name}:${f.size}`))]
     })
+  }
+  // Abre o seletor criando o <input> imperativamente FORA da árvore do React
+  // (anexado ao document.body). O <input> dentro do JSX podia ser remontado
+  // enquanto o diálogo do SO estava aberto — ex.: o setUser do loadUser disparado
+  // no visibilitychange quando a janela perde foco — e o onChange do arquivo
+  // escolhido se perdia num nó descartado → anexo intermitente ("às vezes anexa").
+  // Imperativo no body é imune a qualquer re-render/remontagem do modal.
+  const openFilePicker = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.multiple = true
+    input.style.display = 'none'
+    input.addEventListener('change', () => { addAnexos(input.files); input.remove() })
+    document.body.appendChild(input)
+    input.click()
   }
   const removeAnexo = (i: number) => setAnexos(prev => prev.filter((_, idx) => idx !== i))
   // Limite dos anexos extras. O envio via Graph soma PDF+XLSX+extras até ~3 MB; como o
@@ -1482,20 +1494,13 @@ export default function FechamentoClientePage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
-                    onClick={() => anexoInputRef.current?.click()}
+                    onClick={openFilePicker}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors"
                     style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
                   >
                     <Paperclip size={13} />
                     Adicionar arquivo
                   </button>
-                  <input
-                    ref={anexoInputRef}
-                    type="file"
-                    multiple
-                    style={{ display: 'none' }}
-                    onChange={e => { addAnexos(e.target.files); e.target.value = '' }}
-                  />
                   <span className="text-[11px]" style={{ color: 'var(--text-light)' }}>
                     O relatório (PDF) e a planilha (Excel) do fechamento já vão anexados.
                   </span>
