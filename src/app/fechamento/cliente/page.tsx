@@ -472,7 +472,10 @@ export default function FechamentoClientePage() {
     } finally {
       setPreviewLoading(false)
     }
-  }, [customerId, toYM, tab])
+    // projetoFilter precisa estar nas deps: sem isso, a callback fica stale com o valor
+    // antigo do filtro e a prévia continua mostrando todos os projetos mesmo após o user
+    // selecionar 1 contrato no header. Inclui o tab pra recriar quando alterna servicos/cobranca.
+  }, [customerId, toYM, tab, projetoFilter])
 
   function openCompose() {
     if (!customerId || !toYM) return
