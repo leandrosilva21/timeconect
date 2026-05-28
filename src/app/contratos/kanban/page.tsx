@@ -311,9 +311,12 @@ const STATUS_PROJECT_COLUMNS: Column[] = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function contractColumnId(card: ContractCard): string {
-  if (card.kanban_status === 'alocado' && card.kanban_coordinator_id) {
-    return `coordinator:${card.kanban_coordinator_id}`
+function contractColumnId(card: ContractCard): string | null {
+  if (card.kanban_status === 'alocado') {
+    // Sem coordinator definido NÃO cai em 'novo' (default antigo): o projeto já
+    // foi criado, então o card "como contrato" não pertence a nenhuma coluna —
+    // a presença do projeto é exibida via projectCards.
+    return card.kanban_coordinator_id ? `coordinator:${card.kanban_coordinator_id}` : null
   }
   // All non-approved demand statuses → "novo" column
   if (['backlog', 'novo_projeto', 'em_planejamento', 'em_validacao', 'em_revisao'].includes(card.kanban_status ?? '')) {
@@ -323,6 +326,9 @@ function contractColumnId(card: ContractCard): string {
   if (['aprovado', 'inicio_autorizado'].includes(card.kanban_status ?? '')) {
     return 'pronto'
   }
+  // Contrato com projeto já criado não deve cair no fallback 'novo' (era fonte de
+  // duplicação visual quando o BE devolvia contratos sem kanban_status normalizado).
+  if (card.project_id) return null
   return 'novo'
 }
 
@@ -3186,7 +3192,9 @@ function KanbanContent() {
                                   )
                                 }
                                 const cc = card as ContractCard
-                                const fromCol = col.id.startsWith('sust_') ? col.id : contractColumnId(cc)
+                                // Fallback pra col.id quando contractColumnId retorna null (caso defensivo do
+                                // alocado-sem-coord): mantém o card consistente com a coluna onde foi renderizado.
+                                const fromCol = col.id.startsWith('sust_') ? col.id : (contractColumnId(cc) ?? col.id)
                                 return (
                                   <ContractKanbanCard key={`c-${cc.id}`} card={cc} index={idx}
                                     onClick={() => setSelected(cc)}
