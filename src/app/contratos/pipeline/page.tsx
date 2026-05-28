@@ -2093,11 +2093,13 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
   )
 
   const { user: viewerUser } = useAuth()
+  const isClienteViewer = viewerUser?.type === 'cliente'
   const consumed = p?.consumed_hours ?? 0
   const totalAvail = p?.total_available_hours ?? ((p?.sold_hours ?? 0) + (p?.hour_contribution ?? 0))
   // Lente do coordenador (swap KPIs/risco) — coordenador do projeto + banco explícito.
+  // NUNCA aplica pra cliente: cliente vê sempre o sold_hours original do contrato.
   const coordHoursBank = Number((p as any)?.coordination_hours ?? 0)
-  const isCoordViewer = !!viewerUser?.id && !!p?.coordinators?.some((c: any) => c.id === viewerUser.id) && coordHoursBank > 0
+  const isCoordViewer = !isClienteViewer && !!viewerUser?.id && !!p?.coordinators?.some((c: any) => c.id === viewerUser.id) && coordHoursBank > 0
   const coordConsumedVal = Number((p as any)?.coordination_consumed_hours ?? 0)
   const cardVendidas = isCoordViewer ? coordHoursBank : (p?.sold_hours ?? 0)
   const cardConsumed = isCoordViewer ? coordConsumedVal : consumed
@@ -2252,7 +2254,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
                 </div>
 
                 {/* Horas de Coordenação — pro admin/governança (banco explícito). Coord vê via swap dos KPIs. */}
-                {!isCoordViewer && coordHoursBank > 0 && (() => {
+                {!isCoordViewer && !isClienteViewer && coordHoursBank > 0 && (() => {
                   const cBank = coordHoursBank
                   const cCons = coordConsumedVal
                   const cSaldo = Math.round((cBank - cCons) * 100) / 100
@@ -4705,7 +4707,7 @@ function KanbanContent() {
                         const saude       = rowHealth(p)
                         const saudeColor  = saude === 'red' ? 'var(--danger-border)' : saude === 'yellow' ? 'var(--warning-border)' : 'var(--success-border)'
                         return (
-                          <tr key={`p-${p.id}`} onClick={() => setSelectedProject(p)} className="cursor-pointer hover:bg-zinc-800/40 transition-colors group/row"
+                          <tr key={`p-${p.id}`} onClick={() => { if (!isCliente) setSelectedProject(p) }} className={`${isCliente ? '' : 'cursor-pointer'} hover:bg-zinc-800/40 transition-colors group/row`}
                             style={{ borderTop: '1px solid var(--brand-border)' }}>
                             {!isCliente && (
                               <td className="px-2 py-3 w-10" onClick={e => e.stopPropagation()}>
@@ -4905,7 +4907,7 @@ function KanbanContent() {
                   unreadContractIds={unreadContractIds}
                   onContractClick={setSelectedContract}
                   onContractAction={(card, action) => setContractAction({ card, action })}
-                  onProjectClick={setSelectedProject}
+                  onProjectClick={(card) => { if (!isCliente) setSelectedProject(card) }}
                   onProjectAction={(card, action) => setProjectAction({ card, action })}
                   onRequestClick={card =>
                     card.kanban_column === 'req_inicio_autorizado' && !card.req_decision
@@ -4952,7 +4954,7 @@ function KanbanContent() {
                       }
                     }}
                     onContractAction={(card, action) => setContractAction({ card, action })}
-                    onProjectClick={setSelectedProject}
+                    onProjectClick={(card) => { if (!isCliente) setSelectedProject(card) }}
                     onProjectAction={(card, action) => setProjectAction({ card, action })}
                     onRequestClick={setSelectedRequest}
                     onContractMove={(card, toCol) => handleContractMove(card.id, card, 'inicio_autorizado', toCol)}
@@ -4976,6 +4978,7 @@ function KanbanContent() {
                   newProjectIds={col.id === 'em_andamento' ? newProjectIds : undefined}
                   onContractClick={setSelectedContract}
                   onProjectClick={card => {
+                    if (isCliente) return
                     if (newProjectIds?.has(card.id)) markProjectSeen(card.id)
                     setSelectedProject(card)
                   }}

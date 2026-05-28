@@ -437,8 +437,10 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
   const totalAvail = p?.total_available_hours ?? ((p?.sold_hours ?? 0) + (p?.hour_contribution ?? 0))
   // Lente do coordenador: se o usuário logado é coordenador do projeto e há banco de
   // coordenação, troca KPIs/risco pro banco; admin/demais continuam vendo o operacional.
+  const isClienteViewer = viewerUser?.type === 'cliente'
   const coordHoursBank = Number((p as any)?.coordination_hours ?? 0)
-  const isCoordViewer = !!viewerUser?.id && !!p?.coordinators?.some((c: any) => c.id === viewerUser.id) && coordHoursBank > 0
+  // Cliente NUNCA vê a lente do coord: sempre o sold_hours original do contrato.
+  const isCoordViewer = !isClienteViewer && !!viewerUser?.id && !!p?.coordinators?.some((c: any) => c.id === viewerUser.id) && coordHoursBank > 0
   const coordConsumedVal = Number((p as any)?.coordination_consumed_hours ?? 0)
   const cardVendidas = isCoordViewer ? coordHoursBank : (p?.sold_hours ?? 0)
   const cardConsumed = isCoordViewer ? coordConsumedVal : consumed
@@ -550,7 +552,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
 
                 {/* Horas de Coordenação — visível pro admin/governança (quando há banco explícito).
                     Pro coordenador, o swap dos KPIs já mostra esses números, então omite aqui. */}
-                {!isCoordViewer && coordHoursBank > 0 && (() => {
+                {!isCoordViewer && !isClienteViewer && coordHoursBank > 0 && (() => {
                   const cBank = coordHoursBank
                   const cCons = coordConsumedVal
                   const cSaldo = Math.round((cBank - cCons) * 100) / 100
