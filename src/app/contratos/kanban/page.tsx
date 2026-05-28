@@ -617,6 +617,9 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                       <div className="divide-y px-4" style={{ borderColor: 'var(--brand-border)' }}>
                         <Row label="Tipo de Alocação"     value={(p as any).tipo_alocacao ?? '—'} />
                         <Row label="Condição de Pagamento" value={(p as any).condicao_pagamento ?? '—'} />
+                        <Row label="% Horas Coordenador"  value={(p as any).coordinator_hours != null ? `${(p as any).coordinator_hours}%` : '—'} />
+                        <Row label="Horas de Coordenação" value={(p as any).coordination_hours != null && Number((p as any).coordination_hours) > 0 ? `${Number((p as any).coordination_hours).toFixed(1)}h` : '—'} />
+                        <Row label="Horas Consultor"      value={(p as any).consultant_hours != null ? `${Number((p as any).consultant_hours).toFixed(1)}h` : '—'} />
                         <Row label="Cobra Despesa"        value={(p as any).cobra_despesa_cliente ? 'Sim' : 'Não'} />
                         <Row label="Limite de Despesa"    value={(p as any).limite_despesa != null ? fmtBRL(Number((p as any).limite_despesa)) : '—'} />
                         <Row label="Arquiteto"            value={(p as any).architect?.name ?? '—'} />
