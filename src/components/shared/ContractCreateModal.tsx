@@ -341,13 +341,9 @@ export function ContractCreateModal({
   const isMensalidade = ctNameLower === 'cloud' || ctNameLower === 'saas'
   const isFechado = !!selectedContractType && !isOnDemand && !isBankHours && !isMensalidade
 
-  const saveErpserv = useMemo(() => {
-    if (!isFechado) return null
-    const sold = Number(form.horas_contratadas) || 0
-    const consult = Number(form.horas_consultor) || 0
-    const coord = Number(form.pct_horas_coordenador) || 0
-    return sold - consult - Math.round((coord / 100) * consult)
-  }, [isFechado, form.horas_contratadas, form.horas_consultor, form.pct_horas_coordenador])
+  // "Horas de Gestão" é derivado do Percentual Gestão sobre as Horas Vendidas
+  // (contratadas). Draft local pra digitar suave; quando null, mostra o derivado.
+  const [gestaoDraft, setGestaoDraft] = useState<string | null>(null)
 
   const selectedCustomerObj = useMemo(
     () => customers.find(c => String(c.id) === String(form.customer_id)),
@@ -1165,31 +1161,52 @@ export function ContractCreateModal({
                       <input {...numInput('hora_adicional')} placeholder="0,00" />
                     </div>
                   )}
-                  {!isOnDemand && !isMensalidade && !isBhMensal && (
+                  {(isFechado || isBhFixo) && (
                     <div>
-                      <label className={labelCls} style={{ color: 'var(--text-muted)' }}>% Horas Coordenador</label>
-                      <input {...numInput('pct_horas_coordenador')} placeholder="0,00" />
+                      <label className={labelCls} style={{ color: 'var(--text-muted)' }}>Percentual Gestão (%)</label>
+                      <input {...numInput('pct_horas_coordenador', raw => { setGestaoDraft(null); setForm(f => ({ ...f, pct_horas_coordenador: raw })) })} placeholder="0,00" />
                     </div>
                   )}
-                  {!isOnDemand && !isBhMensal && (
+                  {(isFechado || isBhFixo) && (() => {
+                    // Horas de Gestão = (Percentual Gestão / 100) × Horas Vendidas (contratadas).
+                    // Bidirecional: editar aqui recalcula o %; editar o % recalcula isto.
+                    const base = Number(form.horas_contratadas) || 0
+                    const pct  = Number(form.pct_horas_coordenador) || 0
+                    const derived = base > 0 ? Math.round((pct / 100) * base * 100) / 100 : 0
+                    const shown = gestaoDraft ?? (derived ? String(derived) : '')
+                    return (
+                      <div>
+                        <label className={labelCls} style={{ color: 'var(--text-muted)' }}>Horas de Gestão</label>
+                        <input type="number" value={shown} min="0" step="0.5" disabled={base <= 0}
+                          className={inputCls} style={inputStyle}
+                          onChange={e => {
+                            const v = e.target.value
+                            setGestaoDraft(v)
+                            const h = Number(v) || 0
+                            if (base > 0) setForm(f => ({ ...f, pct_horas_coordenador: String(Math.round((h / base) * 100 * 100) / 100) }))
+                          }}
+                          onBlur={() => setGestaoDraft(null)}
+                          placeholder="0" />
+                        <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                          {base > 0 ? `${pct || 0}% de ${base}h (vendidas)` : 'Informe Horas Contratadas para calcular'}
+                        </p>
+                      </div>
+                    )
+                  })()}
+                  {(isFechado || isBhFixo) && (
                     <div>
-                      <label className={labelCls} style={{ color: 'var(--text-muted)' }}>Horas de Coordenação</label>
+                      <label className={labelCls} style={{ color: 'var(--text-muted)' }}>Horas Apontáveis <span style={{ color: 'var(--danger)' }}>*</span></label>
                       <input {...numInput('horas_coordenacao')} placeholder="0,00" />
-                      <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>Banco fixo de horas do coordenador (governança). Copiado pro projeto ao gerar.</p>
+                      <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>Banco de horas apontáveis (copiado pro projeto ao gerar).</p>
+                      {form.horas_coordenacao !== '' && form.horas_contratadas !== '' && Number(form.horas_coordenacao) > Number(form.horas_contratadas) && (
+                        <p className="text-[10px] mt-1" style={{ color: 'var(--danger)' }}>Não pode exceder as horas vendidas ({form.horas_contratadas}h).</p>
+                      )}
                     </div>
                   )}
                   {(isFechado || isBhFixo) && (
                     <div>
                       <label className={labelCls} style={{ color: 'var(--text-muted)' }}>Horas Consultor</label>
                       <input {...numInput('horas_consultor')} placeholder="0,00" />
-                    </div>
-                  )}
-                  {isFechado && (
-                    <div>
-                      <label className={labelCls} style={{ color: 'var(--text-muted)' }}>Save ERPSERV</label>
-                      <input readOnly
-                        value={saveErpserv != null ? saveErpserv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
-                        className={inputCls} style={{ ...inputStyle, opacity: 0.5, cursor: 'not-allowed' }} />
                     </div>
                   )}
                 </div>
