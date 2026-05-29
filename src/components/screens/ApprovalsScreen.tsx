@@ -567,6 +567,9 @@ export interface ApprovalsScreenProps {
 export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) {
   const { user } = useAuth()
   const isCoordenador = user?.type === 'coordenador'
+  // Chip "Meus projetos / Todos" pra coordenador (idem Apontamentos / Despesas).
+  // Default 'meus' = fila familiar do coord; 'todos' libera a fila inteira do time.
+  const [coordScope, setCoordScope] = useState<'meus' | 'todos'>('meus')
   const hover = useTimesheetHover()
 
   const { filters: flt, set: setFilter, clear: clearPersistedFilters } = usePersistedFilters(
@@ -672,13 +675,20 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
     if (dateFrom)      p.set('date_from',      dateFrom)
     if (dateTo)        p.set('date_to',        dateTo)
     if (userId)        p.set('user_id',        userId)
-    if (coordinatorId) p.set('coordinator_id', coordinatorId)
+    // Coordenador: chip 'Meus projetos' injeta coordinator_id=user.id; o BE
+    // (PR #57) confia no FE pra escopar. Filtro manual de coord (dropdown)
+    // tem prioridade sobre o chip quando preenchido.
+    if (coordinatorId) {
+      p.set('coordinator_id', coordinatorId)
+    } else if (isCoordenador && coordScope === 'meus' && user?.id) {
+      p.set('coordinator_id', String(user.id))
+    }
     if (executiveId)   p.set('executive_id',   executiveId)
     if (projectId)     p.set('project_id',     projectId)
     if (customerId)    p.set('customer_id',    customerId)
     if (categoriaServico) p.set('categoria_servico', categoriaServico)
     return p.toString()
-  }, [dateFrom, dateTo, userId, coordinatorId, executiveId, projectId, customerId, categoriaServico])
+  }, [dateFrom, dateTo, userId, coordinatorId, executiveId, projectId, customerId, categoriaServico, isCoordenador, coordScope, user?.id])
 
   const loadTs = useCallback(async () => {
     setTsLoading(true)
@@ -915,6 +925,28 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
           )
         })}
       </div>
+
+      {/* Chip "Meus projetos / Todos" — coordenador, perto da tabela
+          (mesmo padrão de Apontamentos / Despesas: PRs #36/#33).
+          Filtro de Coordenador no card abaixo (dropdown) tem prioridade sobre o chip. */}
+      {isCoordenador && (
+        <div className="mb-3 inline-flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+          {(['meus', 'todos'] as const).map(opt => {
+            const active = coordScope === opt
+            return (
+              <button key={opt} onClick={() => setCoordScope(opt)}
+                className="px-3 py-1.5 text-xs font-semibold transition-colors"
+                style={{
+                  background: active ? 'var(--primary)' : 'var(--surface)',
+                  color: active ? 'var(--primary-fg)' : 'var(--text-muted)',
+                  borderRight: opt === 'meus' ? '1px solid var(--border)' : undefined,
+                }}>
+                {opt === 'meus' ? 'Meus projetos' : 'Todos'}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* ── Filters ── */}
       <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900">
