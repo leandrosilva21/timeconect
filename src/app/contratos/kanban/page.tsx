@@ -1187,8 +1187,14 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
   const toggleId = (ids: number[], id: number) => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]
   const setF = (key: keyof ProjectEditForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [key]: e.target.value }))
-  // "Horas de Gestão" deriva do % (coordinator_hours) sobre as Horas Consultor.
+  // "Horas de Gestão" deriva do % (coordinator_hours) sobre as Horas Vendidas.
   const [gestaoDraft, setGestaoDraft] = useState<string | null>(null)
+  // Horas Apontáveis / Percentual Gestão / Horas de Gestão só p/ Fechado e BH Fixo.
+  // Cloud/SaaS, On Demand e BH Mensal não têm esses campos.
+  const ctNameK = (optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name
+    ?? (d.contract_type_display ?? d.contract_type?.name ?? '')).toLowerCase()
+  const showApontaveis = !(ctNameK.includes('on demand') || form.tipo_faturamento === 'on_demand'
+    || ctNameK.includes('mensal') || ctNameK === 'cloud' || ctNameK === 'saas')
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error('Nome obrigatório'); return }
@@ -1381,6 +1387,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 <div><label style={lStyle}>Valor da Hora (R$)</label><input type="number" value={form.hourly_rate} onChange={setF('hourly_rate')} style={iStyle} placeholder="0.00" step="0.01" /></div>
                 <div><label style={lStyle}>Hora Adicional (R$)</label><input type="number" value={form.additional_hourly_rate} onChange={setF('additional_hourly_rate')} style={iStyle} placeholder="0.00" step="0.01" /></div>
                 <div><label style={lStyle}>Horas Contratadas</label><input type="number" value={form.sold_hours} onChange={setF('sold_hours')} style={iStyle} placeholder="0" step="1" /></div>
+                {showApontaveis && (<>
                 <div><label style={lStyle}>Percentual Gestão (%)</label><input type="number" value={form.coordinator_hours}
                   onChange={e => { setGestaoDraft(null); setForm(f => ({ ...f, coordinator_hours: e.target.value })) }}
                   style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
@@ -1415,6 +1422,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                     <p className="text-[10px] mt-1" style={{ color: 'var(--danger-border)' }}>Não pode exceder as horas vendidas ({form.sold_hours}h).</p>
                   )}
                 </div>
+                </>)}
                 <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
               </div>
               <div className="grid grid-cols-2 gap-3 rounded-xl p-3" style={{ border: '1px solid var(--brand-border)', background: 'var(--surface-hover)' }}>

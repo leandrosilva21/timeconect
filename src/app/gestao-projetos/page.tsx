@@ -1026,9 +1026,10 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     const ctNameForSave = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase()
       ?? (d.contract_type_display ?? d.contract_type?.name ?? '').toLowerCase()
     const isOnDemandSave = ctNameForSave.includes('on demand') || form.tipo_faturamento === 'on_demand'
-    // BH Mensal não tem horas de coordenação — não exige nem valida.
+    // Horas Apontáveis só para Fechado/BH Fixo. BH Mensal, Cloud/SaaS e On Demand não têm.
     const editIsBhMensal = ctNameForSave.includes('mensal')
-    if (!isOnDemandSave && !editIsBhMensal && form.coordination_hours === '') {
+    const editIsMensalidade = ctNameForSave === 'cloud' || ctNameForSave === 'saas'
+    if (!isOnDemandSave && !editIsBhMensal && !editIsMensalidade && form.coordination_hours === '') {
       toast.error('Horas Apontáveis obrigatórias.')
       return
     }
@@ -1372,8 +1373,10 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 const ctNameForm = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase()
                   ?? (d.contract_type_display ?? d.contract_type?.name ?? '').toLowerCase()
                 const isOnDemandForm = ctNameForm.includes('on demand') || form.tipo_faturamento === 'on_demand'
-                // BH Mensal não tem horas de coordenação — esconde os dois campos.
+                // Horas Apontáveis/Gestão só p/ Fechado e BH Fixo — esconde nos demais.
                 const editIsBhMensal = ctNameForm.includes('mensal')
+                const editIsMensalidade = ctNameForm === 'cloud' || ctNameForm === 'saas'
+                const showApontaveis = !isOnDemandForm && !editIsBhMensal && !editIsMensalidade
                 return (
               <>
               <div className="grid grid-cols-2 gap-3">
@@ -1422,12 +1425,12 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                     }))
                   }} style={iStyle} placeholder="0" step="1" /></div>
                 )}
-                {!isOnDemandForm && !editIsBhMensal && (
+                {showApontaveis && (
                   <div><label style={lStyle}>Percentual Gestão (%)</label><input type="number" value={form.coordinator_hours}
                     onChange={e => { setGestaoDraft(null); setForm(f => ({ ...f, coordinator_hours: e.target.value })) }}
                     style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
                 )}
-                {!isOnDemandForm && !editIsBhMensal && (() => {
+                {showApontaveis && (() => {
                   // Horas de Gestão = (Percentual Gestão / 100) × Horas Vendidas (contratadas).
                   // Bidirecional: editar aqui recalcula o %; editar o % recalcula isto. Deriva do %.
                   const base = Number(form.sold_hours || 0)
@@ -1452,7 +1455,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                     </div>
                   )
                 })()}
-                {!isOnDemandForm && !editIsBhMensal && (
+                {showApontaveis && (
                   <div>
                     <label style={lStyle}>Horas Apontáveis <span style={{ color: 'var(--danger-border)' }}>*</span></label>
                     <input type="number" required value={form.coordination_hours} onChange={setF('coordination_hours')} style={iStyle} placeholder="0" step="0.5" min="0" max={form.sold_hours || undefined} />
