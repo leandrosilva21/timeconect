@@ -625,7 +625,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                         <Row label="Percentual Gestão"    value={(p as any).coordinator_hours != null ? `${(p as any).coordinator_hours}%` : '—'} />
                         <Row label="Horas de Gestão"      value={(p as any).coordinator_hours != null && (p as any).sold_hours != null ? `${Math.round((Number((p as any).coordinator_hours) / 100) * Number((p as any).sold_hours) * 100) / 100}h` : '—'} />
                         <Row label="Horas Consultor"      value={(p as any).consultant_hours != null ? `${Number((p as any).consultant_hours).toFixed(1)}h` : '—'} />
-                        <Row label="Sobra de Horas"       value={(p as any).sold_hours != null && (p as any).consultant_hours != null && (p as any).coordinator_hours != null ? `${Math.round((Number((p as any).sold_hours) - Number((p as any).consultant_hours) - (Number((p as any).coordinator_hours) / 100) * Number((p as any).sold_hours)) * 100) / 100}h` : '—'} />
+                        <Row label="Saving ERPSERV"       value={(p as any).sold_hours != null && (p as any).consultant_hours != null && (p as any).coordinator_hours != null ? `${Math.round((Number((p as any).sold_hours) - Number((p as any).consultant_hours) - (Number((p as any).coordinator_hours) / 100) * Number((p as any).sold_hours)) * 100) / 100}h` : '—'} />
                         <Row label="Horas Apontáveis"     value={(p as any).coordination_hours != null && Number((p as any).coordination_hours) > 0 ? `${Number((p as any).coordination_hours).toFixed(1)}h` : '—'} />
                         <Row label="Cobra Despesa"        value={(p as any).cobra_despesa_cliente ? 'Sim' : 'Não'} />
                         <Row label="Limite de Despesa"    value={(p as any).limite_despesa != null ? fmtBRL(Number((p as any).limite_despesa)) : '—'} />
@@ -1421,14 +1421,14 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
                 {showApontaveis && (<>
                 {(() => {
-                  // Sobra de Horas = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
+                  // Saving ERPSERV = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
                   const sold = Number(form.sold_hours || 0)
                   const cons = Number(form.consultant_hours || 0)
                   const coordPct = Number(form.coordinator_hours || 0)
                   const gestao = sold > 0 ? (coordPct / 100) * sold : 0
                   const sobra = Math.round((sold - cons - gestao) * 100) / 100
                   return (
-                    <div><label style={lStyle}>Sobra de Horas</label><input type="text" value={isNaN(sobra) ? '—' : `${sobra}h`} readOnly tabIndex={-1} style={{ ...iStyle, opacity: 0.7, cursor: 'default' }} /></div>
+                    <div><label style={lStyle}>Saving ERPSERV</label><input type="text" value={isNaN(sobra) ? '—' : `${sobra}h`} readOnly tabIndex={-1} style={{ ...iStyle, opacity: 0.7, cursor: 'default' }} /></div>
                   )
                 })()}
                 <div>
@@ -2254,7 +2254,7 @@ function CardDetailModal({ card, onClose, onEditContract, initialTab, userRole }
     ['Percentual Gestão',   full.pct_horas_coordenador != null ? `${full.pct_horas_coordenador}%` : '—'],
     ['Horas de Gestão',     (full.pct_horas_coordenador != null && full.horas_contratadas != null) ? `${Math.round((Number(full.pct_horas_coordenador) / 100) * Number(full.horas_contratadas) * 100) / 100}h` : '—'],
     ['Horas Consultor',     fmtHours(full.horas_consultor)],
-    ['Sobra de Horas',      (full.horas_contratadas != null && full.horas_consultor != null && full.pct_horas_coordenador != null) ? `${Math.round((Number(full.horas_contratadas) - Number(full.horas_consultor) - (Number(full.pct_horas_coordenador) / 100) * Number(full.horas_contratadas)) * 100) / 100}h` : '—'],
+    ['Saving ERPSERV',      (full.horas_contratadas != null && full.horas_consultor != null && full.pct_horas_coordenador != null) ? `${Math.round((Number(full.horas_contratadas) - Number(full.horas_consultor) - (Number(full.pct_horas_coordenador) / 100) * Number(full.horas_contratadas)) * 100) / 100}h` : '—'],
     ['Horas Apontáveis',    fmtHours((full as any).horas_coordenacao)],
     ['Valor do Projeto',    fmtMoney(full.valor_projeto)],
     ['Valor/Hora',          fmtMoney(full.valor_hora)],

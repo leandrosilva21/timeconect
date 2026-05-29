@@ -1459,14 +1459,14 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                   <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
                 )}
                 {!isOnDemandForm && (() => {
-                  // Sobra de Horas (read-only) = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
+                  // Saving ERPSERV (read-only) = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
                   const sold = Number(form.sold_hours || 0)
                   const cons = Number(form.consultant_hours || 0)
                   const coordPct = Number(form.coordinator_hours || 0)
                   const gestao = sold > 0 ? (coordPct / 100) * sold : 0
                   const sobra = Math.round((sold - cons - gestao) * 100) / 100
                   return (
-                    <div><label style={lStyle}>Sobra de Horas</label><input type="text" value={isNaN(sobra) ? '—' : `${sobra}h`} readOnly tabIndex={-1} style={{ ...iStyle, opacity: 0.7, cursor: 'default' }} /></div>
+                    <div><label style={lStyle}>Saving ERPSERV</label><input type="text" value={isNaN(sobra) ? '—' : `${sobra}h`} readOnly tabIndex={-1} style={{ ...iStyle, opacity: 0.7, cursor: 'default' }} /></div>
                   )
                 })()}
                 {showApontaveis && (
@@ -3724,7 +3724,6 @@ export default function GestaoProjetosPage() {
                           {p.weighted_hourly_rate != null && <Row label="Taxa Média Ponderada" value={fmtBRL(p.weighted_hourly_rate)} />}
                           <Row label="Hora Adicional" value={fmtBRL(p.additional_hourly_rate)} />
                           <Row label="Custo Inicial" value={fmtBRL(p.initial_cost)} />
-                          {p.save_erpserv != null && p.save_erpserv > 0 && <Row label="Save ERPSERV" value={fmtBRL(p.save_erpserv)} />}
                           {p.max_expense_per_consultant != null && <Row label="Limite Despesa/Consultor" value={fmtBRL(p.max_expense_per_consultant)} />}
                           {p.expense_responsible_party && <Row label="Resp. Despesas" value={p.expense_responsible_party === 'client' ? 'Cliente' : 'Consultoria'} />}
                         </div>
@@ -3812,7 +3811,7 @@ export default function GestaoProjetosPage() {
                           {p.coordinator_hours != null && <Row label="Percentual Gestão" value={`${p.coordinator_hours}%`} />}
                           {p.coordinator_hours != null && p.sold_hours != null && <Row label="Horas de Gestão" value={`${Math.round((Number(p.coordinator_hours) / 100) * Number(p.sold_hours) * 100) / 100}h`} />}
                           {p.consultant_hours != null && <Row label="Horas Consultores" value={`${p.consultant_hours}h`} />}
-                          {p.sold_hours != null && p.consultant_hours != null && p.coordinator_hours != null && <Row label="Sobra de Horas" value={`${Math.round((Number(p.sold_hours) - Number(p.consultant_hours) - (Number(p.coordinator_hours) / 100) * Number(p.sold_hours)) * 100) / 100}h`} />}
+                          {p.sold_hours != null && p.consultant_hours != null && p.coordinator_hours != null && <Row label="Saving ERPSERV" value={`${Math.round((Number(p.sold_hours) - Number(p.consultant_hours) - (Number(p.coordinator_hours) / 100) * Number(p.sold_hours)) * 100) / 100}h`} />}
                           {p.initial_hours_consumed != null && p.initial_hours_consumed > 0 && <Row label="HS Consumidas Iniciais" value={`${p.initial_hours_consumed}h`} />}
                           <Row label="% Consumido" value={<span style={{ color: hs.text }}>{totalAvail > 0 ? `${Math.round(pct)}%` : '—'}</span>} />
                         </div>

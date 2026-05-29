@@ -1249,7 +1249,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                     </div>
                   )}
                   {(isFechado || isBhFixo) && (() => {
-                    // Sobra de Horas = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
+                    // Saving ERPSERV = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
                     const sold    = Number(form.horas_contratadas) || 0
                     const consult = Number(form.horas_consultor) || 0
                     const pct     = Number(form.pct_horas_coordenador) || 0
@@ -1257,7 +1257,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                     const sobra   = Math.round((sold - consult - gestao) * 100) / 100
                     return (
                       <div>
-                        <label className={labelCls}>Sobra de Horas</label>
+                        <label className={labelCls}>Saving ERPSERV</label>
                         <input readOnly tabIndex={-1} value={`${sobra}h`}
                           className={inputCls} style={{ ...inputStyle, opacity: 0.6, cursor: 'default' }} />
                       </div>
