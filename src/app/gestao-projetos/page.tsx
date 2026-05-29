@@ -1428,26 +1428,26 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                     style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
                 )}
                 {!isOnDemandForm && !editIsBhMensal && (() => {
-                  // Horas de Gestão = (Percentual Gestão / 100) × Horas Consultor. Bidirecional:
-                  // editar aqui recalcula o %; editar o % recalcula isto. Deriva do %, não persiste.
-                  const cons = Number(form.consultant_hours || 0)
+                  // Horas de Gestão = (Percentual Gestão / 100) × Horas Vendidas (contratadas).
+                  // Bidirecional: editar aqui recalcula o %; editar o % recalcula isto. Deriva do %.
+                  const base = Number(form.sold_hours || 0)
                   const pct  = Number(form.coordinator_hours || 0)
-                  const derived = cons > 0 ? Math.round((pct / 100) * cons * 100) / 100 : 0
+                  const derived = base > 0 ? Math.round((pct / 100) * base * 100) / 100 : 0
                   const shown = gestaoDraft ?? (derived ? String(derived) : '')
                   return (
                     <div>
                       <label style={lStyle}>Horas de Gestão</label>
-                      <input type="number" value={shown} min="0" step="0.5" disabled={cons <= 0}
+                      <input type="number" value={shown} min="0" step="0.5" disabled={base <= 0}
                         onChange={e => {
                           const v = e.target.value
                           setGestaoDraft(v)
                           const h = Number(v) || 0
-                          if (cons > 0) setForm(f => ({ ...f, coordinator_hours: String(Math.round((h / cons) * 100 * 100) / 100) }))
+                          if (base > 0) setForm(f => ({ ...f, coordinator_hours: String(Math.round((h / base) * 100 * 100) / 100) }))
                         }}
                         onBlur={() => setGestaoDraft(null)}
                         style={iStyle} placeholder="0" />
                       <p className="text-[10px] mt-1" style={{ color: 'var(--text-light)' }}>
-                        {cons > 0 ? `${pct || 0}% de ${cons}h (consultor)` : 'Informe Horas Consultor para calcular'}
+                        {base > 0 ? `${pct || 0}% de ${base}h (vendidas)` : 'Informe Horas Contratadas para calcular'}
                       </p>
                     </div>
                   )
