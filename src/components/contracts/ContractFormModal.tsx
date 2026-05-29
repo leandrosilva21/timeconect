@@ -1241,6 +1241,30 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                   })()}
                   {(isFechado || isBhFixo) && (
                     <div>
+                      <label className={labelCls}>Horas Consultor</label>
+                      <input type="number" min="0" step="1" placeholder="0"
+                        value={form.horas_consultor}
+                        onChange={e => setForm(f => ({ ...f, horas_consultor: e.target.value }))}
+                        className={inputCls} style={inputStyle} />
+                    </div>
+                  )}
+                  {(isFechado || isBhFixo) && (() => {
+                    // Sobra de Horas = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
+                    const sold    = Number(form.horas_contratadas) || 0
+                    const consult = Number(form.horas_consultor) || 0
+                    const pct     = Number(form.pct_horas_coordenador) || 0
+                    const gestao  = sold > 0 ? (pct / 100) * sold : 0
+                    const sobra   = Math.round((sold - consult - gestao) * 100) / 100
+                    return (
+                      <div>
+                        <label className={labelCls}>Sobra de Horas</label>
+                        <input readOnly tabIndex={-1} value={`${sobra}h`}
+                          className={inputCls} style={{ ...inputStyle, opacity: 0.6, cursor: 'default' }} />
+                      </div>
+                    )
+                  })()}
+                  {(isFechado || isBhFixo) && (
+                    <div>
                       <label className={labelCls}>Horas Apontáveis <span className="text-red-400">*</span></label>
                       <input type="number" min="0" step="0.5" placeholder="0"
                         value={form.horas_coordenacao}
@@ -1250,15 +1274,6 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                       {form.horas_coordenacao !== '' && form.horas_contratadas !== '' && Number(form.horas_coordenacao) > Number(form.horas_contratadas) && (
                         <p className="text-[10px] mt-1 text-red-400">Não pode exceder as horas vendidas ({form.horas_contratadas}h).</p>
                       )}
-                    </div>
-                  )}
-                  {(isFechado || isBhFixo) && (
-                    <div>
-                      <label className={labelCls}>Horas Consultor</label>
-                      <input type="number" min="0" step="1" placeholder="0"
-                        value={form.horas_consultor}
-                        onChange={e => setForm(f => ({ ...f, horas_consultor: e.target.value }))}
-                        className={inputCls} style={inputStyle} />
                     </div>
                   )}
                 </div>

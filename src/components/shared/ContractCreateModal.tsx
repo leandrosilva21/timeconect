@@ -1195,18 +1195,33 @@ export function ContractCreateModal({
                   })()}
                   {(isFechado || isBhFixo) && (
                     <div>
+                      <label className={labelCls} style={{ color: 'var(--text-muted)' }}>Horas Consultor</label>
+                      <input {...numInput('horas_consultor')} placeholder="0,00" />
+                    </div>
+                  )}
+                  {(isFechado || isBhFixo) && (() => {
+                    // Sobra de Horas = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
+                    const sold    = Number(form.horas_contratadas) || 0
+                    const consult = Number(form.horas_consultor) || 0
+                    const pct     = Number(form.pct_horas_coordenador) || 0
+                    const gestao  = sold > 0 ? (pct / 100) * sold : 0
+                    const sobra   = Math.round((sold - consult - gestao) * 100) / 100
+                    return (
+                      <div>
+                        <label className={labelCls} style={{ color: 'var(--text-muted)' }}>Sobra de Horas</label>
+                        <input readOnly tabIndex={-1} value={`${sobra}h`}
+                          className={inputCls} style={{ ...inputStyle, opacity: 0.6, cursor: 'default' }} />
+                      </div>
+                    )
+                  })()}
+                  {(isFechado || isBhFixo) && (
+                    <div>
                       <label className={labelCls} style={{ color: 'var(--text-muted)' }}>Horas Apontáveis <span style={{ color: 'var(--danger)' }}>*</span></label>
                       <input {...numInput('horas_coordenacao')} placeholder="0,00" />
                       <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>Banco de horas apontáveis (copiado pro projeto ao gerar).</p>
                       {form.horas_coordenacao !== '' && form.horas_contratadas !== '' && Number(form.horas_coordenacao) > Number(form.horas_contratadas) && (
                         <p className="text-[10px] mt-1" style={{ color: 'var(--danger)' }}>Não pode exceder as horas vendidas ({form.horas_contratadas}h).</p>
                       )}
-                    </div>
-                  )}
-                  {(isFechado || isBhFixo) && (
-                    <div>
-                      <label className={labelCls} style={{ color: 'var(--text-muted)' }}>Horas Consultor</label>
-                      <input {...numInput('horas_consultor')} placeholder="0,00" />
                     </div>
                   )}
                 </div>

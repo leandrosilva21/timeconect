@@ -567,7 +567,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                   return (
                     <div className="rounded-xl p-4" style={{ background: 'var(--surface-hover)', border: `1px solid ${cBar}33` }}>
                       <div className="flex justify-between items-center mb-3">
-                        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Horas de Coordenação</span>
+                        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Horas Apontáveis</span>
                         <span className="text-xs font-bold tabular-nums" style={{ color: cBar }}>{cBank > 0 ? `${Math.round(cPct)}% consumido` : 'Sem horas'}</span>
                       </div>
                       <div className="grid grid-cols-3 gap-2 mb-3 text-center">
@@ -622,9 +622,11 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                       <div className="divide-y px-4" style={{ borderColor: 'var(--brand-border)' }}>
                         <Row label="Tipo de Alocação"     value={(p as any).tipo_alocacao ?? '—'} />
                         <Row label="Condição de Pagamento" value={(p as any).condicao_pagamento ?? '—'} />
-                        <Row label="% Horas Coordenador"  value={(p as any).coordinator_hours != null ? `${(p as any).coordinator_hours}%` : '—'} />
-                        <Row label="Horas de Coordenação" value={(p as any).coordination_hours != null && Number((p as any).coordination_hours) > 0 ? `${Number((p as any).coordination_hours).toFixed(1)}h` : '—'} />
+                        <Row label="Percentual Gestão"    value={(p as any).coordinator_hours != null ? `${(p as any).coordinator_hours}%` : '—'} />
+                        <Row label="Horas de Gestão"      value={(p as any).coordinator_hours != null && (p as any).sold_hours != null ? `${Math.round((Number((p as any).coordinator_hours) / 100) * Number((p as any).sold_hours) * 100) / 100}h` : '—'} />
                         <Row label="Horas Consultor"      value={(p as any).consultant_hours != null ? `${Number((p as any).consultant_hours).toFixed(1)}h` : '—'} />
+                        <Row label="Sobra de Horas"       value={(p as any).sold_hours != null && (p as any).consultant_hours != null && (p as any).coordinator_hours != null ? `${Math.round((Number((p as any).sold_hours) - Number((p as any).consultant_hours) - (Number((p as any).coordinator_hours) / 100) * Number((p as any).sold_hours)) * 100) / 100}h` : '—'} />
+                        <Row label="Horas Apontáveis"     value={(p as any).coordination_hours != null && Number((p as any).coordination_hours) > 0 ? `${Number((p as any).coordination_hours).toFixed(1)}h` : '—'} />
                         <Row label="Cobra Despesa"        value={(p as any).cobra_despesa_cliente ? 'Sim' : 'Não'} />
                         <Row label="Limite de Despesa"    value={(p as any).limite_despesa != null ? fmtBRL(Number((p as any).limite_despesa)) : '—'} />
                         <Row label="Arquiteto"            value={(p as any).architect?.name ?? '—'} />
@@ -1415,15 +1417,28 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                     </div>
                   )
                 })()}
+                </>)}
+                <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
+                {showApontaveis && (<>
+                {(() => {
+                  // Sobra de Horas = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
+                  const sold = Number(form.sold_hours || 0)
+                  const cons = Number(form.consultant_hours || 0)
+                  const coordPct = Number(form.coordinator_hours || 0)
+                  const gestao = sold > 0 ? (coordPct / 100) * sold : 0
+                  const sobra = Math.round((sold - cons - gestao) * 100) / 100
+                  return (
+                    <div><label style={lStyle}>Sobra de Horas</label><input type="text" value={isNaN(sobra) ? '—' : `${sobra}h`} readOnly tabIndex={-1} style={{ ...iStyle, opacity: 0.7, cursor: 'default' }} /></div>
+                  )
+                })()}
                 <div>
-                  <label style={lStyle}>Horas Apontáveis</label>
+                  <label style={lStyle}>Horas Apontáveis <span style={{ color: 'var(--danger-border)' }}>*</span></label>
                   <input type="number" value={form.coordination_hours} onChange={setF('coordination_hours')} style={iStyle} placeholder="0" step="0.5" min="0" max={form.sold_hours || undefined} />
                   {form.coordination_hours !== '' && form.sold_hours !== '' && Number(form.coordination_hours) > Number(form.sold_hours) && (
                     <p className="text-[10px] mt-1" style={{ color: 'var(--danger-border)' }}>Não pode exceder as horas vendidas ({form.sold_hours}h).</p>
                   )}
                 </div>
                 </>)}
-                <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
               </div>
               <div className="grid grid-cols-2 gap-3 rounded-xl p-3" style={{ border: '1px solid var(--brand-border)', background: 'var(--surface-hover)' }}>
                 <div className="col-span-2"><label style={{ ...lStyle, marginBottom: 0 }}>Histórico do sistema anterior</label></div>
@@ -2236,8 +2251,11 @@ function CardDetailModal({ card, onClose, onEditContract, initialTab, userRole }
     ['Nome do Projeto',     full.project_name ?? '—'],
     ['Faturamento',         full.tipo_faturamento ? (TIPO_LABEL[full.tipo_faturamento] ?? full.tipo_faturamento) : '—'],
     ['Horas Contratadas',   fmtHours(full.horas_contratadas)],
+    ['Percentual Gestão',   full.pct_horas_coordenador != null ? `${full.pct_horas_coordenador}%` : '—'],
+    ['Horas de Gestão',     (full.pct_horas_coordenador != null && full.horas_contratadas != null) ? `${Math.round((Number(full.pct_horas_coordenador) / 100) * Number(full.horas_contratadas) * 100) / 100}h` : '—'],
     ['Horas Consultor',     fmtHours(full.horas_consultor)],
-    ['% Horas Coordenador', full.pct_horas_coordenador != null ? `${full.pct_horas_coordenador}%` : '—'],
+    ['Sobra de Horas',      (full.horas_contratadas != null && full.horas_consultor != null && full.pct_horas_coordenador != null) ? `${Math.round((Number(full.horas_contratadas) - Number(full.horas_consultor) - (Number(full.pct_horas_coordenador) / 100) * Number(full.horas_contratadas)) * 100) / 100}h` : '—'],
+    ['Horas Apontáveis',    fmtHours((full as any).horas_coordenacao)],
     ['Valor do Projeto',    fmtMoney(full.valor_projeto)],
     ['Valor/Hora',          fmtMoney(full.valor_hora)],
     ['Hora Adicional',      fmtMoney(full.hora_adicional)],

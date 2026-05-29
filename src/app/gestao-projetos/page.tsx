@@ -1455,6 +1455,20 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                     </div>
                   )
                 })()}
+                {!isOnDemandForm && (
+                  <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
+                )}
+                {!isOnDemandForm && (() => {
+                  // Sobra de Horas (read-only) = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
+                  const sold = Number(form.sold_hours || 0)
+                  const cons = Number(form.consultant_hours || 0)
+                  const coordPct = Number(form.coordinator_hours || 0)
+                  const gestao = sold > 0 ? (coordPct / 100) * sold : 0
+                  const sobra = Math.round((sold - cons - gestao) * 100) / 100
+                  return (
+                    <div><label style={lStyle}>Sobra de Horas</label><input type="text" value={isNaN(sobra) ? '—' : `${sobra}h`} readOnly tabIndex={-1} style={{ ...iStyle, opacity: 0.7, cursor: 'default' }} /></div>
+                  )
+                })()}
                 {showApontaveis && (
                   <div>
                     <label style={lStyle}>Horas Apontáveis <span style={{ color: 'var(--danger-border)' }}>*</span></label>
@@ -1464,19 +1478,6 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                     )}
                   </div>
                 )}
-                {!isOnDemandForm && (
-                  <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
-                )}
-                {!isOnDemandForm && (() => {
-                  // Sobra de horas (read-only): contratadas − consultor − (%coordenador × consultor).
-                  const sold = Number(form.sold_hours || 0)
-                  const cons = Number(form.consultant_hours || 0)
-                  const coordPct = Number(form.coordinator_hours || 0)
-                  const sobra = Math.round((sold - cons - (coordPct / 100) * cons) * 100) / 100
-                  return (
-                    <div><label style={lStyle}>Sobra de Horas</label><input type="text" value={isNaN(sobra) ? '—' : `${sobra}h`} readOnly tabIndex={-1} style={{ ...iStyle, opacity: 0.7, cursor: 'default' }} /></div>
-                  )
-                })()}
               </div>
               {/* Histórico: oculto em On Demand novo (sem valor); mostra em On Demand
                   legado pra permitir zerar valores migrados do sistema anterior.
@@ -3808,8 +3809,10 @@ export default function GestaoProjetosPage() {
                           {p.hour_contribution != null && p.hour_contribution > 0 && <Row label="Aporte Inicial" value={`${p.hour_contribution}h`} />}
                           {viewProjectFull?.full_contributions_hours != null && viewProjectFull.full_contributions_hours > 0 && <Row label="Total Aportes" value={`${fmt(viewProjectFull.full_contributions_hours, 1)}h`} />}
                           {p.exceeded_hour_contribution != null && <Row label="Aporte Excedido" value={`${p.exceeded_hour_contribution}h`} />}
+                          {p.coordinator_hours != null && <Row label="Percentual Gestão" value={`${p.coordinator_hours}%`} />}
+                          {p.coordinator_hours != null && p.sold_hours != null && <Row label="Horas de Gestão" value={`${Math.round((Number(p.coordinator_hours) / 100) * Number(p.sold_hours) * 100) / 100}h`} />}
                           {p.consultant_hours != null && <Row label="Horas Consultores" value={`${p.consultant_hours}h`} />}
-                          {p.coordinator_hours != null && <Row label="Horas Coordenadores" value={`${p.coordinator_hours}h`} />}
+                          {p.sold_hours != null && p.consultant_hours != null && p.coordinator_hours != null && <Row label="Sobra de Horas" value={`${Math.round((Number(p.sold_hours) - Number(p.consultant_hours) - (Number(p.coordinator_hours) / 100) * Number(p.sold_hours)) * 100) / 100}h`} />}
                           {p.initial_hours_consumed != null && p.initial_hours_consumed > 0 && <Row label="HS Consumidas Iniciais" value={`${p.initial_hours_consumed}h`} />}
                           <Row label="% Consumido" value={<span style={{ color: hs.text }}>{totalAvail > 0 ? `${Math.round(pct)}%` : '—'}</span>} />
                         </div>
@@ -3828,7 +3831,7 @@ export default function GestaoProjetosPage() {
                       if (isCoordinatorOf(p, user?.id)) return null
                       return (
                         <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>Horas de Coordenação</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>Horas Apontáveis</p>
                           <div className="rounded-xl p-4" style={{ border: `1px solid ${cm.color}55`, background: 'var(--surface)' }}>
                             <div className="grid grid-cols-3 gap-2 mb-3">
                               <div><p className="text-[10px]" style={{ color: 'var(--text-light)' }}>Vendidas</p><p className="text-sm font-bold" style={{ color: 'var(--text)' }}>{fmt(cm.bank, 1)}h</p></div>
