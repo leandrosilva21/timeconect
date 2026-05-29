@@ -12,6 +12,7 @@ import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
   Badge, Button, SkeletonTable, EmptyState, Pagination,
 } from '@/components/ds'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import {
   Receipt, ChevronLeft, ChevronRight, Plus, Pencil, Trash2,
   X, Paperclip, Eye, Building2, FolderOpen, Tag,
@@ -633,7 +634,6 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
       fd.append('amount', form.amount)
       fd.append('expense_type', form.expense_type)
       fd.append('payment_method', form.payment_method)
-      fd.append('charge_client', form.charge_client ? '1' : '0')
       if (canActAsUser && form.user_id) fd.append('user_id', form.user_id)
       if (receipt) fd.append('receipt', receipt)
       if (modal.item) fd.append('_method', 'PUT')
@@ -1021,7 +1021,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
                       ? Number((exp.project as any).max_expense_per_consultant)
                       : Number(exp.amount))}
                   </Td>
-                  {!isCliente && <Td><Badge variant={exp.status as any}>{STATUS_LABEL[exp.status] ?? exp.status}</Badge></Td>}
+                  {!isCliente && <Td><ReasonTooltip status={exp.status} reason={exp.rejection_reason}><Badge variant={exp.status as any}>{STATUS_LABEL[exp.status] ?? exp.status}</Badge></ReasonTooltip></Td>}
                   {!isCliente && (
                     <Td>
                       {exp.is_paid
@@ -1127,15 +1127,6 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
                 <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                   className="mt-1 bg-zinc-800 border-zinc-700 text-white h-9 text-xs" />
               </div>
-              {modal.item && (
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setForm(f => ({ ...f, charge_client: !f.charge_client }))}
-                    className={`w-8 h-4 rounded-full transition-colors relative ${form.charge_client ? 'bg-blue-600' : 'bg-zinc-700'}`}>
-                    <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${form.charge_client ? 'left-4' : 'left-0.5'}`} />
-                  </button>
-                  <Label className="text-xs text-zinc-400">Cobrar do cliente</Label>
-                </div>
-              )}
               <div>
                 <Label className="text-xs text-zinc-400">Comprovante</Label>
                 <div className="mt-1 flex items-center gap-2">

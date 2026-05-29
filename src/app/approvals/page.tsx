@@ -354,15 +354,15 @@ function ExpInfoRow({ icon: Icon, label, value, children, last }: {
   children?: React.ReactNode; last?: boolean
 }) {
   return (
-    <div className={`flex items-start gap-4 px-5 py-4 ${!last ? 'border-b' : ''}`}
+    <div className={`flex items-center gap-2.5 px-3.5 py-1.5 ${!last ? 'border-b' : ''}`}
       style={!last ? { borderColor: 'var(--brand-border)' } : undefined}>
-      <span className="mt-0.5 shrink-0 p-2 rounded-lg"
+      <span className="shrink-0 p-1 rounded-md"
         style={{ background: 'rgba(0,245,255,0.06)', color: 'var(--brand-primary)' }}>
-        <Icon size={14} />
+        <Icon size={12} />
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-[11px] uppercase tracking-widest mb-1" style={{ color: 'var(--brand-subtle)' }}>{label}</p>
-        {children ?? <p className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>{value ?? '—'}</p>}
+        <p className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{label}</p>
+        {children ?? <p className="text-[13px] font-medium" style={{ color: 'var(--brand-text)' }}>{value ?? '—'}</p>}
       </div>
     </div>
   )
@@ -401,26 +401,26 @@ function ExpApproveModal({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 overflow-y-auto"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="relative w-full max-w-2xl mt-8 rounded-2xl shadow-2xl"
+      <div className="relative w-full max-w-lg mt-6 rounded-2xl shadow-2xl"
         style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
         <button onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2 rounded-lg hover:bg-white/5 transition-colors"
+          className="absolute top-3 right-3 z-10 p-1.5 rounded-lg hover:bg-white/5 transition-colors"
           style={{ color: 'var(--brand-subtle)' }}>
-          <X size={18} />
+          <X size={16} />
         </button>
 
         {/* Header */}
-        <div className="px-6 pt-6 pb-5 flex items-start gap-4">
-          <div className="p-3 rounded-2xl shrink-0" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>
-            <Receipt size={20} />
+        <div className="px-4 pt-3.5 pb-2.5 flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg shrink-0" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>
+            <Receipt size={16} />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-lg font-semibold" style={{ color: 'var(--brand-text)' }}>Detalhes da Despesa</h3>
-            <p className="text-xs mt-1" style={{ color: 'var(--brand-subtle)' }}>#{item.id} · {fmt(item.expense_date)}</p>
+            <h3 className="text-base font-semibold" style={{ color: 'var(--brand-text)' }}>Detalhes da Despesa</h3>
+            <p className="text-[11px]" style={{ color: 'var(--brand-subtle)' }}>#{item.id} · {fmt(item.expense_date)}</p>
           </div>
         </div>
 
-        <div className="px-6 pb-6 space-y-4">
+        <div className="px-4 pb-4 space-y-2">
           {/* Status + Categoria */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
@@ -434,10 +434,10 @@ function ExpApproveModal({
           </div>
 
           {/* Valor hero */}
-          <div className="rounded-2xl px-5 py-5"
+          <div className="rounded-xl px-3.5 py-2.5 flex items-baseline justify-between gap-2"
             style={{ background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.15)' }}>
-            <p className="text-[11px] uppercase tracking-widest mb-1.5" style={{ color: 'var(--brand-subtle)' }}>Valor Total</p>
-            <p className="text-3xl font-bold" style={{ color: 'var(--brand-primary)' }}>{fmtBRL(Number(item.amount))}</p>
+            <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--brand-subtle)' }}>Valor Total</p>
+            <p className="text-xl font-bold" style={{ color: 'var(--brand-primary)' }}>{fmtBRL(Number(item.amount))}</p>
           </div>
 
           {/* Info card */}
@@ -458,29 +458,29 @@ function ExpApproveModal({
           {item.description && (
             <div className="rounded-2xl overflow-hidden"
               style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)' }}>
-              <div className="flex items-center gap-2 px-5 py-3" style={{ borderBottom: '1px solid var(--brand-border)' }}>
-                <FileText size={14} style={{ color: 'var(--brand-primary)' }} />
-                <span className="text-[11px] uppercase tracking-widest font-medium" style={{ color: 'var(--brand-subtle)' }}>Descrição</span>
+              <div className="flex items-center gap-2 px-3.5 py-2" style={{ borderBottom: '1px solid var(--brand-border)' }}>
+                <FileText size={13} style={{ color: 'var(--brand-primary)' }} />
+                <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: 'var(--brand-subtle)' }}>Descrição</span>
               </div>
-              <p className="px-5 py-4 text-sm leading-relaxed" style={{ color: 'var(--brand-muted)' }}>{item.description}</p>
+              <p className="px-3.5 py-2 text-[13px] leading-relaxed" style={{ color: 'var(--brand-muted)' }}>{item.description}</p>
             </div>
           )}
 
           {/* Cobrar do cliente */}
           {mode === 'approve' && (
-            <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 px-4 py-3 space-y-3">
+            <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 px-3.5 py-2.5 space-y-2">
               <p className={`text-xs font-semibold ${submitted && chargeClient === null ? 'text-red-400' : 'text-zinc-300'}`}>
                 Cobrar do cliente? *
               </p>
-              <div className="flex gap-3">
+              <div className="flex gap-2">
                 <button type="button" onClick={() => setChargeClient(true)}
-                  className={`flex-1 py-2.5 rounded-xl border text-xs font-medium transition-all ${
+                  className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${
                     chargeClient === true ? 'bg-green-600/20 border-green-500 text-green-300' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
                   }`}>
                   Sim — cobrar do cliente
                 </button>
                 <button type="button" onClick={() => setChargeClient(false)}
-                  className={`flex-1 py-2.5 rounded-xl border text-xs font-medium transition-all ${
+                  className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${
                     chargeClient === false ? 'bg-orange-600/20 border-orange-500 text-orange-300' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
                   }`}>
                   Não — absorver internamente

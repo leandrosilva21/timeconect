@@ -11,6 +11,7 @@ import { exportTimesheetsToExcel } from '@/lib/exportTimesheets'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -81,6 +82,7 @@ interface ExpenseItem {
   charge_client: boolean
   is_paid: boolean
   receipt_url?: string
+  rejection_reason?: string | null
 }
 
 interface ProjectOption { id: number; name: string; code: string; customer?: { id: number; name: string }; service_type?: { id: number; name: string; code: string } }
@@ -1137,7 +1139,6 @@ function TableSkeleton({ cols }: { cols: number }) {
 }
 
 function StatusBadge({ status, display, reason }: { status: string; display?: string; reason?: string | null }) {
-  const hasReason = !!reason && (status === 'rejected' || status === 'adjustment_requested')
   if (status === 'approved') {
     return (
       <span className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full border bg-green-500/15 text-green-400 border-green-500/25">
@@ -1146,19 +1147,12 @@ function StatusBadge({ status, display, reason }: { status: string; display?: st
       </span>
     )
   }
-  const badge = (
-    <Badge variant="outline" className={`text-[10px] font-medium border ${STATUS_COLORS[status] ?? 'text-zinc-400 border-zinc-700'}`}>
-      {STATUS_LABELS[status] ?? display ?? status}
-    </Badge>
-  )
-  if (!hasReason) return badge
   return (
-    <span className="relative group/reason inline-flex">
-      {badge}
-      <span className="pointer-events-none absolute bottom-full left-0 mb-1.5 z-50 hidden group-hover/reason:block bg-zinc-800 border border-zinc-700 text-zinc-200 text-[10px] rounded px-2 py-1 shadow-lg whitespace-nowrap max-w-[240px] truncate">
-        {reason}
-      </span>
-    </span>
+    <ReasonTooltip status={status} reason={reason}>
+      <Badge variant="outline" className={`text-[10px] font-medium border ${STATUS_COLORS[status] ?? 'text-zinc-400 border-zinc-700'}`}>
+        {STATUS_LABELS[status] ?? display ?? status}
+      </Badge>
+    </ReasonTooltip>
   )
 }
 
@@ -2495,7 +2489,7 @@ export default function MeuPainelPage() {
                           </div>
                           <div className="flex items-center gap-2.5 shrink-0">
                             <span className="text-xs font-semibold text-zinc-300">{exp.formatted_amount}</span>
-                            <StatusBadge status={exp.status} display={exp.status_display} />
+                            <StatusBadge status={exp.status} display={exp.status_display} reason={exp.rejection_reason} />
                             {exp.status === 'approved' && (exp.is_paid
                               ? <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400">Pago</span>
                               : <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-950 text-amber-400">Em aberto</span>
@@ -2812,7 +2806,7 @@ export default function MeuPainelPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3.5">
-                        <StatusBadge status={exp.status} display={exp.status_display} />
+                        <StatusBadge status={exp.status} display={exp.status_display} reason={exp.rejection_reason} />
                       </td>
                       <td className="px-4 py-3.5">
                         {exp.is_paid

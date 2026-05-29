@@ -30,6 +30,7 @@ import {
   Badge, Button, Select, TextInput, Pagination,
   EmptyState, SkeletonTable,
 } from '@/components/ds'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1595,19 +1596,11 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
                             {ts.status === 'released' && <Badge variant="approved">Liberado</Badge>}
                           </>
                         )
-                        : (() => {
-                            const hasReason = ts.rejection_reason && (ts.status === 'rejected' || ts.status === 'adjustment_requested')
-                            const badge = <Badge variant={ts.status}>{ts.status_display ?? ts.status}</Badge>
-                            if (!hasReason) return badge
-                            return (
-                              <span className="relative group/reason inline-flex">
-                                {badge}
-                                <span className="pointer-events-none absolute bottom-full left-0 mb-1.5 z-50 hidden group-hover/reason:block bg-zinc-800 border border-zinc-700 text-zinc-200 text-[10px] rounded px-2 py-1 shadow-lg whitespace-nowrap max-w-[240px] truncate">
-                                  {ts.rejection_reason}
-                                </span>
-                              </span>
-                            )
-                          })()
+                        : (
+                            <ReasonTooltip status={ts.status} reason={ts.rejection_reason}>
+                              <Badge variant={ts.status}>{ts.status_display ?? ts.status}</Badge>
+                            </ReasonTooltip>
+                          )
                       }
                       {ts.is_paid && <Badge variant="success">Pago</Badge>}
                     </span>

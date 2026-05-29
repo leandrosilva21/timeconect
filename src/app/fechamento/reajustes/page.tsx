@@ -343,10 +343,19 @@ export default function DashboardReajustesPage() {
                 {hist.map(h => (
                   <div key={h.id} className="rounded-lg p-3" style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-                        {formatBRL(h.valor_anterior)} → {formatBRL(h.valor_novo)}
-                      </span>
-                      <Badge variant="primary">+{h.percentual}% {h.indice === 'IGPM' ? 'IGP-M' : h.indice}</Badge>
+                      {h.indice === 'RENOVACAO' ? (
+                        <>
+                          <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Renovado sem reajuste</span>
+                          <Badge variant="success">+1 ano</Badge>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                            {formatBRL(h.valor_anterior)} → {formatBRL(h.valor_novo)}
+                          </span>
+                          <Badge variant="primary">+{h.percentual}% {h.indice === 'IGPM' ? 'IGP-M' : h.indice}</Badge>
+                        </>
+                      )}
                     </div>
                     <div className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
                       Período: {h.periodo_formatado ?? '—'} · {h.usuario ?? '—'} · {h.data ? new Date(h.data).toLocaleString('pt-BR') : '—'}

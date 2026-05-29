@@ -58,6 +58,8 @@ export function ReajusteModal({ target, onClose, onApplied }: {
   const [novoEmail, setNovoEmail] = useState('')
   const [salvar, setSalvar] = useState(true)
   const [comunicando, setComunicando] = useState(false)
+  // Renovar sem reajuste: só avança o vencimento +1 ano (não mexe no valor).
+  const [renovando, setRenovando] = useState(false)
 
   const addEmail = () => {
     const e = novoEmail.trim().toLowerCase()
@@ -69,7 +71,7 @@ export function ReajusteModal({ target, onClose, onApplied }: {
   }
   const removeEmail = (e: string) => setEmails(prev => prev.filter(x => x !== e))
 
-  const busy = aplicando || comunicando
+  const busy = aplicando || comunicando || renovando
   const close = () => { if (!busy) onClose() }
 
   const buscarIndice = async () => {
@@ -103,6 +105,21 @@ export function ReajusteModal({ target, onClose, onApplied }: {
       toast.error(e instanceof Error ? e.message : 'Erro ao aplicar o reajuste')
     } finally {
       setAplicando(false)
+    }
+  }
+
+  // Renova o contrato por +1 ano sem aplicar reajuste (só avança o vencimento).
+  const renovarSemReajuste = async () => {
+    setRenovando(true)
+    try {
+      await api.post(`/contracts/${target.id}/renew-no-adjustment`, {})
+      toast.success('Contrato renovado por +1 ano (sem reajuste)')
+      onApplied?.()
+      onClose()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao renovar o contrato')
+    } finally {
+      setRenovando(false)
     }
   }
 
@@ -223,6 +240,12 @@ export function ReajusteModal({ target, onClose, onApplied }: {
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-60"
               style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}>
               <X size={15} /> Cancelar
+            </button>
+            <button onClick={renovarSemReajuste} disabled={busy}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-60"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+              title="Não reajustar: apenas avança o vencimento do contrato em +1 ano">
+              <CalendarClock size={15} /> {renovando ? 'Renovando…' : 'Renovar sem reajuste (+1 ano)'}
             </button>
             <button onClick={aplicarReajuste} disabled={!preview || busy}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
