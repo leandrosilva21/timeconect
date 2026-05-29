@@ -409,8 +409,8 @@ export default function EditTimesheetPage() {
                 <div>
                   <Label className="text-xs text-zinc-400">Total {timeDriver === 'total' ? '*' : ''}</Label>
                   {/* Aceita HH:MM ("2:30"), decimal . ou , ("2.5", "2,5") e inteiro ("2"). parseHHMM converte. */}
-                  <input type="text" inputMode="decimal" value={form.total_hours} placeholder="ex: 2:30 ou 2,5"
-                    onChange={e => { const v = e.target.value.replace(/[^\d:.,]/g, ''); setTimeDriver('total'); setForm(f => ({ ...f, total_hours: v })) }}
+                  <input type="text" inputMode="decimal" value={form.total_hours} placeholder="2:30 OU 4,5 OU 4.5"
+                    onChange={e => { const v = e.target.value; setTimeDriver('total'); setForm(f => ({ ...f, total_hours: v })) }}
                     className="mt-1 w-full px-3 py-2 rounded-xl text-sm outline-none bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600" />
                 </div>
               </div>
@@ -426,8 +426,8 @@ export default function EditTimesheetPage() {
                 <div>
                   <Label className="text-xs text-zinc-400">Total de Horas *</Label>
                   {/* Aceita HH:MM ("2:30"), decimal . ou , ("2.5", "2,5") e inteiro ("2"). parseHHMM converte. */}
-                  <input type="text" inputMode="decimal" value={form.total_hours} placeholder="ex: 2:30 ou 2,5"
-                    onChange={e => { const v = e.target.value.replace(/[^\d:.,]/g, ''); setForm(f => ({ ...f, total_hours: v })) }}
+                  <input type="text" inputMode="decimal" value={form.total_hours} placeholder="2:30 OU 4,5 OU 4.5"
+                    onChange={e => { const v = e.target.value; setForm(f => ({ ...f, total_hours: v })) }}
                     className="mt-1 w-full px-3 py-2 rounded-xl text-sm outline-none bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600" />
                 </div>
               </>

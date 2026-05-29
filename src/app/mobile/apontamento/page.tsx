@@ -509,7 +509,7 @@ export default function MobileApontamento() {
                 {/* Aceita HH:MM, decimal . ou ,, e inteiro. parseHHMM converte. */}
                 <input type="text" inputMode="decimal" placeholder="0:00"
                   value={form.total_hours}
-                  onChange={e => { const v = e.target.value.replace(/[^\d:.,]/g, ''); set('total_hours', v) }}
+                  onChange={e => { const v = e.target.value; set('total_hours', v) }}
                   style={{ ...timeField, fontSize: 36, fontWeight: 800, color: '#00F5FF', letterSpacing: 2 }} />
               </div>
             )}
