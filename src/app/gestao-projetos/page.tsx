@@ -1014,6 +1014,9 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
   const toggleId = (ids: number[], id: number) => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]
   const setF = (key: keyof ProjectEditForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [key]: e.target.value }))
+  // "Horas de Gestão" é derivado do % (coordinator_hours) sobre as Horas Consultor.
+  // Draft local pra permitir digitar suave; quando null, mostra o valor derivado do %.
+  const [gestaoDraft, setGestaoDraft] = useState<string | null>(null)
 
   const handleSave = async (hourlyRateEffectiveFrom?: string) => {
     if (!form.name.trim()) { toast.error('Nome obrigatório'); return }
@@ -1026,7 +1029,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     // BH Mensal não tem horas de coordenação — não exige nem valida.
     const editIsBhMensal = ctNameForSave.includes('mensal')
     if (!isOnDemandSave && !editIsBhMensal && form.coordination_hours === '') {
-      toast.error('Horas de Coordenação obrigatórias.')
+      toast.error('Horas Apontáveis obrigatórias.')
       return
     }
     // Horas de coordenação não podem exceder as horas vendidas (contratadas) do projeto.
@@ -1420,11 +1423,38 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                   }} style={iStyle} placeholder="0" step="1" /></div>
                 )}
                 {!isOnDemandForm && !editIsBhMensal && (
-                  <div><label style={lStyle}>% Horas Coordenador</label><input type="number" value={form.coordinator_hours} onChange={setF('coordinator_hours')} style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
+                  <div><label style={lStyle}>Percentual Gestão (%)</label><input type="number" value={form.coordinator_hours}
+                    onChange={e => { setGestaoDraft(null); setForm(f => ({ ...f, coordinator_hours: e.target.value })) }}
+                    style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
                 )}
+                {!isOnDemandForm && !editIsBhMensal && (() => {
+                  // Horas de Gestão = (Percentual Gestão / 100) × Horas Consultor. Bidirecional:
+                  // editar aqui recalcula o %; editar o % recalcula isto. Deriva do %, não persiste.
+                  const cons = Number(form.consultant_hours || 0)
+                  const pct  = Number(form.coordinator_hours || 0)
+                  const derived = cons > 0 ? Math.round((pct / 100) * cons * 100) / 100 : 0
+                  const shown = gestaoDraft ?? (derived ? String(derived) : '')
+                  return (
+                    <div>
+                      <label style={lStyle}>Horas de Gestão</label>
+                      <input type="number" value={shown} min="0" step="0.5" disabled={cons <= 0}
+                        onChange={e => {
+                          const v = e.target.value
+                          setGestaoDraft(v)
+                          const h = Number(v) || 0
+                          if (cons > 0) setForm(f => ({ ...f, coordinator_hours: String(Math.round((h / cons) * 100 * 100) / 100) }))
+                        }}
+                        onBlur={() => setGestaoDraft(null)}
+                        style={iStyle} placeholder="0" />
+                      <p className="text-[10px] mt-1" style={{ color: 'var(--text-light)' }}>
+                        {cons > 0 ? `${pct || 0}% de ${cons}h (consultor)` : 'Informe Horas Consultor para calcular'}
+                      </p>
+                    </div>
+                  )
+                })()}
                 {!isOnDemandForm && !editIsBhMensal && (
                   <div>
-                    <label style={lStyle}>Horas de Coordenação <span style={{ color: 'var(--danger-border)' }}>*</span></label>
+                    <label style={lStyle}>Horas Apontáveis <span style={{ color: 'var(--danger-border)' }}>*</span></label>
                     <input type="number" required value={form.coordination_hours} onChange={setF('coordination_hours')} style={iStyle} placeholder="0" step="0.5" min="0" max={form.sold_hours || undefined} />
                     {form.coordination_hours !== '' && form.sold_hours !== '' && Number(form.coordination_hours) > Number(form.sold_hours) && (
                       <p className="text-[10px] mt-1" style={{ color: 'var(--danger-border)' }}>Não pode exceder as horas vendidas ({form.sold_hours}h).</p>
