@@ -1187,6 +1187,8 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
   const toggleId = (ids: number[], id: number) => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]
   const setF = (key: keyof ProjectEditForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [key]: e.target.value }))
+  // "Horas de Gestão" deriva do % (coordinator_hours) sobre as Horas Consultor.
+  const [gestaoDraft, setGestaoDraft] = useState<string | null>(null)
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error('Nome obrigatório'); return }
@@ -1379,9 +1381,35 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 <div><label style={lStyle}>Valor da Hora (R$)</label><input type="number" value={form.hourly_rate} onChange={setF('hourly_rate')} style={iStyle} placeholder="0.00" step="0.01" /></div>
                 <div><label style={lStyle}>Hora Adicional (R$)</label><input type="number" value={form.additional_hourly_rate} onChange={setF('additional_hourly_rate')} style={iStyle} placeholder="0.00" step="0.01" /></div>
                 <div><label style={lStyle}>Horas Contratadas</label><input type="number" value={form.sold_hours} onChange={setF('sold_hours')} style={iStyle} placeholder="0" step="1" /></div>
-                <div><label style={lStyle}>% Horas Coordenador</label><input type="number" value={form.coordinator_hours} onChange={setF('coordinator_hours')} style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
+                <div><label style={lStyle}>Percentual Gestão (%)</label><input type="number" value={form.coordinator_hours}
+                  onChange={e => { setGestaoDraft(null); setForm(f => ({ ...f, coordinator_hours: e.target.value })) }}
+                  style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
+                {(() => {
+                  // Horas de Gestão = (Percentual Gestão / 100) × Horas Consultor. Bidirecional.
+                  const cons = Number(form.consultant_hours || 0)
+                  const pct  = Number(form.coordinator_hours || 0)
+                  const derived = cons > 0 ? Math.round((pct / 100) * cons * 100) / 100 : 0
+                  const shown = gestaoDraft ?? (derived ? String(derived) : '')
+                  return (
+                    <div>
+                      <label style={lStyle}>Horas de Gestão</label>
+                      <input type="number" value={shown} min="0" step="0.5" disabled={cons <= 0}
+                        onChange={e => {
+                          const v = e.target.value
+                          setGestaoDraft(v)
+                          const h = Number(v) || 0
+                          if (cons > 0) setForm(f => ({ ...f, coordinator_hours: String(Math.round((h / cons) * 100 * 100) / 100) }))
+                        }}
+                        onBlur={() => setGestaoDraft(null)}
+                        style={iStyle} placeholder="0" />
+                      <p className="text-[10px] mt-1" style={{ color: 'var(--text-light)' }}>
+                        {cons > 0 ? `${pct || 0}% de ${cons}h (consultor)` : 'Informe Horas Consultor para calcular'}
+                      </p>
+                    </div>
+                  )
+                })()}
                 <div>
-                  <label style={lStyle}>Horas de Coordenação</label>
+                  <label style={lStyle}>Horas Apontáveis</label>
                   <input type="number" value={form.coordination_hours} onChange={setF('coordination_hours')} style={iStyle} placeholder="0" step="0.5" min="0" max={form.sold_hours || undefined} />
                   {form.coordination_hours !== '' && form.sold_hours !== '' && Number(form.coordination_hours) > Number(form.sold_hours) && (
                     <p className="text-[10px] mt-1" style={{ color: 'var(--danger-border)' }}>Não pode exceder as horas vendidas ({form.sold_hours}h).</p>
