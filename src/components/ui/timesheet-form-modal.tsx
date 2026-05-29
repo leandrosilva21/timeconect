@@ -408,8 +408,9 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
                 </div>
                 <div>
                   <Label className="text-xs text-zinc-400">Total {timeDriver === 'total' ? '*' : ''}</Label>
-                  <input type="text" inputMode="numeric" value={form.total_hours} placeholder="ex: 2:30"
-                    onChange={e => { const v = e.target.value.replace(/[^\d:]/g, ''); setTimeDriver('total'); setForm(f => ({ ...f, total_hours: v })) }}
+                  {/* Aceita HH:MM ("2:30"), decimal com . ou , ("2.5", "2,5") e inteiro ("2"). parseHHMM converte. */}
+                  <input type="text" inputMode="decimal" value={form.total_hours} placeholder="ex: 2:30 ou 2,5"
+                    onChange={e => { const v = e.target.value.replace(/[^\d:.,]/g, ''); setTimeDriver('total'); setForm(f => ({ ...f, total_hours: v })) }}
                     className="mt-1 w-full px-3 py-2 rounded-xl text-sm outline-none" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)" }} />
                 </div>
               </div>
@@ -424,8 +425,9 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
                 </div>
                 <div>
                   <Label className="text-xs text-zinc-400">Total de Horas *</Label>
-                  <input type="text" inputMode="numeric" value={form.total_hours} placeholder="ex: 2:30"
-                    onChange={e => { const v = e.target.value.replace(/[^\d:]/g, ''); setForm(f => ({ ...f, total_hours: v })) }}
+                  {/* Aceita HH:MM ("2:30"), decimal com . ou , ("2.5", "2,5") e inteiro ("2"). parseHHMM converte. */}
+                  <input type="text" inputMode="decimal" value={form.total_hours} placeholder="ex: 2:30 ou 2,5"
+                    onChange={e => { const v = e.target.value.replace(/[^\d:.,]/g, ''); setForm(f => ({ ...f, total_hours: v })) }}
                     className="mt-1 w-full px-3 py-2 rounded-xl text-sm outline-none" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)" }} />
                 </div>
               </>
