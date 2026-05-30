@@ -318,6 +318,31 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
         </div>
       )}
 
+      {/* Cards de totais da folha Bizify */}
+      {!loading && rows.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="rounded-xl p-4" style={{ background: 'var(--primary-soft)', border: '1px solid var(--ring)' }}>
+            <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Total da Folha (Líquido)</p>
+            <p className="text-2xl font-bold mt-1 tabular-nums" style={{ color: 'var(--primary)' }}>{formatBRL(grand.liq)}</p>
+            <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-light)' }}>{visibleRows.length} lançamento{visibleRows.length !== 1 ? 's' : ''}</p>
+          </div>
+          <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Total Créditos</p>
+            <p className="text-2xl font-bold mt-1 tabular-nums" style={{ color: 'var(--text)' }}>{formatBRL(grand.cred)}</p>
+          </div>
+          <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Total Débitos</p>
+            <p className="text-2xl font-bold mt-1 tabular-nums" style={{ color: 'var(--danger)' }}>{formatBRL(grand.deb)}</p>
+            <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-light)' }}>descontos + adiantamentos</p>
+          </div>
+          <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Lançamentos</p>
+            <p className="text-2xl font-bold mt-1 tabular-nums" style={{ color: 'var(--text)' }}>{visibleRows.length}</p>
+            <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-light)' }}>{tab === 'canceladas' ? 'canceladas' : 'ativos'}</p>
+          </div>
+        </div>
+      )}
+
       {!loading && rows.some(r => r.carried) && (
         <div
           className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
