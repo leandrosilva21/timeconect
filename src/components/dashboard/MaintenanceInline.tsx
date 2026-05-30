@@ -87,7 +87,7 @@ function isDigitacaoLate(r: any): boolean {
 
 // ─── Export Excel ───────────────────────────────────────────────────────────
 
-export function exportMaintenanceToXLSX(kind: MaintenanceKind, rows: any[]) {
+export function exportMaintenanceToXLSX(kind: MaintenanceKind, rows: any[], showDigitacao = true) {
   if (rows.length === 0) return
   const sheetName = kind === 'expenses' ? 'Despesas' : (kind === 'architecture' ? 'Arquitetura' : 'Sustentação')
   const data = kind === 'expenses'
@@ -99,9 +99,11 @@ export function exportMaintenanceToXLSX(kind: MaintenanceKind, rows: any[]) {
     : kind === 'maintenance'
       ? rows.map(r => ({
           Data: r.date ? r.date.split('-').reverse().join('/') : '',
-          Digitação: r.created_at
-            ? (isDigitacaoLate(r) ? '⚠ ' : '') + new Date(r.created_at).toLocaleDateString('pt-BR')
-            : '',
+          ...(showDigitacao ? {
+            Digitação: r.created_at
+              ? (isDigitacaoLate(r) ? '⚠ ' : '') + new Date(r.created_at).toLocaleDateString('pt-BR')
+              : '',
+          } : {}),
           Solicitante: r.requester ?? '',
           Consultor: r.user?.name ?? '',
           Ticket: r.ticket ?? '',
@@ -161,7 +163,7 @@ function ReverseApprovalButton({ onClick, busy }: { onClick: () => void; busy: b
   )
 }
 
-export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowClick, onReverseApproved, onReverseSuccess, clientView = false }: {
+export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowClick, onReverseApproved, onReverseSuccess, clientView = false, showDigitacao = true }: {
   rows: any[]
   loading: boolean
   variant?: 'maintenance' | 'architecture'
@@ -172,6 +174,8 @@ export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', 
   // Visão do cliente: paginar 30 linhas + totalizador de horas conforme filtro.
   // Outras visões (admin/coord) seguem sem paginação/totalizador.
   clientView?: boolean
+  // Coluna/destaque de Digitação (created_at). No perfil de cliente fica só p/ Vedamotors.
+  showDigitacao?: boolean
 }) {
   const [reversingId, setReversingId] = useState<number | null>(null)
   const [page, setPage] = useState(1)
@@ -236,7 +240,7 @@ export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', 
     }
   }
   const isArch = variant === 'architecture'
-  const colSpan = isArch ? 5 : 11
+  const colSpan = isArch ? 5 : (showDigitacao ? 11 : 10)
   const fmtDigitacao = (iso?: string | null) => iso ? new Date(iso).toLocaleDateString('pt-BR') : '—'
   return (
     <div
@@ -272,7 +276,7 @@ export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', 
             ) : (
               <>
                 <SortHead k="date">Data</SortHead>
-                <SortHead k="created_at">Digitação</SortHead>
+                {showDigitacao && <SortHead k="created_at">Digitação</SortHead>}
                 <SortHead k="requester">Solicitante</SortHead>
                 <SortHead k="consultor">Consultor</SortHead>
                 <SortHead k="ticket">Ticket</SortHead>
@@ -309,10 +313,12 @@ export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', 
             ) : (
               <DataTableRow key={r.id} onClick={handleClick}>
                 <DataTableCell>{r.date ? r.date.split('-').reverse().join('/') : '—'}</DataTableCell>
-                <DataTableCell
-                  title={isDigitacaoLate(r) ? 'Digitado fora da competência do serviço (lançado depois)' : (r.created_at ? new Date(r.created_at).toLocaleString('pt-BR') : '')}
-                  style={isDigitacaoLate(r) ? { color: 'var(--warning)', fontWeight: 600 } : undefined}
-                >{isDigitacaoLate(r) && '⚠ '}{fmtDigitacao(r.created_at)}</DataTableCell>
+                {showDigitacao && (
+                  <DataTableCell
+                    title={isDigitacaoLate(r) ? 'Digitado fora da competência do serviço (lançado depois)' : (r.created_at ? new Date(r.created_at).toLocaleString('pt-BR') : '')}
+                    style={isDigitacaoLate(r) ? { color: 'var(--warning)', fontWeight: 600 } : undefined}
+                  >{isDigitacaoLate(r) && '⚠ '}{fmtDigitacao(r.created_at)}</DataTableCell>
+                )}
                 <DataTableCell muted={false}>{r.requester ?? '—'}</DataTableCell>
                 <DataTableCell muted={false}>{r.user?.name ?? '—'}</DataTableCell>
                 <DataTableCell>
