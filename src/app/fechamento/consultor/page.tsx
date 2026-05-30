@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
@@ -33,6 +33,12 @@ interface ConsultorBase {
   horas_a_pagar: number
   total: number
   total_despesas: number    // despesas pagar_no_fechamento (não pagas avulso) somadas
+  desconto: number          // ajuste manual: desconto
+  desconto_desc: string | null
+  adiantamento: number      // ajuste manual: adiantamento
+  adicional: number         // ajuste manual: adicional
+  adicional_desc: string | null
+  recebimento: number       // total + despesas − desconto − adiantamento + adicional
   envio_em: string | null   // ISO do último envio do fechamento; null = não enviado
   envio_por: string | null  // nome de quem enviou
   notas?: NotasPayload      // NFS-e + Nota de débito (só consultor PJ avulso)
@@ -336,12 +342,42 @@ function buildReport(
     ? `<div class="summary-item"><div class="summary-label">Despesas (fechamento)</div><div class="summary-value" style="color:#7c3aed">${formatBRL(despTot)}</div></div>`
     : `<div class="summary-item"><div class="summary-label">Total Horas</div><div class="summary-value">${fmtH(totalHoras)}</div></div>${summaryExtra}<div class="summary-item"><div class="summary-label">Total Serviços</div><div class="summary-value" style="color:#7c3aed">${formatBRL(servTotal)}</div></div>`
 
-  const totalValor = mode === 'servicos' ? servTotal : mode === 'despesa' ? despTot : servTotal + despTot
-  const totalLabel = mode === 'servicos'
-    ? 'TOTAL A PAGAR — SERVIÇOS'
-    : mode === 'despesa'
-      ? 'TOTAL — DESPESAS (FECHAMENTO)'
-      : `TOTAL A PAGAR${despTot > 0 ? ` &nbsp;(serviços ${formatBRL(servTotal)} + despesas ${formatBRL(despTot)})` : ''}`
+  const baseValor = mode === 'servicos' ? servTotal : mode === 'despesa' ? despTot : servTotal + despTot
+
+  // Ajustes manuais (desconto/adiantamento/adicional) — entram no Recebimento final.
+  const desconto     = consultor.desconto || 0
+  const adiantamento = consultor.adiantamento || 0
+  const adicional    = consultor.adicional || 0
+  // No relatório de Despesas só entram as despesas — sem ajustes nem recebimento.
+  const temAjustes   = mode !== 'despesa' && (desconto !== 0 || adiantamento !== 0 || adicional !== 0)
+  const recebimento  = baseValor - desconto - adiantamento + adicional
+
+  const ajustesHtml = temAjustes ? `
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Ajustes do recebimento</span>
+      </div>
+      <table>
+        <thead><tr><th>Lançamento</th><th>Descritivo</th><th class="right">Valor</th></tr></thead>
+        <tbody>
+          <tr class="main-row"><td>Serviço</td><td>—</td><td class="right">${formatBRL(servTotal)}</td></tr>
+          ${isDesp && despTot > 0 ? `<tr class="main-row"><td>Despesa</td><td>—</td><td class="right" style="color:#16a34a">+ ${formatBRL(despTot)}</td></tr>` : ''}
+          <tr class="main-row"><td>Desconto</td><td>${consultor.desconto_desc ?? '—'}</td><td class="right" style="color:#dc2626">− ${formatBRL(desconto)}</td></tr>
+          <tr class="main-row"><td>Adiantamento</td><td>—</td><td class="right" style="color:#dc2626">− ${formatBRL(adiantamento)}</td></tr>
+          <tr class="main-row"><td>Adicional</td><td>${consultor.adicional_desc ?? '—'}</td><td class="right" style="color:#16a34a">+ ${formatBRL(adicional)}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  ` : ''
+
+  const totalValor = temAjustes ? recebimento : baseValor
+  const totalLabel = temAjustes
+    ? `RECEBIMENTO &nbsp;<span style="font-size:10px;font-weight:normal">(base ${formatBRL(baseValor)} − desconto ${formatBRL(desconto)} − adiantamento ${formatBRL(adiantamento)} + adicional ${formatBRL(adicional)})</span>`
+    : mode === 'servicos'
+      ? 'TOTAL A PAGAR — SERVIÇOS'
+      : mode === 'despesa'
+        ? 'TOTAL — DESPESAS (FECHAMENTO)'
+        : `TOTAL A PAGAR${despTot > 0 ? ` &nbsp;(serviços ${formatBRL(servTotal)} + despesas ${formatBRL(despTot)})` : ''}`
 
   return `
     <div class="page">
@@ -355,6 +391,7 @@ function buildReport(
       <div class="summary-box">${summaryHtml}</div>
       ${isServ ? sectionsHtml : ''}
       ${isDesp ? despesasHtml : ''}
+      ${ajustesHtml}
       <div class="total-box">
         <span class="total-label">${totalLabel}</span>
         <span class="total-value">${formatBRL(totalValor)}</span>
@@ -428,6 +465,8 @@ export default function FechamentoConsultorPage() {
   const [filterNome, setFilterNome] = useState('')
   // Filtro por Tipo de Contrato (null = "Todos").
   const [contractType, setContractType] = useState<ContractType | null>(null)
+  // Filtro por status de envio do fechamento.
+  const [envioFilter, setEnvioFilter] = useState<'todos' | 'enviado' | 'nao_enviado'>('todos')
   const [downloadingAllExcel, setDownloadingAllExcel] = useState(false)
   // Consultor cujo status de envio está sendo limpo (spinner/disable no botão).
   const [limpandoEnvio, setLimpandoEnvio] = useState<number | null>(null)
@@ -453,6 +492,22 @@ export default function FechamentoConsultorPage() {
       if (!prev) return prev
       const patch = <T extends ConsultorBase>(arr: T[]): T[] =>
         arr.map(c => (c.user_id === userId ? { ...c, notas } : c))
+      return {
+        ...prev,
+        horistas: patch(prev.horistas),
+        banco_horas: patch(prev.banco_horas),
+        fixos: patch(prev.fixos),
+      }
+    })
+  }, [])
+
+  // Atualiza os ajustes (desconto/adiantamento/adicional + recebimento) de um consultor (otimista).
+  const patchAjustes = useCallback((userId: number, fields: Partial<Pick<ConsultorBase,
+    'desconto' | 'desconto_desc' | 'adiantamento' | 'adicional' | 'adicional_desc' | 'recebimento'>>) => {
+    setData(prev => {
+      if (!prev) return prev
+      const patch = <T extends ConsultorBase>(arr: T[]): T[] =>
+        arr.map(c => (c.user_id === userId ? { ...c, ...fields } : c))
       return {
         ...prev,
         horistas: patch(prev.horistas),
@@ -725,6 +780,8 @@ export default function FechamentoConsultorPage() {
     let r = rows
     if (apenasComMovimento) r = r.filter(c => c.total > 0 || c.horas_trabalhadas > 0)
     if (contractType) r = r.filter(c => c.contract_type === contractType)
+    if (envioFilter === 'enviado') r = r.filter(c => !!c.envio_em)
+    else if (envioFilter === 'nao_enviado') r = r.filter(c => !c.envio_em)
     if (filterNome.trim()) {
       const q = filterNome.trim().toLowerCase()
       r = r.filter(c => c.nome.toLowerCase().includes(q))
@@ -765,11 +822,149 @@ export default function FechamentoConsultorPage() {
     )
   }
 
+  // Recebimento ao vivo = serviços + despesas − desconto − adiantamento + adicional.
+  function calcRecebimento(c: ConsultorBase, desconto: number, adiantamento: number, adicional: number): number {
+    return c.total + (c.total_despesas || 0) - desconto - adiantamento + adicional
+  }
+
+  // 4 colunas (Desconto / Adiantamento / Adicional editáveis + Total/Recebimento ao vivo).
+  // Estado local por consultor; salva no onBlur de cada campo via POST /ajustes (otimista).
+  // O Total exibe o Recebimento e recalcula AO VIVO conforme edita.
+  function AjusteCols({ c, totalExtra }: { c: ConsultorBase; totalExtra?: ReactNode }) {
+    const editable = canSendEmail
+    const [desconto, setDesconto] = useState<string>(String(c.desconto ?? 0))
+    const [descontoDesc, setDescontoDesc] = useState<string>(c.desconto_desc ?? '')
+    const [adiantamento, setAdiantamento] = useState<string>(String(c.adiantamento ?? 0))
+    const [adicional, setAdicional] = useState<string>(String(c.adicional ?? 0))
+    const [adicionalDesc, setAdicionalDesc] = useState<string>(c.adicional_desc ?? '')
+    const [saving, setSaving] = useState(false)
+
+    const [descModal, setDescModal] = useState<null | 'desconto' | 'adicional'>(null)
+    const [descDraft, setDescDraft] = useState('')
+
+    const num = (v: string) => { const n = parseFloat(v.replace(',', '.')); return isNaN(n) ? 0 : n }
+
+    async function save(override?: Partial<{ descontoDesc: string; adicionalDesc: string }>) {
+      if (!editable || saving) return
+      setSaving(true)
+      const payload = {
+        desconto: num(desconto),
+        desconto_desc: (override?.descontoDesc ?? descontoDesc) || null,
+        adiantamento: num(adiantamento),
+        adicional: num(adicional),
+        adicional_desc: (override?.adicionalDesc ?? adicionalDesc) || null,
+      }
+      try {
+        const res = await api.post<{ recebimento: number }>(
+          `/fechamento-consultor/${c.user_id}/${yearMonth}/ajustes`, payload,
+        )
+        patchAjustes(c.user_id, { ...payload, recebimento: res.recebimento })
+        toast.success('Ajustes salvos', { duration: 1500 })
+      } catch (err: unknown) {
+        toast.error(`Erro ao salvar ajustes: ${err instanceof Error ? err.message : 'falha na API'}`)
+      } finally {
+        setSaving(false)
+      }
+    }
+
+    function openDesc(field: 'desconto' | 'adicional') {
+      setDescDraft(field === 'desconto' ? descontoDesc : adicionalDesc)
+      setDescModal(field)
+    }
+    function saveDesc() {
+      const v = descDraft.trim()
+      if (descModal === 'desconto') { setDescontoDesc(v); save({ descontoDesc: v }) }
+      else if (descModal === 'adicional') { setAdicionalDesc(v); save({ adicionalDesc: v }) }
+      setDescModal(null)
+    }
+
+    const inputCls = 'w-24 rounded-md px-2 py-1 text-sm text-right ds-input focus:outline-none disabled:opacity-50'
+    const inputStyle = { background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' } as const
+
+    // Botão do descritivo (abre modal): mostra preview se já tem texto, senão "+ descrição".
+    const descBtn = (field: 'desconto' | 'adicional', val: string) => (
+      <button type="button" disabled={!editable} onClick={() => openDesc(field)}
+        title={val || 'Adicionar descrição (vai no relatório)'}
+        className="mt-1 text-[10px] max-w-[6rem] truncate hover:underline disabled:opacity-40"
+        style={{ color: val ? 'var(--primary)' : 'var(--text-light)' }}>
+        {val ? `✎ ${val}` : '+ descrição'}
+      </button>
+    )
+
+    const recebimento = calcRecebimento(c, num(desconto), num(adiantamento), num(adicional))
+
+    return (
+      <>
+        <Td right className="align-top">
+          <div className="flex flex-col items-end">
+            <input type="number" step="0.01" value={desconto} disabled={!editable || saving}
+              onChange={e => setDesconto(e.target.value)} onBlur={() => save()}
+              className={inputCls} style={inputStyle} />
+            {descBtn('desconto', descontoDesc)}
+          </div>
+        </Td>
+        <Td right className="align-top">
+          <input type="number" step="0.01" value={adiantamento} disabled={!editable || saving}
+            onChange={e => setAdiantamento(e.target.value)} onBlur={() => save()}
+            className={inputCls} style={inputStyle} />
+        </Td>
+        <Td right className="align-top">
+          <div className="flex flex-col items-end">
+            <input type="number" step="0.01" value={adicional} disabled={!editable || saving}
+              onChange={e => setAdicional(e.target.value)} onBlur={() => save()}
+              className={inputCls} style={inputStyle} />
+            {descBtn('adicional', adicionalDesc)}
+          </div>
+        </Td>
+        <Td right className="font-semibold text-zinc-100 align-top">
+          {formatBRL(recebimento)}
+          {(() => {
+            const d = num(desconto), a = num(adiantamento), ad = num(adicional)
+            const parts: string[] = [`serv ${formatBRL(c.total)}`]
+            if (c.total_despesas > 0) parts.push(`+ desp ${formatBRL(c.total_despesas)}`)
+            if (d > 0)  parts.push(`− desc ${formatBRL(d)}`)
+            if (a > 0)  parts.push(`− adiant ${formatBRL(a)}`)
+            if (ad > 0) parts.push(`+ adic ${formatBRL(ad)}`)
+            // Empilha cada parcela em sua própria linha (whitespace-nowrap) para não quebrar no meio do valor.
+            return parts.length > 1 ? (
+              <div className="flex flex-col items-end text-[10px] font-normal leading-tight" style={{ color: 'var(--text-light)' }}>
+                {parts.map((p, i) => <span key={i} className="whitespace-nowrap">{p}</span>)}
+              </div>
+            ) : null
+          })()}
+          {totalExtra}
+          {descModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 text-left"
+              onClick={e => { if (e.target === e.currentTarget) setDescModal(null) }}>
+              <div className="w-full max-w-md rounded-xl p-4 shadow-2xl"
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--text)' }}>
+                  Descritivo — {descModal === 'desconto' ? 'Desconto' : 'Adicional'}
+                </h3>
+                <p className="text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>{c.nome} · vai no relatório de fechamento</p>
+                <textarea autoFocus rows={4} value={descDraft} onChange={e => setDescDraft(e.target.value)}
+                  placeholder="Descreva o motivo…"
+                  className="w-full rounded-lg px-3 py-2 text-sm ds-input focus:outline-none resize-none"
+                  style={inputStyle} />
+                <div className="flex justify-end gap-2 mt-3">
+                  <button onClick={() => setDescModal(null)} className="px-3 py-1.5 rounded-lg text-sm"
+                    style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }}>Cancelar</button>
+                  <button onClick={saveDesc} className="px-3 py-1.5 rounded-lg text-sm font-medium"
+                    style={{ background: 'var(--primary)', color: 'var(--primary-fg)' }}>Salvar</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </Td>
+      </>
+    )
+  }
+
   // ─── Tab: Horistas ────────────────────────────────────────────────────────
 
   function TabHoristas() {
     const rows = applyFilters(data?.horistas ?? [])
-    const { sorted, thProps } = useTableSort(rows, (c, k) => k === 'total' ? (c.total + (c.total_despesas || 0)) : (c as unknown as Record<string, unknown>)[k])
+    const { sorted, thProps } = useTableSort(rows, (c, k) => k === 'total' ? (c.recebimento ?? 0) : (c as unknown as Record<string, unknown>)[k])
     return (
       <div>
         <p className="text-sm text-zinc-400 mb-3">{rows.length} consultor{rows.length !== 1 ? 'es' : ''}</p>
@@ -780,6 +975,9 @@ export default function FechamentoConsultorPage() {
               <Th right {...thProps('horas_trabalhadas')}>H Trabalhadas</Th>
               <Th right {...thProps('horas_a_pagar')}>H a Pagar</Th>
               <Th right {...thProps('effective_rate')}>Taxa/h</Th>
+              <Th right>Desconto</Th>
+              <Th right>Adiantamento</Th>
+              <Th right>Adicional</Th>
               <Th right {...thProps('total')}>Total</Th>
               <Th right>Notas (PJ)</Th>
               <Th right>Envio</Th>
@@ -789,7 +987,7 @@ export default function FechamentoConsultorPage() {
           <Tbody>
             {rows.length === 0 && (
               <Tr>
-                <td colSpan={8} className="py-8 text-center text-zinc-500 text-sm">
+                <td colSpan={11} className="py-8 text-center text-zinc-500 text-sm">
                   Nenhum consultor horista no período
                 </td>
               </Tr>
@@ -816,13 +1014,8 @@ export default function FechamentoConsultorPage() {
                       : formatBRL(c.effective_rate)
                     }
                   </Td>
-                  <Td right className="font-semibold text-zinc-100">
-                    {formatBRL(c.total + (c.total_despesas || 0))}
-                    {c.total_despesas > 0 && (
-                      <div className="text-[10px] text-cyan-400 font-normal">serv {formatBRL(c.total)} + desp {formatBRL(c.total_despesas)}</div>
-                    )}
-                  </Td>
-                  <Td><NotasPjCell type="consultor" id={c.user_id} yearMonth={yearMonth} notas={c.notas ?? null} canDecide={canSendEmail} canUpload={canSendEmail || user?.id === c.user_id} onChanged={(n) => patchNotas(c.user_id, n)} /></Td>
+                  <AjusteCols c={c} />
+                  <Td><NotasPjCell type="consultor" id={c.user_id} yearMonth={yearMonth} notas={c.notas ?? null} canDecide={canSendEmail} canUpload={canSendEmail || user?.id === c.user_id} expectedValue={c.recebimento ?? null} selfService={false} onChanged={(n) => patchNotas(c.user_id, n)} /></Td>
                   <Td right><EnvioCell c={c} /></Td>
                   <Td right>
                     <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={(mode) => handleRelatorio(c, mode)} />
@@ -832,8 +1025,9 @@ export default function FechamentoConsultorPage() {
             })}
             {rows.length > 0 && (
               <Tr className="border-t-2 border-zinc-600 bg-zinc-800/20">
-                <td colSpan={4} className="py-2 px-3 text-right font-semibold text-zinc-300 text-sm">Total</td>
-                <Td right className="font-bold text-violet-400">{formatBRL((data?.totais.total_horistas ?? 0) + (data?.horistas?.reduce((s, c) => s + (c.total_despesas || 0), 0) ?? 0))}</Td>
+                <td colSpan={7} className="py-2 px-3 text-right font-semibold text-zinc-300 text-sm">Total (recebimento)</td>
+                <Td right className="font-bold text-violet-400">{formatBRL(rows.reduce((s, c) => s + (c.recebimento ?? 0), 0))}</Td>
+                <Td />
                 <Td />
                 <Td />
               </Tr>
@@ -848,7 +1042,7 @@ export default function FechamentoConsultorPage() {
 
   function TabBancoHoras() {
     const rows = applyFilters(data?.banco_horas ?? [])
-    const { sorted, thProps } = useTableSort(rows, (c, k) => k === 'total' ? (c.total + (c.total_despesas || 0)) : (c as unknown as Record<string, unknown>)[k])
+    const { sorted, thProps } = useTableSort(rows, (c, k) => k === 'total' ? (c.recebimento ?? 0) : (c as unknown as Record<string, unknown>)[k])
     return (
       <div>
         <p className="text-sm text-zinc-400 mb-3">{rows.length} consultor{rows.length !== 1 ? 'es' : ''}</p>
@@ -862,6 +1056,9 @@ export default function FechamentoConsultorPage() {
               <Th right {...thProps('month_balance')}>Saldo Mês</Th>
               <Th right {...thProps('accumulated_balance')}>Acumulado</Th>
               <Th right {...thProps('horas_extras')}>H Extras</Th>
+              <Th right>Desconto</Th>
+              <Th right>Adiantamento</Th>
+              <Th right>Adicional</Th>
               <Th right {...thProps('total')}>Total</Th>
               <Th right>Notas (PJ)</Th>
               <Th right>Envio</Th>
@@ -871,7 +1068,7 @@ export default function FechamentoConsultorPage() {
           <Tbody>
             {rows.length === 0 && (
               <Tr>
-                <td colSpan={11} className="py-8 text-center text-zinc-500 text-sm">
+                <td colSpan={14} className="py-8 text-center text-zinc-500 text-sm">
                   Nenhum consultor banco de horas no período
                 </td>
               </Tr>
@@ -887,16 +1084,10 @@ export default function FechamentoConsultorPage() {
                 <Td right className={`font-mono font-semibold ${c.horas_extras > 0 ? 'text-emerald-400' : 'text-zinc-500'}`}>
                   {c.horas_extras > 0 ? fmtH(c.horas_extras) : '—'}
                 </Td>
-                <Td right className="font-semibold text-zinc-100">
-                  {formatBRL(c.total + (c.total_despesas || 0))}
-                  {c.total_extra > 0 && (
-                    <div className="text-[10px] text-emerald-400 font-normal">+{formatBRL(c.total_extra)} extra</div>
-                  )}
-                  {c.total_despesas > 0 && (
-                    <div className="text-[10px] text-cyan-400 font-normal">+{formatBRL(c.total_despesas)} desp</div>
-                  )}
-                </Td>
-                <Td><NotasPjCell type="consultor" id={c.user_id} yearMonth={yearMonth} notas={c.notas ?? null} canDecide={canSendEmail} canUpload={canSendEmail || user?.id === c.user_id} onChanged={(n) => patchNotas(c.user_id, n)} /></Td>
+                <AjusteCols c={c} totalExtra={c.total_extra > 0
+                  ? <div className="text-[10px] text-emerald-400 font-normal">+{formatBRL(c.total_extra)} extra</div>
+                  : undefined} />
+                <Td><NotasPjCell type="consultor" id={c.user_id} yearMonth={yearMonth} notas={c.notas ?? null} canDecide={canSendEmail} canUpload={canSendEmail || user?.id === c.user_id} expectedValue={c.recebimento ?? null} selfService={false} onChanged={(n) => patchNotas(c.user_id, n)} /></Td>
                   <Td right><EnvioCell c={c} /></Td>
                 <Td right>
                   <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={(mode) => handleRelatorio(c, mode)} />
@@ -905,8 +1096,9 @@ export default function FechamentoConsultorPage() {
             ))}
             {rows.length > 0 && (
               <Tr className="border-t-2 border-zinc-600 bg-zinc-800/20">
-                <td colSpan={7} className="py-2 px-3 text-right font-semibold text-zinc-300 text-sm">Total</td>
-                <Td right className="font-bold text-violet-400">{formatBRL((data?.totais.total_banco_horas ?? 0) + (data?.banco_horas?.reduce((s, c) => s + (c.total_despesas || 0), 0) ?? 0))}</Td>
+                <td colSpan={10} className="py-2 px-3 text-right font-semibold text-zinc-300 text-sm">Total (recebimento)</td>
+                <Td right className="font-bold text-violet-400">{formatBRL(rows.reduce((s, c) => s + (c.recebimento ?? 0), 0))}</Td>
+                <Td />
                 <Td />
                 <Td />
               </Tr>
@@ -931,6 +1123,10 @@ export default function FechamentoConsultorPage() {
               <Th {...thProps('nome')}>Consultor</Th>
               <Th right {...thProps('horas_trabalhadas')}>H Trabalhadas</Th>
               <Th right {...thProps('salario_mensal')}>Salário Mensal</Th>
+              <Th right>Desconto</Th>
+              <Th right>Adiantamento</Th>
+              <Th right>Adicional</Th>
+              <Th right>Total</Th>
               <Th right>Notas (PJ)</Th>
               <Th right>Envio</Th>
               <Th right>Relatório</Th>
@@ -939,7 +1135,7 @@ export default function FechamentoConsultorPage() {
           <Tbody>
             {rows.length === 0 && (
               <Tr>
-                <td colSpan={6} className="py-8 text-center text-zinc-500 text-sm">
+                <td colSpan={10} className="py-8 text-center text-zinc-500 text-sm">
                   Nenhum consultor fixo no período
                 </td>
               </Tr>
@@ -950,11 +1146,9 @@ export default function FechamentoConsultorPage() {
                 <Td right className="font-mono text-zinc-300">{fmtH(c.horas_trabalhadas)}</Td>
                 <Td right className="font-semibold text-zinc-100">
                   {formatBRL(c.salario_mensal)}
-                  {c.total_despesas > 0 && (
-                    <div className="text-[10px] text-cyan-400 font-normal">+{formatBRL(c.total_despesas)} desp. no fech.</div>
-                  )}
                 </Td>
-                <Td><NotasPjCell type="consultor" id={c.user_id} yearMonth={yearMonth} notas={c.notas ?? null} canDecide={canSendEmail} canUpload={canSendEmail || user?.id === c.user_id} onChanged={(n) => patchNotas(c.user_id, n)} /></Td>
+                <AjusteCols c={c} />
+                <Td><NotasPjCell type="consultor" id={c.user_id} yearMonth={yearMonth} notas={c.notas ?? null} canDecide={canSendEmail} canUpload={canSendEmail || user?.id === c.user_id} expectedValue={c.recebimento ?? null} selfService={false} onChanged={(n) => patchNotas(c.user_id, n)} /></Td>
                   <Td right><EnvioCell c={c} /></Td>
                 <Td right>
                   <RelatorioBtn userId={c.user_id} printingUser={printingUser} onClick={(mode) => handleRelatorio(c, mode)} />
@@ -963,8 +1157,9 @@ export default function FechamentoConsultorPage() {
             ))}
             {rows.length > 0 && (
               <Tr className="border-t-2 border-zinc-600 bg-zinc-800/20">
-                <td colSpan={2} className="py-2 px-3 text-right font-semibold text-zinc-300 text-sm">Total</td>
-                <Td right className="font-bold text-violet-400">{formatBRL((data?.totais.total_fixos ?? 0) + (data?.fixos?.reduce((s, c) => s + (c.total_despesas || 0), 0) ?? 0))}</Td>
+                <td colSpan={6} className="py-2 px-3 text-right font-semibold text-zinc-300 text-sm">Total (recebimento)</td>
+                <Td right className="font-bold text-violet-400">{formatBRL(rows.reduce((s, c) => s + (c.recebimento ?? 0), 0))}</Td>
+                <Td />
                 <Td />
                 <Td />
               </Tr>
@@ -1303,15 +1498,32 @@ export default function FechamentoConsultorPage() {
             ))}
           </div>
 
-          <div className="relative flex-1 min-w-[180px] max-w-xs">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
+          {/* Filtro: status de envio (Todos / Enviado / Não enviado) */}
+          <div className="flex rounded-lg overflow-hidden border text-xs font-semibold" style={{ borderColor: 'var(--border)' }}>
+            {([['todos', 'Todos'], ['enviado', 'Enviado'], ['nao_enviado', 'Não enviado']] as const).map(([v, lbl], i) => (
+              <button
+                key={v}
+                onClick={() => setEnvioFilter(v)}
+                className={`px-3 py-1.5 transition-colors ${i > 0 ? 'border-l' : ''}`}
+                style={envioFilter === v
+                  ? { background: 'var(--primary)', color: 'var(--primary-fg)', borderColor: 'var(--border)' }
+                  : { background: 'var(--surface)', color: 'var(--text-muted)', borderColor: 'var(--border)' }}
+              >
+                {lbl}
+              </button>
+            ))}
+          </div>
+
+          <div className="relative w-56">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
             <input
               type="text"
               placeholder="Buscar consultor..."
               value={filterNome}
               onChange={e => setFilterNome(e.target.value)}
-              className="w-full rounded-lg pl-8 pr-7 py-1.5 text-xs focus:outline-none ds-input"
-              style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+              className="w-full rounded-lg py-1.5 text-xs focus:outline-none ds-input"
+              // paddingLeft/Right inline para vencer o shorthand `padding` do .ds-input (senão o texto fica atrás da lupa).
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', paddingLeft: '2.25rem', paddingRight: '1.75rem' }}
             />
             {filterNome && (
               <button onClick={() => setFilterNome('')}

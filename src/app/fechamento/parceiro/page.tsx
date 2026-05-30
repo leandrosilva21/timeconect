@@ -35,6 +35,13 @@ interface ParceiroStatus {
   envio_por?: string | null  // nome de quem enviou
   contract_type?: string | null // pj | clt | cooperado
   notas?: NotasPayload          // NFS-e + Nota de débito (só parceiro PJ)
+  // Ajustes manuais do recebimento (desconto/adiantamento/adicional + descritivos).
+  desconto?: number
+  desconto_desc?: string | null
+  adiantamento?: number
+  adicional?: number
+  adicional_desc?: string | null
+  recebimento?: number          // total_a_pagar − desconto − adiantamento + adicional
 }
 
 interface ConsultorRow {
@@ -156,13 +163,22 @@ export default function FechamentoParceiroPage() {
   const setFilterApStatus    = (v: string)             => setFilter('filterApStatus', v)
   const setFilterApConsultor = (v: number | '')        => setFilter('filterApConsultor', v)
 
-  const yearMonth = month && year ? toYearMonth(month, year) : ''
+  // Sem data selecionada, cai na apuração do MÊS ATUAL (não fica em branco).
+  const effMonth = month || (now.getMonth() + 1)
+  const effYear  = year  || now.getFullYear()
+  const yearMonth = toYearMonth(effMonth, effYear)
 
   const [parceiros, setParceiros]     = useState<ParceiroStatus[]>([])
   const [status, setStatus]           = useState<ParceiroStatus | null>(null)
 
   const [consultores, setConsultores] = useState<ConsultorRow[]>([])
   const [despesas, setDespesas]       = useState<DespesaRow[]>([])
+
+  // ── Ajustes do recebimento (desconto/adiantamento/adicional) — admin ──────────
+  const [ajuste, setAjuste] = useState({
+    desconto: '', desconto_desc: '', adiantamento: '', adicional: '', adicional_desc: '',
+  })
+  const [savingAjuste, setSavingAjuste] = useState(false)
   const [reportMode, setReportMode]   = useState<'servicos' | 'despesa' | 'ambos'>('ambos')
   const [apontamentos, setApontamentos] = useState<ApontamentoRow[]>([])
 
@@ -198,7 +214,9 @@ export default function FechamentoParceiroPage() {
   // ─── Carregamento de dados ────────────────────────────────────────────────
 
   const loadParceiros = useCallback(() => {
-    if (!yearMonth) return
+    // A lista de parceiros NÃO depende do mês — o BE trata year_month vazio
+    // (retorna os parceiros ativos com status 'sem_registro'). Sem isso, a
+    // dropdown ficava vazia quando month/year não estavam selecionados.
     api.get<{ data: ParceiroStatus[] }>(`/fechamento-parceiro?year_month=${yearMonth}`)
       .then(r => {
         setParceiros(r.data ?? [])
@@ -243,6 +261,17 @@ export default function FechamentoParceiroPage() {
     setDespesas([])
     setApontamentos([])
   }, [yearMonth])
+
+  // Seed do formulário de ajustes a partir do parceiro selecionado.
+  useEffect(() => {
+    setAjuste({
+      desconto:       status?.desconto ? String(status.desconto) : '',
+      desconto_desc:  status?.desconto_desc ?? '',
+      adiantamento:   status?.adiantamento ? String(status.adiantamento) : '',
+      adicional:      status?.adicional ? String(status.adicional) : '',
+      adicional_desc: status?.adicional_desc ?? '',
+    })
+  }, [status?.partner_id])
 
   useEffect(() => {
     if (!partnerId) { setStatus(null); return }
@@ -417,6 +446,31 @@ export default function FechamentoParceiroPage() {
       </div>
       <hr class="divider"/>`
 
+    // Ajustes do recebimento (desconto/adiantamento/adicional). Só exibe quando há algum.
+    const ajDesconto     = Number(status.desconto ?? 0)     || 0
+    const ajAdiantamento = Number(status.adiantamento ?? 0) || 0
+    const ajAdicional    = Number(status.adicional ?? 0)    || 0
+    // No relatório de Despesas só entram as despesas — sem ajustes nem recebimento.
+    const temAjustes     = mode !== 'despesa' && (ajDesconto !== 0 || ajAdiantamento !== 0 || ajAdicional !== 0)
+    const baseAjuste     = mode === 'despesa' ? saldoDesp : (mode === 'servicos' ? totalServicos : totalServicos + saldoDesp)
+    const recebimentoRep = baseAjuste - ajDesconto - ajAdiantamento + ajAdicional
+    const ajustesHtml = !temAjustes ? '' : `
+      <div class="section" style="margin-bottom:24px">
+        <div style="font-size:14px;font-weight:700;color:#111;border-bottom:2px solid #7c3aed;padding-bottom:6px;margin-bottom:8px">Ajustes do recebimento</div>
+        <table>
+          <thead><tr><th>Ajuste</th><th>Descritivo</th><th class="right">Valor</th></tr></thead>
+          <tbody>
+            <tr class="main-row"><td>Serviço</td><td>—</td><td class="right">${formatBRL(totalServicos)}</td></tr>
+            ${mode !== 'servicos' && saldoDesp > 0 ? `<tr class="main-row"><td>Despesa</td><td>—</td><td class="right" style="color:#16a34a">+ ${formatBRL(saldoDesp)}</td></tr>` : ''}
+            ${ajDesconto !== 0 ? `<tr class="main-row"><td>Desconto</td><td>${status.desconto_desc ?? '—'}</td><td class="right">− ${formatBRL(ajDesconto)}</td></tr>` : ''}
+            ${ajAdiantamento !== 0 ? `<tr class="main-row"><td>Adiantamento</td><td>—</td><td class="right">− ${formatBRL(ajAdiantamento)}</td></tr>` : ''}
+            ${ajAdicional !== 0 ? `<tr class="main-row"><td>Adicional</td><td>${status.adicional_desc ?? '—'}</td><td class="right">+ ${formatBRL(ajAdicional)}</td></tr>` : ''}
+            <tr><td colspan="2" class="right" style="font-weight:bold">Recebimento</td><td class="right" style="font-weight:bold;color:#7c3aed">${formatBRL(Math.round(recebimentoRep * 100) / 100)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <hr class="divider"/>`
+
     const isServ = mode !== 'despesa'
     const isDesp = mode !== 'servicos'
     const h1Label = mode === 'despesa' ? 'Relatório de Despesas' : mode === 'servicos' ? 'Relatório de Serviços' : 'Relatório de Fechamento'
@@ -448,6 +502,8 @@ export default function FechamentoParceiroPage() {
   ${isServ ? resumoHtml : ''}
 
   ${isDesp ? despHtml : ''}
+
+  ${ajustesHtml}
 
   ${totalBoxHtml}
   ${isServ && isFixed ? '<p style="margin-top:8px;font-size:10px;color:#9ca3af">* Taxa fixa aplicada a todos os consultores.</p>' : ''}
@@ -724,6 +780,40 @@ export default function FechamentoParceiroPage() {
     }
   }
 
+  // Salva (upsert) os ajustes do recebimento do parceiro no mês. Otimista: atualiza
+  // status + parceiros com o ajuste salvo + recebimento recalculado pela API.
+  async function salvarAjuste() {
+    if (!partnerId || !yearMonth) return
+    setSavingAjuste(true)
+    try {
+      const payload = {
+        desconto:       ajuste.desconto === '' ? 0 : Number(ajuste.desconto),
+        desconto_desc:  ajuste.desconto_desc || null,
+        adiantamento:   ajuste.adiantamento === '' ? 0 : Number(ajuste.adiantamento),
+        adicional:      ajuste.adicional === '' ? 0 : Number(ajuste.adicional),
+        adicional_desc: ajuste.adicional_desc || null,
+      }
+      const res = await api.post<{ recebimento: number; total_a_pagar: number }>(
+        `/fechamento-parceiro/${partnerId}/${yearMonth}/ajustes`, payload,
+      )
+      const patch: Partial<ParceiroStatus> = {
+        desconto: payload.desconto,
+        desconto_desc: payload.desconto_desc,
+        adiantamento: payload.adiantamento,
+        adicional: payload.adicional,
+        adicional_desc: payload.adicional_desc,
+        recebimento: res?.recebimento,
+      }
+      setStatus(prev => (prev && prev.partner_id === partnerId ? { ...prev, ...patch } : prev))
+      setParceiros(prev => prev.map(p => (p.partner_id === partnerId ? { ...p, ...patch } : p)))
+      toast.success('Ajustes salvos.')
+    } catch (err: unknown) {
+      toast.error(`Erro ao salvar ajustes: ${err instanceof Error ? err.message : 'falha na API'}`)
+    } finally {
+      setSavingAjuste(false)
+    }
+  }
+
   // ─── Derivados ────────────────────────────────────────────────────────────
 
   const isFixed    = status?.pricing_type === 'fixed'
@@ -748,6 +838,14 @@ export default function FechamentoParceiroPage() {
   const totalDespesas    = despesas.filter(r => !r.is_paid).reduce((s, r) => s + r.valor, 0)
   const totalDespesasAnt = despesas.filter(r => r.is_paid).reduce((s, r) => s + r.valor, 0)
   const totalAPagar      = totalServicos + totalDespesas
+
+  // Recebimento ao vivo = total a pagar − desconto − adiantamento + adicional.
+  // Usa o total ao vivo quando os consultores já carregaram; senão o do payload (status).
+  const ajusteDesconto     = ajuste.desconto === ''     ? 0 : Number(ajuste.desconto)     || 0
+  const ajusteAdiantamento = ajuste.adiantamento === '' ? 0 : Number(ajuste.adiantamento) || 0
+  const ajusteAdicional    = ajuste.adicional === ''    ? 0 : Number(ajuste.adicional)    || 0
+  const baseRecebimento    = consultores.length ? totalAPagar : (status?.total_a_pagar ?? 0)
+  const recebimentoLive    = baseRecebimento - ajusteDesconto - ajusteAdiantamento + ajusteAdicional
 
   const TABS = [
     { key: 'consultores',  label: 'Consultores' },
@@ -780,8 +878,8 @@ export default function FechamentoParceiroPage() {
                 placeholder="Selecionar parceiro..."
               />
               <MonthYearPicker
-                month={month}
-                year={year}
+                month={effMonth}
+                year={effYear}
                 onChange={(m, y) => { setMonth(m || null); setYear(y || null) }}
               />
               {tab === 'relatorio' && partnerId && (
@@ -835,8 +933,101 @@ export default function FechamentoParceiroPage() {
               notas={status?.notas ?? null}
               canDecide={canDecideNotas}
               canUpload={canDecideNotas}
+              expectedValue={status?.recebimento ?? null}
+              selfService={false}
               onChanged={(n) => patchNotas(partnerId, n)}
             />
+          </div>
+        )}
+
+        {partnerId && (
+          <div className="mx-6 mt-4 p-3 rounded-lg border" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>Ajustes do recebimento</div>
+              <div className="text-right">
+                <div className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--brand-muted)' }}>Recebimento</div>
+                <div className="text-lg font-bold tabular-nums" style={{ color: 'var(--brand-primary)' }}>{formatBRL(recebimentoLive)}</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Desconto + descritivo */}
+              <div>
+                <label className="block text-[11px] mb-1" style={{ color: 'var(--brand-muted)' }}>Desconto</label>
+                <input
+                  type="number" step="0.01" min="0" inputMode="decimal"
+                  disabled={!canDecideNotas}
+                  value={ajuste.desconto}
+                  onChange={(e) => setAjuste(a => ({ ...a, desconto: e.target.value }))}
+                  onBlur={salvarAjuste}
+                  placeholder="0,00"
+                  className="w-full px-2 py-1.5 rounded text-sm tabular-nums"
+                  style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
+                />
+                <input
+                  type="text"
+                  disabled={!canDecideNotas}
+                  value={ajuste.desconto_desc}
+                  onChange={(e) => setAjuste(a => ({ ...a, desconto_desc: e.target.value }))}
+                  onBlur={salvarAjuste}
+                  placeholder="Descritivo (opcional)"
+                  className="w-full mt-1 px-2 py-1 rounded text-xs"
+                  style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
+                />
+              </div>
+              {/* Adiantamento (só valor) */}
+              <div>
+                <label className="block text-[11px] mb-1" style={{ color: 'var(--brand-muted)' }}>Adiantamento</label>
+                <input
+                  type="number" step="0.01" min="0" inputMode="decimal"
+                  disabled={!canDecideNotas}
+                  value={ajuste.adiantamento}
+                  onChange={(e) => setAjuste(a => ({ ...a, adiantamento: e.target.value }))}
+                  onBlur={salvarAjuste}
+                  placeholder="0,00"
+                  className="w-full px-2 py-1.5 rounded text-sm tabular-nums"
+                  style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
+                />
+              </div>
+              {/* Adicional + descritivo */}
+              <div>
+                <label className="block text-[11px] mb-1" style={{ color: 'var(--brand-muted)' }}>Adicional</label>
+                <input
+                  type="number" step="0.01" min="0" inputMode="decimal"
+                  disabled={!canDecideNotas}
+                  value={ajuste.adicional}
+                  onChange={(e) => setAjuste(a => ({ ...a, adicional: e.target.value }))}
+                  onBlur={salvarAjuste}
+                  placeholder="0,00"
+                  className="w-full px-2 py-1.5 rounded text-sm tabular-nums"
+                  style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
+                />
+                <input
+                  type="text"
+                  disabled={!canDecideNotas}
+                  value={ajuste.adicional_desc}
+                  onChange={(e) => setAjuste(a => ({ ...a, adicional_desc: e.target.value }))}
+                  onBlur={salvarAjuste}
+                  placeholder="Descritivo (opcional)"
+                  className="w-full mt-1 px-2 py-1 rounded text-xs"
+                  style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
+                />
+              </div>
+            </div>
+            {(() => {
+              // Legenda do recebimento, com serviço e despesa SEPARADOS (despesa entra no total).
+              const despLeg = consultores.length ? totalDespesas : (Number(status?.total_despesas ?? 0) || 0)
+              const servLeg = baseRecebimento - despLeg
+              const parts: string[] = [`serv ${formatBRL(servLeg)}`]
+              if (despLeg > 0)             parts.push(`+ desp ${formatBRL(despLeg)}`)
+              if (ajusteDesconto > 0)      parts.push(`− desc ${formatBRL(ajusteDesconto)}`)
+              if (ajusteAdiantamento > 0)  parts.push(`− adiant ${formatBRL(ajusteAdiantamento)}`)
+              if (ajusteAdicional > 0)     parts.push(`+ adic ${formatBRL(ajusteAdicional)}`)
+              return (
+                <div className="mt-2 text-[10px] leading-tight" style={{ color: 'var(--brand-muted)' }}>
+                  Recebimento = {parts.join('  ')}{savingAjuste ? ' · salvando…' : ''}
+                </div>
+              )
+            })()}
           </div>
         )}
 

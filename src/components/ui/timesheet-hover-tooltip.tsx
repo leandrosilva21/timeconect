@@ -13,13 +13,19 @@ export interface TimesheetPreview {
   id?: number | string
   user?: { name?: string } | null
   user_name?: string
-  customer?: { name?: string } | null
+  customer?: { name?: string; executive?: { name?: string } | null } | null
   customer_name?: string
-  project?: { name?: string; customer?: { name?: string } } | null
+  project?: {
+    name?: string
+    customer?: { name?: string; executive?: { name?: string } | null } | null
+    coordinators?: ({ name?: string } | null)[] | null
+    kanban_override_coordinator?: { name?: string } | null
+  } | null
   project_name?: string
   effort_minutes?: number
   ticket?: string | null
   observation?: string | null
+  coordinator_label?: string | null
 }
 
 export function useTimesheetHover() {
@@ -44,6 +50,12 @@ export function TimesheetHoverTooltip({ ts }: { ts: TimesheetPreview | null }) {
   const customerName = ts.customer?.name ?? ts.project?.customer?.name ?? ts.customer_name ?? '—'
   const projectName = ts.project?.name ?? ts.project_name ?? '—'
   const horas       = ts.effort_minutes != null ? toHHMM(ts.effort_minutes) : '—'
+  // Coordenador efetivo: usa o label resolvido pelo BE (override → coordenadores → coord. de sustentação);
+  // fallback pro cálculo local (override / coordenadores do projeto).
+  const coordNames  = ts.coordinator_label
+    || ts.project?.kanban_override_coordinator?.name
+    || (ts.project?.coordinators ?? []).map(c => c?.name).filter(Boolean).join(', ')
+  const execName    = ts.project?.customer?.executive?.name ?? ts.customer?.executive?.name ?? ''
 
   const obsText = (ts.observation ?? '')
     .replace(/<[^>]+>/g, ' ')
@@ -71,6 +83,12 @@ export function TimesheetHoverTooltip({ ts }: { ts: TimesheetPreview | null }) {
         <div><span style={{ color: 'var(--text-muted)' }}>Colaborador:</span> <span className="font-medium">{userName}</span></div>
         <div><span style={{ color: 'var(--text-muted)' }}>Cliente:</span> <span className="font-medium">{customerName}</span></div>
         <div><span style={{ color: 'var(--text-muted)' }}>Projeto:</span> <span className="font-medium">{projectName}</span></div>
+        {coordNames && (
+          <div><span style={{ color: 'var(--text-muted)' }}>Coordenador:</span> <span className="font-medium">{coordNames}</span></div>
+        )}
+        {execName && (
+          <div><span style={{ color: 'var(--text-muted)' }}>Executivo:</span> <span className="font-medium">{execName}</span></div>
+        )}
         <div><span style={{ color: 'var(--text-muted)' }}>Horas:</span> <span className="font-semibold" style={{ color: 'var(--brand-primary)' }}>{horas}</span></div>
         {ts.ticket && (
           <div><span style={{ color: 'var(--text-muted)' }}>Ticket:</span> <span className="font-medium">#{ts.ticket}</span></div>

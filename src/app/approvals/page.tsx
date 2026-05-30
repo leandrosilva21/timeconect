@@ -16,6 +16,7 @@ import { RowMenu } from '@/components/ui/row-menu'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { TimesheetViewModal } from '@/components/ui/timesheet-view-modal'
+import { TimesheetHoverTooltip, useTimesheetHover } from '@/components/ui/timesheet-hover-tooltip'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { api, ApiError } from '@/lib/api'
 import { fetchAsBlob } from '@/lib/attachments'
@@ -593,6 +594,7 @@ export default function ApprovalsPage() {
   const [users,        setUsers]        = useState<UserOption[]>([])
   const [coordinators, setCoordinators] = useState<UserOption[]>([])
   const [executives,   setExecutives]   = useState<UserOption[]>([])
+  const hover = useTimesheetHover()
   const [projects,     setProjects]     = useState<ProjectOption[]>([])
   const [customers,    setCustomers]    = useState<CustomerOption[]>([])
 
@@ -1080,6 +1082,8 @@ export default function ApprovalsPage() {
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Colaborador</th>
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Cliente</th>
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Projeto</th>
+              {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Coordenador</th>}
+              {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Executivo</th>}
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Título</th>}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Descrição</th>
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Solicitante</th>}
@@ -1122,7 +1126,7 @@ export default function ApprovalsPage() {
 
             {/* Timesheets rows */}
             {!currentLoading && tab === 'timesheets' && tsItems.map(ts => (
-              <tr key={ts.id} onClick={() => openTsView(ts)}
+              <tr key={ts.id} onClick={() => openTsView(ts)} {...hover.bind(ts)}
                 className={`border-b border-zinc-800/60 cursor-pointer transition-colors ${
                   selected.includes(ts.id) ? 'bg-blue-950/30' : 'hover:bg-zinc-800/40'
                 }`}>
@@ -1178,6 +1182,12 @@ export default function ApprovalsPage() {
                 <td className="px-3 py-2.5 text-zinc-200 font-medium">{ts.user?.name ?? '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-500 hidden md:table-cell">{ts.project?.customer?.name ?? '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell truncate max-w-[280px]">{ts.project?.name ?? '—'}</td>
+                <td className="px-3 py-2.5 text-zinc-500 hidden xl:table-cell truncate max-w-[160px]">
+                  {(ts as any).coordinator_label || '—'}
+                </td>
+                <td className="px-3 py-2.5 text-zinc-500 hidden xl:table-cell truncate max-w-[140px]">
+                  {(ts.project as any)?.customer?.executive?.name ?? '—'}
+                </td>
                 <td className="px-3 py-2.5 text-zinc-500 hidden lg:table-cell truncate max-w-[160px]">{ts.ticket_subject ?? '—'}</td>
                 <td className="px-3 py-2.5 hidden lg:table-cell max-w-[200px]">
                   {ts.observation ? (
@@ -1278,6 +1288,10 @@ export default function ApprovalsPage() {
           currentUser={user}
         />
       )}
+
+      {/* Preview do apontamento ao passar o mouse na linha (canto superior direito) */}
+      <TimesheetHoverTooltip ts={hover.ts} />
+
 
       {/* ── Modal: aprovar despesa ── */}
       {expApprove && (
