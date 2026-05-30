@@ -156,6 +156,9 @@ export default function OnDemandPage() {
   const [refMonth, setRefMonth] = useState<number | null>(now.getMonth() + 1)
   const [refYear,  setRefYear]  = useState<number | null>(now.getFullYear())
   const [filterMode, setFilterMode] = useState<'month' | 'period'>('month')
+  // Sustentação: range de DIGITAÇÃO opcional (created_at) — filtra SÓ a lista de apontamentos.
+  const [digFrom, setDigFrom] = useState('')
+  const [digTo,   setDigTo]   = useState('')
 
   const [summary,       setSummary]       = useState<SummaryData | null>(null)
   const [loadingSummary, setLoadingSummary] = useState(false)
@@ -167,6 +170,13 @@ export default function OnDemandPage() {
   const [projectsList, setProjectsList] = useState<ProjectItem[]>([])
   const [loadingProjects, setLoadingProjects] = useState(false)
 
+  // Competência (mês do serviço) = o próprio filtro de DATA (Mês/Ano → mês; Período → range).
+  // Trava a data do serviço dos apontamentos da Sustentação (além de dirigir o consumo).
+  const competenciaFrom = filterMode === 'month' && refMonth && refYear
+    ? `${refYear}-${String(refMonth).padStart(2, '0')}-01` : dateFrom
+  const competenciaTo = filterMode === 'month' && refMonth && refYear
+    ? `${refYear}-${String(refMonth).padStart(2, '0')}-${String(new Date(refYear, refMonth, 0).getDate()).padStart(2, '0')}` : dateTo
+
   // Componentes embarcados (Sustentação + Despesas) — reusam endpoints do BH Fixo
   const mxKind: 'maintenance' | 'expenses' = activeTab === 'expenses' ? 'expenses' : 'maintenance'
   const { rows: mxRows, loading: mxLoading, ticketSummary: mxTicketSummary, ticketLoading: mxTicketLoading, reload: reloadMx } = useMaintenanceInline({
@@ -174,8 +184,10 @@ export default function OnDemandPage() {
     kind: mxKind,
     customerId: (selectedCustomer as number) || user?.customer_id,
     projectId: (selectedProject as number) || null,
-    dateFrom,
-    dateTo,
+    competenciaFrom,
+    competenciaTo,
+    digFrom,
+    digTo,
   })
   const [mxDetail, setMxDetail] = useState<any | null>(null)
   const [indicatorParams, setIndicatorParams] = useState<URLSearchParams>(new URLSearchParams())
@@ -340,9 +352,11 @@ export default function OnDemandPage() {
               </div>
             )
           })()}
-          {/* Filtro de data */}
+          {/* Filtro de data = COMPETÊNCIA (mês do serviço): dirige consumo + trava o serviço dos apontamentos. */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Data</label>
+            <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>
+              {activeTab === 'maintenance' ? 'Competência (serviço)' : 'Data'}
+            </label>
             <div className="flex items-center gap-2">
               <div className="flex rounded-lg border border-zinc-700 overflow-hidden text-xs">
                 {(['month', 'period'] as const).map((mode) => (
@@ -370,6 +384,21 @@ export default function OnDemandPage() {
                 />
               )}
             </div>
+            {/* Sustentação: range de DIGITAÇÃO opcional — filtra SÓ a lista de apontamentos (não muda consumo).
+                Vazio = traz 100% da competência (qualquer data de digitação). */}
+            {activeTab === 'maintenance' && (
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Digitação</span>
+                <DateRangePicker from={digFrom} to={digTo} onChange={(f, t) => { setDigFrom(f); setDigTo(t) }} />
+                {(digFrom || digTo) && (
+                  <button onClick={() => { setDigFrom(''); setDigTo('') }}
+                    className="text-[11px] px-2 py-1 rounded" style={{ color: 'var(--text-muted)', border: '1px solid var(--brand-border)' }}>
+                    limpar
+                  </button>
+                )}
+                <span className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>(opcional — vazio traz 100% da competência)</span>
+              </div>
+            )}
           </div>
         </div>
 

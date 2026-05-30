@@ -1,12 +1,12 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { sanitizeHtml, previewText } from '@/lib/sanitize'
 import * as XLSX from 'xlsx'
 import {
   Clock, Eye, Download, Calendar, User as UserIcon, Building2, Folder,
-  Paperclip, FileText, X as CloseIcon, Undo2,
+  Paperclip, FileText, X as CloseIcon, Undo2, ChevronUp, ChevronDown, ChevronsUpDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -29,8 +29,13 @@ export function useMaintenanceInline(opts: {
   projectId?: number | null
   dateFrom?: string
   dateTo?: string
+  dateField?: 'servico' | 'digitacao'  // qual data o período filtra (compat. callers antigos)
+  competenciaFrom?: string  // mês do SERVIÇO (trava a competência)
+  competenciaTo?: string
+  digFrom?: string  // range de DIGITAÇÃO opcional (created_at) — só filtra a lista
+  digTo?: string
 }) {
-  const { enabled, kind, customerId, projectId, dateFrom, dateTo } = opts
+  const { enabled, kind, customerId, projectId, dateFrom, dateTo, dateField, competenciaFrom, competenciaTo, digFrom, digTo } = opts
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [ticketSummary, setTicketSummary] = useState<any[]>([])
@@ -46,6 +51,11 @@ export function useMaintenanceInline(opts: {
     if (projectId)  qs.set('project_id', String(projectId))
     if (dateFrom)   qs.set('date_from', dateFrom)
     if (dateTo)     qs.set('date_to', dateTo)
+    if (dateField === 'digitacao') qs.set('date_field', 'digitacao')
+    if (competenciaFrom) qs.set('competencia_start', competenciaFrom)
+    if (competenciaTo)   qs.set('competencia_end', competenciaTo)
+    if (digFrom) qs.set('dig_from', digFrom)
+    if (digTo)   qs.set('dig_to', digTo)
     const path = kind === 'expenses'
       ? `/dashboards/bank-hours-fixed/expenses?${qs}`
       : `/dashboards/bank-hours-fixed/category-timesheets?${qs}&category=${kind}`
@@ -64,9 +74,15 @@ export function useMaintenanceInline(opts: {
     } else {
       setTicketSummary([])
     }
-  }, [enabled, kind, customerId, projectId, dateFrom, dateTo, reloadKey])
+  }, [enabled, kind, customerId, projectId, dateFrom, dateTo, dateField, competenciaFrom, competenciaTo, digFrom, digTo, reloadKey])
 
   return { rows, loading, ticketSummary, ticketLoading, reload }
+}
+
+// Straggler: digitado em mês POSTERIOR ao do serviço (lançado fora da competência do serviço).
+function isDigitacaoLate(r: any): boolean {
+  if (!r?.created_at || !r?.date) return false
+  return String(r.created_at).slice(0, 7) > String(r.date).slice(0, 7)
 }
 
 // ─── Export Excel ───────────────────────────────────────────────────────────
@@ -83,6 +99,9 @@ export function exportMaintenanceToXLSX(kind: MaintenanceKind, rows: any[]) {
     : kind === 'maintenance'
       ? rows.map(r => ({
           Data: r.date ? r.date.split('-').reverse().join('/') : '',
+          Digitação: r.created_at
+            ? (isDigitacaoLate(r) ? '⚠ ' : '') + new Date(r.created_at).toLocaleDateString('pt-BR')
+            : '',
           Solicitante: r.requester ?? '',
           Consultor: r.user?.name ?? '',
           Ticket: r.ticket ?? '',
@@ -157,11 +176,52 @@ export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', 
   const [reversingId, setReversingId] = useState<number | null>(null)
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 30
-  // Reset pra página 1 quando o filtro muda (rows muda de referência).
-  useEffect(() => { setPage(1) }, [rows])
-  const totalPages = clientView ? Math.max(1, Math.ceil(rows.length / PAGE_SIZE)) : 1
-  const visibleRows = clientView ? rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) : rows
+
+  // ── Ordenação por coluna (clique no cabeçalho) ──────────────────────────────
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const requestSort = (k: string) => {
+    if (sortKey === k) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(k); setSortDir('asc') }
+  }
+  const sortVal = (r: any, k: string): string | number => {
+    switch (k) {
+      case 'date':       return r.date ?? ''
+      case 'created_at': return r.created_at ?? ''
+      case 'requester':  return (r.requester ?? '').toString().toLowerCase()
+      case 'consultor':  return (r.user?.name ?? '').toLowerCase()
+      case 'ticket':     return r.ticket ?? ''
+      case 'titulo':     return (r.ticket_subject ?? '').toLowerCase()
+      case 'inicio':     return r.start_time ?? ''
+      case 'fim':        return r.end_time ?? ''
+      case 'esforco':    return r.effort_minutes ?? 0
+      default:           return ''
+    }
+  }
+  const sortedRows = useMemo(() => {
+    if (!sortKey) return rows
+    const mul = sortDir === 'asc' ? 1 : -1
+    return [...rows].sort((a, b) => {
+      const av = sortVal(a, sortKey), bv = sortVal(b, sortKey)
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * mul
+      return String(av).localeCompare(String(bv), 'pt-BR', { numeric: true }) * mul
+    })
+  }, [rows, sortKey, sortDir])
+
+  // Reset pra página 1 quando filtro/ordenação muda.
+  useEffect(() => { setPage(1) }, [rows, sortKey, sortDir])
+  const totalPages = clientView ? Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE)) : 1
+  const visibleRows = clientView ? sortedRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) : sortedRows
   const totalHours = clientView ? rows.reduce((s, r) => s + ((r.effort_minutes ?? 0) / 60), 0) : 0
+  // Cabeçalho ordenável: clica e mostra a seta da direção.
+  const sortIcon = (k: string) => sortKey === k
+    ? (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
+    : <ChevronsUpDown size={11} style={{ opacity: 0.35 }} />
+  const SortHead = ({ k, align, children }: { k: string; align?: 'left' | 'center' | 'right'; children: React.ReactNode }) => (
+    <DataTableHeadCell align={align} className="cursor-pointer select-none" onClick={() => requestSort(k)}>
+      <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'justify-end w-full' : ''}`}>{children}{sortIcon(k)}</span>
+    </DataTableHeadCell>
+  )
   const handleReverse = async (id: number) => {
     if (!confirm('Estornar a aprovação deste apontamento?')) return
     setReversingId(id)
@@ -176,7 +236,8 @@ export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', 
     }
   }
   const isArch = variant === 'architecture'
-  const colSpan = isArch ? 5 : 10
+  const colSpan = isArch ? 5 : 11
+  const fmtDigitacao = (iso?: string | null) => iso ? new Date(iso).toLocaleDateString('pt-BR') : '—'
   return (
     <div
       className="rounded-xl overflow-hidden"
@@ -210,15 +271,16 @@ export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', 
               </>
             ) : (
               <>
-                <DataTableHeadCell>Data</DataTableHeadCell>
-                <DataTableHeadCell>Solicitante</DataTableHeadCell>
-                <DataTableHeadCell>Consultor</DataTableHeadCell>
-                <DataTableHeadCell>Ticket</DataTableHeadCell>
-                <DataTableHeadCell>Título do ticket</DataTableHeadCell>
+                <SortHead k="date">Data</SortHead>
+                <SortHead k="created_at">Digitação</SortHead>
+                <SortHead k="requester">Solicitante</SortHead>
+                <SortHead k="consultor">Consultor</SortHead>
+                <SortHead k="ticket">Ticket</SortHead>
+                <SortHead k="titulo">Título do ticket</SortHead>
                 <DataTableHeadCell>Descrição</DataTableHeadCell>
-                <DataTableHeadCell>Início</DataTableHeadCell>
-                <DataTableHeadCell>Fim</DataTableHeadCell>
-                <DataTableHeadCell align="right">Esforço (h)</DataTableHeadCell>
+                <SortHead k="inicio">Início</SortHead>
+                <SortHead k="fim">Fim</SortHead>
+                <SortHead k="esforco" align="right">Esforço (h)</SortHead>
                 <DataTableHeadCell align="right" />
               </>
             )}
@@ -247,6 +309,10 @@ export function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', 
             ) : (
               <DataTableRow key={r.id} onClick={handleClick}>
                 <DataTableCell>{r.date ? r.date.split('-').reverse().join('/') : '—'}</DataTableCell>
+                <DataTableCell
+                  title={isDigitacaoLate(r) ? 'Digitado fora da competência do serviço (lançado depois)' : (r.created_at ? new Date(r.created_at).toLocaleString('pt-BR') : '')}
+                  style={isDigitacaoLate(r) ? { color: 'var(--warning)', fontWeight: 600 } : undefined}
+                >{isDigitacaoLate(r) && '⚠ '}{fmtDigitacao(r.created_at)}</DataTableCell>
                 <DataTableCell muted={false}>{r.requester ?? '—'}</DataTableCell>
                 <DataTableCell muted={false}>{r.user?.name ?? '—'}</DataTableCell>
                 <DataTableCell>
