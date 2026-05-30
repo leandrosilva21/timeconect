@@ -136,6 +136,9 @@ export default function OnDemandPage() {
   const router = useRouter()
   const isAdmin   = user?.type === 'admin'
   const isCliente = user?.type === 'cliente'
+  // Digitação (filtro + coluna + destaque) liberado p/ admin/interno; no perfil de
+  // CLIENTE fica exclusivo da Vedamotors (customer_id 176). Demais clientes: só competência.
+  const showDigitacao = !isCliente || user?.customer_id === 176
   const canReverseApproval = !!user && user.type !== 'consultor' && user.type !== 'cliente'
 
   useEffect(() => {
@@ -186,8 +189,8 @@ export default function OnDemandPage() {
     projectId: (selectedProject as number) || null,
     competenciaFrom,
     competenciaTo,
-    digFrom,
-    digTo,
+    digFrom: showDigitacao ? digFrom : '',
+    digTo:   showDigitacao ? digTo   : '',
   })
   const [mxDetail, setMxDetail] = useState<any | null>(null)
   const [indicatorParams, setIndicatorParams] = useState<URLSearchParams>(new URLSearchParams())
@@ -386,7 +389,7 @@ export default function OnDemandPage() {
             </div>
             {/* Sustentação: range de DIGITAÇÃO opcional — filtra SÓ a lista de apontamentos (não muda consumo).
                 Vazio = traz 100% da competência (qualquer data de digitação). */}
-            {activeTab === 'maintenance' && (
+            {activeTab === 'maintenance' && showDigitacao && (
               <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                 <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Digitação</span>
                 <DateRangePicker from={digFrom} to={digTo} onChange={(f, t) => { setDigFrom(f); setDigTo(t) }} />
@@ -513,8 +516,8 @@ export default function OnDemandPage() {
             {/* ── SUSTENTAÇÃO ── */}
             {activeTab === 'maintenance' && isSustentacaoContract && (
               <div className="space-y-4">
-                <MxExportButton onClick={() => exportMaintenanceToXLSX('maintenance', mxRows)} disabled={mxRows.length === 0} />
-                <MxTimesheets rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} onReverseApproved={canReverseApproval} onReverseSuccess={reloadMx} clientView={isCliente} />
+                <MxExportButton onClick={() => exportMaintenanceToXLSX('maintenance', mxRows, showDigitacao)} disabled={mxRows.length === 0} />
+                <MxTimesheets rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} onReverseApproved={canReverseApproval} onReverseSuccess={reloadMx} clientView={isCliente} showDigitacao={showDigitacao} />
                 <MxTicketSummary rows={mxTicketSummary} loading={mxTicketLoading} />
               </div>
             )}
