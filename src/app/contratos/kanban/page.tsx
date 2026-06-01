@@ -3359,6 +3359,8 @@ function KanbanContent() {
           aporte={selectedAporte}
           canWrite={canWrite}
           onClose={() => setSelectedAporte(null)}
+          onSaved={load}
+          onDeleted={() => setAporteCards(prev => prev.filter(x => x.id !== selectedAporte.id))}
           onViewInProject={() => {
             // Abre o modal do projeto (mesma UX do "Visualizar" no Kanban Contratos),
             // direto na aba "Aportes". Sem sair da página; admin pode trocar de aba dentro.
