@@ -148,6 +148,10 @@ function fmtDateTime(iso: string | null | undefined): string {
 }
 
 const now = new Date()
+// Fechamento abre SEMPRE no mês anterior (o mês que se fecha), não no atual.
+const closingRef = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+const CLOSING_MONTH = closingRef.getMonth() + 1
+const CLOSING_YEAR  = closingRef.getFullYear()
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 
@@ -159,23 +163,21 @@ export default function FechamentoClientePage() {
     'fechamento_cliente',
     user?.id,
     {
-      fromMonth:    now.getMonth() + 1 as number | null,
-      fromYear:     now.getFullYear() as number | null,
-      toMonth:      now.getMonth() + 1 as number | null,
-      toYear:       now.getFullYear() as number | null,
       customerId:   null as number | null,
       projetoFilter: null as number | null,
       tab:          'servicos' as Tab,
     },
   )
-  const { fromMonth, fromYear, toMonth, toYear, customerId, projetoFilter, tab } = flt
-  const setFromMonth     = (v: number | null) => setFilter('fromMonth', v)
-  const setFromYear      = (v: number | null) => setFilter('fromYear', v)
-  const setToMonth       = (v: number | null) => setFilter('toMonth', v)
-  const setToYear        = (v: number | null) => setFilter('toYear', v)
+  const { customerId, projetoFilter, tab } = flt
   const setCustomerId    = (v: number | null) => setFilter('customerId', v)
   const setProjetoFilter = (v: number | null) => setFilter('projetoFilter', v)
   const setTab           = (v: Tab)           => setFilter('tab', v)
+
+  // Período NÃO é persistido: a tela de fechamento sempre abre no mês anterior.
+  const [fromMonth, setFromMonth] = useState<number | null>(CLOSING_MONTH)
+  const [fromYear,  setFromYear]  = useState<number | null>(CLOSING_YEAR)
+  const [toMonth,   setToMonth]   = useState<number | null>(CLOSING_MONTH)
+  const [toYear,    setToYear]    = useState<number | null>(CLOSING_YEAR)
 
   // ── Período ──
   const fromYM = fromMonth && fromYear ? toYearMonth(fromMonth, fromYear) : ''
