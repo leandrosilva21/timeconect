@@ -42,6 +42,7 @@ interface SummaryData {
   contributed_hours_history?: ContributionItem[]
   has_support?: boolean
   has_architecture?: boolean
+  has_children?: boolean
 }
 
 interface ContributionItem {
@@ -246,7 +247,7 @@ export default function BankHoursFixedPage() {
   // Projeto "leaf": um único projeto selecionado, sem sub-projetos de Arquitetura/Sustentação.
   // Apontamentos vão direto no Total Geral; abas e cards monetários ficam ocultos.
   const isLeafProject = !!selectedProject && summary != null
-    && !(summary.has_architecture) && !(summary.has_support)
+    && !(summary.has_architecture) && !(summary.has_support) && !(summary.has_children)
 
   useEffect(() => {
     if (isLeafProject && activeTab === 'projects') setActiveTab('total')
