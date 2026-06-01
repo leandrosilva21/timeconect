@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api } from '@/lib/api'
+import { uploadDirect } from '@/lib/upload'
 import { toast } from 'sonner'
 import { Plus, X, CheckCircle, ExternalLink } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/search-select'
@@ -494,16 +495,7 @@ export function ContractCreateModal({
         fd.append('motivo',            form.aporte_motivo)
         if (form.aporte_descricao) fd.append('description', form.aporte_descricao)
         if (!isChildTarget && pendingProposta) fd.append('proposta', pendingProposta)
-        const res = await fetch(`/api/v1/projects/${form.aporte_target_project_id}/hour-contributions`, {
-          method: 'POST',
-          credentials: 'same-origin',
-          body: fd,
-        })
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}))
-          toast.error((err as any)?.message ?? 'Erro ao criar aporte')
-          return
-        }
+        await uploadDirect(`/projects/${form.aporte_target_project_id}/hour-contributions`, fd)
         toast.success(isChildTarget
           ? 'Aporte registrado no projeto filho (consumindo do saldo do pai)'
           : 'Aporte criado — card disponível no Kanban')
@@ -583,11 +575,10 @@ export function ContractCreateModal({
         const fd = new FormData()
         fd.append('file', clientApprovalFile)
         fd.append('type', 'aprovacao_cliente')
-        const res = await fetch(`/api/v1/contracts/${contract.id}/attachments`, {
-          method: 'POST', credentials: 'same-origin', body: fd,
-        })
-        if (!res.ok) {
-          toast.error('Contrato criado, mas falha ao enviar aprovação. Anexe manualmente na edição.')
+        try {
+          await uploadDirect(`/contracts/${contract.id}/attachments`, fd)
+        } catch (upErr: any) {
+          toast.error(upErr?.message ?? 'Contrato criado, mas falha ao enviar aprovação. Anexe manualmente na edição.')
         }
       }
 

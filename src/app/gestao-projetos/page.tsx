@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { api, ApiError } from '@/lib/api'
+import { uploadDirect } from '@/lib/upload'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { Project, PaginatedResponse, HourContribution } from '@/types'
@@ -1121,7 +1122,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
         const fd = new FormData()
         fd.append('file', file)
         fd.append('type', type)
-        await fetch(`/api/v1/projects/${project.id}/attachments`, { method: 'POST', credentials: 'same-origin', body: fd })
+        await uploadDirect(`/projects/${project.id}/attachments`, fd)
       }
       setPendingAttach([])
     }

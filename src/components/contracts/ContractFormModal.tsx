@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api } from '@/lib/api'
+import { uploadDirect } from '@/lib/upload'
 import { toast } from 'sonner'
 import { Plus, X, Trash2, FileText, Download, ExternalLink, CheckCircle } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/search-select'
@@ -486,16 +487,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
         fd.append('motivo',            form.aporte_motivo)
         if (form.aporte_descricao) fd.append('description', form.aporte_descricao)
         if (!isChildTarget && pendProposta) fd.append('proposta', pendProposta.file)
-        const res = await fetch(`/api/v1/projects/${form.aporte_target_project_id}/hour-contributions`, {
-          method: 'POST',
-          credentials: 'same-origin',
-          body: fd,
-        })
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}))
-          toast.error(err?.message ?? 'Erro ao criar aporte')
-          return
-        }
+        await uploadDirect(`/projects/${form.aporte_target_project_id}/hour-contributions`, fd)
         toast.success(isChildTarget
           ? 'Aporte registrado no projeto filho (consumindo do saldo do pai)'
           : 'Aporte criado — card disponível no Kanban')
@@ -560,11 +552,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
           const fd = new FormData()
           fd.append('file', file)
           fd.append('type', type)
-          await fetch(`/api/v1/contracts/${contract.id}/attachments`, {
-            method: 'POST',
-            credentials: 'same-origin',
-            body: fd,
-          })
+          await uploadDirect(`/contracts/${contract.id}/attachments`, fd)
         }
         setUploading(false)
       }
