@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { api, ApiError } from '@/lib/api'
+import { uploadDirect } from '@/lib/upload'
 import { previewText } from '@/lib/sanitize'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
@@ -1261,7 +1262,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
         const fd = new FormData()
         fd.append('file', file)
         fd.append('type', type)
-        await fetch(`/api/v1/projects/${project.id}/attachments`, { method: 'POST', credentials: 'same-origin', body: fd })
+        await uploadDirect(`/projects/${project.id}/attachments`, fd)
       }
       setPendingAttach([])
     }
