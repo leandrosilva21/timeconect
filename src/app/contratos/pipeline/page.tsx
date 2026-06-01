@@ -2091,7 +2091,9 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
   const totalAvail = p?.total_available_hours ?? ((p?.sold_hours ?? 0) + (p?.hour_contribution ?? 0))
   // Lente do coordenador (swap KPIs/risco) — coordenador do projeto + banco explícito.
   // NUNCA aplica pra cliente: cliente vê sempre o sold_hours original do contrato.
-  const coordHoursBank = Number((p as any)?.coordination_hours ?? 0)
+  // Banco apontável = Horas Apontáveis informadas + APORTE (aporte soma com as contratadas).
+  const coordRaw = Number((p as any)?.coordination_hours ?? 0)
+  const coordHoursBank = coordRaw > 0 ? coordRaw + Math.max(0, totalAvail - Number(p?.sold_hours ?? 0)) : 0
   const isCoordViewer = !isClienteViewer && !!viewerUser?.id && !!p?.coordinators?.some((c: any) => c.id === viewerUser.id) && coordHoursBank > 0
   const coordConsumedVal = Number((p as any)?.coordination_consumed_hours ?? 0)
   const cardVendidas = isCoordViewer ? coordHoursBank : (p?.sold_hours ?? 0)

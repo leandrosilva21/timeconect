@@ -172,7 +172,9 @@ function calcProjHours(p: ProjectWithTeam): { displaySold: number; consumedHours
 function coordinationMeta(p: ProjectWithTeam, displaySold: number) {
   const raw = (p.coordination_hours != null && String(p.coordination_hours) !== '') ? Number(p.coordination_hours) : null
   const explicit = raw != null && raw > 0
-  const bank = explicit ? raw! : displaySold
+  // Banco apontável inclui o APORTE (aporte soma com as contratadas).
+  const aporte = Math.max(0, Number((p as any).total_available_hours ?? displaySold) - displaySold)
+  const bank = (explicit ? raw! : displaySold) + aporte
   const consumed = Number(p.coordination_consumed_hours ?? 0)
   const saldo = Math.round((bank - consumed) * 100) / 100
   const pct = bank > 0 ? (consumed / bank) * 100 : 0

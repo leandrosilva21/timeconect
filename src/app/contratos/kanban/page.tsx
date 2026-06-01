@@ -445,7 +445,10 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
   // Lente do coordenador: se o usuário logado é coordenador do projeto e há banco de
   // coordenação, troca KPIs/risco pro banco; admin/demais continuam vendo o operacional.
   const isClienteViewer = viewerUser?.type === 'cliente'
-  const coordHoursBank = Number((p as any)?.coordination_hours ?? 0)
+  // Banco apontável = Horas Apontáveis informadas + APORTE (aporte soma com as contratadas).
+  const coordRaw = Number((p as any)?.coordination_hours ?? 0)
+  const aporteHoras = Math.max(0, totalAvail - Number(p?.sold_hours ?? 0))
+  const coordHoursBank = coordRaw > 0 ? coordRaw + aporteHoras : 0
   // Cliente NUNCA vê a lente do coord: sempre o sold_hours original do contrato.
   const isCoordViewer = !isClienteViewer && !!viewerUser?.id && !!p?.coordinators?.some((c: any) => c.id === viewerUser.id) && coordHoursBank > 0
   const coordConsumedVal = Number((p as any)?.coordination_consumed_hours ?? 0)
