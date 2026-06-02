@@ -42,6 +42,7 @@ interface ConsultorBase {
   envio_em: string | null   // ISO do último envio do fechamento; null = não enviado
   envio_por: string | null  // nome de quem enviou
   notas?: NotasPayload      // NFS-e + Nota de débito (só consultor PJ avulso)
+  is_bizify?: boolean       // funcionário Bizify (relatório sai com logo Bizify)
 }
 
 interface ConsultorHorista extends ConsultorBase {
@@ -390,7 +391,7 @@ function buildReport(
   return `
     <div class="page">
       <div class="header">
-        <div class="logo"><img src="${window.location.origin}/logo.png" alt="ERPServ Consultoria" /></div>
+        <div class="logo"><img src="${window.location.origin}/${consultor.is_bizify ? 'logo-bizify.png' : 'logo.png'}" alt="${consultor.is_bizify ? 'Bizify' : 'ERPServ Consultoria'}" /></div>
         <div class="meta">
           <strong>${consultor.nome}</strong>
           Fechamento de Consultores &nbsp;·&nbsp; ${fmtYearMonth(yearMonth)} &nbsp;·&nbsp; ${modeLabel}
