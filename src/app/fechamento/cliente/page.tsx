@@ -31,6 +31,8 @@ interface PendItem {
   observacao?: string | null
   descricao?: string | null
   categoria?: string | null
+  executivo?: string | null
+  coordenador?: string | null
 }
 interface PendData {
   timesheets: PendItem[]
@@ -1470,6 +1472,8 @@ export default function FechamentoClientePage() {
                         <Th>Data</Th>
                         <Th>Colaborador</Th>
                         <Th>Projeto</Th>
+                        <Th>Coordenador</Th>
+                        <Th>Executivo</Th>
                         <Th className="text-right">Horas</Th>
                         <Th className="text-right">Valor</Th>
                         <Th>Status</Th>
@@ -1484,6 +1488,8 @@ export default function FechamentoClientePage() {
                             <span style={{ color: 'var(--text)' }}>{t.projeto}</span>
                             {t.ticket ? <span className="text-xs ml-1" style={{ color: 'var(--text-light)' }}>#{t.ticket}</span> : null}
                           </Td>
+                          <Td>{t.coordenador ?? '—'}</Td>
+                          <Td>{t.executivo ?? '—'}</Td>
                           <Td className="text-right tabular-nums">{(t.horas ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Td>
                           <Td className="text-right tabular-nums">{formatBRL(t.valor)}</Td>
                           <Td><Badge variant={t.status === 'adjustment_requested' ? 'danger' : 'warning'}>{t.status === 'adjustment_requested' ? 'Ajuste solicitado' : 'Pendente'}</Badge></Td>
