@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import {
   Search, Users, X, Check, TrendingUp, Clock,
   BarChart2, Building2, User, ChevronDown, ChevronRight, Plus, Pencil, Trash2,
+  CalendarPlus, CalendarOff,
 } from 'lucide-react'
 import { PageHeader, Table, Thead, Th, Tbody, Tr, Td, Button, SkeletonTable, EmptyState } from '@/components/ds'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
@@ -26,6 +27,7 @@ interface ICProject {
   categoria_interna: string | null
   customer: { id: number; name: string } | null
   consultants: Consultant[]
+  has_open_period?: boolean
 }
 
 interface HoursSummary { project_id: number; total_hours: number }
@@ -127,6 +129,8 @@ export default function InvestimentoComercialPage() {
   const [editProject,     setEditProject]     = useState<ICProject | null>(null)
   const [editName,        setEditName]        = useState('')
   const [editCategoria,   setEditCategoria]   = useState<EditableCategoria>('')
+  // Modal de abertura/fechamento de mês (períodos abertos) — igual aos projetos tradicionais
+  const [openPeriodProject, setOpenPeriodProject] = useState<ICProject | null>(null)
   const [savingEdit,      setSavingEdit]      = useState(false)
   const [deletingEdit,    setDeletingEdit]    = useState(false)
   const openEditModal = (p: ICProject) => {
@@ -200,7 +204,7 @@ export default function InvestimentoComercialPage() {
     try {
       const projRes = await api.get<any>('/projects?only_investimento_comercial=true&pageSize=2000&gestao=true&with_team=true')
       const rawProjects: any[] = projRes?.items ?? projRes?.data ?? []
-      setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, categoria_interna: p.categoria_interna ?? null, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
+      setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, categoria_interna: p.categoria_interna ?? null, customer: p.customer ?? null, consultants: p.consultants ?? [], has_open_period: p.has_open_period ?? false })))
     } catch {
       toast.error('Erro ao recarregar projetos')
     }
@@ -215,7 +219,7 @@ export default function InvestimentoComercialPage() {
     ]).then(([projRes, usersRes, groupsRes]) => {
       if (cancelled) return
       const rawProjects: any[] = projRes?.items ?? projRes?.data ?? []
-      setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, categoria_interna: p.categoria_interna ?? null, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
+      setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, categoria_interna: p.categoria_interna ?? null, customer: p.customer ?? null, consultants: p.consultants ?? [], has_open_period: p.has_open_period ?? false })))
       const rawUsers: any[] = usersRes?.items ?? usersRes?.data ?? []
       setAllUsers(rawUsers.map((u: any) => ({ id: u.id, name: u.name, email: u.email })))
       const rawGroups: any[] = groupsRes?.data ?? groupsRes?.items ?? []
@@ -447,6 +451,13 @@ export default function InvestimentoComercialPage() {
                           </Button>
                           <Button size="sm" variant="ghost" onClick={() => openModal(project)}>
                             <Users size={13} className="mr-1" /> Alocação
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setOpenPeriodProject(project)}
+                            aria-label={project.has_open_period ? 'Fechar mês' : 'Abrir mês'}
+                            style={project.has_open_period ? { color: 'var(--warning)' } : undefined}>
+                            {project.has_open_period
+                              ? <><CalendarOff size={13} className="mr-1" /> Fechar Mês</>
+                              : <><CalendarPlus size={13} className="mr-1" /> Abrir Mês</>}
                           </Button>
                         </div>
                       </Td>
@@ -917,6 +928,153 @@ export default function InvestimentoComercialPage() {
           </div>
         )
       })()}
+
+      {/* Modal: Abrir/Fechar mês (períodos abertos) — mesma regra dos projetos tradicionais */}
+      {openPeriodProject && (
+        <ICOpenPeriodModal
+          project={openPeriodProject}
+          onClose={() => setOpenPeriodProject(null)}
+          onRefresh={(hasOpen) => setProjects(prev => prev.map(p => p.id === openPeriodProject.id ? { ...p, has_open_period: hasOpen } : p))}
+        />
+      )}
     </AppLayout>
+  )
+}
+
+// ─── Modal de abertura/fechamento de mês ────────────────────────────────────────
+// Reusa os endpoints genéricos de projeto (/projects/{id}/open-period|close-periods|
+// open-periods) — os mesmos da Gestão de Projetos tradicional.
+function ICOpenPeriodModal({ project, onClose, onRefresh }: {
+  project: ICProject
+  onClose: () => void
+  onRefresh: (hasOpen: boolean) => void
+}) {
+  const now = new Date()
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const defaultYearMonth = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}`
+
+  const [yearMonth, setYearMonth]     = useState(defaultYearMonth)
+  const [openPeriods, setOpenPeriods] = useState<{ id: number; year_month: string }[]>([])
+  const [saving, setSaving]           = useState(false)
+  const [closing, setClosing]         = useState(false)
+
+  useEffect(() => {
+    api.get<any>(`/projects/${project.id}/open-periods`)
+      .then(r => setOpenPeriods(Array.isArray(r) ? r : (Array.isArray(r?.data) ? r.data : [])))
+      .catch(() => {})
+  }, [project.id])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  const fmtMonth = (ym: string) => {
+    const [y, m] = ym.split('-')
+    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  }
+
+  const handleOpen = async () => {
+    setSaving(true)
+    try {
+      await api.post(`/projects/${project.id}/open-period`, { year_month: yearMonth })
+      toast.success(`Mês ${fmtMonth(yearMonth)} aberto para este projeto.`)
+      onRefresh(true)
+      onClose()
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao abrir período')
+    } finally { setSaving(false) }
+  }
+
+  const handleCloseAll = async () => {
+    setClosing(true)
+    try {
+      const r = await api.post<{ count: number }>(`/projects/${project.id}/close-periods`, {})
+      toast.success(`${r.count} período(s) fechado(s).`)
+      onRefresh(false)
+      onClose()
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao fechar períodos')
+    } finally { setClosing(false) }
+  }
+
+  const monthOptions: { value: string; label: string }[] = []
+  for (let i = 1; i <= 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    monthOptions.push({ value: val, label: fmtMonth(val) })
+  }
+
+  const hasOpenPeriods = openPeriods.length > 0 || project.has_open_period === true
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}
+      onClick={onClose}>
+      <div className="w-full max-w-sm rounded-xl relative" style={{ background: 'var(--surface-raised, var(--surface))', border: '1px solid var(--border)' }}
+        onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute top-3 right-3 p-1 transition-colors" style={{ color: 'var(--text-muted)' }}><X size={14} /></button>
+        <div className="p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <CalendarPlus size={14} style={{ color: 'var(--warning-border)' }} />
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Períodos Abertos</h3>
+          </div>
+          <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
+            <strong>{project.name}</strong> — permite apontamentos em meses com competência fechada
+          </p>
+
+          {hasOpenPeriods && (
+            <div className="mb-4 space-y-1.5">
+              <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Meses atualmente abertos:</p>
+              {openPeriods.length > 0 ? openPeriods.map(p => (
+                <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs"
+                  style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', color: 'var(--warning)', fontWeight: 600 }}>
+                  <CalendarPlus size={11} style={{ color: 'var(--warning-border)' }} />
+                  {fmtMonth(p.year_month)}
+                </div>
+              )) : (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs"
+                  style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', color: 'var(--warning)', fontWeight: 600 }}>
+                  <CalendarPlus size={11} style={{ color: 'var(--warning-border)' }} />
+                  Há mês(es) aberto(s) neste projeto
+                </div>
+              )}
+              <button onClick={handleCloseAll} disabled={closing}
+                className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                style={{ background: 'var(--danger)', color: 'var(--primary-fg)', border: '1px solid var(--danger)' }}>
+                <CalendarOff size={12} />
+                {closing ? 'Fechando...' : 'Fechar mês(es) aberto(s)'}
+              </button>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs mb-1 block" style={{ color: 'var(--text-muted)' }}>
+                {hasOpenPeriods ? 'Ou abrir outro mês:' : 'Abrir mês:'}
+              </label>
+              <select value={yearMonth} onChange={e => setYearMonth(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-xs outline-none"
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+                {monthOptions.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
+              </select>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs"
+                style={{ border: '1px solid var(--border)', color: 'var(--text-muted)', background: 'var(--surface)' }}>
+                Cancelar
+              </button>
+              <button onClick={handleOpen} disabled={saving}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
+                style={hasOpenPeriods
+                  ? { background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)' }
+                  : { background: 'var(--warning-border)', color: 'var(--surface)', border: '1px solid var(--warning-border)' }}>
+                {saving ? 'Abrindo...' : 'Abrir Mês'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
