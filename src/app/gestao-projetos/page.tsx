@@ -3103,7 +3103,7 @@ export default function GestaoProjetosPage() {
                                 <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--warning-border)' }}>{c.pending_hours.toFixed(1)}h</td>
                                 <td className="px-3 py-2.5 tabular-nums text-[11px]" style={{ color: 'var(--text-muted)' }}>
                                   {c.consultant_hourly_rate != null ? formatBRL(c.consultant_hourly_rate) : '—'}
-                                  {c.consultant_rate_type === 'monthly' && <span className="ml-1 opacity-60">÷180</span>}
+                                  {c.consultant_rate_type === 'monthly' && <span className="ml-1 opacity-60">÷160</span>}
                                 </td>
                                 <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text)' }}>{formatBRL(c.cost)}</td>
                               </tr>
@@ -3660,7 +3660,7 @@ export default function GestaoProjetosPage() {
                                       <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--warning-border)' }}>{c.pending_hours.toFixed(1)}h</td>
                                       <td className="px-3 py-2.5 tabular-nums text-[11px]" style={{ color: 'var(--text-muted)' }}>
                                         {c.consultant_hourly_rate != null ? fmtBRL(c.consultant_hourly_rate) : '—'}
-                                        {c.consultant_rate_type === 'monthly' && <span className="ml-1 opacity-60">÷180</span>}
+                                        {c.consultant_rate_type === 'monthly' && <span className="ml-1 opacity-60">÷160</span>}
                                       </td>
                                       <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text)' }}>{fmtBRL(c.cost)}</td>
                                     </tr>

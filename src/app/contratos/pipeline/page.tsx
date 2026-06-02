@@ -2711,7 +2711,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
                                   <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--brand-text)' }}>{c.total_hours.toFixed(1)}h</td>
                                   <td className="px-3 py-2.5 tabular-nums" style={{ color: '#22c55e' }}>{c.approved_hours.toFixed(1)}h</td>
                                   <td className="px-3 py-2.5 tabular-nums" style={{ color: '#f59e0b' }}>{c.pending_hours.toFixed(1)}h</td>
-                                  <td className="px-3 py-2.5 tabular-nums text-[11px]" style={{ color: 'var(--brand-muted)' }}>{c.consultant_hourly_rate != null ? fmtBRL(c.consultant_hourly_rate) : '—'}{c.consultant_rate_type === 'monthly' && <span className="ml-1 opacity-60">÷180</span>}</td>
+                                  <td className="px-3 py-2.5 tabular-nums text-[11px]" style={{ color: 'var(--brand-muted)' }}>{c.consultant_hourly_rate != null ? fmtBRL(c.consultant_hourly_rate) : '—'}{c.consultant_rate_type === 'monthly' && <span className="ml-1 opacity-60">÷160</span>}</td>
                                   <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--brand-text)' }}>{fmtBRL(c.cost)}</td>
                                 </tr>
                               ))}

@@ -1098,7 +1098,7 @@ export default function FechamentoParceiroPage() {
                                 <Td>
                                   <div className="text-xs font-medium" style={{ color: 'var(--brand-text)' }}>{row.nome}</div>
                                   {row.rate_type === 'monthly' && !isFixed && (
-                                    <div className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Mensalista · ÷180</div>
+                                    <div className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Mensalista · ÷160</div>
                                   )}
                                 </Td>
                                 <Td right className="tabular-nums text-xs">{row.horas.toFixed(2)}h</Td>

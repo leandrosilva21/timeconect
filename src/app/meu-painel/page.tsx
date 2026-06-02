@@ -466,7 +466,7 @@ function ParceiroSimplesSection({
 function HBPaymentSection({ data, fixedSalary, expTotal, expPaid, showExtras = true }: { data: HourBankMonth; fixedSalary: number; expTotal: number; expPaid: number; showExtras?: boolean }) {
   const hasExtra     = showExtras && data.accumulated_balance > 0
   const extraHours   = hasExtra ? data.accumulated_balance : 0
-  const valorHoraExt = fixedSalary > 0 ? fixedSalary / 180 : 0
+  const valorHoraExt = fixedSalary > 0 ? fixedSalary / 160 : 0
   const totalExtra   = hasExtra ? extraHours * valorHoraExt : 0
   const totalSalario = fixedSalary + totalExtra
   const expAllTotal  = expTotal + expPaid
@@ -1799,7 +1799,7 @@ export default function MeuPainelPage() {
     if (!user?.id) return
     const rawRate = (user as any)?.hourly_rate ?? 0
     const rType   = (user as any)?.rate_type ?? 'hourly'
-    const rate    = rawRate > 0 ? (rType === 'monthly' ? rawRate / 180 : rawRate) : 0
+    const rate    = rawRate > 0 ? (rType === 'monthly' ? rawRate / 160 : rawRate) : 0
 
     async function load() {
       setHistoryLoading(true)
@@ -2070,12 +2070,12 @@ export default function MeuPainelPage() {
   const maxProjectMin  = tsByProject[0]?.minutes  ?? 1
   const maxCustomerMin = tsByCustomer[0]?.minutes ?? 1
 
-  // Taxa efetiva: horistas usam o valor direto; mensalistas dividem por 180
+  // Taxa efetiva: horistas usam o valor direto; mensalistas dividem por 160
   const hourlyRate      = Number((user as any)?.hourly_rate ?? 0)
   const rateType        = (user as any)?.rate_type ?? 'hourly'
   const guaranteedHours = (user as any)?.guaranteed_hours != null ? Number((user as any).guaranteed_hours) : null
   const effectiveRate   = hourlyRate > 0
-    ? (rateType === 'monthly' ? hourlyRate / 180 : hourlyRate)
+    ? (rateType === 'monthly' ? hourlyRate / 160 : hourlyRate)
     : 0
   const tsPctExtraMin = useMemo(() =>
     timesheets.reduce((acc, ts) => acc + (ts.consultant_extra_pct
@@ -2133,7 +2133,7 @@ export default function MeuPainelPage() {
   const hbBeforeStart = hbStartYM !== null && hbSelectedYM < hbStartYM
   const hbExtraHours  = !hbBeforeStart && hbCurrent && hbCurrent.accumulated_balance > 0
     ? hbCurrent.accumulated_balance : 0
-  const hbExtraValue  = hourlyRate > 0 ? hbExtraHours * (hourlyRate / 180) : 0
+  const hbExtraValue  = hourlyRate > 0 ? hbExtraHours * (hourlyRate / 160) : 0
   const hbServiceVal  = hourlyRate + hbExtraValue
   const hbTotalGeral  = hbServiceVal + expTotal
 

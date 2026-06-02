@@ -208,7 +208,7 @@ function TabCusto({ data, loading }: { data: CustoData | null; loading: boolean 
                 <Td right className="tabular-nums text-xs">{r.horas.toFixed(1)}h</Td>
                 <Td right className="tabular-nums text-xs" style={{ color: 'var(--brand-muted)' }}>
                   {r.valor_hora > 0 ? formatBRL(r.valor_hora) : '—'}
-                  {r.rate_type === 'monthly' && <span className="ml-1 text-[10px] opacity-60">÷180</span>}
+                  {r.rate_type === 'monthly' && <span className="ml-1 text-[10px] opacity-60">÷160</span>}
                 </Td>
                 <Td right className="tabular-nums text-xs font-bold" style={{ color: 'var(--brand-text)' }}>{formatBRL(r.total)}</Td>
               </Tr>
