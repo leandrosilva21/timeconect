@@ -817,7 +817,7 @@ interface ProjectEditForm {
   observacoes_contrato: string
   max_expense_per_consultant: string
   timesheet_retroactive_limit_days: string
-  allow_manual_timesheets: boolean; allow_negative_balance: boolean
+  allow_manual_timesheets: boolean; allow_negative_balance: boolean; client_follows_timesheets: boolean
   movidesk_integration_enabled: boolean
   coordinator_ids: number[]; consultant_ids: number[]; consultant_group_ids: number[]
   kanban_coordinator_override_id: string
@@ -880,6 +880,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     timesheet_retroactive_limit_days: d.timesheet_retroactive_limit_days != null ? String(d.timesheet_retroactive_limit_days) : '',
     allow_manual_timesheets:         d.allow_manual_timesheets ?? true,
     allow_negative_balance:          d.allow_negative_balance ?? false,
+    client_follows_timesheets:       (d as any).client_follows_timesheets ?? true,
     movidesk_integration_enabled:    (d as any).movidesk_integration_enabled ?? false,
     coordinator_ids:                 (d.coordinators ?? d.approvers ?? []).map((c: any) => c.id),
     consultant_ids:                  (d.consultants ?? []).map((c: any) => c.id),
@@ -1052,6 +1053,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
         encerramento_date:    form.encerramento_date || null,
         allow_manual_timesheets: form.allow_manual_timesheets,
         allow_negative_balance:  form.allow_negative_balance,
+        client_follows_timesheets: form.client_follows_timesheets,
         movidesk_integration_enabled: form.movidesk_integration_enabled,
         cobra_despesa_cliente:   form.cobra_despesa_cliente,
         observacoes_contrato: form.observacoes_contrato || null,
@@ -1546,6 +1548,15 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 </div>
               </div>
               <Toggle2 checked={form.allow_negative_balance} onChange={v => setForm(p => ({ ...p, allow_negative_balance: v }))} label="Permitir saldo negativo de horas" />
+              {(() => {
+                const ctn = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase() ?? ''
+                if (!ctn.includes('banco de horas fixo')) return null
+                return (
+                  <Toggle2 checked={form.client_follows_timesheets}
+                    onChange={v => setForm(p => ({ ...p, client_follows_timesheets: v }))}
+                    label="Cliente acompanha apontamento (se desligado, o cliente não vê os apontamentos e o saldo aparece zerado — tudo consumido)" />
+                )
+              })()}
               <Toggle2
                 checked={form.movidesk_integration_enabled}
                 onChange={v => setForm(p => ({ ...p, movidesk_integration_enabled: v }))}
