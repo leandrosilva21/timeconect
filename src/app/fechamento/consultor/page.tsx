@@ -82,11 +82,19 @@ interface Totais {
   total_geral: number
 }
 
+interface BizifyData {
+  horistas: ConsultorHorista[]
+  banco_horas: ConsultorBancoHoras[]
+  fixos: ConsultorFixo[]
+  totais: Totais
+}
+
 interface IndexData {
   horistas: ConsultorHorista[]
   banco_horas: ConsultorBancoHoras[]
   fixos: ConsultorFixo[]
   totais: Totais
+  bizify?: BizifyData
 }
 
 interface ApontamentoRow {
@@ -109,7 +117,7 @@ interface ApontamentoRow {
   valor_extra?: number | null // apenas horista/fixo
 }
 
-type Tab = 'horistas' | 'banco_horas' | 'fixo' | 'resumo'
+type Tab = 'horistas' | 'banco_horas' | 'fixo' | 'resumo' | 'bizify'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -767,11 +775,15 @@ export default function FechamentoConsultorPage() {
     setReportTarget(null) // consolidado — sem alvo individual, esconde "Enviar e-mail"
   }
 
+  const hasBizify = ((data?.bizify?.horistas?.length ?? 0)
+    + (data?.bizify?.banco_horas?.length ?? 0)
+    + (data?.bizify?.fixos?.length ?? 0)) > 0
   const TABS: { key: Tab; label: string }[] = [
     { key: 'horistas',    label: 'Horistas' },
     { key: 'banco_horas', label: 'Banco de Horas' },
     { key: 'fixo',        label: 'Fixo' },
     { key: 'resumo',      label: 'Resumo' },
+    ...(hasBizify ? [{ key: 'bizify' as Tab, label: 'Bizify' }] : []),
   ]
 
   // ─── Filtros ──────────────────────────────────────────────────────────────
@@ -962,8 +974,8 @@ export default function FechamentoConsultorPage() {
 
   // ─── Tab: Horistas ────────────────────────────────────────────────────────
 
-  function TabHoristas() {
-    const rows = applyFilters(data?.horistas ?? [])
+  function TabHoristas({ source }: { source?: ConsultorHorista[] } = {}) {
+    const rows = applyFilters(source ?? data?.horistas ?? [])
     const { sorted, thProps } = useTableSort(rows, (c, k) => k === 'total' ? (c.recebimento ?? 0) : (c as unknown as Record<string, unknown>)[k])
     return (
       <div>
@@ -1040,8 +1052,8 @@ export default function FechamentoConsultorPage() {
 
   // ─── Tab: Banco de Horas ──────────────────────────────────────────────────
 
-  function TabBancoHoras() {
-    const rows = applyFilters(data?.banco_horas ?? [])
+  function TabBancoHoras({ source }: { source?: ConsultorBancoHoras[] } = {}) {
+    const rows = applyFilters(source ?? data?.banco_horas ?? [])
     const { sorted, thProps } = useTableSort(rows, (c, k) => k === 'total' ? (c.recebimento ?? 0) : (c as unknown as Record<string, unknown>)[k])
     return (
       <div>
@@ -1111,8 +1123,8 @@ export default function FechamentoConsultorPage() {
 
   // ─── Tab: Fixo ────────────────────────────────────────────────────────────
 
-  function TabFixo() {
-    const rows = applyFilters((data?.fixos ?? []) as ConsultorFixo[])
+  function TabFixo({ source }: { source?: ConsultorFixo[] } = {}) {
+    const rows = applyFilters((source ?? data?.fixos ?? []) as ConsultorFixo[])
     const { sorted, thProps } = useTableSort(rows)
     return (
       <div>
@@ -1171,6 +1183,58 @@ export default function FechamentoConsultorPage() {
   }
 
   // ─── Tab: Resumo ──────────────────────────────────────────────────────────
+
+  function TabBizify() {
+    const bz = data?.bizify
+    const h = bz?.horistas ?? []
+    const b = bz?.banco_horas ?? []
+    const f = bz?.fixos ?? []
+    const t = bz?.totais
+    const vazio = h.length === 0 && b.length === 0 && f.length === 0
+    return (
+      <div>
+        {/* Cabeçalho Bizify (mesmos campos do consultor, com o logo Bizify) */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-bizify.png" alt="Bizify" className="h-9 w-auto" />
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-100">Fechamento Bizify</h3>
+              <p className="text-xs text-zinc-400">Não entra no resultado da ERPSERV</p>
+            </div>
+          </div>
+          {t && (
+            <div className="text-right">
+              <p className="text-xs text-zinc-400">Total Geral Bizify</p>
+              <p className="text-lg font-bold text-zinc-100">{formatBRL(t.total_geral)}</p>
+            </div>
+          )}
+        </div>
+
+        {h.length > 0 && (
+          <section className="mb-6">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-2">Horistas</h4>
+            <TabHoristas source={h} />
+          </section>
+        )}
+        {b.length > 0 && (
+          <section className="mb-6">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-2">Banco de Horas</h4>
+            <TabBancoHoras source={b} />
+          </section>
+        )}
+        {f.length > 0 && (
+          <section className="mb-6">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-2">Fixo</h4>
+            <TabFixo source={f} />
+          </section>
+        )}
+        {vazio && (
+          <p className="py-8 text-center text-zinc-500 text-sm">Nenhum consultor Bizify no período</p>
+        )}
+      </div>
+    )
+  }
 
   function TabResumo() {
     const t = data?.totais
@@ -1547,6 +1611,7 @@ export default function FechamentoConsultorPage() {
               {tab === 'banco_horas' && <TabBancoHoras />}
               {tab === 'fixo'        && <TabFixo />}
               {tab === 'resumo'      && <TabResumo />}
+              {tab === 'bizify'      && <TabBizify />}
             </>
           )}
         </div>
