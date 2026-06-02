@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { ConfirmDeleteModal } from '@/components/ui/confirm-delete-modal'
 import { ExpenseViewModal } from '@/components/ui/expense-view-modal'
+import { ExpenseHoverTooltip, useExpenseHover } from '@/components/ui/timesheet-hover-tooltip'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { useAuth } from '@/hooks/use-auth'
@@ -730,6 +731,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
     }
   }, [])
   const { sorted: sortedItems, thProps } = useTableSort(items, expenseSortAccessor)
+  const expHover = useExpenseHover()
 
   // ─── Exportar Excel (apenas a página visível ordenada — mesma regra do print) ──
   const exportToExcel = () => {
@@ -979,7 +981,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
                   </td>
                 </tr>
               ) : sortedItems.map(exp => (
-                <Tr key={exp.id} onClick={() => setViewItem(exp)}>
+                <Tr key={exp.id} onClick={() => setViewItem(exp)} {...expHover.bind(exp)}>
                   {!isCliente && (
                     <Td className="w-10">
                       <div onClick={e => e.stopPropagation()}>
@@ -1150,6 +1152,8 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
       )}
 
       {/* Modal: Visualizar Despesa */}
+      <ExpenseHoverTooltip exp={expHover.exp} />
+
       {viewItem && (
         <ExpenseViewModal
           expense={viewItem}

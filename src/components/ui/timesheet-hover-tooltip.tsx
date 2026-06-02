@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatBRL } from '@/lib/format'
 
 /**
  * Tooltip flutuante (canto superior direito, pointer-events:none) que
@@ -97,6 +98,92 @@ export function TimesheetHoverTooltip({ ts }: { ts: TimesheetPreview | null }) {
           <div className="pt-2 mt-2" style={{ borderTop: '1px solid var(--border)' }}>
             <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>Descrição</p>
             <p className="leading-snug" style={{ color: 'var(--text-muted)' }}>{obsPreview}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Tooltip de Despesa (mesmo formato do apontamento, campos de despesa) ────────
+export interface ExpensePreview {
+  id?: number | string
+  user?: { name?: string } | null
+  customer?: { name?: string; executive?: { name?: string } | null } | null
+  project?: {
+    name?: string
+    customer?: { name?: string; executive?: { name?: string } | null } | null
+    coordinators?: ({ name?: string } | null)[] | null
+    kanban_override_coordinator?: { name?: string } | null
+  } | null
+  category?: { name?: string } | null
+  amount?: number | string | null
+  description?: string | null
+  coordinator_label?: string | null
+}
+
+export function useExpenseHover() {
+  const [exp, setExp] = useState<ExpensePreview | null>(null)
+  const bind = (item: ExpensePreview) => ({
+    onMouseEnter: () => setExp(item),
+    onMouseLeave: () => setExp(null),
+  })
+  return { exp, bind, clear: () => setExp(null) }
+}
+
+export function ExpenseHoverTooltip({ exp }: { exp: ExpensePreview | null }) {
+  if (!exp) return null
+
+  const userName     = exp.user?.name ?? '—'
+  const customerName = exp.customer?.name ?? exp.project?.customer?.name ?? '—'
+  const projectName  = exp.project?.name ?? '—'
+  const coordNames   = exp.coordinator_label
+    || exp.project?.kanban_override_coordinator?.name
+    || (exp.project?.coordinators ?? []).map(c => c?.name).filter(Boolean).join(', ')
+  const execName     = exp.project?.customer?.executive?.name ?? exp.customer?.executive?.name ?? ''
+  const categoria    = exp.category?.name ?? ''
+  const valor        = exp.amount != null ? formatBRL(Number(exp.amount)) : '—'
+
+  const descText = (exp.description ?? '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const descPreview = descText.length > 240 ? descText.slice(0, 240) + '…' : descText
+
+  return (
+    <div
+      className="fixed z-40 rounded-lg shadow-2xl pointer-events-none"
+      style={{
+        top: 80, right: 16, minWidth: 280, maxWidth: 380,
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        padding: '12px 14px',
+      }}
+    >
+      {exp.id != null && (
+        <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>
+          Despesa #{exp.id}
+        </p>
+      )}
+      <div className="space-y-1 text-xs" style={{ color: 'var(--text)' }}>
+        <div><span style={{ color: 'var(--text-muted)' }}>Colaborador:</span> <span className="font-medium">{userName}</span></div>
+        <div><span style={{ color: 'var(--text-muted)' }}>Cliente:</span> <span className="font-medium">{customerName}</span></div>
+        <div><span style={{ color: 'var(--text-muted)' }}>Projeto:</span> <span className="font-medium">{projectName}</span></div>
+        {coordNames && (
+          <div><span style={{ color: 'var(--text-muted)' }}>Coordenador:</span> <span className="font-medium">{coordNames}</span></div>
+        )}
+        {execName && (
+          <div><span style={{ color: 'var(--text-muted)' }}>Executivo:</span> <span className="font-medium">{execName}</span></div>
+        )}
+        {categoria && (
+          <div><span style={{ color: 'var(--text-muted)' }}>Categoria:</span> <span className="font-medium">{categoria}</span></div>
+        )}
+        <div><span style={{ color: 'var(--text-muted)' }}>Valor:</span> <span className="font-semibold" style={{ color: 'var(--brand-primary)' }}>{valor}</span></div>
+        {descPreview && (
+          <div className="pt-2 mt-2" style={{ borderTop: '1px solid var(--border)' }}>
+            <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--text-light)' }}>Descrição</p>
+            <p className="leading-snug" style={{ color: 'var(--text-muted)' }}>{descPreview}</p>
           </div>
         )}
       </div>
