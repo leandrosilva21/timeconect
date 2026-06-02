@@ -33,6 +33,7 @@ type StatementType = 'monthly' | 'fixed' | 'on_demand' | 'none'
 interface StatementRow {
   year_month: string
   vendidas_hours: number | null
+  aporte_hours?: number
   consumption_hours: number
   accumulated_consumption_hours: number
   balance_hours: number | null
@@ -139,7 +140,14 @@ export function MonthlyAccrualTable({ startDate, hoursPerMonth = 0, accumulated,
                 return (
                   <tr key={r.year_month} style={{ borderBottom: `1px solid ${t.border}` }}>
                     <td className="px-3 py-2 tabular-nums" style={{ color: t.muted }}>{fmtMonth(r.year_month)}</td>
-                    {showVendidas && <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: t.text }}>{fmtH(r.vendidas_hours ?? 0)}</td>}
+                    {showVendidas && (
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: t.text }}>
+                        {fmtH(r.vendidas_hours ?? 0)}
+                        {(r.aporte_hours ?? 0) > 0 && (
+                          <span className="block text-[10px] font-medium" style={{ color: 'var(--success)' }}>+{fmtH(r.aporte_hours ?? 0)} aporte</span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-3 py-2 text-right tabular-nums" style={{ color: t.text }}>
                       {canEdit ? (
                         <div className="inline-flex items-center gap-1 justify-end">
