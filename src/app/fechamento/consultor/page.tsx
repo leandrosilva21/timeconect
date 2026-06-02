@@ -689,12 +689,10 @@ export default function FechamentoConsultorPage() {
   async function handleRelatorio(consultor: ConsultorBase | ConsultorHorista | ConsultorBancoHoras | ConsultorFixo, mode: ReportMode = 'ambos') {
     setPrintingUser(consultor.user_id)
     try {
-      const [res, despRes] = await Promise.all([
-        api.get<{ data: ApontamentoRow[] }>(`/fechamento-consultor/${consultor.user_id}/${yearMonth}/apontamentos`),
-        api.get<{ data: DespesaRow[] }>(`/fechamento-consultor/${consultor.user_id}/${yearMonth}/despesas`),
-      ])
-      const html = buildReport(consultor, res.data ?? [], yearMonth, despRes.data ?? [], mode)
-      setReportHtml(buildFullHtml(html))
+      // Fonte ÚNICA: o relatório vem do MESMO Blade do servidor que gera o PDF/e-mail,
+      // garantindo que a tela e o e-mail sejam idênticos.
+      const res = await api.get<{ html: string }>(`/fechamento-consultor/${consultor.user_id}/${yearMonth}/report-html?mode=${mode}`)
+      setReportHtml(res.html)
       setReportTarget({ userId: consultor.user_id, name: consultor.nome, mode })
     } catch (err: unknown) {
       toast.error(`Erro ao gerar relatório: ${err instanceof Error ? err.message : 'falha na API'}`)
