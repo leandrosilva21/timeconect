@@ -29,6 +29,8 @@ interface FolhaRow {
   is_socio: boolean
   // Linha de parceiro Raho (azul, identificada, editável como sócio).
   is_raho?: boolean
+  // Linha consolidada do parceiro (exceto Raho): apuração total no parceiro admin.
+  is_parceiro_total?: boolean
   partner_label?: string | null
   // Valores ORIGINAIS calculados do mês (Raho) — p/ legenda "original" quando alterado.
   producao_calc?: number
@@ -969,6 +971,8 @@ export default function FechamentoFolhaPage() {
                       ? 'var(--danger-bg)'
                       : r.is_raho
                         ? 'rgba(59,130,246,0.13)' // azul — parceiro Raho
+                        : r.is_parceiro_total
+                          ? 'rgba(20,184,166,0.12)' // teal — parceiro consolidado (apuração total)
                         : socio
                           ? 'var(--success-bg)'
                           : afastado
@@ -1035,6 +1039,13 @@ export default function FechamentoFolhaPage() {
                                   {r.partner_label ?? 'Raho'}
                                 </span>
                               )}
+                              {r.is_parceiro_total && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                                  style={{ background: 'rgba(20,184,166,0.2)', color: '#14b8a6' }}
+                                  title="Apuração total do parceiro">
+                                  {r.partner_label ?? 'Parceiro'}
+                                </span>
+                              )}
                               {afastado && (
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0"
                                   style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>
@@ -1080,7 +1091,7 @@ export default function FechamentoFolhaPage() {
                               className={cellInputClass}
                               style={cellInputStyle}
                             />
-                          ) : fmtNum(r.valor_hora, 2)}
+                          ) : r.is_parceiro_total ? '—' : fmtNum(r.valor_hora, 2)}
                         </Td>
 
                         {/* ── Produção: editável p/ todos; legendas = produção calculada + despesa do mês ── */}
