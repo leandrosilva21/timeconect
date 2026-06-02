@@ -146,11 +146,8 @@ function fmtDateTime(iso: string | null): string {
 }
 
 function fmtH(h: number): string {
-  const sign     = h < 0 ? '-' : ''
-  const totalMins = Math.abs(Math.round(h * 60))
-  const hrs  = Math.floor(totalMins / 60)
-  const mins = totalMins % 60
-  return `${sign}${hrs}h${String(mins).padStart(2, '0')}`
+  // Horas em DECIMAL 2 casas (pt-BR) — bate com horas × taxa no total.
+  return (h ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function balanceColor(val: number): string {
