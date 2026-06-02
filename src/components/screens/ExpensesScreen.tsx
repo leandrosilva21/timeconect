@@ -421,7 +421,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
   const isCoordenador    = user?.type === 'coordenador'
   const isAdmin          = user?.type === 'admin'
   const isAdministrativo = user?.type === 'administrativo'
-  const canActAsUser     = isAdmin || isCoordenador
+  const canActAsUser     = isAdmin || isCoordenador || isAdministrativo
   const isCliente        = user?.type === 'cliente'
   const canPay           = isAdmin || isAdministrativo
   // Chip "Meus projetos / Todos" pra coordenador (idem Apontamentos / Demandas).
