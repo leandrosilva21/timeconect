@@ -180,6 +180,17 @@ export default function FechamentoParceiroPage() {
   })
   const [savingAjuste, setSavingAjuste] = useState(false)
   const [reportMode, setReportMode]   = useState<'servicos' | 'despesa' | 'ambos'>('ambos')
+  // Relatório (preview): vem do MESMO Blade do servidor que gera o PDF/e-mail → tela = e-mail.
+  const [reportHtmlSrv, setReportHtmlSrv] = useState<string | null>(null)
+  const [loadingReport,  setLoadingReport]  = useState(false)
+  useEffect(() => {
+    if (tab !== 'relatorio' || !partnerId || !yearMonth) return
+    setLoadingReport(true)
+    api.get<{ html: string }>(`/fechamento-parceiro/${partnerId}/${yearMonth}/report-html?mode=${reportMode}`)
+      .then(r => setReportHtmlSrv(r.html ?? null))
+      .catch(() => setReportHtmlSrv(null))
+      .finally(() => setLoadingReport(false))
+  }, [tab, partnerId, yearMonth, reportMode])
   const [apontamentos, setApontamentos] = useState<ApontamentoRow[]>([])
 
   const [loadingConsult, setLoadingConsult]   = useState(false)
@@ -1401,10 +1412,10 @@ export default function FechamentoParceiroPage() {
 
               {/* ── Tab Relatório ── */}
               {tab === 'relatorio' && (
-                loadingAp ? (
+                (loadingAp || loadingReport) ? (
                   <div className="p-6"><SkeletonTable rows={4} cols={6} /></div>
                 ) : (() => {
-                  const reportHtml = buildServicosHtml(reportMode)
+                  const reportHtml = reportHtmlSrv
                   if (!reportHtml) {
                     return (
                       <EmptyState
