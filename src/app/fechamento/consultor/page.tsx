@@ -236,7 +236,9 @@ function buildReport(
   if ('fixed_salary' in consultor) {
     const c = consultor as ConsultorBancoHoras
     summaryExtra = `
+      <div class="summary-item"><div class="summary-label">H Úteis Disponib.</div><div class="summary-value">${fmtH(c.expected_hours)}</div></div>
       <div class="summary-item"><div class="summary-label">Base Mensal</div><div class="summary-value">${formatBRL(c.fixed_salary)}</div></div>
+      <div class="summary-item"><div class="summary-label">Taxa/h (÷160)</div><div class="summary-value">R$ ${c.valor_hora_extra.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</div></div>
       <div class="summary-item"><div class="summary-label">Saldo Acumulado</div><div class="summary-value">${fmtH(c.accumulated_balance)}</div></div>
       <div class="summary-item"><div class="summary-label">H Extras</div><div class="summary-value">${c.horas_extras > 0 ? fmtH(c.horas_extras) : '—'}</div></div>
     `
