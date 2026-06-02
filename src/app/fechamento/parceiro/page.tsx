@@ -390,7 +390,7 @@ export default function FechamentoParceiroPage() {
           <thead><tr><th>Consultor</th><th class="right">Horas</th><th class="right">Valor</th></tr></thead>
           <tbody>
             ${Array.from(resumoMap.values()).map(c => `
-              <tr class="main-row"><td>${c.consultor}</td><td class="right">${c.horas.toFixed(2)}h</td><td class="right">${formatBRL(Math.round(c.total * 100) / 100)}</td></tr>`).join('')}
+              <tr class="main-row"><td>${c.consultor}</td><td class="right">${c.horas.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</td><td class="right">${formatBRL(Math.round(c.total * 100) / 100)}</td></tr>`).join('')}
           </tbody>
         </table>
       </div>`
@@ -404,19 +404,19 @@ export default function FechamentoParceiroPage() {
           <td>${r.solicitante ?? '—'}</td>
           <td>${r.ticket ?? '0'}</td>
           <td>${r.titulo ?? '—'}</td>
-          <td class="right">${r.horas.toFixed(2)}h</td>
+          <td class="right">${r.horas.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</td>
         </tr>`).join('')
       return `
         <div class="section" style="margin-bottom:20px">
           <div class="section-header" style="border-bottom:2px solid #7c3aed;padding-bottom:6px;margin-bottom:10px">
-            <div><span class="section-title" style="font-size:15px;color:#111">${consultor}</span> <span style="font-size:12px;color:#7c3aed;font-weight:700">· ${horas.toFixed(2)}h</span></div>
+            <div><span class="section-title" style="font-size:15px;color:#111">${consultor}</span> <span style="font-size:12px;color:#7c3aed;font-weight:700">· ${horas.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</span></div>
             <div class="section-rate">Valor/hora: <b>${formatBRL(taxa)}/h</b></div>
           </div>
           <table>
             <thead><tr><th>Data</th><th>Cliente</th><th>Projeto</th><th>Solicitante</th><th>Ticket</th><th>Título</th><th class="right">Horas</th></tr></thead>
             <tbody>${rowsHtml}</tbody>
           </table>
-          <div class="section-footer">${horas.toFixed(2)}h × ${formatBRL(taxa)}/h = <b>${formatBRL(Math.round(total * 100) / 100)}</b></div>
+          <div class="section-footer">${horas.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h × ${formatBRL(taxa)}/h = <b>${formatBRL(Math.round(total * 100) / 100)}</b></div>
         </div>
         <hr class="divider"/>`
     }).join('')
@@ -477,8 +477,8 @@ export default function FechamentoParceiroPage() {
     const totalBoxHtml = mode === 'despesa'
       ? `<div class="total-box" style="background:#0e7490;border-color:#0891b2;"><div class="total-box-block"><div class="total-box-label">Saldo a pagar no fechamento</div><div class="total-box-value">${formatBRL(saldoDesp)}</div></div></div>`
       : mode === 'servicos'
-        ? `<div class="total-box"><div class="total-box-block"><div class="total-box-label">Total de Horas</div><div class="total-box-value">${totalHoras.toFixed(2)}h</div></div><div class="total-box-block" style="text-align:right"><div class="total-box-label">Total Serviços</div><div class="total-box-value">${formatBRL(totalServicos)}</div></div></div>`
-        : `<div class="total-box"><div class="total-box-block"><div class="total-box-label">Total de Horas</div><div class="total-box-value">${totalHoras.toFixed(2)}h</div></div><div class="total-box-block" style="text-align:center"><div class="total-box-label">Total Serviços</div><div class="total-box-value">${formatBRL(totalServicos)}</div></div>${saldoDesp > 0 ? `<div class="total-box-block" style="text-align:center"><div class="total-box-label">Despesas</div><div class="total-box-value">${formatBRL(saldoDesp)}</div></div>` : ''}<div class="total-box-block" style="text-align:right"><div class="total-box-label">Total a Pagar</div><div class="total-box-value">${formatBRL(totalServicos + saldoDesp)}</div></div></div>`
+        ? `<div class="total-box"><div class="total-box-block"><div class="total-box-label">Total de Horas</div><div class="total-box-value">${totalHoras.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</div></div><div class="total-box-block" style="text-align:right"><div class="total-box-label">Total Serviços</div><div class="total-box-value">${formatBRL(totalServicos)}</div></div></div>`
+        : `<div class="total-box"><div class="total-box-block"><div class="total-box-label">Total de Horas</div><div class="total-box-value">${totalHoras.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</div></div><div class="total-box-block" style="text-align:center"><div class="total-box-label">Total Serviços</div><div class="total-box-value">${formatBRL(totalServicos)}</div></div>${saldoDesp > 0 ? `<div class="total-box-block" style="text-align:center"><div class="total-box-label">Despesas</div><div class="total-box-value">${formatBRL(saldoDesp)}</div></div>` : ''}<div class="total-box-block" style="text-align:right"><div class="total-box-label">Total a Pagar</div><div class="total-box-value">${formatBRL(totalServicos + saldoDesp)}</div></div></div>`
 
     const html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -1101,7 +1101,7 @@ export default function FechamentoParceiroPage() {
                                     <div className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Mensalista · ÷160</div>
                                   )}
                                 </Td>
-                                <Td right className="tabular-nums text-xs">{row.horas.toFixed(2)}h</Td>
+                                <Td right className="tabular-nums text-xs">{row.horas.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</Td>
                                 <Td right className="tabular-nums text-xs">{formatBRL(row.valor_hora)}/h</Td>
                                 <Td right className="tabular-nums text-sm font-semibold" style={{ color: 'var(--brand-primary)' }}>{formatBRL(row.total)}</Td>
                               </Tr>
@@ -1111,7 +1111,7 @@ export default function FechamentoParceiroPage() {
                       )}
                       {filteredConsultores.length > 0 && (
                         <div className="mt-4 flex justify-between items-center">
-                          <span className="text-xs" style={{ color: 'var(--brand-muted)' }}>Total: <b>{filteredConsultores.reduce((s, c) => s + c.horas, 0).toFixed(2)}h</b></span>
+                          <span className="text-xs" style={{ color: 'var(--brand-muted)' }}>Total: <b>{filteredConsultores.reduce((s, c) => s + c.horas, 0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</b></span>
                           <div className="text-sm font-semibold px-4 py-2 rounded" style={{ background: 'rgba(0,245,255,0.07)', color: 'var(--brand-primary)' }}>
                             Total Serviços: {formatBRL(filteredConsultores.reduce((s, c) => s + c.total, 0))}
                           </div>
@@ -1154,7 +1154,7 @@ export default function FechamentoParceiroPage() {
                                     <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>{code}</span>
                                   </div>
                                   <span className="text-xs" style={{ color: 'var(--brand-muted)' }}>
-                                    {tipoHoras.toFixed(2)}h · <b style={{ color: 'var(--brand-primary)' }}>{formatBRL(tipoTotal)}</b>
+                                    {tipoHoras.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h · <b style={{ color: 'var(--brand-primary)' }}>{formatBRL(tipoTotal)}</b>
                                   </span>
                                 </div>
                                 <Table>
@@ -1165,7 +1165,7 @@ export default function FechamentoParceiroPage() {
                                     {rows.map(r => (
                                       <Tr key={r.user_id}>
                                         <Td className="text-xs font-medium" style={{ color: 'var(--brand-text)' }}>{r.consultor}</Td>
-                                        <Td right className="tabular-nums text-xs">{r.horas.toFixed(2)}h</Td>
+                                        <Td right className="tabular-nums text-xs">{r.horas.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</Td>
                                         <Td right className="tabular-nums text-xs">{formatBRL(r.taxa)}/h</Td>
                                         <Td right className="tabular-nums text-sm font-semibold" style={{ color: 'var(--brand-primary)' }}>{formatBRL(Math.round(r.total * 100) / 100)}</Td>
                                       </Tr>
@@ -1177,7 +1177,7 @@ export default function FechamentoParceiroPage() {
                           })}
                           <div className="flex justify-between items-center pt-2 border-t" style={{ borderColor: 'var(--brand-border)' }}>
                             <span className="text-xs" style={{ color: 'var(--brand-muted)' }}>
-                              Total: <b>{apontamentos.reduce((s, a) => s + a.horas, 0).toFixed(2)}h</b>
+                              Total: <b>{apontamentos.reduce((s, a) => s + a.horas, 0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</b>
                             </span>
                             <div className="text-sm font-semibold px-4 py-2 rounded" style={{ background: 'rgba(0,245,255,0.07)', color: 'var(--brand-primary)' }}>
                               Total Serviços: {formatBRL(totalServicos)}
@@ -1334,7 +1334,7 @@ export default function FechamentoParceiroPage() {
                             </Td>
                             <Td className="text-xs">{row.consultor}</Td>
                             <Td className="text-xs">{row.projeto}</Td>
-                            <Td right className="tabular-nums text-xs">{row.horas.toFixed(2)}h</Td>
+                            <Td right className="tabular-nums text-xs">{row.horas.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</Td>
                             <Td className="text-xs">
                               <Badge variant={STATUS_VARIANTS[row.status] ?? 'secondary'}>
                                 {STATUS_LABELS[row.status] ?? row.status}
@@ -1352,15 +1352,15 @@ export default function FechamentoParceiroPage() {
                   {filteredApontamentos.length > 0 && (
                     <div className="mt-4 flex justify-between items-center text-xs" style={{ color: 'var(--brand-muted)' }}>
                       <span>
-                        Total filtrado: <b>{filteredApontamentos.reduce((s, a) => s + a.horas, 0).toFixed(2)}h</b>
+                        Total filtrado: <b>{filteredApontamentos.reduce((s, a) => s + a.horas, 0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</b>
                       </span>
                       <span>
                         Aprovados: <b style={{ color: 'var(--brand-primary)' }}>
-                          {filteredApontamentos.filter(a => a.status === 'approved').reduce((s, a) => s + a.horas, 0).toFixed(2)}h
+                          {filteredApontamentos.filter(a => a.status === 'approved').reduce((s, a) => s + a.horas, 0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h
                         </b>
                         {' · '}
                         Pendentes: <b style={{ color: '#fbbf24' }}>
-                          {filteredApontamentos.filter(a => a.status === 'pending').reduce((s, a) => s + a.horas, 0).toFixed(2)}h
+                          {filteredApontamentos.filter(a => a.status === 'pending').reduce((s, a) => s + a.horas, 0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h
                         </b>
                       </span>
                     </div>
@@ -1377,7 +1377,7 @@ export default function FechamentoParceiroPage() {
                     </h3>
                     <div className="flex justify-between text-sm" style={{ color: 'var(--brand-muted)' }}>
                       <span>Total Horas Trabalhadas</span>
-                      <span className="tabular-nums">{totalHoras.toFixed(2)}h</span>
+                      <span className="tabular-nums">{totalHoras.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</span>
                     </div>
                     <div className="flex justify-between text-sm" style={{ color: 'var(--brand-muted)' }}>
                       <span>Total Serviços</span>
