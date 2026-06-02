@@ -422,7 +422,7 @@ export default function FechamentoFolhaPage() {
       status: 'Contratado',
       nome: '',
       dias: 0,
-      horas: 180,
+      horas: 160,
       horas_apontamentos: 0,
       valor_hora: 0,
       producao: 0,
@@ -448,7 +448,7 @@ export default function FechamentoFolhaPage() {
         matricula: '',
         status: 'Contratado',
         nome: '',
-        horas: 180,
+        horas: 160,
         valor_hora: 0,
         producao: 0,
       },
@@ -1057,7 +1057,7 @@ export default function FechamentoFolhaPage() {
                           />
                         </Td>
 
-                        {/* ── Horas: editável p/ sócio e Raho; normal = 180 fixo ── */}
+                        {/* ── Horas: editável p/ sócio e Raho; normal = 160 fixo ── */}
                         <Td right mono className={valEditable ? undefined : 'text-zinc-300 tabular-nums'}>
                           {valEditable ? (
                             <MaskedNum
