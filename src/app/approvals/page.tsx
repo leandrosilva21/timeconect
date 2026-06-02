@@ -10,7 +10,7 @@ import {
   CheckSquare, Clock, Receipt, ChevronLeft, ChevronRight,
   Check, XCircle, X, Filter, ChevronDown, Eye, Pencil, RotateCcw,
   Paperclip, Download, Calendar, User, Building2, FolderOpen, Tag, CreditCard, FileText,
-  FileSpreadsheet,
+  FileSpreadsheet, ChevronUp, ChevronsUpDown,
 } from 'lucide-react'
 import { RowMenu } from '@/components/ui/row-menu'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
@@ -641,15 +641,46 @@ export default function ApprovalsPage() {
       const l = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
       setExecutives(l.map((u: any) => ({ id: u.id, name: u.name })))
     }).catch(() => {})
-    api.get<any>('/projects?minimal=true&pageSize=200&status=active').then(r => {
-      const l = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
-      setProjects(l.map((p: any) => ({ id: p.id, name: p.name })))
-    }).catch(() => {})
     api.get<any>('/customers?pageSize=500').then(r => {
       const l = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
       setCustomers(l.map((c: any) => ({ id: c.id, name: c.name })))
     }).catch(() => {})
   }, [])
+
+  // Projetos do dropdown — refetch quando o cliente muda. Sem status=active (projetos
+  // ficam com status "started"/etc, não "active") e pageSize alto + customer_id, senão
+  // o projeto não aparecia na busca (ex.: AUSTER tem 0 projetos status=active).
+  useEffect(() => {
+    const params = new URLSearchParams({ minimal: 'true', pageSize: '2000' })
+    if (customerId) params.set('customer_id', customerId)
+    api.get<any>(`/projects?${params.toString()}`).then(r => {
+      const l = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
+      setProjects(l.map((p: any) => ({ id: p.id, name: p.name })))
+    }).catch(() => {})
+  }, [customerId])
+
+  // Ordenação de colunas (server-side; reaplica via filterParams → reseta página).
+  const [sortField, setSortField] = useState<string | null>(null)
+  const [sortDir,   setSortDir]   = useState<'asc' | 'desc'>('desc')
+  const handleSort = (field: string) => {
+    if (sortField === field) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortField(field); setSortDir('desc') }
+  }
+  const SortTh = ({ label, field, className = '', align = 'left' }: { label: string; field?: string; className?: string; align?: 'left' | 'right' }) => {
+    const sortable = !!field
+    const active = sortable && sortField === field
+    return (
+      <th className={`${align === 'right' ? 'text-right' : 'text-left'} px-3 py-2.5 text-zinc-500 font-medium ${className} ${sortable ? 'cursor-pointer select-none hover:text-zinc-300' : ''}`}
+        onClick={sortable ? () => handleSort(field!) : undefined}>
+        <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'flex-row-reverse' : ''}`}>
+          {label}
+          {sortable && (active
+            ? <ChevronUp size={12} className={sortDir === 'desc' ? 'rotate-180' : ''} style={{ color: 'var(--primary)' }} />
+            : <ChevronsUpDown size={12} className="opacity-40" />)}
+        </span>
+      </th>
+    )
+  }
 
   const filterParams = useMemo(() => {
     const p = new URLSearchParams()
@@ -661,8 +692,9 @@ export default function ApprovalsPage() {
     if (projectId)     p.set('project_id',     projectId)
     if (customerId)    p.set('customer_id',    customerId)
     if (categoriaServico) p.set('categoria_servico', categoriaServico)
+    if (sortField)     p.set('order', (sortDir === 'desc' ? '-' : '') + sortField)
     return p.toString()
-  }, [dateFrom, dateTo, userId, coordinatorId, executiveId, projectId, customerId, categoriaServico])
+  }, [dateFrom, dateTo, userId, coordinatorId, executiveId, projectId, customerId, categoriaServico, sortField, sortDir])
 
   const loadTs = useCallback(async () => {
     setTsLoading(true)
@@ -1072,26 +1104,28 @@ export default function ApprovalsPage() {
                   style={{ color: 'var(--brand-primary)', background: 'rgba(0,245,255,0.06)', borderLeft: '2px solid var(--brand-primary)', borderRight: '2px solid var(--brand-primary)' }}
                 >Hist. de Hs Tikets</th>
               )}
-              <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Data</th>
-              {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Início</th>}
-              {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Fim</th>}
-              {tab === 'timesheets' && <th className="text-right px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Tempo</th>}
+              <SortTh label="Data" field="date" />
+              {tab === 'timesheets' && <SortTh label="Início" field="start_time" className="hidden md:table-cell" />}
+              {tab === 'timesheets' && <SortTh label="Fim" field="end_time" className="hidden md:table-cell" />}
+              {tab === 'timesheets' && <SortTh label="Tempo" field="effort_minutes" align="right" className="hidden md:table-cell" />}
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Ticket #</th>}
-              <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Inclusão</th>
+              <SortTh label="Inclusão" field="created_at" className="hidden sm:table-cell" />
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Origem</th>}
-              <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Colaborador</th>
-              <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Cliente</th>
-              <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Projeto</th>
+              <SortTh label="Colaborador" field="user.name" />
+              {tab === 'timesheets'
+                ? <SortTh label="Cliente" field="customer.name" className="hidden md:table-cell" />
+                : <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Cliente</th>}
+              <SortTh label="Projeto" field="project.name" className="hidden lg:table-cell" />
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Coordenador</th>}
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Executivo</th>}
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Título</th>}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Descrição</th>
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Solicitante</th>}
-              {tab === 'expenses'    && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Categoria</th>}
+              {tab === 'expenses'    && <SortTh label="Categoria" field="category.name" className="hidden lg:table-cell" />}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Tipo de Serviço</th>
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Contrato</th>}
-              {tab === 'expenses'   && <th className="text-right px-3 py-2.5 text-zinc-500 font-medium">Valor</th>}
-              <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Status</th>
+              {tab === 'expenses'   && <SortTh label="Valor" field="amount" align="right" />}
+              <SortTh label="Status" field="status" />
               {tab === 'expenses' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Pagamento</th>}
             </tr>
           </thead>
