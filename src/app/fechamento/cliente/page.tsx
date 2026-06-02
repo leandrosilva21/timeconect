@@ -10,11 +10,38 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { useTableSort } from '@/hooks/use-table-sort'
 import { toast } from 'sonner'
-import { Lock, RefreshCw, Building2, Printer, FileText, Receipt, ChevronRight, ChevronLeft, ChevronDown, Mail, FileSpreadsheet, Send, X, Save, Plus, Check, Paperclip } from 'lucide-react'
+import { Lock, RefreshCw, Building2, Printer, FileText, Receipt, ChevronRight, ChevronLeft, ChevronDown, Mail, FileSpreadsheet, Send, X, Save, Plus, Check, Paperclip, Eye, AlertTriangle } from 'lucide-react'
 import {
   Table, Thead, Th, Tbody, Tr, Td,
   Badge, Button, SkeletonTable, EmptyState,
 } from '@/components/ds'
+
+// Pendências (apontamentos + despesas a cobrar não aprovados) do cliente no período
+interface PendItem {
+  id: number
+  tipo: 'timesheet' | 'expense'
+  data: string
+  colaborador: string
+  projeto: string
+  projeto_codigo: string
+  horas?: number
+  valor: number
+  status: string
+  ticket?: string | null
+  observacao?: string | null
+  descricao?: string | null
+  categoria?: string | null
+}
+interface PendData {
+  timesheets: PendItem[]
+  despesas: PendItem[]
+  qtd_timesheets: number
+  qtd_despesas: number
+  total_pendencias: number
+  valor_timesheets: number
+  valor_despesas: number
+  valor_pendente: number
+}
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -195,6 +222,10 @@ export default function FechamentoClientePage() {
 
   const [dados,    setDados]    = useState<ApontamentosData | null>(null)
   const [despesas, setDespesas] = useState<DespesaRow[]>([])
+
+  // Pendências do cliente (cards no topo + modal)
+  const [pendData,      setPendData]      = useState<PendData | null>(null)
+  const [pendModalOpen, setPendModalOpen] = useState(false)
   // Apontamentos "planos" de TODOS os clientes (aba Apontamentos).
   const [apsGeral, setApsGeral]             = useState<ApontamentoGeralRow[]>([])
   const [loadingApsGeral, setLoadingApsGeral] = useState(false)
@@ -307,6 +338,16 @@ export default function FechamentoClientePage() {
       .finally(() => setLoading(false))
   }, [customerId, fromYM, toYM])
 
+  // Pendências (apontamentos + despesas a cobrar não aprovados) — alimenta os cards do topo.
+  // Endpoint retorna o objeto direto (sem wrapper `data`).
+  const loadPendencias = useCallback(() => {
+    if (!customerId || !fromYM || !toYM) { setPendData(null); return }
+    const params = new URLSearchParams({ from: fromYM, to: toYM })
+    api.get<PendData>(`/fechamento-cliente/${customerId}/${toYM}/pendencias?${params}`)
+      .then(setPendData)
+      .catch(() => setPendData(null))
+  }, [customerId, fromYM, toYM])
+
   // Apontamentos de TODOS os clientes (aba Apontamentos) — filtra cliente/projeto no front.
   const loadApsGeral = useCallback(() => {
     if (!fromYM || !toYM) return
@@ -394,7 +435,7 @@ export default function FechamentoClientePage() {
   }, [fromYM, toYM])
 
   useEffect(() => {
-    if (!customerId) { setStatus(null); setDados(null); setDespesas([]); setTicketSummary([]); return }
+    if (!customerId) { setStatus(null); setDados(null); setDespesas([]); setTicketSummary([]); setPendData(null); return }
     setStatus(clientes.find(c => c.customer_id === customerId) ?? null)
     setDados(null)
     setDespesas([])
@@ -409,6 +450,7 @@ export default function FechamentoClientePage() {
       loadServicos()
       loadDespesas()
       loadTicketSummary()
+      loadPendencias()
     }
   }, [customerId, fromYM, toYM, clientes])
 
@@ -944,6 +986,72 @@ export default function FechamentoClientePage() {
 
         </div>
 
+        {/* ── Cards de pendências (apontamentos + despesas a cobrar não aprovados) — topo, sempre visíveis ── */}
+        {customerId && pendData && (
+          <div className="px-6 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Card 1 — apontamentos pendentes */}
+            <div
+              className="ds-card flex items-center justify-between gap-3 px-4 py-3"
+              style={{
+                background: 'var(--surface)',
+                border: `1px solid ${pendData.total_pendencias > 0 ? 'var(--warning)' : 'var(--border)'}`,
+              }}
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-light)' }}>
+                  {pendData.total_pendencias > 0 && <AlertTriangle size={12} style={{ color: 'var(--warning)' }} />}
+                  Apontamentos pendentes
+                </div>
+                <div className="text-2xl font-bold leading-tight mt-0.5" style={{ color: pendData.qtd_timesheets > 0 ? 'var(--warning)' : 'var(--text)' }}>
+                  {pendData.qtd_timesheets}
+                </div>
+                <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>
+                  {pendData.qtd_despesas > 0 ? `+ ${pendData.qtd_despesas} despesa(s) a cobrar` : 'sem despesas pendentes'}
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={Eye}
+                disabled={pendData.total_pendencias === 0}
+                onClick={() => setPendModalOpen(true)}
+              >
+                Ver
+              </Button>
+            </div>
+
+            {/* Card 2 — valor pendente */}
+            <div
+              className="ds-card flex items-center justify-between gap-3 px-4 py-3"
+              style={{
+                background: 'var(--surface)',
+                border: `1px solid ${pendData.valor_pendente > 0 ? 'var(--warning)' : 'var(--border)'}`,
+              }}
+            >
+              <div className="min-w-0">
+                <div className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-light)' }}>
+                  Valor pendente
+                </div>
+                <div className="text-2xl font-bold leading-tight mt-0.5" style={{ color: pendData.valor_pendente > 0 ? 'var(--warning)' : 'var(--text)' }}>
+                  {formatBRL(pendData.valor_pendente)}
+                </div>
+                <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>
+                  apontamentos {formatBRL(pendData.valor_timesheets)} · despesas {formatBRL(pendData.valor_despesas)}
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={Eye}
+                disabled={pendData.total_pendencias === 0}
+                onClick={() => setPendModalOpen(true)}
+              >
+                Ver
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* ── Tabs — sempre visíveis ── */}
         <div className="flex gap-1 px-6 border-b" style={{ borderColor: 'var(--brand-border)' }}>
           {([
@@ -1308,6 +1416,136 @@ export default function FechamentoClientePage() {
 
         </div>
       </div>
+
+      {/* Modal de pendências — apontamentos + despesas a cobrar não aprovados (respeita o filtro de período) */}
+      {pendModalOpen && customerId && pendData && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.85)' }}
+          onClick={e => { if (e.target === e.currentTarget) setPendModalOpen(false) }}
+        >
+          <div
+            className="ds-card flex flex-col w-full max-w-4xl max-h-[90vh] overflow-hidden"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <p className="text-sm font-semibold flex items-center gap-1.5" style={{ color: 'var(--text)' }}>
+                  <AlertTriangle size={15} style={{ color: 'var(--warning)' }} />
+                  Pendências — {clienteNome}
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                  {fromYM === toYM ? fmtYM(toYM) : `${fmtYM(fromYM)} — ${fmtYM(toYM)}`}
+                  {' · '}{pendData.total_pendencias} item(ns) · {formatBRL(pendData.valor_pendente)}
+                </p>
+              </div>
+              <button
+                onClick={() => setPendModalOpen(false)}
+                className="p-1 rounded transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+                title="Fechar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-5 flex flex-col gap-6">
+              {/* Apontamentos pendentes */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-light)' }}>
+                    Apontamentos ({pendData.qtd_timesheets})
+                  </span>
+                  <span className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>{formatBRL(pendData.valor_timesheets)}</span>
+                </div>
+                {pendData.timesheets.length === 0 ? (
+                  <EmptyState title="Sem apontamentos pendentes" />
+                ) : (
+                  <Table>
+                    <Thead>
+                      <Tr>
+                        <Th>Data</Th>
+                        <Th>Colaborador</Th>
+                        <Th>Projeto</Th>
+                        <Th className="text-right">Horas</Th>
+                        <Th className="text-right">Valor</Th>
+                        <Th>Status</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {pendData.timesheets.map(t => (
+                        <Tr key={`ts-${t.id}`}>
+                          <Td>{fmtDate(t.data)}</Td>
+                          <Td>{t.colaborador}</Td>
+                          <Td>
+                            <span style={{ color: 'var(--text)' }}>{t.projeto}</span>
+                            {t.ticket ? <span className="text-xs ml-1" style={{ color: 'var(--text-light)' }}>#{t.ticket}</span> : null}
+                          </Td>
+                          <Td className="text-right tabular-nums">{(t.horas ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Td>
+                          <Td className="text-right tabular-nums">{formatBRL(t.valor)}</Td>
+                          <Td><Badge variant={t.status === 'adjustment_requested' ? 'danger' : 'warning'}>{t.status === 'adjustment_requested' ? 'Ajuste solicitado' : 'Pendente'}</Badge></Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                )}
+              </div>
+
+              {/* Despesas a cobrar pendentes */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-light)' }}>
+                    Despesas a cobrar ({pendData.qtd_despesas})
+                  </span>
+                  <span className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>{formatBRL(pendData.valor_despesas)}</span>
+                </div>
+                {pendData.despesas.length === 0 ? (
+                  <EmptyState title="Sem despesas pendentes" />
+                ) : (
+                  <Table>
+                    <Thead>
+                      <Tr>
+                        <Th>Data</Th>
+                        <Th>Colaborador</Th>
+                        <Th>Projeto</Th>
+                        <Th>Categoria</Th>
+                        <Th className="text-right">Valor</Th>
+                        <Th>Status</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {pendData.despesas.map(d => (
+                        <Tr key={`ex-${d.id}`}>
+                          <Td>{fmtDate(d.data)}</Td>
+                          <Td>{d.colaborador}</Td>
+                          <Td>{d.projeto}</Td>
+                          <Td>
+                            <span style={{ color: 'var(--text)' }}>{d.categoria ?? '—'}</span>
+                            {d.descricao ? <span className="block text-xs" style={{ color: 'var(--text-light)' }}>{d.descricao}</span> : null}
+                          </Td>
+                          <Td className="text-right tabular-nums">{formatBRL(d.valor)}</Td>
+                          <Td><Badge variant={d.status === 'adjustment_requested' ? 'danger' : 'warning'}>{d.status === 'adjustment_requested' ? 'Ajuste solicitado' : 'Pendente'}</Badge></Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-5 py-3 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+              <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                Total pendente: {formatBRL(pendData.valor_pendente)}
+              </span>
+              <Button size="sm" variant="secondary" onClick={() => setPendModalOpen(false)}>Fechar</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Dialog de composição/preview do e-mail */}
       {composeOpen && customerId && (
