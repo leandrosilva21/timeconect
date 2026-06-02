@@ -147,6 +147,7 @@ interface ProjectEditForm {
   max_expense_per_consultant: string
   timesheet_retroactive_limit_days: string
   allow_manual_timesheets: boolean; allow_negative_balance: boolean
+  client_follows_timesheets: boolean
   movidesk_integration_enabled: boolean
   coordinator_ids: number[]; consultant_ids: number[]; consultant_group_ids: number[]
 }
@@ -1123,6 +1124,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     timesheet_retroactive_limit_days: d.timesheet_retroactive_limit_days != null ? String(d.timesheet_retroactive_limit_days) : '',
     allow_manual_timesheets:         d.allow_manual_timesheets ?? true,
     allow_negative_balance:          d.allow_negative_balance ?? false,
+    client_follows_timesheets:       (d as any).client_follows_timesheets ?? true,
     movidesk_integration_enabled:    (d as any).movidesk_integration_enabled ?? false,
     coordinator_ids:                 (d.coordinators ?? d.approvers ?? []).map((c: any) => c.id),
     consultant_ids:                  (d.consultants ?? []).map((c: any) => c.id),
@@ -1211,6 +1213,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
         start_date: form.start_date || null, expected_end_date: form.expected_end_date || null,
         allow_manual_timesheets: form.allow_manual_timesheets,
         allow_negative_balance: form.allow_negative_balance,
+        client_follows_timesheets: form.client_follows_timesheets,
         movidesk_integration_enabled: form.movidesk_integration_enabled,
         cobra_despesa_cliente: form.cobra_despesa_cliente,
         observacoes_contrato: form.observacoes_contrato || null,
@@ -1465,6 +1468,11 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 <div><label style={lStyle}>Prazo para Lançamento (dias)</label><input type="number" value={form.timesheet_retroactive_limit_days} onChange={setF('timesheet_retroactive_limit_days')} style={iStyle} placeholder="Padrão global" min="0" max="365" /></div>
               </div>
               <Toggle2 checked={form.allow_negative_balance} onChange={v => setForm(p => ({ ...p, allow_negative_balance: v }))} label="Permitir saldo negativo de horas" />
+              {ctNameK.includes('banco de horas fixo') && (
+                <Toggle2 checked={form.client_follows_timesheets}
+                  onChange={v => setForm(p => ({ ...p, client_follows_timesheets: v }))}
+                  label="Cliente acompanha apontamento (se desligado, o cliente não vê os apontamentos e o saldo aparece zerado — tudo consumido)" />
+              )}
               <Toggle2
                 checked={form.movidesk_integration_enabled}
                 onChange={v => setForm(p => ({ ...p, movidesk_integration_enabled: v }))}
