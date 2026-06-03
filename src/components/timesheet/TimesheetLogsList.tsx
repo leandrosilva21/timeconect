@@ -14,6 +14,7 @@ export interface TimesheetLog {
   timesheet?: {
     id: number
     date: string
+    ticket?: string | null
     user?: { id: number; name: string } | null
     project?: { id: number; code: string; name: string } | null
     customer?: { id: number; name: string } | null
@@ -160,9 +161,12 @@ export function TimesheetLogsList({ logs, loading, empty = 'Nenhum log encontrad
             {/* Info do timesheet (só na tela de auditoria) */}
             {showTimesheetInfo && log.timesheet && (
               <div className="mb-2 text-xs" style={{ color: 'var(--brand-subtle)' }}>
-                Apontamento <strong>#{log.timesheet.id}</strong> · {log.timesheet.date}
+                Apontamento <strong>#{log.timesheet.id}</strong>
+                {log.timesheet.customer ? ` · ${log.timesheet.customer.name}` : ''}
+                {` · Serviço ${fmtValue(log.timesheet.date)}`}
                 {log.timesheet.user ? ` · ${log.timesheet.user.name}` : ''}
                 {log.timesheet.project ? ` · ${log.timesheet.project.code} ${log.timesheet.project.name}` : ''}
+                {log.timesheet.ticket ? ` · Ticket #${log.timesheet.ticket}` : ''}
               </div>
             )}
 
