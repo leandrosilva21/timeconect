@@ -162,6 +162,9 @@ export function ExpenseViewModal({
               <InfoRow icon={Building2} label="Cliente" value={expense.project.customer.name} />
             )}
             <InfoRow icon={FolderOpen} label="Projeto" value={expense.project?.name} />
+            {(expense as any).real_project?.name && (
+              <InfoRow icon={FolderOpen} label="Projeto Real" value={(expense as any).real_project.name} />
+            )}
             <InfoRow icon={Tag} label="Tipo" value={EXP_TYPE_LABEL[expense.expense_type] ?? expense.expense_type} />
             {expense.payment_method && (
               <InfoRow icon={CreditCard} label="Pagamento" value={PAYMENT_LABEL_MAP[expense.payment_method] ?? expense.payment_method} />

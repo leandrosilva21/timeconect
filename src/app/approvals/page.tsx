@@ -448,6 +448,9 @@ function ExpApproveModal({
             <ExpInfoRow icon={User} label="Colaborador" value={item.user?.name} />
             <ExpInfoRow icon={Building2} label="Cliente" value={(item.project as any)?.customer?.name} />
             <ExpInfoRow icon={FolderOpen} label="Projeto" value={item.project?.name} />
+            {(item as any).real_project?.name && (
+              <ExpInfoRow icon={FolderOpen} label="Projeto Real" value={(item as any).real_project.name} />
+            )}
             <ExpInfoRow icon={Paperclip} label="Comprovante" last>
               {item.receipt_url
                 ? <ReceiptLink url={item.receipt_url} />
@@ -1215,7 +1218,12 @@ export default function ApprovalsPage() {
                 </td>
                 <td className="px-3 py-2.5 text-zinc-200 font-medium">{ts.user?.name ?? '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-500 hidden md:table-cell">{ts.project?.customer?.name ?? '—'}</td>
-                <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell truncate max-w-[280px]">{ts.project?.name ?? '—'}</td>
+                <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell truncate max-w-[280px]">
+                  {ts.project?.name ?? '—'}
+                  {(ts as any).real_project?.name && (
+                    <span className="block text-[10px]" style={{ color: 'var(--text-light)' }}>Real: {(ts as any).real_project.name}</span>
+                  )}
+                </td>
                 <td className="px-3 py-2.5 text-zinc-500 hidden xl:table-cell truncate max-w-[160px]">
                   {(ts as any).coordinator_label || '—'}
                 </td>
@@ -1259,7 +1267,12 @@ export default function ApprovalsPage() {
                 <td className="px-3 py-2.5 text-zinc-400 whitespace-nowrap hidden sm:table-cell">{fmtDateTime(exp.created_at)}</td>
                 <td className="px-3 py-2.5 text-zinc-200 font-medium">{exp.user?.name ?? '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-500 hidden md:table-cell">{exp.project?.customer?.name ?? '—'}</td>
-                <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell truncate max-w-[280px]">{exp.project?.name ?? '—'}</td>
+                <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell truncate max-w-[280px]">
+                  {exp.project?.name ?? '—'}
+                  {(exp as any).real_project?.name && (
+                    <span className="block text-[10px]" style={{ color: 'var(--text-light)' }}>Real: {(exp as any).real_project.name}</span>
+                  )}
+                </td>
                 <td className="px-3 py-2.5 hidden lg:table-cell max-w-[200px]">
                   <div className="flex items-center gap-1.5">
                     <span title={exp.description} className="block truncate text-zinc-400 cursor-default">

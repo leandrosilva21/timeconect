@@ -473,7 +473,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
   const [revertReason,     setRevertReason]     = useState('')
   const [reverting,        setReverting]        = useState(false)
   const [form, setForm] = useState({
-    customer_id: '', project_id: '', expense_category_id: '', expense_date: '',
+    customer_id: '', project_id: '', real_project_id: '', expense_category_id: '', expense_date: '',
     description: '', amount: '', expense_type: 'reimbursement',
     payment_method: 'pix', charge_client: false, user_id: '',
   })
@@ -599,7 +599,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
   }, [modal.open, form.customer_id])
 
   const openCreate = () => {
-    setForm({ customer_id: '', project_id: '', expense_category_id: '', expense_date: new Date().toISOString().split('T')[0], description: '', amount: '', expense_type: 'reimbursement', payment_method: 'pix', charge_client: false, user_id: '' })
+    setForm({ customer_id: '', project_id: '', real_project_id: '', expense_category_id: '', expense_date: new Date().toISOString().split('T')[0], description: '', amount: '', expense_type: 'reimbursement', payment_method: 'pix', charge_client: false, user_id: '' })
     setReceipt(null)
     loadOptions()
     setModal({ open: true })
@@ -610,6 +610,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
     setForm({
       customer_id: custId,
       project_id: String(item.project_id),
+      real_project_id: String((item as any).real_project_id ?? ''),
       expense_category_id: String(item.expense_category_id),
       expense_date: item.expense_date,
       description: item.description,
@@ -627,8 +628,12 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
   const save = async () => {
     setSaving(true)
     try {
+      const selProj = (projects as any[]).find(p => String(p.id) === form.project_id)
+      const isInvestimento = !!selProj?.is_investimento_comercial
+      if (isInvestimento && !form.real_project_id) { toast.error('Selecione o Projeto Real'); setSaving(false); return }
       const fd = new FormData()
       fd.append('project_id', form.project_id)
+      if (isInvestimento && form.real_project_id) fd.append('real_project_id', form.real_project_id)
       fd.append('expense_category_id', form.expense_category_id)
       fd.append('expense_date', form.expense_date)
       fd.append('description', form.description)
@@ -1006,7 +1011,12 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
                   )}
                   <Td className="whitespace-nowrap font-medium">{formatDate(exp.expense_date)}</Td>
                   <Td muted className="truncate max-w-[140px]">{exp.user?.name ?? '—'}</Td>
-                  <Td muted className="hidden md:table-cell truncate max-w-[260px]">{exp.project?.name ?? '—'}</Td>
+                  <Td muted className="hidden md:table-cell truncate max-w-[260px]">
+                    {exp.project?.name ?? '—'}
+                    {(exp as any).real_project?.name && (
+                      <span className="block text-[10px]" style={{ color: 'var(--text-light)' }}>Real: {(exp as any).real_project.name}</span>
+                    )}
+                  </Td>
                   {!isCliente && <Td muted className="hidden sm:table-cell truncate max-w-[120px]">{exp.project?.customer?.name ?? '—'}</Td>}
                   {!isCliente && (
                     <Td className="max-w-[200px]">
@@ -1095,12 +1105,37 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
                 <div className="mt-1">
                   <SearchSelect
                     value={form.project_id}
-                    onChange={v => setForm(f => ({ ...f, project_id: v }))}
+                    onChange={v => setForm(f => ({ ...f, project_id: v, real_project_id: '' }))}
                     options={projects}
                     placeholder="Selecione o projeto..."
                   />
                 </div>
               </div>
+
+              {/* Projeto Real — só para projetos de INVESTIMENTO (despesa contabiliza no investimento). */}
+              {(() => {
+                const sel = (projects as any[]).find(p => String(p.id) === form.project_id)
+                if (!sel?.is_investimento_comercial) return null
+                const soSustentacao = sel?.categoria_interna === 'Suporte'
+                const realOpts = (projects as any[]).filter(p => {
+                  if (p.is_investimento_comercial || String(p.id) === form.project_id) return false
+                  if (soSustentacao && p.service_type?.code !== 'sustentacao') return false
+                  return true
+                })
+                return (
+                  <div>
+                    <Label className="text-xs text-zinc-400">Projeto Real *{soSustentacao ? ' (Sustentação)' : ''}</Label>
+                    <div className="mt-1">
+                      <SearchSelect
+                        value={form.real_project_id}
+                        onChange={v => setForm(f => ({ ...f, real_project_id: v }))}
+                        options={realOpts}
+                        placeholder="Selecione o projeto real..."
+                      />
+                    </div>
+                  </div>
+                )
+              })()}
               <div>
                 <Label className="text-xs text-zinc-400">Categoria *</Label>
                 <div className="mt-1">

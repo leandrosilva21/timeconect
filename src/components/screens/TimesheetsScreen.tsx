@@ -1664,6 +1664,9 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
                     >
                       {ts.project?.name ?? `Projeto #${ts.project_id}`}
                     </button>
+                    {(ts as any).real_project?.name && (
+                      <span className="block text-[10px]" style={{ color: 'var(--text-light)' }}>Real: {(ts as any).real_project.name}</span>
+                    )}
                   </Td>
                   <Td muted className="hidden lg:table-cell truncate max-w-[160px]">
                     {ts.ticket_subject ?? '—'}

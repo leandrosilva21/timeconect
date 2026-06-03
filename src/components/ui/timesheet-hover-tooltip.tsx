@@ -23,6 +23,7 @@ export interface TimesheetPreview {
     kanban_override_coordinator?: { name?: string } | null
   } | null
   project_name?: string
+  real_project?: { name?: string } | null
   effort_minutes?: number
   ticket?: string | null
   observation?: string | null
@@ -84,6 +85,9 @@ export function TimesheetHoverTooltip({ ts }: { ts: TimesheetPreview | null }) {
         <div><span style={{ color: 'var(--text-muted)' }}>Colaborador:</span> <span className="font-medium">{userName}</span></div>
         <div><span style={{ color: 'var(--text-muted)' }}>Cliente:</span> <span className="font-medium">{customerName}</span></div>
         <div><span style={{ color: 'var(--text-muted)' }}>Projeto:</span> <span className="font-medium">{projectName}</span></div>
+        {ts.real_project?.name && (
+          <div><span style={{ color: 'var(--text-muted)' }}>Projeto Real:</span> <span className="font-medium">{ts.real_project.name}</span></div>
+        )}
         {coordNames && (
           <div><span style={{ color: 'var(--text-muted)' }}>Coordenador:</span> <span className="font-medium">{coordNames}</span></div>
         )}
@@ -119,6 +123,7 @@ export interface ExpensePreview {
   category?: { name?: string } | null
   amount?: number | string | null
   description?: string | null
+  real_project?: { name?: string } | null
   coordinator_label?: string | null
 }
 
@@ -170,6 +175,9 @@ export function ExpenseHoverTooltip({ exp }: { exp: ExpensePreview | null }) {
         <div><span style={{ color: 'var(--text-muted)' }}>Colaborador:</span> <span className="font-medium">{userName}</span></div>
         <div><span style={{ color: 'var(--text-muted)' }}>Cliente:</span> <span className="font-medium">{customerName}</span></div>
         <div><span style={{ color: 'var(--text-muted)' }}>Projeto:</span> <span className="font-medium">{projectName}</span></div>
+        {exp.real_project?.name && (
+          <div><span style={{ color: 'var(--text-muted)' }}>Projeto Real:</span> <span className="font-medium">{exp.real_project.name}</span></div>
+        )}
         {coordNames && (
           <div><span style={{ color: 'var(--text-muted)' }}>Coordenador:</span> <span className="font-medium">{coordNames}</span></div>
         )}
