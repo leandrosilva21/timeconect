@@ -28,6 +28,11 @@ export interface TimesheetPreview {
   ticket?: string | null
   observation?: string | null
   coordinator_label?: string | null
+  status?: string | null
+  // No endpoint de apontamentos a relação vem serializada como objeto em `reviewed_by`
+  // (a coluna int é sobrescrita pela relação); outras telas usam `reviewedBy`.
+  reviewed_by?: { name?: string } | number | null
+  reviewedBy?: { name?: string } | null
 }
 
 export function useTimesheetHover() {
@@ -58,6 +63,10 @@ export function TimesheetHoverTooltip({ ts }: { ts: TimesheetPreview | null }) {
     || ts.project?.kanban_override_coordinator?.name
     || (ts.project?.coordinators ?? []).map(c => c?.name).filter(Boolean).join(', ')
   const execName    = ts.project?.customer?.executive?.name ?? ts.customer?.executive?.name ?? ''
+
+  const approverName = (ts.reviewed_by && typeof ts.reviewed_by === 'object' ? ts.reviewed_by.name : undefined)
+    ?? ts.reviewedBy?.name ?? ''
+  const approverLabel = ts.status === 'approved' ? 'Aprovador' : 'Revisado por'
 
   const obsText = (ts.observation ?? '')
     .replace(/<[^>]+>/g, ' ')
@@ -97,6 +106,9 @@ export function TimesheetHoverTooltip({ ts }: { ts: TimesheetPreview | null }) {
         <div><span style={{ color: 'var(--text-muted)' }}>Horas:</span> <span className="font-semibold" style={{ color: 'var(--brand-primary)' }}>{horas}</span></div>
         {ts.ticket && (
           <div><span style={{ color: 'var(--text-muted)' }}>Ticket:</span> <span className="font-medium">#{ts.ticket}</span></div>
+        )}
+        {approverName && (
+          <div><span style={{ color: 'var(--text-muted)' }}>{approverLabel}:</span> <span className="font-medium">{approverName}</span></div>
         )}
         {obsPreview && (
           <div className="pt-2 mt-2" style={{ borderTop: '1px solid var(--border)' }}>
