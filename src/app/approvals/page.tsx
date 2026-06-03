@@ -1,6 +1,7 @@
 'use client'
 
 import { AppLayout } from '@/components/layout/app-layout'
+import { PageHeader } from '@/components/ds'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,14 +10,17 @@ import {
   CheckSquare, Clock, Receipt, ChevronLeft, ChevronRight,
   Check, XCircle, X, Filter, ChevronDown, Eye, Pencil, RotateCcw,
   Paperclip, Download, Calendar, User, Building2, FolderOpen, Tag, CreditCard, FileText,
-  FileSpreadsheet,
+  FileSpreadsheet, ChevronUp, ChevronsUpDown,
 } from 'lucide-react'
 import { RowMenu } from '@/components/ui/row-menu'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { TimesheetViewModal } from '@/components/ui/timesheet-view-modal'
+import { TimesheetHoverTooltip, useTimesheetHover } from '@/components/ui/timesheet-hover-tooltip'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { api, ApiError, toRelativePath } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
+import { fetchAsBlob } from '@/lib/attachments'
+import { previewText } from '@/lib/sanitize'
 import { exportTimesheetsToExcel } from '@/lib/exportTimesheets'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
@@ -36,6 +40,7 @@ interface TSItem {
   effort_minutes: number
   observation?: string
   ticket?: string
+  ticket_total_minutes?: number | null
   ticket_subject?: string
   ticket_solicitante?: { id?: number; name?: string } | null
   origin?: string
@@ -100,6 +105,15 @@ function fmtDateTime(d: string | null | undefined) {
 
 function fmtMin(minutes: number) {
   return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}`
+}
+
+// Cor semântica do Consumo do Ticket por faixa de horas:
+// < 4h verde | 4-8h amarelo | 8-12h laranja | > 12h vermelho
+function ticketTotalColor(minutes: number): string {
+  if (minutes < 240)  return '#10B981'
+  if (minutes < 480)  return '#F59E0B'
+  if (minutes < 720)  return '#F97316'
+  return '#EF4444'
 }
 
 function fmtBRL(val: number) {
@@ -274,16 +288,8 @@ function StatusPills({ value, onChange, options }: {
 
 // ─── Receipt helpers ──────────────────────────────────────────────────────────
 
-async function fetchReceipt(url: string): Promise<{ blobUrl: string; filename: string }> {
-  const res = await fetch(toRelativePath(url), { credentials: 'same-origin' })
-  if (!res.ok) throw new Error('not_found')
-  const blob = await res.blob()
-  const cd = res.headers.get('content-disposition') ?? ''
-  const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
-  const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg') ?? 'pdf'
-  const filename = match?.[1]?.replace(/['"]/g, '') ?? `comprovante.${ext}`
-  return { blobUrl: URL.createObjectURL(blob), filename }
-}
+// FASE 11.2.FE — Helper centralizado em src/lib/attachments.ts.
+const fetchReceipt = fetchAsBlob
 
 function triggerAnchor(href: string, download?: string) {
   const a = document.createElement('a')
@@ -349,13 +355,15 @@ function ExpInfoRow({ icon: Icon, label, value, children, last }: {
   children?: React.ReactNode; last?: boolean
 }) {
   return (
-    <div className={`flex items-start gap-3 px-4 py-3 ${!last ? 'border-b border-zinc-800' : ''}`}>
-      <span className="mt-0.5 shrink-0 p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400">
-        <Icon size={11} />
+    <div className={`flex items-center gap-2.5 px-3.5 py-1.5 ${!last ? 'border-b' : ''}`}
+      style={!last ? { borderColor: 'var(--brand-border)' } : undefined}>
+      <span className="shrink-0 p-1 rounded-md"
+        style={{ background: 'rgba(0,245,255,0.06)', color: 'var(--brand-primary)' }}>
+        <Icon size={12} />
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-[10px] uppercase tracking-widest mb-0.5 text-zinc-500">{label}</p>
-        {children ?? <p className="text-xs font-medium text-zinc-200">{value ?? '—'}</p>}
+        <p className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{label}</p>
+        {children ?? <p className="text-[13px] font-medium" style={{ color: 'var(--brand-text)' }}>{value ?? '—'}</p>}
       </div>
     </div>
   )
@@ -392,85 +400,91 @@ function ExpApproveModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 overflow-y-auto"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="relative w-full max-w-md rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto"
+      <div className="relative w-full max-w-lg mt-6 rounded-2xl shadow-2xl"
         style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
         <button onClick={onClose}
-          className="absolute top-3 right-3 z-10 p-1.5 rounded-lg hover:bg-white/5 transition-colors text-zinc-500">
-          <X size={14} />
+          className="absolute top-3 right-3 z-10 p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+          style={{ color: 'var(--brand-subtle)' }}>
+          <X size={16} />
         </button>
 
         {/* Header */}
-        <div className="px-5 pt-5 pb-4 flex items-start gap-3">
-          <div className="p-2.5 rounded-xl shrink-0" style={{ background: 'rgba(249,115,22,0.1)', color: '#F97316' }}>
+        <div className="px-4 pt-3.5 pb-2.5 flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg shrink-0" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>
             <Receipt size={16} />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-white">Detalhes da Despesa</h3>
-            <p className="text-[11px] mt-0.5 text-zinc-500">#{item.id} · {fmt(item.expense_date)}</p>
+            <h3 className="text-base font-semibold" style={{ color: 'var(--brand-text)' }}>Detalhes da Despesa</h3>
+            <p className="text-[11px]" style={{ color: 'var(--brand-subtle)' }}>#{item.id} · {fmt(item.expense_date)}</p>
           </div>
         </div>
 
-        <div className="px-5 pb-5 space-y-4">
+        <div className="px-4 pb-4 space-y-2">
           {/* Status + Categoria */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
               style={{ background: sc.bg, color: sc.color }}>{sc.label}</span>
             {item.category?.name && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
                 style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <Tag size={9} /> {item.category.name}
+                <Tag size={11} /> {item.category.name}
               </span>
             )}
           </div>
 
           {/* Valor hero */}
-          <div className="rounded-xl px-4 py-4"
-            style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
-            <p className="text-[10px] uppercase tracking-widest mb-1 text-zinc-500">Valor Total</p>
-            <p className="text-2xl font-bold" style={{ color: '#F97316' }}>{fmtBRL(Number(item.amount))}</p>
+          <div className="rounded-xl px-3.5 py-2.5 flex items-baseline justify-between gap-2"
+            style={{ background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.15)' }}>
+            <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--brand-subtle)' }}>Valor Total</p>
+            <p className="text-xl font-bold" style={{ color: 'var(--brand-primary)' }}>{fmtBRL(Number(item.amount))}</p>
           </div>
 
           {/* Info card */}
-          <div className="rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800">
+          <div className="rounded-xl overflow-hidden"
+            style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)' }}>
             <ExpInfoRow icon={Calendar} label="Data" value={fmt(item.expense_date)} />
             <ExpInfoRow icon={User} label="Colaborador" value={item.user?.name} />
             <ExpInfoRow icon={Building2} label="Cliente" value={(item.project as any)?.customer?.name} />
             <ExpInfoRow icon={FolderOpen} label="Projeto" value={item.project?.name} />
+            {(item as any).real_project?.name && (
+              <ExpInfoRow icon={FolderOpen} label="Projeto Real" value={(item as any).real_project.name} />
+            )}
             <ExpInfoRow icon={Paperclip} label="Comprovante" last>
               {item.receipt_url
                 ? <ReceiptLink url={item.receipt_url} />
-                : <span className="text-xs text-zinc-500">Sem comprovante</span>}
+                : <span className="text-sm" style={{ color: 'var(--brand-subtle)' }}>Sem comprovante</span>}
             </ExpInfoRow>
           </div>
 
           {/* Descrição */}
           {item.description && (
-            <div className="rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800">
-              <div className="flex items-center gap-2 px-4 py-2.5 border-b border-zinc-800">
-                <FileText size={11} className="text-cyan-400" />
-                <span className="text-[10px] uppercase tracking-widest font-medium text-zinc-500">Descrição</span>
+            <div className="rounded-2xl overflow-hidden"
+              style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)' }}>
+              <div className="flex items-center gap-2 px-3.5 py-2" style={{ borderBottom: '1px solid var(--brand-border)' }}>
+                <FileText size={13} style={{ color: 'var(--brand-primary)' }} />
+                <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: 'var(--brand-subtle)' }}>Descrição</span>
               </div>
-              <p className="px-4 py-3 text-sm leading-relaxed text-zinc-400">{item.description}</p>
+              <p className="px-3.5 py-2 text-[13px] leading-relaxed" style={{ color: 'var(--brand-muted)' }}>{item.description}</p>
             </div>
           )}
 
           {/* Cobrar do cliente */}
           {mode === 'approve' && (
-            <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 px-4 py-3 space-y-3">
+            <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 px-3.5 py-2.5 space-y-2">
               <p className={`text-xs font-semibold ${submitted && chargeClient === null ? 'text-red-400' : 'text-zinc-300'}`}>
                 Cobrar do cliente? *
               </p>
-              <div className="flex gap-3">
+              <div className="flex gap-2">
                 <button type="button" onClick={() => setChargeClient(true)}
-                  className={`flex-1 py-2.5 rounded-xl border text-xs font-medium transition-all ${
+                  className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${
                     chargeClient === true ? 'bg-green-600/20 border-green-500 text-green-300' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
                   }`}>
                   Sim — cobrar do cliente
                 </button>
                 <button type="button" onClick={() => setChargeClient(false)}
-                  className={`flex-1 py-2.5 rounded-xl border text-xs font-medium transition-all ${
+                  className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${
                     chargeClient === false ? 'bg-orange-600/20 border-orange-500 text-orange-300' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
                   }`}>
                   Não — absorver internamente
@@ -583,6 +597,7 @@ export default function ApprovalsPage() {
   const [users,        setUsers]        = useState<UserOption[]>([])
   const [coordinators, setCoordinators] = useState<UserOption[]>([])
   const [executives,   setExecutives]   = useState<UserOption[]>([])
+  const hover = useTimesheetHover()
   const [projects,     setProjects]     = useState<ProjectOption[]>([])
   const [customers,    setCustomers]    = useState<CustomerOption[]>([])
 
@@ -629,15 +644,46 @@ export default function ApprovalsPage() {
       const l = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
       setExecutives(l.map((u: any) => ({ id: u.id, name: u.name })))
     }).catch(() => {})
-    api.get<any>('/projects?minimal=true&pageSize=200&status=active').then(r => {
-      const l = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
-      setProjects(l.map((p: any) => ({ id: p.id, name: p.name })))
-    }).catch(() => {})
     api.get<any>('/customers?pageSize=500').then(r => {
       const l = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
       setCustomers(l.map((c: any) => ({ id: c.id, name: c.name })))
     }).catch(() => {})
   }, [])
+
+  // Projetos do dropdown — refetch quando o cliente muda. Sem status=active (projetos
+  // ficam com status "started"/etc, não "active") e pageSize alto + customer_id, senão
+  // o projeto não aparecia na busca (ex.: AUSTER tem 0 projetos status=active).
+  useEffect(() => {
+    const params = new URLSearchParams({ minimal: 'true', pageSize: '2000' })
+    if (customerId) params.set('customer_id', customerId)
+    api.get<any>(`/projects?${params.toString()}`).then(r => {
+      const l = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
+      setProjects(l.map((p: any) => ({ id: p.id, name: p.name })))
+    }).catch(() => {})
+  }, [customerId])
+
+  // Ordenação de colunas (server-side; reaplica via filterParams → reseta página).
+  const [sortField, setSortField] = useState<string | null>(null)
+  const [sortDir,   setSortDir]   = useState<'asc' | 'desc'>('desc')
+  const handleSort = (field: string) => {
+    if (sortField === field) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortField(field); setSortDir('desc') }
+  }
+  const SortTh = ({ label, field, className = '', align = 'left' }: { label: string; field?: string; className?: string; align?: 'left' | 'right' }) => {
+    const sortable = !!field
+    const active = sortable && sortField === field
+    return (
+      <th className={`${align === 'right' ? 'text-right' : 'text-left'} px-3 py-2.5 text-zinc-500 font-medium ${className} ${sortable ? 'cursor-pointer select-none hover:text-zinc-300' : ''}`}
+        onClick={sortable ? () => handleSort(field!) : undefined}>
+        <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'flex-row-reverse' : ''}`}>
+          {label}
+          {sortable && (active
+            ? <ChevronUp size={12} className={sortDir === 'desc' ? 'rotate-180' : ''} style={{ color: 'var(--primary)' }} />
+            : <ChevronsUpDown size={12} className="opacity-40" />)}
+        </span>
+      </th>
+    )
+  }
 
   const filterParams = useMemo(() => {
     const p = new URLSearchParams()
@@ -649,8 +695,9 @@ export default function ApprovalsPage() {
     if (projectId)     p.set('project_id',     projectId)
     if (customerId)    p.set('customer_id',    customerId)
     if (categoriaServico) p.set('categoria_servico', categoriaServico)
+    if (sortField)     p.set('order', (sortDir === 'desc' ? '-' : '') + sortField)
     return p.toString()
-  }, [dateFrom, dateTo, userId, coordinatorId, executiveId, projectId, customerId, categoriaServico])
+  }, [dateFrom, dateTo, userId, coordinatorId, executiveId, projectId, customerId, categoriaServico, sortField, sortDir])
 
   const loadTs = useCallback(async () => {
     setTsLoading(true)
@@ -859,6 +906,11 @@ export default function ApprovalsPage() {
 
   return (
     <AppLayout title="Aprovações">
+      <PageHeader
+        icon={CheckSquare}
+        title="Aprovações"
+        subtitle="Pendências de apontamentos e despesas para análise"
+      />
 
       {/* ── Tabs ── */}
       <div className="flex items-center gap-2 mb-5">
@@ -1049,24 +1101,34 @@ export default function ApprovalsPage() {
                     className="rounded border-zinc-600 bg-zinc-800 accent-blue-500" />
                 </th>
               )}
-              <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Data</th>
-              {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Início</th>}
-              {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Fim</th>}
-              {tab === 'timesheets' && <th className="text-right px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Tempo</th>}
+              {tab === 'timesheets' && (
+                <th
+                  className="text-center px-3 py-2.5 font-medium hidden lg:table-cell whitespace-nowrap"
+                  style={{ color: 'var(--brand-primary)', background: 'rgba(0,245,255,0.06)', borderLeft: '2px solid var(--brand-primary)', borderRight: '2px solid var(--brand-primary)' }}
+                >Hist. de Hs Tikets</th>
+              )}
+              <SortTh label="Data" field="date" />
+              {tab === 'timesheets' && <SortTh label="Início" field="start_time" className="hidden md:table-cell" />}
+              {tab === 'timesheets' && <SortTh label="Fim" field="end_time" className="hidden md:table-cell" />}
+              {tab === 'timesheets' && <SortTh label="Tempo" field="effort_minutes" align="right" className="hidden md:table-cell" />}
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Ticket #</th>}
-              <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Inclusão</th>
+              <SortTh label="Inclusão" field="created_at" className="hidden sm:table-cell" />
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden sm:table-cell">Origem</th>}
-              <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Colaborador</th>
-              <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Cliente</th>
-              <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Projeto</th>
+              <SortTh label="Colaborador" field="user.name" />
+              {tab === 'timesheets'
+                ? <SortTh label="Cliente" field="customer.name" className="hidden md:table-cell" />
+                : <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden md:table-cell">Cliente</th>}
+              <SortTh label="Projeto" field="project.name" className="hidden lg:table-cell" />
+              {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Coordenador</th>}
+              {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Executivo</th>}
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Título</th>}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Descrição</th>
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Solicitante</th>}
-              {tab === 'expenses'    && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden lg:table-cell">Categoria</th>}
+              {tab === 'expenses'    && <SortTh label="Categoria" field="category.name" className="hidden lg:table-cell" />}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Tipo de Serviço</th>
               {tab === 'timesheets' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium hidden xl:table-cell">Contrato</th>}
-              {tab === 'expenses'   && <th className="text-right px-3 py-2.5 text-zinc-500 font-medium">Valor</th>}
-              <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Status</th>
+              {tab === 'expenses'   && <SortTh label="Valor" field="amount" align="right" />}
+              <SortTh label="Status" field="status" />
               {tab === 'expenses' && <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Pagamento</th>}
             </tr>
           </thead>
@@ -1101,7 +1163,7 @@ export default function ApprovalsPage() {
 
             {/* Timesheets rows */}
             {!currentLoading && tab === 'timesheets' && tsItems.map(ts => (
-              <tr key={ts.id} onClick={() => toggleOne(ts.id)}
+              <tr key={ts.id} onClick={() => openTsView(ts)} {...hover.bind(ts)}
                 className={`border-b border-zinc-800/60 cursor-pointer transition-colors ${
                   selected.includes(ts.id) ? 'bg-blue-950/30' : 'hover:bg-zinc-800/40'
                 }`}>
@@ -1116,6 +1178,14 @@ export default function ApprovalsPage() {
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                   <input type="checkbox" checked={selected.includes(ts.id)} onChange={() => toggleOne(ts.id)}
                     className="rounded border-zinc-600 bg-zinc-800 accent-blue-500" />
+                </td>
+                <td
+                  className="px-3 py-2.5 font-mono text-center hidden lg:table-cell"
+                  style={{ background: 'rgba(0,245,255,0.06)', borderLeft: '2px solid var(--brand-primary)', borderRight: '2px solid var(--brand-primary)' }}
+                >
+                  {ts.ticket_total_minutes != null
+                    ? <span style={{ color: ticketTotalColor(ts.ticket_total_minutes), fontWeight: 700, fontSize: '0.875rem' }}>{fmtMin(ts.ticket_total_minutes)}</span>
+                    : <span style={{ color: 'var(--brand-subtle)' }}>—</span>}
                 </td>
                 <td className="px-3 py-2.5 text-zinc-300 whitespace-nowrap">{fmt(ts.date)}</td>
                 <td className="px-3 py-2.5 text-zinc-400 font-mono hidden md:table-cell">{ts.start_time ?? '—'}</td>
@@ -1148,12 +1218,23 @@ export default function ApprovalsPage() {
                 </td>
                 <td className="px-3 py-2.5 text-zinc-200 font-medium">{ts.user?.name ?? '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-500 hidden md:table-cell">{ts.project?.customer?.name ?? '—'}</td>
-                <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell truncate max-w-[160px]">{ts.project?.name ?? '—'}</td>
+                <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell truncate max-w-[280px]">
+                  {ts.project?.name ?? '—'}
+                  {(ts as any).real_project?.name && (
+                    <span className="block text-[10px]" style={{ color: 'var(--text-light)' }}>Real: {(ts as any).real_project.name}</span>
+                  )}
+                </td>
+                <td className="px-3 py-2.5 text-zinc-500 hidden xl:table-cell truncate max-w-[160px]">
+                  {(ts as any).coordinator_label || '—'}
+                </td>
+                <td className="px-3 py-2.5 text-zinc-500 hidden xl:table-cell truncate max-w-[140px]">
+                  {(ts.project as any)?.customer?.executive?.name ?? '—'}
+                </td>
                 <td className="px-3 py-2.5 text-zinc-500 hidden lg:table-cell truncate max-w-[160px]">{ts.ticket_subject ?? '—'}</td>
                 <td className="px-3 py-2.5 hidden lg:table-cell max-w-[200px]">
                   {ts.observation ? (
-                    <span title={ts.observation} className="block truncate text-zinc-400 cursor-default">
-                      {ts.observation}
+                    <span title={previewText(ts.observation)} className="block truncate text-zinc-400 cursor-default">
+                      {previewText(ts.observation)}
                     </span>
                   ) : <span className="text-zinc-600">—</span>}
                 </td>
@@ -1169,8 +1250,9 @@ export default function ApprovalsPage() {
             {/* Expenses rows */}
             {!currentLoading && tab === 'expenses' && expItems.map(exp => (
               <tr key={exp.id}
-                className="border-b border-zinc-800/60 hover:bg-zinc-800/40 transition-colors">
-                <td className="px-2 py-2.5 w-10">
+                onClick={() => openExpApprove(exp)}
+                className="border-b border-zinc-800/60 hover:bg-zinc-800/40 transition-colors cursor-pointer">
+                <td className="px-2 py-2.5 w-10" onClick={e => e.stopPropagation()}>
                   <RowMenu items={[
                     { label: 'Visualizar', icon: <Eye size={12} />, onClick: () => openExpApprove(exp) },
                     { label: 'Aprovar', icon: <Check size={12} />, onClick: () => openExpApprove(exp) },
@@ -1185,7 +1267,12 @@ export default function ApprovalsPage() {
                 <td className="px-3 py-2.5 text-zinc-400 whitespace-nowrap hidden sm:table-cell">{fmtDateTime(exp.created_at)}</td>
                 <td className="px-3 py-2.5 text-zinc-200 font-medium">{exp.user?.name ?? '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-500 hidden md:table-cell">{exp.project?.customer?.name ?? '—'}</td>
-                <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell truncate max-w-[160px]">{exp.project?.name ?? '—'}</td>
+                <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell truncate max-w-[280px]">
+                  {exp.project?.name ?? '—'}
+                  {(exp as any).real_project?.name && (
+                    <span className="block text-[10px]" style={{ color: 'var(--text-light)' }}>Real: {(exp as any).real_project.name}</span>
+                  )}
+                </td>
                 <td className="px-3 py-2.5 hidden lg:table-cell max-w-[200px]">
                   <div className="flex items-center gap-1.5">
                     <span title={exp.description} className="block truncate text-zinc-400 cursor-default">
@@ -1248,6 +1335,10 @@ export default function ApprovalsPage() {
           currentUser={user}
         />
       )}
+
+      {/* Preview do apontamento ao passar o mouse na linha (canto superior direito) */}
+      <TimesheetHoverTooltip ts={hover.ts} />
+
 
       {/* ── Modal: aprovar despesa ── */}
       {expApprove && (

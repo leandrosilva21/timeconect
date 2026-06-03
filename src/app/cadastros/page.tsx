@@ -236,7 +236,16 @@ function CustomersTab() {
   const [filterExecutive, setFilterExecutive] = useState('')
   const [executives, setExecutives] = useState<Executive[]>([])
   const [modal, setModal] = useState<{ open: boolean; item?: CustomerFull }>({ open: false })
-  const [form, setForm] = useState({ name: '', company_name: '', cgc: '', code_prefix: '', active: true, executive_id: '' })
+  const [form, setForm] = useState({ name: '', company_name: '', cgc: '', code_prefix: '', active: true, executive_id: '', emails_administrativos: [] as string[] })
+  const [novoEmailCli, setNovoEmailCli] = useState('')
+  const addEmailCli = () => {
+    const e = novoEmailCli.trim().toLowerCase()
+    if (!e) return
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) { toast.error('E-mail inválido'); return }
+    setForm(f => f.emails_administrativos.includes(e) ? f : { ...f, emails_administrativos: [...f.emails_administrativos, e] })
+    setNovoEmailCli('')
+  }
+  const removeEmailCli = (e: string) => setForm(f => ({ ...f, emails_administrativos: f.emails_administrativos.filter(x => x !== e) }))
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<number | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id?: number }>({ open: false })
@@ -262,9 +271,10 @@ function CustomersTab() {
 
   useEffect(() => { load() }, [load])
 
-  const openCreate = () => { setForm({ name: '', company_name: '', cgc: '', code_prefix: '', active: true, executive_id: '' }); setModal({ open: true }) }
+  const openCreate = () => { setForm({ name: '', company_name: '', cgc: '', code_prefix: '', active: true, executive_id: '', emails_administrativos: [] }); setNovoEmailCli(''); setModal({ open: true }) }
   const openEdit = (item: CustomerFull) => {
-    setForm({ name: item.name, company_name: item.company_name ?? '', cgc: item.cgc ?? '', code_prefix: item.code_prefix ?? '', active: item.active, executive_id: item.executive_id ? String(item.executive_id) : '' })
+    setForm({ name: item.name, company_name: item.company_name ?? '', cgc: item.cgc ?? '', code_prefix: item.code_prefix ?? '', active: item.active, executive_id: item.executive_id ? String(item.executive_id) : '', emails_administrativos: (item as CustomerFull & { emails_administrativos?: string[] }).emails_administrativos ?? [] })
+    setNovoEmailCli('')
     setModal({ open: true, item })
   }
 
@@ -388,6 +398,29 @@ function CustomersTab() {
                   <option value="">Sem executivo</option>
                   {executives.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
                 </select>
+              </div>
+              <div>
+                <Label className="text-xs text-zinc-400">E-mails administrativos</Label>
+                {form.emails_administrativos.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {form.emails_administrativos.map(e => (
+                      <span key={e} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium"
+                        style={{ background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-border)' }}>
+                        {e}
+                        <button onClick={() => removeEmailCli(e)} className="leading-none" style={{ color: 'var(--success)' }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2 mt-1.5">
+                  <Input value={novoEmailCli} type="email"
+                    onChange={e => setNovoEmailCli(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addEmailCli() } }}
+                    placeholder="adicionar e-mail…"
+                    className="bg-zinc-800 border-zinc-700 text-white h-9 text-xs" />
+                  <Button variant="outline" onClick={addEmailCli} className="h-9 text-xs border-zinc-700 text-zinc-300 shrink-0">Adicionar</Button>
+                </div>
+                <p className="mt-1 text-[11px] text-zinc-500">Mesma lista usada no fechamento e nos comunicados (reajuste) do cliente.</p>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setForm(f => ({ ...f, active: !f.active }))}
@@ -1377,7 +1410,8 @@ function CadastrosContent() {
   const { user } = useAuth()
 
   const isAdmin = user?.type === 'admin'
-  const ep = user?.extra_permissions ?? []
+  // Lista resolvida pelo backend (base + extra + grupos); fallback pra extra_permissions
+  const ep = (user as any)?.permissions ?? user?.extra_permissions ?? []
 
   // Filtra tabs conforme permissões do usuário
   const visibleTabs = TABS.filter(t =>

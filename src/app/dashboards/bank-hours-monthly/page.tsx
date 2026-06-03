@@ -6,15 +6,23 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
+import { Eye } from 'lucide-react'
 import DashboardIndicators from '@/components/dashboard/DashboardIndicators'
+import ProjectTimesheetsModal from '@/components/dashboard/ProjectTimesheetsModal'
+import { MonthlyAccrualTable } from '@/components/projects/monthly-accrual-table'
+import {
+  useMaintenanceInline, exportMaintenanceToXLSX,
+  ExportButton, InlineTimesheetsTable, InlineTicketSummaryTable, InlineExpensesTable, TimesheetDetailModal,
+} from '@/components/dashboard/MaintenanceInline'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { SearchSelect } from '@/components/ui/search-select'
+import { KpiCard } from '@/components/ui/kpi-card'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface Customer  { id: number; name: string }
-interface Project   { id: number; name: string; code: string; start_date?: string | null }
+interface Project   { id: number; name: string; code: string; start_date?: string | null; status?: string; status_display?: string; service_type?: { code?: string | null; name?: string | null } | null }
 interface Executive { id: number; name: string }
 
 interface SummaryData {
@@ -44,8 +52,15 @@ interface ContributionItem {
   hourly_rate?: number
   total_value?: number
   description?: string | null
+  motivo?: string
   changed_by: { name: string } | null
   created_at: string
+}
+
+const MOTIVO_LABEL: Record<string, string> = {
+  aporte: 'Aporte',
+  excedentes: 'Excedentes',
+  absorvidas: 'Absorvidas',
 }
 
 interface ProjectItem {
@@ -57,6 +72,7 @@ interface ProjectItem {
   sold_hours: number | null
   total_contributions_hours: number
   hour_contribution: number | null
+  consumed_hours: number
   hours_balance: number
   start_date: string | null
 }
@@ -68,18 +84,14 @@ function fmtBRL(v: number | null | undefined) {
   if (v == null) return '—'
   return formatBRL(v ?? 0)
 }
-function fmtDate(s: string) { return new Date(s).toLocaleDateString('pt-BR') }
-
-
-function StatCard({ label, value, accent }: { label: string; value: string; accent?: 'success' | 'danger' | 'primary' }) {
-  const color = accent === 'success' ? '#10B981' : accent === 'danger' ? '#EF4444' : accent === 'primary' ? '#00F5FF' : 'var(--brand-text)'
-  return (
-    <div className="rounded-2xl p-5 flex flex-col gap-3" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
-      <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{label}</span>
-      <span className="text-3xl font-extrabold tracking-tight" style={{ color, lineHeight: 1 }}>{value}</span>
-    </div>
-  )
+function fmtDate(s: string) {
+  // Sem shift de fuso — mantém DD/MM/AAAA literal do banco.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : new Date(s).toLocaleDateString('pt-BR')
 }
+
+
+// StatCard local removido — agora usamos KpiCard de '@/components/ui/kpi-card'.
 
 function Tab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
@@ -95,7 +107,7 @@ function Tab({ label, active, onClick }: { label: string; active: boolean; onCli
 
 // ─── Projects Table ───────────────────────────────────────────────────────────
 
-function ProjectsTable({ items, loading }: { items: ProjectItem[]; loading: boolean }) {
+function ProjectsTable({ items, loading, onViewTimesheets }: { items: ProjectItem[]; loading: boolean; onViewTimesheets: (p: ProjectItem) => void }) {
   return (
     <div className="rounded-2xl overflow-x-auto overflow-y-clip" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
       {loading ? (
@@ -108,16 +120,15 @@ function ProjectsTable({ items, loading }: { items: ProjectItem[]; loading: bool
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10" style={{ borderBottom: '1px solid var(--brand-border)', background: 'rgba(255,255,255,0.02)' }}>
               <tr>
-                {['Código','Projeto','Status','Tipo','Horas Vendidas','Saldo','Início'].map(col => (
-                  <th key={col} className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wider ${col === 'Saldo' || col === 'Horas Vendidas' ? 'text-right' : 'text-left'}`} style={{ color: 'var(--brand-subtle)' }}>{col}</th>
+                {['Código','Projeto','Status','Tipo','Horas Vendidas','Consumo','Início',''].map(col => (
+                  <th key={col} className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wider ${['Horas Vendidas','Consumo'].includes(col) ? 'text-right' : 'text-left'}`} style={{ color: 'var(--brand-subtle)' }}>{col}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {items.length === 0
-                ? <tr><td colSpan={7} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
+                ? <tr><td colSpan={8} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
                 : items.map(p => {
-                  const balance = p.hours_balance ?? 0
                   const contributions = p.total_contributions_hours || p.hour_contribution || 0
                   return (
                     <tr key={p.id} className="transition-colors" style={{ borderBottom: '1px solid var(--brand-border)' }}
@@ -135,8 +146,18 @@ function ProjectsTable({ items, loading }: { items: ProjectItem[]; loading: bool
                       <td className="px-5 py-3.5 text-right font-medium" style={{ color: 'var(--brand-text)' }}>
                         {p.sold_hours !== null ? (contributions > 0 ? `${p.sold_hours} (+${contributions})` : String(p.sold_hours)) : '—'}
                       </td>
-                      <td className="px-5 py-3.5 text-right font-bold" style={{ color: balance >= 0 ? '#10B981' : '#EF4444' }}>{fmtH(balance)}</td>
+                      <td className="px-5 py-3.5 text-right font-medium" style={{ color: 'var(--brand-text)' }}>{fmtH(p.consumed_hours ?? 0)}</td>
                       <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--brand-muted)' }}>{p.start_date ? fmtDate(p.start_date) : '—'}</td>
+                      <td className="px-3 py-3.5 text-right">
+                        <button
+                          onClick={() => onViewTimesheets(p)}
+                          className="p-1.5 rounded-md hover:bg-white/5"
+                          style={{ color: 'var(--text-muted)' }}
+                          title="Ver apontamentos"
+                        >
+                          <Eye size={16} />
+                        </button>
+                      </td>
                     </tr>
                   )
                 })}
@@ -154,6 +175,7 @@ export default function BankHoursMonthlyPage() {
   const router = useRouter()
   const isAdmin   = user?.type === 'admin'
   const isCliente = user?.type === 'cliente'
+  const canReverseApproval = !!user && user.type !== 'consultor' && user.type !== 'cliente'
 
   useEffect(() => {
     if (user && user.type === 'coordenador') router.replace('/timesheets')
@@ -180,7 +202,21 @@ export default function BankHoursMonthlyPage() {
   const [loadingSummary,  setLoadingSummary]  = useState(false)
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [loadingMaint,    setLoadingMaint]    = useState(false)
-  const [activeTab, setActiveTab] = useState<'total' | 'projects' | 'maintenance' | 'indicators'>('total')
+  const [activeTab, setActiveTab] = useState<'total' | 'projects' | 'maintenance' | 'expenses' | 'indicators'>('total')
+  // Modal reutilizável "Ver apontamentos" da aba Projetos.
+  const [tsModalProject, setTsModalProject] = useState<ProjectItem | null>(null)
+
+  // Componentes embarcados (Sustentação completa + Despesas)
+  const mxKind: 'maintenance' | 'expenses' = activeTab === 'expenses' ? 'expenses' : 'maintenance'
+  const { rows: mxRows, loading: mxLoading, ticketSummary: mxTicketSummary, ticketLoading: mxTicketLoading, reload: reloadMx } = useMaintenanceInline({
+    enabled: activeTab === 'maintenance' || activeTab === 'expenses',
+    kind: mxKind,
+    customerId: selectedCustomer || user?.customer_id,
+    projectId: selectedProject || null,
+    dateFrom,
+    dateTo,
+  })
+  const [mxDetail, setMxDetail] = useState<any | null>(null)
   const [indicatorParams, setIndicatorParams] = useState<URLSearchParams>(new URLSearchParams())
 
   useEffect(() => {
@@ -200,7 +236,7 @@ export default function BankHoursMonthlyPage() {
   }, [user, selectedCustomer, isCliente])
 
   const fetchSummary = useCallback(() => {
-    if (!selectedProject && isAdmin) return
+    if (!selectedProject) return
     const now = new Date()
     const toM = refMonth ?? (dateTo ? Number(dateTo.split('-')[1]) : now.getMonth() + 1)
     const toY = refYear  ?? (dateTo ? Number(dateTo.split('-')[0]) : now.getFullYear())
@@ -236,7 +272,7 @@ export default function BankHoursMonthlyPage() {
   }, [selectedCustomer, selectedExecutive, selectedProject, dateFrom, dateTo, refMonth, refYear, isCliente, user?.customer_id])
 
   const fetchProjectsList = useCallback(() => {
-    if (!selectedProject && isAdmin) return
+    if (!selectedProject) return
     const params = buildParams()
     params.set('service_type_name', 'Projeto')
     setLoadingProjects(true)
@@ -247,7 +283,7 @@ export default function BankHoursMonthlyPage() {
   }, [buildParams, isAdmin])
 
   const fetchMaintList = useCallback(() => {
-    if (!selectedProject && isAdmin) return
+    if (!selectedProject) return
     const params = buildParams()
     params.set('service_type_name', 'Sustentação')
     setLoadingMaint(true)
@@ -262,7 +298,36 @@ export default function BankHoursMonthlyPage() {
   useEffect(() => { if (activeTab === 'maintenance') fetchMaintList()    }, [fetchMaintList, activeTab])
   useEffect(() => { setIndicatorParams(buildParams()) }, [buildParams])
 
-  const hasFilters = !isAdmin || !!selectedProject
+  // Exige PROJETO selecionado pra todos (sem projeto = estado vazio, não agrega o cliente).
+  const hasFilters = !!selectedProject
+
+  // Projeto selecionado + se o contrato é do tipo Sustentação (esconde a aba "Sustentação").
+  const selProj = projects.find(p => p.id === selectedProject)
+  const isSustentacaoContract = (() => {
+    const st = selProj?.service_type
+    if (!st) return false
+    const c = (st.code ?? '').toLowerCase()
+    const n = (st.name ?? '').toLowerCase()
+    return c === 'sustentacao' || /sustenta|cloud|bizify/.test(n)
+  })()
+
+  // Abas "Sustentação" e "Indicadores" só em contrato de sustentação; "Projetos"
+  // sempre (em sustentação lista os projetos-filho). Reseta se some.
+  useEffect(() => {
+    if (!isSustentacaoContract && (activeTab === 'maintenance' || activeTab === 'indicators')) setActiveTab('total')
+  }, [isSustentacaoContract, activeTab])
+
+  // Legenda do "Consumo do Mês" — espelha o período efetivo do summary.
+  const MONTH_NAMES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+  const monthConsumptionHint = (() => {
+    if (dateFrom && dateTo) {
+      const fmt = (s: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); return m ? `${m[3]}/${m[2]}/${m[1]}` : s }
+      return `Período: ${fmt(dateFrom)} a ${fmt(dateTo)}`
+    }
+    if (refMonth && refYear) return `${MONTH_NAMES_PT[refMonth - 1]} ${refYear}`
+    const now = new Date()
+    return `Mês vigente — ${MONTH_NAMES_PT[now.getMonth()]} ${now.getFullYear()}`
+  })()
 
   return (
     <AppLayout title="Dashboard — Banco de Horas Mensais">
@@ -303,14 +368,26 @@ export default function BankHoursMonthlyPage() {
               wide
             />
           )}
-          <SearchSelect
-            label="Projeto"
-            value={String(selectedProject)}
-            onChange={v => setSelectedProject(v === '' ? '' : Number(v))}
-            options={projects.map(p => ({ id: p.id, name: `${p.code} — ${p.name}` }))}
-            placeholder="Selecione um projeto"
-            wide
-          />
+          {/* Status do projeto selecionado — em evidência, cores padrão (verde/vermelho/etc). */}
+          {(() => {
+            const sel = projects.find(p => String(p.id) === String(selectedProject))
+            if (!sel?.status) return null
+            const c = (sel.status === 'cancelled' || sel.status === 'finished')
+              ? { bg: 'var(--danger-bg)',  fg: 'var(--danger)',  bd: 'var(--danger-border)' }
+              : sel.status === 'paused'
+              ? { bg: 'var(--warning-bg)', fg: 'var(--warning)', bd: 'var(--warning-border)' }
+              : (sel.status === 'started' || sel.status === 'awaiting_start')
+              ? { bg: 'var(--success-bg)', fg: 'var(--success)', bd: 'var(--success-border)' }
+              : { bg: 'var(--info-bg)',    fg: 'var(--info)',    bd: 'var(--info-border)' }
+            return (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Status</label>
+                <span className="inline-flex items-center px-4 py-2 rounded-full text-sm font-bold w-fit" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.bd}` }}>
+                  {sel.status_display ?? sel.status}
+                </span>
+              </div>
+            )
+          })()}
           {/* Filtro de data */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Data</label>
@@ -344,32 +421,70 @@ export default function BankHoursMonthlyPage() {
           </div>
         </div>
 
+        {/* Sem projeto selecionado → lista de projetos com botão "Ver". */}
         {!hasFilters && (
-          <div className="rounded-2xl p-16 text-center" style={{ border: '1px dashed var(--brand-border)' }}>
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(0,245,255,0.06)' }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00F5FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-            </div>
-            <p className="font-semibold text-sm mb-1" style={{ color: 'var(--brand-text)' }}>Nenhum projeto selecionado</p>
-            <p className="text-sm" style={{ color: 'var(--brand-muted)' }}>
-              {isAdmin
-                ? 'Selecione um cliente e um projeto para visualizar os dados do dashboard.'
-                : 'Selecione um projeto para visualizar os dados do dashboard.'}
-            </p>
+          <div className="rounded-2xl overflow-x-auto overflow-y-clip" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 z-10" style={{ borderBottom: '1px solid var(--brand-border)', background: 'rgba(255,255,255,0.02)' }}>
+                <tr>
+                  {['Código','Projeto','Status'].map(col => (
+                    <th key={col} className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{col}</th>
+                  ))}
+                  <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projects.length === 0 ? (
+                  <tr><td colSpan={4} className="py-12 text-center text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum projeto encontrado.</td></tr>
+                ) : projects.map(p => (
+                  <tr key={p.id} className="transition-colors" style={{ borderBottom: '1px solid var(--brand-border)' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,245,255,0.03)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td className="px-5 py-3.5">
+                      <span className="font-mono text-xs px-2 py-1 rounded-md" style={{ background: 'var(--brand-border)', color: 'var(--brand-subtle)' }}>{p.code}</span>
+                    </td>
+                    <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--brand-text)' }}>{p.name}</td>
+                    <td className="px-5 py-3.5">
+                      <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{p.status_display ?? p.status ?? '—'}</span>
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <button
+                        onClick={() => setSelectedProject(p.id)}
+                        className="inline-flex items-center px-4 py-1.5 rounded-lg text-sm font-semibold transition-all"
+                        style={{ background: 'var(--brand-primary)', color: 'var(--primary-fg)' }}
+                      >
+                        Ver
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
         {hasFilters && (
           <div className="space-y-6">
+            {/* Voltar à lista de projetos */}
+            <button
+              onClick={() => setSelectedProject('')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium"
+              style={{ background: 'var(--surface-hover)', color: 'var(--text)', border: '1px solid var(--border)' }}
+            >
+              ← Projetos
+            </button>
             {/* Tabs */}
             <div className="flex gap-1 p-1 rounded-2xl w-fit" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
               <Tab label="Total Geral"  active={activeTab === 'total'}       onClick={() => setActiveTab('total')} />
               <Tab label="Projetos"     active={activeTab === 'projects'}    onClick={() => setActiveTab('projects')} />
-              {(summary?.has_support ?? true) && (
+              {isSustentacaoContract && (
                 <Tab label="Sustentação" active={activeTab === 'maintenance'} onClick={() => setActiveTab('maintenance')} />
               )}
-              <Tab label="Indicadores"  active={activeTab === 'indicators'}  onClick={() => setActiveTab('indicators')} />
+              <Tab label="Despesas"     active={activeTab === 'expenses'}    onClick={() => setActiveTab('expenses')} />
+              {isSustentacaoContract && (
+                <Tab label="Indicadores"  active={activeTab === 'indicators'}  onClick={() => setActiveTab('indicators')} />
+              )}
             </div>
 
             {/* Total Tab */}
@@ -445,8 +560,8 @@ export default function BankHoursMonthlyPage() {
                           </div>
                         )}
                       </div>
-                      <StatCard label="Consumo do Mês" value={fmtH(summary.month_consumed_hours)} />
-                      <StatCard
+                      <KpiCard label="Consumo do Mês" value={fmtH(summary.month_consumed_hours)} hint={monthConsumptionHint} />
+                      <KpiCard
                         label="Saldo de Horas"
                         value={fmtH(summary.hours_balance)}
                         accent={summary.hours_balance >= 0 ? 'success' : 'danger'}
@@ -454,41 +569,56 @@ export default function BankHoursMonthlyPage() {
                     </div>
                     {/* Row 2 — 3 cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <StatCard
+                      {/* Sem valor/hora definido → os 3 cards ficam sem valor (—). */}
+                      <KpiCard
                         label="Horas Excedentes"
-                        value={fmtH(summary.exceeded_hours ?? 0)}
-                        accent={(summary.exceeded_hours ?? 0) > 0 ? 'danger' : undefined}
+                        value={summary.hourly_rate != null ? fmtH(summary.exceeded_hours ?? 0) : '—'}
+                        accent={summary.hourly_rate != null && (summary.exceeded_hours ?? 0) > 0 ? 'danger' : undefined}
                       />
-                      <StatCard label="Valor Hora"   value={fmtBRL(summary.hourly_rate)} />
-                      <StatCard
+                      <KpiCard label="Valor Hora"   value={fmtBRL(summary.hourly_rate)} />
+                      <KpiCard
                         label="Valor a Pagar"
-                        value={fmtBRL(summary.amount_to_pay)}
-                        accent={(summary.amount_to_pay ?? 0) > 0 ? 'danger' : undefined}
+                        value={summary.hourly_rate != null ? fmtBRL(summary.amount_to_pay) : '—'}
+                        accent={summary.hourly_rate != null && (summary.amount_to_pay ?? 0) > 0 ? 'danger' : undefined}
                       />
                     </div>
 
-                    {/* Histórico de Aporte */}
-                    {(summary.contributed_hours_history?.length ?? 0) > 0 && (
-                      <div className="rounded-2xl overflow-x-auto overflow-y-clip" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+                    {/* Horas mensais incrementadas (acúmulo do banco mensal) — acima dos aportes */}
+                    <MonthlyAccrualTable
+                      variant="brand"
+                      startDate={summary.start_date}
+                      hoursPerMonth={summary.contracted_hours ?? 0}
+                      accumulated={summary.accumulated_contracted_hours ?? null}
+                    />
+
+                    {/* Histórico de Aporte — sempre exibido (com estado vazio). */}
+                    <div className="rounded-2xl overflow-x-auto overflow-y-clip" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
                         <div className="px-5 py-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
                           <h3 className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>Histórico de Aporte de Horas</h3>
                         </div>
                           <table className="w-full text-sm">
                             <thead className="sticky top-0 z-10" style={{ borderBottom: '1px solid var(--brand-border)', background: 'rgba(255,255,255,0.02)' }}>
                               <tr>
-                                {['Projeto','Horas','Valor/h','Total','Descrição','Data','Por'].map(col => (
+                                {['Projeto','Horas','Motivo','Valor/h','Total','Descrição','Data','Por'].map(col => (
                                   <th key={col} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{col}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
-                              {summary.contributed_hours_history!.map(item => (
+                              {(summary.contributed_hours_history?.length ?? 0) === 0 ? (
+                                <tr>
+                                  <td colSpan={8} className="px-5 py-8 text-center text-sm" style={{ color: 'var(--brand-subtle)' }}>
+                                    Nenhum aporte de horas registrado
+                                  </td>
+                                </tr>
+                              ) : summary.contributed_hours_history!.map(item => (
                                 <tr key={item.id} style={{ borderBottom: '1px solid var(--brand-border)' }}
                                   onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,245,255,0.03)')}
                                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                 >
                                   <td className="px-5 py-3" style={{ color: 'var(--brand-text)' }}>{item.project?.code} — {item.project?.name}</td>
                                   <td className="px-5 py-3 font-bold" style={{ color: '#00F5FF' }}>{Number(item.contributed_hours ?? item.difference ?? 0).toFixed(0)}h</td>
+                                  <td className="px-5 py-3" style={{ color: 'var(--brand-muted)' }}>{MOTIVO_LABEL[item.motivo ?? 'aporte'] ?? 'Aporte'}</td>
                                   <td className="px-5 py-3" style={{ color: 'var(--brand-muted)' }}>{fmtBRL(item.hourly_rate ?? null)}</td>
                                   <td className="px-5 py-3" style={{ color: 'var(--brand-muted)' }}>{fmtBRL(item.total_value ?? null)}</td>
                                   <td className="px-5 py-3 max-w-48 truncate" style={{ color: 'var(--brand-muted)' }}>{item.description || '—'}</td>
@@ -499,7 +629,6 @@ export default function BankHoursMonthlyPage() {
                             </tbody>
                           </table>
                       </div>
-                    )}
                   </>
                 ) : (
                   <p className="text-sm" style={{ color: 'var(--brand-muted)' }}>Nenhum dado disponível.</p>
@@ -509,32 +638,55 @@ export default function BankHoursMonthlyPage() {
 
             {/* Projects Tab */}
             {activeTab === 'projects' && (
+              // Aba Projetos IGNORA o filtro de data — lista todos os projetos com
+              // consumo acumulado (all-time). Card "Consumo do Mês" removido daqui.
               <div className="space-y-4">
                 {summary && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <StatCard label="Consumo Acumulado" value={fmtH(summary.projects_consumed_hours ?? 0)} accent="primary" />
-                    <StatCard label="Consumo do Mês"    value={fmtH(summary.projects_month_consumed_hours ?? 0)} />
+                  <div className="grid grid-cols-1 gap-4">
+                    <KpiCard label="Consumo Acumulado" value={fmtH(summary.projects_consumed_hours ?? 0)} accent="primary" />
                   </div>
                 )}
-                <ProjectsTable items={projectsList} loading={loadingProjects} />
+                <ProjectsTable items={projectsList} loading={loadingProjects} onViewTimesheets={setTsModalProject} />
               </div>
             )}
 
             {/* ── SUSTENTAÇÃO ── */}
-            {activeTab === 'maintenance' && (
+            {activeTab === 'maintenance' && isSustentacaoContract && (
               <div className="space-y-4">
                 {summary && (
                   <div className="grid grid-cols-2 gap-4">
-                    <StatCard label="Consumo Acumulado" value={fmtH(summary.maintenance_consumed_hours ?? 0)} accent="primary" />
-                    <StatCard label="Consumo do Mês"    value={fmtH(summary.maintenance_month_consumed_hours ?? 0)} />
+                    <KpiCard label="Consumo Acumulado" value={fmtH(summary.maintenance_consumed_hours ?? 0)} accent="primary" />
+                    <KpiCard label="Consumo do Mês"    value={fmtH(summary.maintenance_month_consumed_hours ?? 0)} hint={monthConsumptionHint} />
                   </div>
                 )}
-                <ProjectsTable items={maintList} loading={loadingMaint} />
+                <ExportButton onClick={() => exportMaintenanceToXLSX('maintenance', mxRows)} disabled={mxRows.length === 0} />
+                <InlineTimesheetsTable rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} onReverseApproved={canReverseApproval} onReverseSuccess={reloadMx} />
+                <InlineTicketSummaryTable rows={mxTicketSummary} loading={mxTicketLoading} />
               </div>
             )}
 
+            {/* ── DESPESAS ── */}
+            {activeTab === 'expenses' && (() => {
+              const totalAmount = mxRows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+              const toPay = mxRows
+                .filter(r => !['rejected','rejeitado','pago','paid'].includes(String(r.status ?? '').toLowerCase()))
+                .reduce((s, r) => s + (Number(r.amount) || 0), 0)
+              const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+              return (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <KpiCard label="Quantidade"    value={String(mxRows.length)} />
+                    <KpiCard label="Valor Total"   value={fmtBRL(totalAmount)} />
+                    <KpiCard label="Valor a Pagar" value={fmtBRL(toPay)} accent="primary" />
+                  </div>
+                  <ExportButton onClick={() => exportMaintenanceToXLSX('expenses', mxRows)} disabled={mxRows.length === 0} />
+                  <InlineExpensesTable rows={mxRows} loading={mxLoading} />
+                </div>
+              )
+            })()}
+
             {/* ── INDICADORES ── */}
-            {activeTab === 'indicators' && (
+            {activeTab === 'indicators' && isSustentacaoContract && (
               <DashboardIndicators
                 basePath="/dashboards/bank-hours-monthly/indicators"
                 params={indicatorParams}
@@ -544,6 +696,17 @@ export default function BankHoursMonthlyPage() {
           </div>
         )}
       </div>
+      {mxDetail && <TimesheetDetailModal ts={mxDetail} onClose={() => setMxDetail(null)} />}
+      {/* ─ Modal reutilizável: Ver apontamentos do projeto (filtro + export) ─ */}
+      {tsModalProject && (
+        <ProjectTimesheetsModal
+          projectId={tsModalProject.id}
+          projectCode={tsModalProject.code}
+          projectName={tsModalProject.name}
+          customerId={selectedCustomer || null}
+          onClose={() => setTsModalProject(null)}
+        />
+      )}
     </AppLayout>
   )
 }

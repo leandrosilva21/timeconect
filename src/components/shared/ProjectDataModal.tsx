@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { X, Clock, BarChart2, Download } from 'lucide-react'
 import { api } from '@/lib/api'
+import { previewText } from '@/lib/sanitize'
 import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
 
@@ -82,19 +83,20 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
   const [loading, setLoading] = useState(false)
 
   const fetchData = useCallback(async () => {
-    if (!startDate || !endDate) return
     setLoading(true)
     try {
+      const qs = new URLSearchParams()
+      qs.set('project_id', String(projectId))
+      qs.set('pageSize', '100')
+      if (startDate) qs.set('start_date', startDate)
+      if (endDate)   qs.set('end_date',   endDate)
       if (tab === 'timesheets') {
-        const r = await api.get<any>(
-          `/timesheets?project_id=${projectId}&start_date=${startDate}&end_date=${endDate}&per_page=500&sort=date&direction=desc`
-        )
+        qs.set('sort', 'date'); qs.set('direction', 'desc')
+        const r = await api.get<any>(`/timesheets?${qs}`)
         const items = Array.isArray(r?.data) ? r.data : Array.isArray(r?.items) ? r.items : Array.isArray(r) ? r : []
         setTimesheets(items)
       } else {
-        const r = await api.get<any>(
-          `/expenses?project_id=${projectId}&start_date=${startDate}&end_date=${endDate}&per_page=500`
-        )
+        const r = await api.get<any>(`/expenses?${qs}`)
         const items = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : Array.isArray(r) ? r : []
         setExpenses(items)
       }
@@ -116,7 +118,7 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
         'Data': fmtDate(t.date),
         'Colaborador': t.user?.name ?? '—',
         'Horas': parseEffortToDecimal(t.effort_hours, t.effort_minutes),
-        'Observação': t.observation ?? '',
+        'Observação': previewText(t.observation),
         'Status': t.status_display,
       }))
       rows.push({ 'Data': '', 'Colaborador': 'TOTAL', 'Horas': totalHours, 'Observação': '', 'Status': '' })
@@ -211,6 +213,17 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
                 style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid var(--brand-border)', color: 'var(--brand-text)' }}
               />
             </div>
+            {(startDate || endDate) && (
+              <button
+                type="button"
+                onClick={() => { setStartDate(''); setEndDate('') }}
+                className="text-[11px] px-2 py-1.5 rounded-lg transition-colors"
+                style={{ color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}
+                title="Mostrar todos os períodos"
+              >
+                × Limpar
+              </button>
+            )}
           </div>
         </div>
 
@@ -220,7 +233,7 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
             <p className="text-center text-sm animate-pulse py-16" style={{ color: 'var(--brand-subtle)' }}>Carregando...</p>
           ) : tab === 'timesheets' ? (
             timesheets.length === 0 ? (
-              <p className="text-center text-sm py-16" style={{ color: 'var(--brand-subtle)' }}>Nenhum apontamento neste período.</p>
+              <p className="text-center text-sm py-16" style={{ color: 'var(--brand-subtle)' }}>{startDate || endDate ? 'Nenhum apontamento neste período.' : 'Nenhum apontamento.'}</p>
             ) : (
               <div className="p-5 space-y-4">
                 <div className="grid grid-cols-4 gap-3">
@@ -253,7 +266,7 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
                             <td className="px-3 py-2.5 tabular-nums whitespace-nowrap" style={{ color: 'var(--brand-muted)' }}>{fmtDate(ts.date)}</td>
                             <td className="px-3 py-2.5" style={{ color: 'var(--brand-text)' }}>{ts.user?.name ?? '—'}</td>
                             <td className="px-3 py-2.5 tabular-nums font-semibold" style={{ color: '#00F5FF' }}>{fmtHours(ts.effort_hours, ts.effort_minutes)}</td>
-                            <td className="px-3 py-2.5 max-w-[200px] truncate" style={{ color: 'var(--brand-muted)' }}>{ts.observation ?? '—'}</td>
+                            <td className="px-3 py-2.5 max-w-[200px] truncate" style={{ color: 'var(--brand-muted)' }} title={previewText(ts.observation)}>{ts.observation ? previewText(ts.observation) : '—'}</td>
                             <td className="px-3 py-2.5">
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap" style={{ background: `${c}18`, color: c }}>
                                 {ts.status_display}

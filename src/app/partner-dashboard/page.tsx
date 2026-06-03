@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { api, ApiError } from '@/lib/api'
+import { NotasPjCell, type NotasPayload } from '@/components/fechamento/NotasPjCell'
 import { exportTimesheetsToExcel } from '@/lib/exportTimesheets'
 import { TimesheetFormModal } from '@/components/ui/timesheet-form-modal'
 import { formatBRL, formatNumber } from '@/lib/format'
@@ -95,6 +96,89 @@ interface ExpenseItem {
 }
 
 type Tab = 'consultores' | 'apontamentos' | 'despesas' | 'indicadores'
+
+// ─── Recebimento do fechamento (espelha a tela do admin) ──────────────────────
+
+interface MyClosing {
+  tipo: 'consultor' | 'parceiro'
+  total_servico: number
+  total_despesas: number
+  total_base: number
+  desconto: number
+  desconto_desc: string | null
+  adiantamento: number
+  adicional: number
+  adicional_desc: string | null
+  recebimento: number
+}
+
+/**
+ * Bloco "Recebimento do fechamento" — mostra o MESMO valor que o admin vê na tela de
+ * fechamento do parceiro: total base + ajustes (desconto/adiantamento/adicional com
+ * motivos) e o recebimento final em destaque. Só renderiza ajustes ≠ 0.
+ */
+function MyClosingBlock({ closing }: { closing: MyClosing | null }) {
+  if (!closing) return null
+
+  const temAjustes = closing.desconto !== 0 || closing.adiantamento !== 0 || closing.adicional !== 0
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--brand-border)', background: 'var(--brand-surface)' }}>
+      <div className="px-5 py-3.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--brand-border)' }}>
+        <DollarSign size={15} style={{ color: 'var(--primary)' }} />
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Recebimento do fechamento</h3>
+      </div>
+      <div className="px-5 py-4 space-y-2.5">
+        <div className="flex items-center justify-between text-sm">
+          <span style={{ color: 'var(--brand-muted)' }}>Total do fechamento</span>
+          <span className="font-semibold tabular-nums" style={{ color: 'var(--brand-text)' }}>{formatBRL(closing.total_servico)}</span>
+        </div>
+        {closing.total_despesas > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span style={{ color: 'var(--brand-muted)' }}>+ Despesa</span>
+            <span className="font-medium tabular-nums shrink-0 ml-3" style={{ color: 'var(--success)' }}>+ {formatBRL(closing.total_despesas)}</span>
+          </div>
+        )}
+        {temAjustes && (
+          <div className="space-y-2 pt-1 mt-1 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+            {closing.desconto !== 0 && (
+              <div className="flex items-start justify-between text-sm">
+                <div className="min-w-0">
+                  <span style={{ color: 'var(--brand-muted)' }}>− Desconto</span>
+                  {closing.desconto_desc && (
+                    <p className="text-[11px] mt-0.5 break-words" style={{ color: 'var(--brand-subtle)' }}>{closing.desconto_desc}</p>
+                  )}
+                </div>
+                <span className="font-medium tabular-nums shrink-0 ml-3" style={{ color: 'var(--danger)' }}>− {formatBRL(closing.desconto)}</span>
+              </div>
+            )}
+            {closing.adiantamento !== 0 && (
+              <div className="flex items-start justify-between text-sm">
+                <span style={{ color: 'var(--brand-muted)' }}>− Adiantamento</span>
+                <span className="font-medium tabular-nums shrink-0 ml-3" style={{ color: 'var(--danger)' }}>− {formatBRL(closing.adiantamento)}</span>
+              </div>
+            )}
+            {closing.adicional !== 0 && (
+              <div className="flex items-start justify-between text-sm">
+                <div className="min-w-0">
+                  <span style={{ color: 'var(--brand-muted)' }}>+ Adicional</span>
+                  {closing.adicional_desc && (
+                    <p className="text-[11px] mt-0.5 break-words" style={{ color: 'var(--brand-subtle)' }}>{closing.adicional_desc}</p>
+                  )}
+                </div>
+                <span className="font-medium tabular-nums shrink-0 ml-3" style={{ color: 'var(--success)' }}>+ {formatBRL(closing.adicional)}</span>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="flex items-center justify-between pt-2.5 mt-1 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+          <span className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Recebimento</span>
+          <span className="text-lg font-bold tabular-nums" style={{ color: 'var(--success)' }}>{formatBRL(closing.recebimento)}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const STATUS_COLORS: Record<string, string> = {
   pending:              'bg-yellow-500/15 text-yellow-400',
@@ -214,6 +298,39 @@ function KpiCard({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Card do Painel do Parceiro: o admin do parceiro (parceiro_admin) envia a NFS-e + Nota de
+ * débito do parceiro no mês. O GET retorna `notas: null` se o parceiro não for PJ → o card some.
+ * Só upload — o aceite/recusa é do administrativo (Fechamento → Parceiro).
+ */
+function NotasFiscaisParceiroCard({ partnerId, yearMonth }: { partnerId: number; yearMonth: string }) {
+  const [notas, setNotas] = useState<NotasPayload>(null)
+  const [isPj, setIsPj] = useState<boolean | null>(null)
+  // Recebimento esperado do fechamento (o valor da nota deve ser igual a ele).
+  const [expectedValue, setExpectedValue] = useState<number | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    api.get<{ notas: NotasPayload }>(`/fechamento/notas/parceiro/${partnerId}/${yearMonth}`)
+      .then(r => { if (alive) { setNotas(r.notas ?? null); setIsPj(r.notas != null) } })
+      .catch(() => { if (alive) setIsPj(false) })
+    api.get<{ data: { recebimento: number } }>(`/my-closing/${yearMonth}`)
+      .then(r => { if (alive) setExpectedValue(r?.data?.recebimento ?? null) })
+      .catch(() => { if (alive) setExpectedValue(null) })
+    return () => { alive = false }
+  }, [partnerId, yearMonth])
+
+  if (isPj !== true) return null
+
+  return (
+    <div className="rounded-xl border p-4" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
+      <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--text)' }}>Notas Fiscais (PJ)</h3>
+      <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>Envie a NFS-e do parceiro neste mês. O administrativo valida (aceita ou recusa com motivo).</p>
+      <NotasPjCell type="parceiro" id={partnerId} yearMonth={yearMonth} notas={notas} canDecide={false} canUpload expectedValue={expectedValue} onChanged={setNotas} />
+    </div>
+  )
+}
+
 export default function PartnerDashboardPage() {
   const { user } = useAuth()
   const router = useRouter()
@@ -249,6 +366,18 @@ export default function PartnerDashboardPage() {
 
   const [consultantId, setConsultantId] = useState('')
   const [newTsOpen, setNewTsOpen] = useState(false)
+
+  // ── Recebimento do fechamento (mesmo valor que o admin vê) ──
+  const [myClosing, setMyClosing] = useState<MyClosing | null>(null)
+  useEffect(() => {
+    const ym = `${year}-${pad(month + 1)}`
+    let alive = true
+    setMyClosing(null)
+    api.get<{ data: MyClosing }>(`/my-closing/${ym}`)
+      .then(r => { if (alive) setMyClosing(r?.data ?? null) })
+      .catch(() => { if (alive) setMyClosing(null) })
+    return () => { alive = false }
+  }, [year, month])
 
   // ── Timesheets tab state ──
   const [timesheets, setTimesheets]     = useState<TimesheetItem[]>([])
@@ -654,6 +783,13 @@ export default function PartnerDashboardPage() {
             />
           </div>
         ) : null}
+
+        {/* Recebimento do fechamento — mesmo valor que o admin vê, perto do KPI Total a Receber */}
+        {activeTab === 'consultores' && <MyClosingBlock closing={myClosing} />}
+
+        {data?.partner?.id && (
+          <NotasFiscaisParceiroCard partnerId={data.partner.id} yearMonth={`${year}-${pad(month + 1)}`} />
+        )}
 
         {/* ── Tabs ── */}
         <div

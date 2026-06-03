@@ -7,7 +7,8 @@ import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
 import {
   Search, Users, X, Check, TrendingUp, Clock,
-  BarChart2, Building2, User, ChevronDown, ChevronRight, Plus,
+  BarChart2, Building2, User, ChevronDown, ChevronRight, Plus, Pencil, Trash2,
+  CalendarPlus, CalendarOff,
 } from 'lucide-react'
 import { PageHeader, Table, Thead, Th, Tbody, Tr, Td, Button, SkeletonTable, EmptyState } from '@/components/ds'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
@@ -26,6 +27,7 @@ interface ICProject {
   categoria_interna: string | null
   customer: { id: number; name: string } | null
   consultants: Consultant[]
+  has_open_period?: boolean
 }
 
 interface HoursSummary { project_id: number; total_hours: number }
@@ -71,10 +73,10 @@ function fmtMonth(m: string) {
   return `${names[parseInt(mo) - 1]}/${y}`
 }
 
-function MiniBar({ value, max, color = '#00F5FF' }: { value: number; max: number; color?: string }) {
+function MiniBar({ value, max, color = 'var(--primary)' }: { value: number; max: number; color?: string }) {
   const pct = max > 0 ? Math.max(3, (value / max) * 100) : 0
   return (
-    <div className="w-24 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+    <div className="w-24 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-hover)' }}>
       <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
     </div>
   )
@@ -122,6 +124,60 @@ export default function InvestimentoComercialPage() {
   const [newProjectCategoria, setNewProjectCategoria] = useState<'Sustentação' | 'Projeto' | 'Suporte' | 'Comercial'>('Projeto')
   const [creatingProject,     setCreatingProject]     = useState(false)
 
+  // Modal de edição de projeto interno
+  type EditableCategoria = '' | 'Sustentação' | 'Projeto' | 'Suporte' | 'Comercial'
+  const [editProject,     setEditProject]     = useState<ICProject | null>(null)
+  const [editName,        setEditName]        = useState('')
+  const [editCategoria,   setEditCategoria]   = useState<EditableCategoria>('')
+  // Modal de abertura/fechamento de mês (períodos abertos) — igual aos projetos tradicionais
+  const [openPeriodProject, setOpenPeriodProject] = useState<ICProject | null>(null)
+  const [savingEdit,      setSavingEdit]      = useState(false)
+  const [deletingEdit,    setDeletingEdit]    = useState(false)
+  const openEditModal = (p: ICProject) => {
+    setEditProject(p)
+    setEditName(p.name ?? '')
+    setEditCategoria(((p.categoria_interna ?? '') as EditableCategoria))
+  }
+  const closeEditModal = () => { setEditProject(null); setEditName(''); setEditCategoria('') }
+  const handleSaveEdit = async () => {
+    if (!editProject) return
+    const name = editName.trim()
+    if (name.length < 2) { toast.error('Informe um nome válido (mín. 2 caracteres)'); return }
+    setSavingEdit(true)
+    try {
+      const payload: { name: string; categoria_interna: string | null } = {
+        name,
+        categoria_interna: editCategoria === '' ? null : editCategoria,
+      }
+      await api.patch(`/projects/${editProject.id}`, payload)
+      setProjects(prev => prev.map(p => p.id === editProject.id
+        ? { ...p, name, categoria_interna: payload.categoria_interna }
+        : p))
+      toast.success('Projeto atualizado')
+      closeEditModal()
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Erro ao atualizar projeto')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+  const handleDeleteEdit = async () => {
+    if (!editProject) return
+    const ok = window.confirm(`Excluir o projeto "${editProject.name}" (${editProject.code})?\n\nA exclusão é bloqueada se houver apontamentos vinculados.`)
+    if (!ok) return
+    setDeletingEdit(true)
+    try {
+      await api.delete(`/projects/${editProject.id}`)
+      setProjects(prev => prev.filter(p => p.id !== editProject.id))
+      toast.success('Projeto excluído')
+      closeEditModal()
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Erro ao excluir projeto')
+    } finally {
+      setDeletingEdit(false)
+    }
+  }
+
   // Árvore: clientes expandidos
   const [expandedCustomers, setExpandedCustomers] = useState<Set<number>>(new Set())
   // Filtro de categoria
@@ -146,9 +202,9 @@ export default function InvestimentoComercialPage() {
 
   const reloadProjects = async () => {
     try {
-      const projRes = await api.get<any>('/projects?only_investimento_comercial=true&pageSize=500&gestao=true&with_team=true')
+      const projRes = await api.get<any>('/projects?only_investimento_comercial=true&pageSize=2000&gestao=true&with_team=true')
       const rawProjects: any[] = projRes?.items ?? projRes?.data ?? []
-      setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, categoria_interna: p.categoria_interna ?? null, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
+      setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, categoria_interna: p.categoria_interna ?? null, customer: p.customer ?? null, consultants: p.consultants ?? [], has_open_period: p.has_open_period ?? false })))
     } catch {
       toast.error('Erro ao recarregar projetos')
     }
@@ -157,13 +213,13 @@ export default function InvestimentoComercialPage() {
   useEffect(() => {
     let cancelled = false
     Promise.all([
-      api.get<any>('/projects?only_investimento_comercial=true&pageSize=500&gestao=true&with_team=true'),
+      api.get<any>('/projects?only_investimento_comercial=true&pageSize=2000&gestao=true&with_team=true'),
       api.get<any>('/users?exclude_type=cliente&pageSize=500'),
       api.get<any>('/consultant-groups?pageSize=200&with_users=true'),
     ]).then(([projRes, usersRes, groupsRes]) => {
       if (cancelled) return
       const rawProjects: any[] = projRes?.items ?? projRes?.data ?? []
-      setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, categoria_interna: p.categoria_interna ?? null, customer: p.customer ?? null, consultants: p.consultants ?? [] })))
+      setProjects(rawProjects.map(p => ({ id: p.id, name: p.name ?? '', code: p.code, status: p.status, categoria_interna: p.categoria_interna ?? null, customer: p.customer ?? null, consultants: p.consultants ?? [], has_open_period: p.has_open_period ?? false })))
       const rawUsers: any[] = usersRes?.items ?? usersRes?.data ?? []
       setAllUsers(rawUsers.map((u: any) => ({ id: u.id, name: u.name, email: u.email })))
       const rawGroups: any[] = groupsRes?.data ?? groupsRes?.items ?? []
@@ -176,6 +232,13 @@ export default function InvestimentoComercialPage() {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
+
+  // Auto-expandir o cliente ERPSERV ao carregar (é o destaque da página)
+  useEffect(() => {
+    const erpserv = projects.find(p => (p.customer?.name ?? '').toUpperCase().includes('ERPSERV'))?.customer
+    if (!erpserv) return
+    setExpandedCustomers(prev => prev.has(erpserv.id) ? prev : new Set(prev).add(erpserv.id))
+  }, [projects])
 
   const handleCreateProject = async () => {
     const name = newProjectName.trim()
@@ -276,7 +339,15 @@ export default function InvestimentoComercialPage() {
       if (!groups.has(key)) groups.set(key, { customer: p.customer, projects: [] })
       groups.get(key)!.projects.push(p)
     }
-    const groupList = [...groups.values()].sort((a, b) => a.customer.name.localeCompare(b.customer.name))
+    const isErpserv = (name: string) => name.toUpperCase().includes('ERPSERV')
+    const groupList = [...groups.values()].sort((a, b) => {
+      const aErp = isErpserv(a.customer.name)
+      const bErp = isErpserv(b.customer.name)
+      if (aErp && !bErp) return -1
+      if (!aErp && bErp) return 1
+      return a.customer.name.localeCompare(b.customer.name)
+    })
+    const firstNonErpservId = groupList.find(g => !isErpserv(g.customer.name))?.customer.id
 
     return (
       <Table>
@@ -292,30 +363,49 @@ export default function InvestimentoComercialPage() {
             const expanded = expandedCustomers.has(customer.id)
             const totalHoursCustomer = projects.reduce((s, p) => s + (hoursMap[p.id] ?? 0), 0)
             const totalConsultorIds = new Set(projects.flatMap(p => p.consultants.map(c => c.id)))
+            const erpservRow = isErpserv(customer.name)
+            const showDivider = customer.id === firstNonErpservId
             return (
               <Fragment key={customer.id}>
+                {showDivider && (
+                  <Tr baseBackground="transparent">
+                    <Td colSpan={5}>
+                      <div className="flex items-center gap-2 py-1">
+                        <div className="flex-1 h-px" style={{ background: 'var(--brand-border)' }} />
+                        <span className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--brand-subtle)' }}>Clientes</span>
+                        <div className="flex-1 h-px" style={{ background: 'var(--brand-border)' }} />
+                      </div>
+                    </Td>
+                  </Tr>
+                )}
                 {/* Linha do cliente (pai) */}
-                <Tr>
+                <Tr baseBackground={erpservRow ? 'var(--primary-soft)' : undefined}>
                   <Td>
                     <button onClick={() => toggleCustomerExpand(customer.id)}
                       className="flex items-center gap-2 text-left w-full hover:opacity-80 transition-opacity">
                       {expanded
-                        ? <ChevronDown size={14} style={{ color: 'var(--brand-muted)' }} />
-                        : <ChevronRight size={14} style={{ color: 'var(--brand-muted)' }} />}
-                      <span className="font-medium text-sm" style={{ color: 'var(--brand-text)' }}>{customer.name}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>{projects.length}</span>
+                        ? <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
+                        : <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />}
+                      <span className="font-semibold text-sm" style={{ color: 'var(--text)' }}>{customer.name}</span>
+                      {erpservRow && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded uppercase tracking-widest font-bold"
+                          style={{ background: 'var(--primary)', color: 'var(--primary-fg)' }}>
+                          Casa
+                        </span>
+                      )}
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>{projects.length}</span>
                     </button>
                   </Td>
-                  <Td><span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>—</span></Td>
+                  <Td><span className="text-xs" style={{ color: 'var(--text-light)' }}>—</span></Td>
                   <Td>
                     {totalConsultorIds.size === 0
-                      ? <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhum alocado</span>
-                      : <span className="text-xs" style={{ color: 'var(--brand-muted)' }}>{totalConsultorIds.size} {totalConsultorIds.size === 1 ? 'consultor' : 'consultores'}</span>}
+                      ? <span className="text-xs" style={{ color: 'var(--text-light)' }}>Nenhum alocado</span>
+                      : <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{totalConsultorIds.size} {totalConsultorIds.size === 1 ? 'consultor' : 'consultores'}</span>}
                   </Td>
                   <Td>
                     {hoursLoading
-                      ? <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>…</span>
-                      : <span className="text-sm font-semibold tabular-nums" style={{ color: totalHoursCustomer > 0 ? '#00F5FF' : 'var(--brand-subtle)' }}>{fmtHours(totalHoursCustomer)}</span>}
+                      ? <span className="text-xs" style={{ color: 'var(--text-light)' }}>…</span>
+                      : <span className="text-sm font-semibold tabular-nums" style={{ color: totalHoursCustomer > 0 ? 'var(--text)' : 'var(--text-light)' }}>{fmtHours(totalHoursCustomer)}</span>}
                   </Td>
                   <Td></Td>
                 </Tr>
@@ -329,32 +419,48 @@ export default function InvestimentoComercialPage() {
                           <span className="text-zinc-600">└</span>
                           <span className="text-sm" style={{ color: 'var(--brand-text)' }}>{project.name || '—'}</span>
                           {project.categoria_interna && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider"
-                              style={{ background: 'rgba(167,139,250,0.12)', color: '#a78bfa' }}>
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider"
+                              style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
                               {project.categoria_interna}
                             </span>
                           )}
                         </span>
                       </Td>
-                      <Td><span className="text-xs font-mono px-2 py-0.5 rounded" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{project.code}</span></Td>
+                      <Td><span className="text-xs font-mono font-medium px-2 py-0.5 rounded" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>{project.code}</span></Td>
                       <Td>
                         {project.consultants.length === 0
                           ? <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Nenhum alocado</span>
                           : <div className="flex flex-wrap gap-1">
                               {project.consultants.slice(0, 4).map(c => (
-                                <span key={c.id} className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)' }}>{c.name.split(' ')[0]}</span>
+                                <span key={c.id} className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--surface-hover)', color: 'var(--brand-muted)' }}>{c.name.split(' ')[0]}</span>
                               ))}
-                              {project.consultants.length > 4 && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-subtle)' }}>+{project.consultants.length - 4}</span>}
+                              {project.consultants.length > 4 && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--surface-hover)', color: 'var(--brand-subtle)' }}>+{project.consultants.length - 4}</span>}
                             </div>
                         }
                       </Td>
                       <Td>
                         {hoursLoading
-                          ? <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>…</span>
-                          : <span className="text-sm font-semibold tabular-nums" style={{ color: hours > 0 ? '#00F5FF' : 'var(--brand-subtle)' }}>{fmtHours(hours)}</span>
+                          ? <span className="text-xs" style={{ color: 'var(--text-light)' }}>…</span>
+                          : <span className="text-sm font-semibold tabular-nums" style={{ color: hours > 0 ? 'var(--text)' : 'var(--text-light)' }}>{fmtHours(hours)}</span>
                         }
                       </Td>
-                      <Td><Button size="sm" variant="ghost" onClick={() => openModal(project)}><Users size={13} className="mr-1" /> Alocação</Button></Td>
+                      <Td>
+                        <div className="flex items-center gap-1 justify-end">
+                          <Button size="sm" variant="ghost" onClick={() => openEditModal(project)} aria-label="Editar projeto">
+                            <Pencil size={13} className="mr-1" /> Editar
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => openModal(project)}>
+                            <Users size={13} className="mr-1" /> Alocação
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setOpenPeriodProject(project)}
+                            aria-label={project.has_open_period ? 'Fechar mês' : 'Abrir mês'}
+                            style={project.has_open_period ? { color: 'var(--warning)' } : undefined}>
+                            {project.has_open_period
+                              ? <><CalendarOff size={13} className="mr-1" /> Fechar Mês</>
+                              : <><CalendarPlus size={13} className="mr-1" /> Abrir Mês</>}
+                          </Button>
+                        </div>
+                      </Td>
                     </Tr>
                   )
                 })}
@@ -377,13 +483,13 @@ export default function InvestimentoComercialPage() {
     return (
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.15)' }}>
-            <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'var(--brand-subtle)' }}>Total Horas</p>
-            <p className="text-xl font-bold" style={{ color: '#00F5FF' }}>{fmtHours(totalH)}</p>
+          <div className="rounded-xl px-4 py-3" style={{ background: 'var(--primary-soft)', border: '1px solid var(--primary)' }}>
+            <p className="text-[10px] uppercase tracking-widest mb-1 font-semibold" style={{ color: 'var(--text-muted)' }}>Total Horas</p>
+            <p className="text-xl font-bold tabular-nums" style={{ color: 'var(--primary)' }}>{fmtHours(totalH)}</p>
           </div>
-          <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.2)' }}>
-            <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'var(--brand-subtle)' }}>Custo Total</p>
-            <p className="text-xl font-bold" style={{ color: '#8B5CF6' }}>{fmtCurrency(totalC)}</p>
+          <div className="rounded-xl px-4 py-3" style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+            <p className="text-[10px] uppercase tracking-widest mb-1 font-semibold" style={{ color: 'var(--text-muted)' }}>Custo Total</p>
+            <p className="text-xl font-bold tabular-nums" style={{ color: 'var(--text)' }}>{fmtCurrency(totalC)}</p>
           </div>
         </div>
         <Table>
@@ -396,14 +502,14 @@ export default function InvestimentoComercialPage() {
                 <Td><span className="font-medium text-sm" style={{ color: 'var(--brand-text)' }}>{r.customer_name}</span></Td>
                 <Td>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold tabular-nums" style={{ color: '#00F5FF' }}>{fmtHours(r.total_hours)}</span>
-                    <MiniBar value={r.total_hours} max={maxHours} color="#00F5FF" />
+                    <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtHours(r.total_hours)}</span>
+                    <MiniBar value={r.total_hours} max={maxHours} color="var(--primary)" />
                   </div>
                 </Td>
                 <Td>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold tabular-nums" style={{ color: '#8B5CF6' }}>{fmtCurrency(r.total_cost)}</span>
-                    <MiniBar value={r.total_cost} max={maxCost} color="#8B5CF6" />
+                    <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtCurrency(r.total_cost)}</span>
+                    <MiniBar value={r.total_cost} max={maxCost} color="var(--text-muted)" />
                   </div>
                 </Td>
               </Tr>
@@ -434,12 +540,12 @@ export default function InvestimentoComercialPage() {
                 <Td><span className="font-medium text-sm" style={{ color: 'var(--brand-text)' }}>{r.user_name}</span></Td>
                 <Td>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold tabular-nums" style={{ color: '#00F5FF' }}>{fmtHours(r.total_hours)}</span>
+                    <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtHours(r.total_hours)}</span>
                     <MiniBar value={r.total_hours} max={maxH} />
                   </div>
                 </Td>
-                <Td><span className="text-sm font-semibold tabular-nums" style={{ color: '#8B5CF6' }}>{fmtCurrency(r.total_cost)}</span></Td>
-                <Td><span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)' }}>{r.num_customers} cliente{r.num_customers !== 1 ? 's' : ''}</span></Td>
+                <Td><span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtCurrency(r.total_cost)}</span></Td>
+                <Td><span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--surface-hover)', color: 'var(--brand-muted)' }}>{r.num_customers} cliente{r.num_customers !== 1 ? 's' : ''}</span></Td>
                 <Td>
                   {myDetail.length > 0 && (
                     <button onClick={() => setExpandedConsultant(expanded ? null : r.user_id)}
@@ -452,7 +558,7 @@ export default function InvestimentoComercialPage() {
                 </Td>
               </Tr>,
               ...(expanded ? myDetail.map(d => (
-                <Tr key={`${r.user_id}-${d.customer_id}`} baseBackground="rgba(0,245,255,0.02)">
+                <Tr key={`${r.user_id}-${d.customer_id}`} baseBackground="var(--surface-hover)">
                   <Td>
                     <span className="ml-5 text-xs" style={{ color: 'var(--brand-subtle)' }}>↳ {d.customer_name}</span>
                   </Td>
@@ -484,8 +590,8 @@ export default function InvestimentoComercialPage() {
               const pct = maxH > 0 ? (r.total_hours / maxH) * 100 : 0
               return (
                 <div key={r.month} className="flex-1 flex flex-col items-center gap-1 group">
-                  <span className="text-[9px] opacity-0 group-hover:opacity-100 transition-opacity tabular-nums" style={{ color: '#00F5FF' }}>{fmtHours(r.total_hours)}</span>
-                  <div className="w-full rounded-t-sm transition-all" style={{ height: `${Math.max(4, pct)}%`, background: 'rgba(0,245,255,0.5)', minHeight: 4 }} />
+                  <span className="text-[9px] opacity-0 group-hover:opacity-100 transition-opacity tabular-nums" style={{ color: 'var(--primary)' }}>{fmtHours(r.total_hours)}</span>
+                  <div className="w-full rounded-t-sm transition-all" style={{ height: `${Math.max(4, pct)}%`, background: 'var(--primary)', minHeight: 4 }} />
                   <span className="text-[9px] rotate-0 whitespace-nowrap" style={{ color: 'var(--brand-subtle)', fontSize: '8px' }}>{fmtMonth(r.month)}</span>
                 </div>
               )
@@ -502,14 +608,14 @@ export default function InvestimentoComercialPage() {
                 <Td><span className="font-medium text-sm" style={{ color: 'var(--brand-text)' }}>{fmtMonth(r.month)}</span></Td>
                 <Td>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold tabular-nums" style={{ color: '#00F5FF' }}>{fmtHours(r.total_hours)}</span>
+                    <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtHours(r.total_hours)}</span>
                     <MiniBar value={r.total_hours} max={maxH} />
                   </div>
                 </Td>
                 <Td>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold tabular-nums" style={{ color: '#8B5CF6' }}>{fmtCurrency(r.total_cost)}</span>
-                    <MiniBar value={r.total_cost} max={maxC} color="#8B5CF6" />
+                    <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtCurrency(r.total_cost)}</span>
+                    <MiniBar value={r.total_cost} max={maxC} color="var(--text-muted)" />
                   </div>
                 </Td>
               </Tr>
@@ -534,8 +640,8 @@ export default function InvestimentoComercialPage() {
             <Tr key={i}>
               <Td><span className="text-sm" style={{ color: 'var(--brand-text)' }}>{r.user_name}</span></Td>
               <Td><span className="text-sm" style={{ color: 'var(--brand-muted)' }}>{r.customer_name}</span></Td>
-              <Td><span className="text-sm font-semibold tabular-nums" style={{ color: '#00F5FF' }}>{fmtHours(r.total_hours)}</span></Td>
-              <Td><span className="text-sm font-semibold tabular-nums" style={{ color: '#8B5CF6' }}>{fmtCurrency(r.total_cost)}</span></Td>
+              <Td><span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtHours(r.total_hours)}</span></Td>
+              <Td><span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text)' }}>{fmtCurrency(r.total_cost)}</span></Td>
             </Tr>
           ))}
         </Tbody>
@@ -571,7 +677,7 @@ export default function InvestimentoComercialPage() {
             <span className="text-xs ml-auto" style={{ color: 'var(--brand-subtle)' }}>
               {filtered.length} cliente{filtered.length !== 1 ? 's' : ''}
               {filterMonth > 0 && !hoursLoading && (
-                <span> · <span style={{ color: '#00F5FF' }}>{fmtHours(totalHours)}</span> total</span>
+                <span> · <span className="font-semibold" style={{ color: 'var(--text)' }}>{fmtHours(totalHours)}</span> total</span>
               )}
             </span>
             <Button size="sm" variant="primary" onClick={() => setNewProjectOpen(true)}>
@@ -681,6 +787,65 @@ export default function InvestimentoComercialPage() {
         </div>
       )}
 
+      {/* Modal: Editar Projeto Interno */}
+      {editProject && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}
+          onClick={() => !savingEdit && closeEditModal()}>
+          <div className="flex flex-col rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+              <h2 className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>Editar Projeto Interno</h2>
+              <button onClick={() => !savingEdit && closeEditModal()} className="p-1.5 rounded-lg hover:bg-white/5">
+                <X size={16} style={{ color: 'var(--brand-muted)' }} />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>
+                Cliente: <span className="font-semibold" style={{ color: 'var(--brand-text)' }}>{editProject.customer?.name ?? '—'}</span>
+                {' · '}<span className="font-mono">{editProject.code}</span>
+              </p>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--brand-muted)' }}>
+                  Nome do Projeto <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input type="text" autoFocus value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !savingEdit) handleSaveEdit() }}
+                  className="w-full px-3 h-9 rounded-xl text-sm outline-none" style={inputStyle} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--brand-muted)' }}>Categoria</label>
+                <select value={editCategoria}
+                  onChange={e => setEditCategoria(e.target.value as EditableCategoria)}
+                  className="w-full px-3 h-9 rounded-xl text-sm outline-none" style={inputStyle}>
+                  <option value="">— Sem categoria —</option>
+                  <option value="Sustentação">Sustentação</option>
+                  <option value="Projeto">Projeto</option>
+                  <option value="Suporte">Suporte</option>
+                  <option value="Comercial">Comercial</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-6 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+              <button
+                type="button"
+                onClick={handleDeleteEdit}
+                disabled={savingEdit || deletingEdit}
+                className="inline-flex items-center gap-1.5 px-3 h-9 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50"
+                style={{ background: 'rgba(239,68,68,0.10)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)' }}>
+                <Trash2 size={13} /> {deletingEdit ? 'Excluindo...' : 'Excluir'}
+              </button>
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" onClick={closeEditModal} disabled={savingEdit || deletingEdit}>Cancelar</Button>
+                <Button variant="primary" onClick={handleSaveEdit} disabled={savingEdit || deletingEdit || editName.trim().length < 2}>
+                  {savingEdit ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal gerenciar equipe */}
       {modal.open && modal.project && (() => {
         const userOpts = allUsers.map(u => ({ id: u.id, name: u.name }))
@@ -702,7 +867,7 @@ export default function InvestimentoComercialPage() {
             <div className="w-full max-w-md rounded-2xl p-6 flex flex-col gap-4" style={surfaceStyle}>
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs font-semibold" style={{ color: '#00F5FF' }}>Investimento Interno</p>
+                  <p className="text-xs font-semibold" style={{ color: 'var(--primary)' }}>Investimento Interno</p>
                   <h2 className="text-base font-bold mt-0.5" style={{ color: 'var(--brand-text)' }}>{modal.project!.customer?.name ?? '—'}</h2>
                   <p className="text-[11px] mt-0.5" style={{ color: 'var(--brand-subtle)' }}>{modal.project!.name} · <span className="font-mono">{modal.project!.code}</span></p>
                 </div>
@@ -742,11 +907,11 @@ export default function InvestimentoComercialPage() {
                       const u = usersById.get(id)
                       if (!u) return null
                       return (
-                        <span key={id} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full"
-                          style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-text)', border: '1px solid rgba(0,245,255,0.2)' }}>
+                        <span key={id} className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full"
+                          style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--primary)' }}>
                           {u.name}
                           <button onClick={() => removeUser(id)} className="hover:opacity-70 transition-opacity" aria-label="Remover">
-                            <X size={11} style={{ color: '#00F5FF' }} />
+                            <X size={11} style={{ color: 'var(--primary)' }} />
                           </button>
                         </span>
                       )
@@ -763,6 +928,153 @@ export default function InvestimentoComercialPage() {
           </div>
         )
       })()}
+
+      {/* Modal: Abrir/Fechar mês (períodos abertos) — mesma regra dos projetos tradicionais */}
+      {openPeriodProject && (
+        <ICOpenPeriodModal
+          project={openPeriodProject}
+          onClose={() => setOpenPeriodProject(null)}
+          onRefresh={(hasOpen) => setProjects(prev => prev.map(p => p.id === openPeriodProject.id ? { ...p, has_open_period: hasOpen } : p))}
+        />
+      )}
     </AppLayout>
+  )
+}
+
+// ─── Modal de abertura/fechamento de mês ────────────────────────────────────────
+// Reusa os endpoints genéricos de projeto (/projects/{id}/open-period|close-periods|
+// open-periods) — os mesmos da Gestão de Projetos tradicional.
+function ICOpenPeriodModal({ project, onClose, onRefresh }: {
+  project: ICProject
+  onClose: () => void
+  onRefresh: (hasOpen: boolean) => void
+}) {
+  const now = new Date()
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const defaultYearMonth = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}`
+
+  const [yearMonth, setYearMonth]     = useState(defaultYearMonth)
+  const [openPeriods, setOpenPeriods] = useState<{ id: number; year_month: string }[]>([])
+  const [saving, setSaving]           = useState(false)
+  const [closing, setClosing]         = useState(false)
+
+  useEffect(() => {
+    api.get<any>(`/projects/${project.id}/open-periods`)
+      .then(r => setOpenPeriods(Array.isArray(r) ? r : (Array.isArray(r?.data) ? r.data : [])))
+      .catch(() => {})
+  }, [project.id])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  const fmtMonth = (ym: string) => {
+    const [y, m] = ym.split('-')
+    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  }
+
+  const handleOpen = async () => {
+    setSaving(true)
+    try {
+      await api.post(`/projects/${project.id}/open-period`, { year_month: yearMonth })
+      toast.success(`Mês ${fmtMonth(yearMonth)} aberto para este projeto.`)
+      onRefresh(true)
+      onClose()
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao abrir período')
+    } finally { setSaving(false) }
+  }
+
+  const handleCloseAll = async () => {
+    setClosing(true)
+    try {
+      const r = await api.post<{ count: number }>(`/projects/${project.id}/close-periods`, {})
+      toast.success(`${r.count} período(s) fechado(s).`)
+      onRefresh(false)
+      onClose()
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao fechar períodos')
+    } finally { setClosing(false) }
+  }
+
+  const monthOptions: { value: string; label: string }[] = []
+  for (let i = 1; i <= 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    monthOptions.push({ value: val, label: fmtMonth(val) })
+  }
+
+  const hasOpenPeriods = openPeriods.length > 0 || project.has_open_period === true
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}
+      onClick={onClose}>
+      <div className="w-full max-w-sm rounded-xl relative" style={{ background: 'var(--surface-raised, var(--surface))', border: '1px solid var(--border)' }}
+        onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute top-3 right-3 p-1 transition-colors" style={{ color: 'var(--text-muted)' }}><X size={14} /></button>
+        <div className="p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <CalendarPlus size={14} style={{ color: 'var(--warning-border)' }} />
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Períodos Abertos</h3>
+          </div>
+          <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
+            <strong>{project.name}</strong> — permite apontamentos em meses com competência fechada
+          </p>
+
+          {hasOpenPeriods && (
+            <div className="mb-4 space-y-1.5">
+              <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Meses atualmente abertos:</p>
+              {openPeriods.length > 0 ? openPeriods.map(p => (
+                <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs"
+                  style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', color: 'var(--warning)', fontWeight: 600 }}>
+                  <CalendarPlus size={11} style={{ color: 'var(--warning-border)' }} />
+                  {fmtMonth(p.year_month)}
+                </div>
+              )) : (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs"
+                  style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', color: 'var(--warning)', fontWeight: 600 }}>
+                  <CalendarPlus size={11} style={{ color: 'var(--warning-border)' }} />
+                  Há mês(es) aberto(s) neste projeto
+                </div>
+              )}
+              <button onClick={handleCloseAll} disabled={closing}
+                className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                style={{ background: 'var(--danger)', color: 'var(--primary-fg)', border: '1px solid var(--danger)' }}>
+                <CalendarOff size={12} />
+                {closing ? 'Fechando...' : 'Fechar mês(es) aberto(s)'}
+              </button>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs mb-1 block" style={{ color: 'var(--text-muted)' }}>
+                {hasOpenPeriods ? 'Ou abrir outro mês:' : 'Abrir mês:'}
+              </label>
+              <select value={yearMonth} onChange={e => setYearMonth(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-xs outline-none"
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+                {monthOptions.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
+              </select>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs"
+                style={{ border: '1px solid var(--border)', color: 'var(--text-muted)', background: 'var(--surface)' }}>
+                Cancelar
+              </button>
+              <button onClick={handleOpen} disabled={saving}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
+                style={hasOpenPeriods
+                  ? { background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)' }
+                  : { background: 'var(--warning-border)', color: 'var(--surface)', border: '1px solid var(--warning-border)' }}>
+                {saving ? 'Abrindo...' : 'Abrir Mês'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

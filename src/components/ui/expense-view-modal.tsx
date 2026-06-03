@@ -6,7 +6,8 @@ import {
   Tag, CreditCard, Paperclip, FileText, Eye, Download,
 } from 'lucide-react'
 import type { Expense } from '@/types'
-import { toRelativePath } from '@/lib/api'
+import { fetchAndOpenLegacyUrl } from '@/lib/attachments'
+import { EntityAttachmentsPanel } from '@/components/attachments'
 
 function formatDate(d: string | null | undefined) {
   if (!d) return '—'
@@ -39,23 +40,8 @@ const PAYMENT_LABEL_MAP: Record<string, string> = {
   bank_transfer: 'Transferência Bancária',
 }
 
-async function fetchAndOpenFile(url: string, download = false) {
-  const res = await fetch(toRelativePath(url), { credentials: 'same-origin' })
-  if (!res.ok) throw new Error('not_found')
-  const blob = await res.blob()
-  const cd = res.headers.get('content-disposition') ?? ''
-  const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
-  const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg') ?? 'pdf'
-  const filename = match?.[1]?.replace(/['"]/g, '') ?? `comprovante.${ext}`
-  const blobUrl = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = blobUrl
-  if (download) { a.download = filename } else { a.target = '_blank'; a.rel = 'noopener noreferrer' }
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
-}
+// FASE 11.2.FE — Helper centralizado em src/lib/attachments.ts.
+const fetchAndOpenFile = fetchAndOpenLegacyUrl
 
 function ReceiptLink({ url }: { url: string }) {
   const [loading, setLoading] = useState(false)
@@ -86,15 +72,15 @@ function InfoRow({ icon: Icon, label, value, children, last }: {
   children?: React.ReactNode; last?: boolean
 }) {
   return (
-    <div className={`flex items-start gap-3 px-4 py-3 ${!last ? 'border-b' : ''}`}
+    <div className={`flex items-center gap-2.5 px-3.5 py-1.5 ${!last ? 'border-b' : ''}`}
       style={!last ? { borderColor: 'var(--brand-border)' } : undefined}>
-      <span className="mt-0.5 shrink-0 p-1.5 rounded-lg"
+      <span className="shrink-0 p-1 rounded-md"
         style={{ background: 'rgba(0,245,255,0.06)', color: 'var(--brand-primary)' }}>
-        <Icon size={11} />
+        <Icon size={12} />
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-[10px] uppercase tracking-widest mb-0.5" style={{ color: 'var(--brand-subtle)' }}>{label}</p>
-        {children ?? <p className="text-xs font-medium" style={{ color: 'var(--brand-text)' }}>{value ?? '—'}</p>}
+        <p className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{label}</p>
+        {children ?? <p className="text-[13px] font-medium" style={{ color: 'var(--brand-text)' }}>{value ?? '—'}</p>}
       </div>
     </div>
   )
@@ -110,49 +96,59 @@ export function ExpenseViewModal({
   const sc = EXP_STATUS_CONF[expense.status] ?? { bg: 'rgba(113,113,122,0.12)', color: '#71717A', label: expense.status }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="relative w-full max-w-md rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto"
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 overflow-y-auto" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="relative w-full max-w-lg mt-6 rounded-2xl shadow-2xl"
         style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
         <button onClick={onClose}
           className="absolute top-3 right-3 z-10 p-1.5 rounded-lg hover:bg-white/5 transition-colors"
           style={{ color: 'var(--brand-subtle)' }}>
-          <X size={14} />
+          <X size={16} />
         </button>
 
         {/* Header */}
-        <div className="px-5 pt-5 pb-4 flex items-start gap-3">
-          <div className="p-2.5 rounded-xl shrink-0"
-            style={{ background: 'rgba(249,115,22,0.1)', color: '#F97316' }}>
+        <div className="px-4 pt-3.5 pb-2.5 flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg shrink-0"
+            style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>
             <Receipt size={16} />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-white">Detalhes da Despesa</h3>
-            <p className="text-[11px] mt-0.5" style={{ color: 'var(--brand-subtle)' }}>
+            <h3 className="text-base font-semibold" style={{ color: 'var(--brand-text)' }}>Detalhes da Despesa</h3>
+            <p className="text-[11px]" style={{ color: 'var(--brand-subtle)' }}>
               #{expense.id} · {formatDate(expense.expense_date)}
             </p>
           </div>
         </div>
 
-        <div className="px-5 pb-5 space-y-4">
+        <div className="px-4 pb-4 space-y-2">
           {/* Status + Categoria */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
               style={{ background: sc.bg, color: sc.color }}>
               {sc.label}
             </span>
             {expense.category?.name && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
                 style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <Tag size={9} /> {expense.category.name}
+                <Tag size={11} /> {expense.category.name}
               </span>
             )}
           </div>
 
+          {/* Motivo do ajuste / rejeição — exibe o que o aprovador escreveu */}
+          {(expense.status === 'adjustment_requested' || expense.status === 'rejected') && expense.rejection_reason && (
+            <div className="rounded-xl px-4 py-3" style={{ background: sc.bg, border: `1px solid ${sc.color}55` }}>
+              <p className="text-[11px] uppercase tracking-widest font-semibold mb-1" style={{ color: sc.color }}>
+                {expense.status === 'rejected' ? 'Motivo da rejeição' : 'Motivo do ajuste'}
+              </p>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--brand-text)' }}>{expense.rejection_reason}</p>
+            </div>
+          )}
+
           {/* Valor hero */}
-          <div className="rounded-xl px-4 py-4"
-            style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
-            <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'var(--brand-subtle)' }}>Valor Total</p>
-            <p className="text-2xl font-bold" style={{ color: '#F97316' }}>{formatCurrency(expense.amount)}</p>
+          <div className="rounded-xl px-3.5 py-2.5 flex items-baseline justify-between gap-2"
+            style={{ background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.15)' }}>
+            <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--brand-subtle)' }}>Valor Total</p>
+            <p className="text-xl font-bold" style={{ color: 'var(--brand-primary)' }}>{formatCurrency(expense.amount)}</p>
           </div>
 
           {/* Info card */}
@@ -166,6 +162,9 @@ export function ExpenseViewModal({
               <InfoRow icon={Building2} label="Cliente" value={expense.project.customer.name} />
             )}
             <InfoRow icon={FolderOpen} label="Projeto" value={expense.project?.name} />
+            {(expense as any).real_project?.name && (
+              <InfoRow icon={FolderOpen} label="Projeto Real" value={(expense as any).real_project.name} />
+            )}
             <InfoRow icon={Tag} label="Tipo" value={EXP_TYPE_LABEL[expense.expense_type] ?? expense.expense_type} />
             {expense.payment_method && (
               <InfoRow icon={CreditCard} label="Pagamento" value={PAYMENT_LABEL_MAP[expense.payment_method] ?? expense.payment_method} />
@@ -173,36 +172,51 @@ export function ExpenseViewModal({
             <InfoRow icon={Paperclip} label="Comprovante" last>
               {expense.receipt_url
                 ? <ReceiptLink url={expense.receipt_url} />
-                : <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>Sem comprovante</span>
+                : <span className="text-sm" style={{ color: 'var(--brand-subtle)' }}>Sem comprovante</span>
               }
             </InfoRow>
+            {/* FASE 11.2.FE — Painel composto: lista + upload de extras via nova camada.
+                Coexiste com receipt_url legado acima. Quando 11.4 deprecar legado,
+                a InfoRow "Comprovante" sai daqui e este painel é a fonte única. */}
+            <div className="px-3.5 py-2.5" style={{ borderTop: '1px solid var(--brand-border)' }}>
+              <EntityAttachmentsPanel
+                entityType="EXPENSE"
+                entityId={expense.id}
+                category="receipt"
+                title="Anexos adicionais"
+                accept="application/pdf,image/*"
+                maxMb={10}
+                hideWhenEmpty
+                variant="compact"
+              />
+            </div>
           </div>
 
           {/* Descrição */}
           {expense.description && (
-            <div className="rounded-xl overflow-hidden"
+            <div className="rounded-2xl overflow-hidden"
               style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)' }}>
-              <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: '1px solid var(--brand-border)' }}>
-                <FileText size={11} style={{ color: 'var(--brand-primary)' }} />
-                <span className="text-[10px] uppercase tracking-widest font-medium" style={{ color: 'var(--brand-subtle)' }}>Descrição</span>
+              <div className="flex items-center gap-2 px-3.5 py-2" style={{ borderBottom: '1px solid var(--brand-border)' }}>
+                <FileText size={13} style={{ color: 'var(--brand-primary)' }} />
+                <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: 'var(--brand-subtle)' }}>Descrição</span>
               </div>
-              <p className="px-4 py-3 text-sm leading-relaxed" style={{ color: 'var(--brand-muted)' }}>
+              <p className="px-3.5 py-2 text-[13px] leading-relaxed" style={{ color: 'var(--brand-muted)' }}>
                 {expense.description}
               </p>
             </div>
           )}
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-2 pt-1">
+          <div className="flex items-center justify-end gap-2 pt-2">
             {onEdit && (
               <button onClick={onEdit}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors hover:bg-white/5"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors hover:bg-white/5"
                 style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>
-                <Pencil size={11} /> Editar
+                <Pencil size={14} /> Editar
               </button>
             )}
             <button onClick={onClose}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors hover:bg-white/5"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-colors hover:bg-white/5"
               style={{ color: 'var(--brand-subtle)', border: '1px solid var(--brand-border)' }}>
               Fechar
             </button>

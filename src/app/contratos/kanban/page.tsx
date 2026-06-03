@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { api, ApiError } from '@/lib/api'
+import { uploadDirect } from '@/lib/upload'
 import { previewText } from '@/lib/sanitize'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
@@ -146,6 +147,7 @@ interface ProjectEditForm {
   max_expense_per_consultant: string
   timesheet_retroactive_limit_days: string
   allow_manual_timesheets: boolean; allow_negative_balance: boolean
+  client_follows_timesheets: boolean
   movidesk_integration_enabled: boolean
   coordinator_ids: number[]; consultant_ids: number[]; consultant_group_ids: number[]
 }
@@ -205,7 +207,7 @@ function endDateStyle(dateStr: string): { color: string; bg: string; label: stri
 const PROJECT_MENU_ITEMS = [
   { action: 'view',       label: 'Visualizar',       icon: Eye },
   { action: 'edit',       label: 'Editar',            icon: Pencil,     adminOnly: true },
-  { action: 'chat',       label: 'Chat',              icon: MessageSquare },
+  // 'Chat' removido (2026-05-28): após virar projeto, chat sai. Chat só na Requisição/Contrato.
   { action: 'status',     label: 'Alterar Status',    icon: Layers },
   { action: 'cost',       label: 'Custo',             icon: DollarSign, coordHidden: true },
   { action: 'timesheets', label: 'Apont. & Despesas', icon: Clock },
@@ -311,9 +313,12 @@ const STATUS_PROJECT_COLUMNS: Column[] = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function contractColumnId(card: ContractCard): string {
-  if (card.kanban_status === 'alocado' && card.kanban_coordinator_id) {
-    return `coordinator:${card.kanban_coordinator_id}`
+function contractColumnId(card: ContractCard): string | null {
+  if (card.kanban_status === 'alocado') {
+    // Sem coordinator definido NÃO cai em 'novo' (default antigo): o projeto já
+    // foi criado, então o card "como contrato" não pertence a nenhuma coluna —
+    // a presença do projeto é exibida via projectCards.
+    return card.kanban_coordinator_id ? `coordinator:${card.kanban_coordinator_id}` : null
   }
   // All non-approved demand statuses → "novo" column
   if (['backlog', 'novo_projeto', 'em_planejamento', 'em_validacao', 'em_revisao'].includes(card.kanban_status ?? '')) {
@@ -323,6 +328,9 @@ function contractColumnId(card: ContractCard): string {
   if (['aprovado', 'inicio_autorizado'].includes(card.kanban_status ?? '')) {
     return 'pronto'
   }
+  // Contrato com projeto já criado não deve cair no fallback 'novo' (era fonte de
+  // duplicação visual quando o BE devolvia contratos sem kanban_status normalizado).
+  if (card.project_id) return null
   return 'novo'
 }
 
@@ -437,8 +445,13 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
   const totalAvail = p?.total_available_hours ?? ((p?.sold_hours ?? 0) + (p?.hour_contribution ?? 0))
   // Lente do coordenador: se o usuário logado é coordenador do projeto e há banco de
   // coordenação, troca KPIs/risco pro banco; admin/demais continuam vendo o operacional.
-  const coordHoursBank = Number((p as any)?.coordination_hours ?? 0)
-  const isCoordViewer = !!viewerUser?.id && !!p?.coordinators?.some((c: any) => c.id === viewerUser.id) && coordHoursBank > 0
+  const isClienteViewer = viewerUser?.type === 'cliente'
+  // Banco apontável = Horas Apontáveis informadas + APORTE (aporte soma com as contratadas).
+  const coordRaw = Number((p as any)?.coordination_hours ?? 0)
+  const aporteHoras = Math.max(0, totalAvail - Number(p?.sold_hours ?? 0))
+  const coordHoursBank = coordRaw > 0 ? coordRaw + aporteHoras : 0
+  // Cliente NUNCA vê a lente do coord: sempre o sold_hours original do contrato.
+  const isCoordViewer = !isClienteViewer && !!viewerUser?.id && !!p?.coordinators?.some((c: any) => c.id === viewerUser.id) && coordHoursBank > 0
   const coordConsumedVal = Number((p as any)?.coordination_consumed_hours ?? 0)
   const cardVendidas = isCoordViewer ? coordHoursBank : (p?.sold_hours ?? 0)
   const cardConsumed = isCoordViewer ? coordConsumedVal : consumed
@@ -550,7 +563,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
 
                 {/* Horas de Coordenação — visível pro admin/governança (quando há banco explícito).
                     Pro coordenador, o swap dos KPIs já mostra esses números, então omite aqui. */}
-                {!isCoordViewer && coordHoursBank > 0 && (() => {
+                {!isCoordViewer && !isClienteViewer && coordHoursBank > 0 && (() => {
                   const cBank = coordHoursBank
                   const cCons = coordConsumedVal
                   const cSaldo = Math.round((cBank - cCons) * 100) / 100
@@ -559,7 +572,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                   return (
                     <div className="rounded-xl p-4" style={{ background: 'var(--surface-hover)', border: `1px solid ${cBar}33` }}>
                       <div className="flex justify-between items-center mb-3">
-                        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Horas de Coordenação</span>
+                        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Horas Apontáveis</span>
                         <span className="text-xs font-bold tabular-nums" style={{ color: cBar }}>{cBank > 0 ? `${Math.round(cPct)}% consumido` : 'Sem horas'}</span>
                       </div>
                       <div className="grid grid-cols-3 gap-2 mb-3 text-center">
@@ -614,9 +627,11 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                       <div className="divide-y px-4" style={{ borderColor: 'var(--brand-border)' }}>
                         <Row label="Tipo de Alocação"     value={(p as any).tipo_alocacao ?? '—'} />
                         <Row label="Condição de Pagamento" value={(p as any).condicao_pagamento ?? '—'} />
-                        <Row label="% Horas Coordenador"  value={(p as any).coordinator_hours != null ? `${(p as any).coordinator_hours}%` : '—'} />
-                        <Row label="Horas de Coordenação" value={(p as any).coordination_hours != null && Number((p as any).coordination_hours) > 0 ? `${Number((p as any).coordination_hours).toFixed(1)}h` : '—'} />
+                        <Row label="Percentual Gestão"    value={(p as any).coordinator_hours != null ? `${(p as any).coordinator_hours}%` : '—'} />
+                        <Row label="Horas de Gestão"      value={(p as any).coordinator_hours != null && (p as any).sold_hours != null ? `${Math.round((Number((p as any).coordinator_hours) / 100) * Number((p as any).sold_hours) * 100) / 100}h` : '—'} />
                         <Row label="Horas Consultor"      value={(p as any).consultant_hours != null ? `${Number((p as any).consultant_hours).toFixed(1)}h` : '—'} />
+                        <Row label="Saving ERPSERV"       value={(p as any).sold_hours != null && (p as any).consultant_hours != null && (p as any).coordinator_hours != null ? `${Math.round((Number((p as any).sold_hours) - Number((p as any).consultant_hours) - (Number((p as any).coordinator_hours) / 100) * Number((p as any).sold_hours)) * 100) / 100}h` : '—'} />
+                        <Row label="Horas Apontáveis"     value={(p as any).coordination_hours != null && Number((p as any).coordination_hours) > 0 ? `${Number((p as any).coordination_hours).toFixed(1)}h` : '—'} />
                         <Row label="Cobra Despesa"        value={(p as any).cobra_despesa_cliente ? 'Sim' : 'Não'} />
                         <Row label="Limite de Despesa"    value={(p as any).limite_despesa != null ? fmtBRL(Number((p as any).limite_despesa)) : '—'} />
                         <Row label="Arquiteto"            value={(p as any).architect?.name ?? '—'} />
@@ -1045,7 +1060,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                                   <td className="px-3 py-2.5 tabular-nums" style={{ color: '#f59e0b' }}>{c.pending_hours.toFixed(1)}h</td>
                                   <td className="px-3 py-2.5 tabular-nums text-[11px]" style={{ color: 'var(--brand-muted)' }}>
                                     {c.consultant_hourly_rate != null ? fmtBRL(c.consultant_hourly_rate) : '—'}
-                                    {c.consultant_rate_type === 'monthly' && <span className="ml-1 opacity-60">÷180</span>}
+                                    {c.consultant_rate_type === 'monthly' && <span className="ml-1 opacity-60">÷160</span>}
                                   </td>
                                   <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--brand-text)' }}>{fmtBRL(c.cost)}</td>
                                 </tr>
@@ -1109,6 +1124,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     timesheet_retroactive_limit_days: d.timesheet_retroactive_limit_days != null ? String(d.timesheet_retroactive_limit_days) : '',
     allow_manual_timesheets:         d.allow_manual_timesheets ?? true,
     allow_negative_balance:          d.allow_negative_balance ?? false,
+    client_follows_timesheets:       (d as any).client_follows_timesheets ?? true,
     movidesk_integration_enabled:    (d as any).movidesk_integration_enabled ?? false,
     coordinator_ids:                 (d.coordinators ?? d.approvers ?? []).map((c: any) => c.id),
     consultant_ids:                  (d.consultants ?? []).map((c: any) => c.id),
@@ -1179,6 +1195,14 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
   const toggleId = (ids: number[], id: number) => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]
   const setF = (key: keyof ProjectEditForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [key]: e.target.value }))
+  // "Horas de Gestão" deriva do % (coordinator_hours) sobre as Horas Vendidas.
+  const [gestaoDraft, setGestaoDraft] = useState<string | null>(null)
+  // Horas Apontáveis / Percentual Gestão / Horas de Gestão só p/ Fechado e BH Fixo.
+  // Cloud/SaaS, On Demand e BH Mensal não têm esses campos.
+  const ctNameK = (optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name
+    ?? (d.contract_type_display ?? d.contract_type?.name ?? '')).toLowerCase()
+  const showApontaveis = !(ctNameK.includes('on demand') || form.tipo_faturamento === 'on_demand'
+    || ctNameK.includes('mensal') || ctNameK === 'cloud' || ctNameK === 'saas')
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error('Nome obrigatório'); return }
@@ -1189,6 +1213,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
         start_date: form.start_date || null, expected_end_date: form.expected_end_date || null,
         allow_manual_timesheets: form.allow_manual_timesheets,
         allow_negative_balance: form.allow_negative_balance,
+        client_follows_timesheets: form.client_follows_timesheets,
         movidesk_integration_enabled: form.movidesk_integration_enabled,
         cobra_despesa_cliente: form.cobra_despesa_cliente,
         observacoes_contrato: form.observacoes_contrato || null,
@@ -1243,7 +1268,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
         const fd = new FormData()
         fd.append('file', file)
         fd.append('type', type)
-        await fetch(`/api/v1/projects/${project.id}/attachments`, { method: 'POST', credentials: 'same-origin', body: fd })
+        await uploadDirect(`/projects/${project.id}/attachments`, fd)
       }
       setPendingAttach([])
     }
@@ -1371,15 +1396,56 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 <div><label style={lStyle}>Valor da Hora (R$)</label><input type="number" value={form.hourly_rate} onChange={setF('hourly_rate')} style={iStyle} placeholder="0.00" step="0.01" /></div>
                 <div><label style={lStyle}>Hora Adicional (R$)</label><input type="number" value={form.additional_hourly_rate} onChange={setF('additional_hourly_rate')} style={iStyle} placeholder="0.00" step="0.01" /></div>
                 <div><label style={lStyle}>Horas Contratadas</label><input type="number" value={form.sold_hours} onChange={setF('sold_hours')} style={iStyle} placeholder="0" step="1" /></div>
-                <div><label style={lStyle}>% Horas Coordenador</label><input type="number" value={form.coordinator_hours} onChange={setF('coordinator_hours')} style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
+                {showApontaveis && (<>
+                <div><label style={lStyle}>Percentual Gestão (%)</label><input type="number" value={form.coordinator_hours}
+                  onChange={e => { setGestaoDraft(null); setForm(f => ({ ...f, coordinator_hours: e.target.value })) }}
+                  style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
+                {(() => {
+                  // Horas de Gestão = (Percentual Gestão / 100) × Horas Vendidas (contratadas). Bidirecional.
+                  const base = Number(form.sold_hours || 0)
+                  const pct  = Number(form.coordinator_hours || 0)
+                  const derived = base > 0 ? Math.round((pct / 100) * base * 100) / 100 : 0
+                  const shown = gestaoDraft ?? (derived ? String(derived) : '')
+                  return (
+                    <div>
+                      <label style={lStyle}>Horas de Gestão</label>
+                      <input type="number" value={shown} min="0" step="0.5" disabled={base <= 0}
+                        onChange={e => {
+                          const v = e.target.value
+                          setGestaoDraft(v)
+                          const h = Number(v) || 0
+                          if (base > 0) setForm(f => ({ ...f, coordinator_hours: String(Math.round((h / base) * 100 * 100) / 100) }))
+                        }}
+                        onBlur={() => setGestaoDraft(null)}
+                        style={iStyle} placeholder="0" />
+                      <p className="text-[10px] mt-1" style={{ color: 'var(--text-light)' }}>
+                        {base > 0 ? `${pct || 0}% de ${base}h (vendidas)` : 'Informe Horas Contratadas para calcular'}
+                      </p>
+                    </div>
+                  )
+                })()}
+                </>)}
+                <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
+                {showApontaveis && (<>
+                {(() => {
+                  // Saving ERPSERV = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
+                  const sold = Number(form.sold_hours || 0)
+                  const cons = Number(form.consultant_hours || 0)
+                  const coordPct = Number(form.coordinator_hours || 0)
+                  const gestao = sold > 0 ? (coordPct / 100) * sold : 0
+                  const sobra = Math.round((sold - cons - gestao) * 100) / 100
+                  return (
+                    <div><label style={lStyle}>Saving ERPSERV</label><input type="text" value={isNaN(sobra) ? '—' : `${sobra}h`} readOnly tabIndex={-1} style={{ ...iStyle, opacity: 0.7, cursor: 'default' }} /></div>
+                  )
+                })()}
                 <div>
-                  <label style={lStyle}>Horas de Coordenação</label>
+                  <label style={lStyle}>Horas Apontáveis <span style={{ color: 'var(--danger-border)' }}>*</span></label>
                   <input type="number" value={form.coordination_hours} onChange={setF('coordination_hours')} style={iStyle} placeholder="0" step="0.5" min="0" max={form.sold_hours || undefined} />
                   {form.coordination_hours !== '' && form.sold_hours !== '' && Number(form.coordination_hours) > Number(form.sold_hours) && (
                     <p className="text-[10px] mt-1" style={{ color: 'var(--danger-border)' }}>Não pode exceder as horas vendidas ({form.sold_hours}h).</p>
                   )}
                 </div>
-                <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
+                </>)}
               </div>
               <div className="grid grid-cols-2 gap-3 rounded-xl p-3" style={{ border: '1px solid var(--brand-border)', background: 'var(--surface-hover)' }}>
                 <div className="col-span-2"><label style={{ ...lStyle, marginBottom: 0 }}>Histórico do sistema anterior</label></div>
@@ -1402,6 +1468,11 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 <div><label style={lStyle}>Prazo para Lançamento (dias)</label><input type="number" value={form.timesheet_retroactive_limit_days} onChange={setF('timesheet_retroactive_limit_days')} style={iStyle} placeholder="Padrão global" min="0" max="365" /></div>
               </div>
               <Toggle2 checked={form.allow_negative_balance} onChange={v => setForm(p => ({ ...p, allow_negative_balance: v }))} label="Permitir saldo negativo de horas" />
+              {ctNameK.includes('banco de horas fixo') && (
+                <Toggle2 checked={form.client_follows_timesheets}
+                  onChange={v => setForm(p => ({ ...p, client_follows_timesheets: v }))}
+                  label="Cliente acompanha apontamento (se desligado, o cliente não vê os apontamentos e o saldo aparece zerado — tudo consumido)" />
+              )}
               <Toggle2
                 checked={form.movidesk_integration_enabled}
                 onChange={v => setForm(p => ({ ...p, movidesk_integration_enabled: v }))}
@@ -2101,15 +2172,7 @@ function ProjectKanbanCard({ card, index, onClick, onAction, onMove, availableCo
               {card.coordinators?.[0] ? `👤 ${card.coordinators[0]}` : ''}
             </span>
             <div className="flex items-center gap-1">
-              {onAction && (
-                <button onClick={e => { e.stopPropagation(); onAction('chat') }}
-                  className="p-1 rounded-md transition-colors" title="Abrir Chat"
-                  style={{ color: 'var(--text-muted)', background: 'transparent' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                  <MessageSquare size={11} />
-                </button>
-              )}
+              {/* Ícone de chat removido (2026-05-28): após virar projeto, chat sai. Chat só na Requisição/Contrato. */}
               <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
                 {card.code}
               </span>
@@ -2200,8 +2263,11 @@ function CardDetailModal({ card, onClose, onEditContract, initialTab, userRole }
     ['Nome do Projeto',     full.project_name ?? '—'],
     ['Faturamento',         full.tipo_faturamento ? (TIPO_LABEL[full.tipo_faturamento] ?? full.tipo_faturamento) : '—'],
     ['Horas Contratadas',   fmtHours(full.horas_contratadas)],
+    ['Percentual Gestão',   full.pct_horas_coordenador != null ? `${full.pct_horas_coordenador}%` : '—'],
+    ['Horas de Gestão',     (full.pct_horas_coordenador != null && full.horas_contratadas != null) ? `${Math.round((Number(full.pct_horas_coordenador) / 100) * Number(full.horas_contratadas) * 100) / 100}h` : '—'],
     ['Horas Consultor',     fmtHours(full.horas_consultor)],
-    ['% Horas Coordenador', full.pct_horas_coordenador != null ? `${full.pct_horas_coordenador}%` : '—'],
+    ['Saving ERPSERV',      (full.horas_contratadas != null && full.horas_consultor != null && full.pct_horas_coordenador != null) ? `${Math.round((Number(full.horas_contratadas) - Number(full.horas_consultor) - (Number(full.pct_horas_coordenador) / 100) * Number(full.horas_contratadas)) * 100) / 100}h` : '—'],
+    ['Horas Apontáveis',    fmtHours((full as any).horas_coordenacao)],
     ['Valor do Projeto',    fmtMoney(full.valor_projeto)],
     ['Valor/Hora',          fmtMoney(full.valor_hora)],
     ['Hora Adicional',      fmtMoney(full.hora_adicional)],
@@ -3192,7 +3258,9 @@ function KanbanContent() {
                                   )
                                 }
                                 const cc = card as ContractCard
-                                const fromCol = col.id.startsWith('sust_') ? col.id : contractColumnId(cc)
+                                // Fallback pra col.id quando contractColumnId retorna null (caso defensivo do
+                                // alocado-sem-coord): mantém o card consistente com a coluna onde foi renderizado.
+                                const fromCol = col.id.startsWith('sust_') ? col.id : (contractColumnId(cc) ?? col.id)
                                 return (
                                   <ContractKanbanCard key={`c-${cc.id}`} card={cc} index={idx}
                                     onClick={() => setSelected(cc)}
@@ -3302,6 +3370,8 @@ function KanbanContent() {
           aporte={selectedAporte}
           canWrite={canWrite}
           onClose={() => setSelectedAporte(null)}
+          onSaved={load}
+          onDeleted={() => setAporteCards(prev => prev.filter(x => x.id !== selectedAporte.id))}
           onViewInProject={() => {
             // Abre o modal do projeto (mesma UX do "Visualizar" no Kanban Contratos),
             // direto na aba "Aportes". Sem sair da página; admin pode trocar de aba dentro.

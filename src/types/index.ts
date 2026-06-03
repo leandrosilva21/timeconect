@@ -228,6 +228,7 @@ export interface Expense {
   expense_type: string
   payment_method: string
   status: string
+  rejection_reason?: string
   charge_client: boolean
   is_paid: boolean
   pagar_no_fechamento?: boolean

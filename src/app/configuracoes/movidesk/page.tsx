@@ -46,6 +46,20 @@ interface OrgRow {
   is_active_proj: boolean | null
 }
 
+interface ProblemTicket {
+  id: number
+  ticket_id: string
+  attempts: number
+  last_error: string | null
+  last_attempt_at: string | null
+  blacklisted_at: string | null
+  first_seen_at: string | null
+  status: 'retryable' | 'blacklisted'
+  movidesk_url: string
+}
+
+type ProblemFilter = 'all' | 'retryable' | 'blacklisted'
+
 const INTERVAL_OPTIONS = [5, 10, 15, 20, 30, 60]
 
 interface SelectOption { id: number | string; name: string }
@@ -98,6 +112,10 @@ export default function MovideskIntegracaoPage() {
   const [editingOrgId, setEditingOrgId] = useState<number | null>(null)
   const [editingProjectId, setEditingProjectId] = useState('')
   const [savingOrg, setSavingOrg] = useState(false)
+  const [problemTickets, setProblemTickets] = useState<ProblemTicket[]>([])
+  const [problemLoading, setProblemLoading] = useState(false)
+  const [problemFilter,  setProblemFilter]  = useState<ProblemFilter>('all')
+  const [problemActingId, setProblemActingId] = useState<number | null>(null)
 
   const loadOrgs = useCallback(async () => {
     setOrgsLoading(true)
@@ -106,6 +124,37 @@ export default function MovideskIntegracaoPage() {
       setOrgs(r?.orgs ?? [])
     } catch {} finally { setOrgsLoading(false) }
   }, [])
+
+  const loadProblemTickets = useCallback(async () => {
+    setProblemLoading(true)
+    try {
+      const qs = problemFilter !== 'all' ? `?status=${problemFilter}` : ''
+      const r = await api.get<any>(`/movidesk/problem-tickets${qs}`)
+      setProblemTickets(r?.items ?? [])
+    } catch { setProblemTickets([]) }
+    finally { setProblemLoading(false) }
+  }, [problemFilter])
+
+  const handleProblemRetry = async (id: number) => {
+    setProblemActingId(id)
+    try {
+      await api.post(`/movidesk/problem-tickets/${id}/retry`, {})
+      toast.success('Ticket reabilitado — slow-lane vai tentar de novo na próxima execução')
+      loadProblemTickets()
+    } catch { toast.error('Erro ao reabilitar ticket') }
+    finally { setProblemActingId(null) }
+  }
+
+  const handleProblemDrop = async (id: number, ticketId: string) => {
+    if (!confirm(`Remover ticket #${ticketId} da fila de problemas? Esta ação não pode ser desfeita.`)) return
+    setProblemActingId(id)
+    try {
+      await api.delete(`/movidesk/problem-tickets/${id}`)
+      toast.success('Ticket removido da fila')
+      loadProblemTickets()
+    } catch { toast.error('Erro ao remover ticket') }
+    finally { setProblemActingId(null) }
+  }
 
   const handleSaveOrgProject = async (orgId: number) => {
     setSavingOrg(true)
@@ -154,6 +203,7 @@ export default function MovideskIntegracaoPage() {
   }, [])
 
   useEffect(() => { loadStatus(); loadSettings(); loadOrgs() }, [loadStatus, loadSettings, loadOrgs])
+  useEffect(() => { loadProblemTickets() }, [loadProblemTickets])
 
   const copyWebhook = () => {
     navigator.clipboard.writeText(WEBHOOK_URL).then(() => {
@@ -527,6 +577,91 @@ export default function MovideskIntegracaoPage() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Tickets travados (slow-lane) */}
+        <div className="rounded-2xl p-5 space-y-4" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={16} style={{ color: '#f59e0b' }} />
+              <h2 className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>Tickets travados (slow-lane)</h2>
+              {problemTickets.length > 0 && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+                  {problemTickets.length}
+                </span>
+              )}
+            </div>
+            <button onClick={loadProblemTickets} className="p-1.5 rounded-lg hover:bg-white/[0.06]" title="Recarregar">
+              <RefreshCw size={13} style={{ color: 'var(--brand-subtle)' }} className={problemLoading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+          <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>
+            Tickets que falharam no <code className="px-1 rounded" style={{ background: 'var(--brand-bg)' }}>movidesk:sync</code> (timeout 5s) caem aqui. O cron <code className="px-1 rounded" style={{ background: 'var(--brand-bg)' }}>movidesk:retry-problem-tickets</code> roda de hora em hora com timeout 30s e <code>$expand</code> reduzido. Após 3 falhas, o ticket é blacklistado — admin precisa reabilitar manualmente ou remover da fila.
+          </p>
+
+          <div className="flex gap-2">
+            {(['all','retryable','blacklisted'] as ProblemFilter[]).map(f => (
+              <button key={f} onClick={() => setProblemFilter(f)}
+                className="px-3 py-1 rounded-lg text-[11px] font-semibold transition-colors"
+                style={{
+                  background: problemFilter === f ? 'var(--primary)' : 'var(--brand-bg)',
+                  color:      problemFilter === f ? 'var(--primary-fg)' : 'var(--brand-muted)',
+                  border:     `1px solid ${problemFilter === f ? 'var(--primary)' : 'var(--brand-border)'}`,
+                }}>
+                {f === 'all' ? 'Todos' : f === 'retryable' ? 'Em retry' : 'Blacklistados'}
+              </button>
+            ))}
+          </div>
+
+          {problemLoading && <p className="text-xs text-center py-4" style={{ color: 'var(--brand-subtle)' }}>Carregando...</p>}
+          {!problemLoading && problemTickets.length === 0 && (
+            <p className="text-xs text-center py-4" style={{ color: 'var(--brand-subtle)' }}>
+              Nenhum ticket na fila — slow-lane está limpa. 🎉
+            </p>
+          )}
+          {!problemLoading && problemTickets.length > 0 && (
+            <div className="space-y-1 max-h-96 overflow-y-auto pr-1">
+              {problemTickets.map(t => (
+                <div key={t.id} className="rounded-xl px-3 py-2.5"
+                  style={{ background: 'var(--brand-bg)', border: `1px solid ${t.status === 'blacklisted' ? 'rgba(239,68,68,0.3)' : 'var(--brand-border)'}` }}>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <a href={t.movidesk_url} target="_blank" rel="noopener noreferrer"
+                       className="text-xs font-semibold hover:underline" style={{ color: 'var(--primary)' }}>
+                      #{t.ticket_id}
+                    </a>
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                      style={{
+                        background: t.status === 'blacklisted' ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)',
+                        color:      t.status === 'blacklisted' ? '#ef4444' : '#f59e0b',
+                      }}>
+                      {t.status === 'blacklisted' ? 'BLACKLIST' : `Tentativa ${t.attempts}/3`}
+                    </span>
+                    <span className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>
+                      última: {t.last_attempt_at ? new Date(t.last_attempt_at).toLocaleString('pt-BR') : '—'}
+                    </span>
+                    <div className="flex-1" />
+                    <button onClick={() => handleProblemRetry(t.id)} disabled={problemActingId === t.id}
+                      className="px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors disabled:opacity-50"
+                      style={{ background: 'var(--primary)', color: 'var(--primary-fg)' }}
+                      title="Zera attempts e remove blacklist — slow-lane vai tentar de novo">
+                      Retry agora
+                    </button>
+                    <button onClick={() => handleProblemDrop(t.id, t.ticket_id)} disabled={problemActingId === t.id}
+                      className="px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors hover:bg-white/[0.06] disabled:opacity-50"
+                      style={{ color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
+                      title="Remove da fila definitivamente">
+                      Remover
+                    </button>
+                  </div>
+                  {t.last_error && (
+                    <p className="text-[10px] mt-1.5 font-mono break-all" style={{ color: 'var(--brand-muted)' }}>
+                      {t.last_error.length > 200 ? t.last_error.slice(0, 200) + '…' : t.last_error}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Sync manual */}

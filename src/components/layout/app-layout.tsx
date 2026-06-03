@@ -122,7 +122,8 @@ export function AppLayout({ children, title, actions, fullBleed = false }: AppLa
                   {user.type === 'admin' ? 'Admin'
                     : user.type === 'administrativo' ? 'Administrativo'
                     : user.type === 'coordenador' ? 'Coordenador'
-                    : user.type === 'parceiro' ? 'Parceiro'
+                    : user.type === 'parceiro_admin'
+                      ? ((user as any).is_executive ? 'Parceiro Gestor' : 'Parceiro')
                     : 'Consultor'}
                 </span>
               )}

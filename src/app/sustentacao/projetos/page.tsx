@@ -13,6 +13,7 @@ import {
   Edit2, Trash2, Layers, Check, X,
 } from 'lucide-react'
 import { RowMenu } from '@/components/ui/row-menu'
+import { CustomerContactsSection } from '@/components/ui/customer-contacts-section'
 import { PageHeader } from '@/components/ds'
 import { ProjectMessages } from '@/components/shared/ProjectMessages'
 import { formatBRL } from '@/lib/format'
@@ -27,6 +28,9 @@ interface SustProject extends Project {
   contract_type_display?: string
   status_display?: string
   project_value?: number | null
+  // Override do coord: quando preenchido, projeto é gerenciado por outro coordenador
+  // e NÃO deve aparecer no portal de sustentação (regra pré-existente).
+  kanban_coordinator_override_id?: number | null
 }
 
 interface CostSummary {
@@ -200,6 +204,9 @@ function ViewProjectModal({ project, onClose }: { project: SustProject; onClose:
               </div>
             ) : null)}
           </div>
+
+          {/* Contatos do cliente */}
+          <CustomerContactsSection customerId={project.customer?.id ?? project.customer_id} customerName={project.customer?.name} />
 
           {/* Equipe */}
           {((project.coordinators?.length ?? 0) > 0 || (project.consultants?.length ?? 0) > 0) && (
@@ -445,7 +452,9 @@ export default function SustentacaoProjetosPage() {
         const items = res.items ?? []
         // For coordinator sustentacao the API auto-scopes; for admin we filter client-side
         const isCoordenadorSust = user?.type === 'coordenador' && (user as any)?.coordinator_type === 'sustentacao'
-        setProjects(isCoordenadorSust ? items : items.filter(isSustProject))
+        const base = isCoordenadorSust ? items : items.filter(isSustProject)
+        // Esconde projetos gerenciados por outro coordenador (override) — saem do portal.
+        setProjects(base.filter(p => !p.kanban_coordinator_override_id))
       })
       .catch(() => toast.error('Erro ao carregar projetos'))
       .finally(() => setLoading(false))

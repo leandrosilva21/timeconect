@@ -7,9 +7,13 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-geist);
+  /* --font-display: Geist Sans — usada em headings/KPIs. Visual mais
+   * geométrico que Inter (que segue no body). Trocar fonte global =
+   * trocar essa linha só, sem tocar componentes. */
+  --font-display: var(--font-geist);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -135,17 +139,17 @@
  */
 :root {
   /* ── NEUTRO ──────────────────────────────────────── */
-  --brand-bg:       #F8FAFC;   /* leve diferença vs --surface */
+  --brand-bg:       #F7F9FC;   /* fundo levemente mais frio (spec) */
   --brand-surface:  #FFFFFF;
   --brand-border:   #E2E8F0;
   --brand-text:     #0F172A;
-  --brand-muted:    #334155;
-  --brand-subtle:   #64748B;
+  --brand-muted:    #475569;   /* spec text-secondary */
+  --brand-subtle:   #94A3B8;   /* spec text-muted */
 
-  /* ── PRIMARY (ação — cyan denso) ─────────────────── */
-  --brand-primary:        #0E7490;   /* texto/ação real em fundo branco */
-  --brand-primary-strong: #0C5F73;   /* hover ainda mais denso */
-  --brand-primary-dim:    #BAE6FD;   /* bg/badge soft — sky-200, peso real */
+  /* ── PRIMARY (ação — cyan brand premium) ─────────── */
+  --brand-primary:        #06B6D4;   /* cyan brand brilhante */
+  --brand-primary-strong: #0891B2;   /* hover ~5% mais escuro */
+  --brand-primary-dim:    #E6F6FA;   /* sidebar active / badge soft (spec) */
 
   /* ── Semantic — light (tons de border/accent) ────── */
   --brand-success:  #22C55E;
@@ -157,9 +161,16 @@
   --brand-logo: #06B6D4;
 
   /* ── Elevation & dividers — só ativos no light ──── */
-  --brand-card-shadow:    0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.04);
-  --brand-card-shadow-md: 0 4px 6px -1px rgb(15 23 42 / 0.06), 0 2px 4px -2px rgb(15 23 42 / 0.04);
+  --brand-card-shadow:    0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --brand-card-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
   --brand-table-divider:  rgba(15, 23, 42, 0.06);
+
+  /* ── Shadow system (semântico — usar em código novo) ── */
+  --shadow-xs:      0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm:      0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+  --shadow-md:      0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+  --shadow-lg:      0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.06);
+  --shadow-overlay: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
 
   /* Scrollbar */
   --scrollbar-thumb:        #CBD5E1;
@@ -171,10 +182,13 @@
   --bg:            var(--brand-bg);
   --surface:       var(--brand-surface);
   --surface-hover: #F1F5F9;
+  --surface-sunken:#EEF2F6;   /* inputs, table header — superfície "afundada" */
   --text:          var(--brand-text);
   --text-muted:    var(--brand-muted);
   --text-light:    var(--brand-subtle);
   --border:        var(--brand-border);
+  --border-strong: #CBD5E1;   /* divisores fortes, hover de inputs */
+  --ring:          rgba(6, 182, 212, 0.30);  /* focus ring (primary @ 30%) */
 
   /* PRIMARY */
   --primary:       var(--brand-primary);
@@ -183,17 +197,17 @@
   --primary-fg:    #FFFFFF;
 
   /* SUCCESS */
-  --success:        #166534;          /* texto/conteúdo (denso) */
+  --success:        #15803D;          /* texto/conteúdo */
   --success-border: #22C55E;          /* contorno/ícone */
   --success-bg:     #DCFCE7;
 
   /* WARNING */
-  --warning:        #92400E;
+  --warning:        #B45309;
   --warning-border: #F59E0B;
   --warning-bg:     #FEF3C7;
 
   /* DANGER */
-  --danger:         #991B1B;
+  --danger:         #B91C1C;
   --danger-border:  #EF4444;
   --danger-bg:      #FEE2E2;
 
@@ -237,13 +251,23 @@
   --brand-card-shadow-md: none;
   --brand-table-divider:  var(--brand-border);
 
+  /* Shadow system zerado no dark (visual flat) */
+  --shadow-xs:      none;
+  --shadow-sm:      none;
+  --shadow-md:      none;
+  --shadow-lg:      none;
+  --shadow-overlay: 0 25px 50px -12px rgba(0, 0, 0, 0.55);
+
   /* Scrollbar */
   --scrollbar-thumb:        #2A2A2E;
   --scrollbar-thumb-hover:  #3A3A3E;
 
   /* ══ Tokens públicos — dark ══════════════════════════ */
-  --surface-hover: #1F1F23;
-  --primary-fg:    #0A0A0B;   /* texto sobre cyan vibrante */
+  --surface-hover:  #1F1F23;
+  --surface-sunken: #121215;   /* mais fundo que surface no dark */
+  --border-strong:  #3F3F46;
+  --ring:           rgba(0, 245, 255, 0.35);
+  --primary-fg:     #0A0A0B;   /* texto sobre cyan vibrante */
 
   /* No dark, texto/border/bg de status apontam todos pros tons vibrantes
    * (já legíveis em #0A0A0B). Estrutura igual ao light, valores trocados. */
@@ -291,10 +315,57 @@ tbody tr + tr > td {
     background-color: var(--brand-bg);
     color: var(--brand-text);
     transition: background-color 0.15s ease, color 0.15s ease;
+    /* Inter polish: kerning + tabular nums acessível via .ds-text-numeric.
+     * 'cv11' melhora o desenho do 'a' (de uma só camada) — visual mais moderno. */
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     @apply font-sans;
   }
   html {
     @apply font-sans;
+  }
+
+  /* ─── Tipografia base do produto ────────────────────────────────────
+   * Headings sem className específica passam a herdar essa escala.
+   * Componentes com `text-xl`/`text-2xl` em Tailwind continuam vencendo
+   * por especificidade — esses estilos servem de fallback "premium". */
+  h1 {
+    font-family: var(--font-display, var(--font-sans));
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    color: var(--text);
+  }
+  h2 {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.35;
+    color: var(--text);
+  }
+  h3 {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--text);
+  }
+  /* Tabular nums automático em qualquer <td>/<th> com `.tabular-nums` ou
+   * com a classe `numeric`. Garante valores monetários sempre alinhados. */
+  td.numeric, td.tabular-nums,
+  th.numeric, th.tabular-nums,
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  /* Placeholder global — Firefox/Safari default fica washed (slate-400 60%).
+   * Forçar text-muted + opacity:1 garante contraste AA em todos os inputs. */
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--text-muted);
+    opacity: 1;
   }
 }
 
@@ -400,83 +471,199 @@ tr.row--pausado:hover {
   color: var(--text-muted);
 }
 
+/* ─── Tipografia — escala padronizada ──────────────────────────────────────
+ * Base: Inter (já em --font-inter / --font-sans). Para o futuro: Satoshi
+ * pode entrar só nos KPIs trocando --font-display.
+ *
+ *  h1     20px / 600 / tracking-tight   → título da página
+ *  h2     16px / 600                    → título de seção / card
+ *  h3     14px / 600                    → subtítulo
+ *  body   14px / 400                    → texto padrão
+ *  body-sm 13px / 400                   → célula de tabela, descrições
+ *  label  11px / 500 uppercase 0.04em   → label de form, header de tabela
+ *  caption 12px / 400                   → hint, sub-info
+ *  kpi    24px / 600 tracking-[-0.02em] → valor de KPI card
+ *  kpi-lg 32px / 600 tracking-[-0.02em] → valor destacado (hero)
+ *  numeric tabular-nums                 → modificador pra valores numéricos
+ */
+.ds-text-h1 {
+  font-family: var(--font-display, var(--font-sans));
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--text);
+}
+.ds-text-h2 {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+}
+.ds-text-h3 {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text);
+}
+.ds-text-body {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text);
+}
+.ds-text-body-sm {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text);
+}
+.ds-text-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.ds-text-caption {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.ds-text-kpi {
+  font-family: var(--font-display, var(--font-sans));
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--text);
+}
+.ds-text-kpi-lg {
+  font-family: var(--font-display, var(--font-sans));
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--text);
+}
+/* Modificador: ative tabular-nums em qualquer texto com .ds-text-numeric.
+ * Pareie com .ds-text-body-sm / .ds-text-kpi pra valores. */
+.ds-text-numeric {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* Aliases curtos pra uso em KPI cards. Compõem com .ds-text-numeric quando
+ * for valor numérico:  <span class="kpi-value ds-text-numeric">9h 44m</span> */
+.kpi-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.kpi-value { font-family: var(--font-display, var(--font-sans)); font-size: 24px; font-weight: 600; letter-spacing: -0.01em; line-height: 1; color: var(--text); }
+.kpi-sub   { font-size: 12px; font-weight: 400; color: var(--text-light); }
+
+/* Title utility — para títulos de seção/card/modal. Apelido curto do .ds-text-h2. */
+.text-title { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: var(--text); line-height: 1.35; }
+
+/* Aliases de cor — apenas color (não mexe font-size/weight). */
+.text-muted { color: var(--text-muted); }
+.text-light { color: var(--text-light); }
+
 .ds-row-hover:hover {
   background: var(--surface-hover);
 }
 
-.ds-btn-primary {
+/* ── Botões — base compartilhada ───────────────────────────── */
+.ds-btn-primary,
+.ds-btn-secondary,
+.ds-btn-ghost,
+.ds-btn-danger {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  background: var(--primary);
-  color: var(--primary-fg);
-  border: 1px solid transparent;
-  border-radius: 0.625rem;
+  border-radius: 0.5rem;
   padding: 0.5rem 0.875rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
   cursor: pointer;
+  outline: none;
 }
-.ds-btn-primary:hover {
-  background: var(--primary-hover);
+.ds-btn-primary:focus-visible,
+.ds-btn-secondary:focus-visible,
+.ds-btn-ghost:focus-visible,
+.ds-btn-danger:focus-visible {
+  box-shadow: 0 0 0 3px var(--ring);
 }
-.ds-btn-primary:disabled {
+.ds-btn-primary:disabled,
+.ds-btn-secondary:disabled,
+.ds-btn-ghost:disabled,
+.ds-btn-danger:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.ds-btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 0.625rem;
-  padding: 0.5rem 0.875rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-  cursor: pointer;
+/* Primary — ação CTA */
+.ds-btn-primary {
+  background: var(--primary);
+  color: var(--primary-fg);
 }
-.ds-btn-secondary:hover {
-  background: var(--surface-hover);
-  border-color: var(--text-light);
+.ds-btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
 }
 
+/* Secondary — ação alternativa, mesmo peso */
+.ds-btn-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+.ds-btn-secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+/* Ghost — ação de baixa hierarquia */
 .ds-btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
   background: transparent;
   color: var(--text-muted);
-  border: none;
-  border-radius: 0.625rem;
-  padding: 0.5rem 0.875rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  transition: background-color 0.15s ease, color 0.15s ease;
-  cursor: pointer;
 }
-.ds-btn-ghost:hover {
+.ds-btn-ghost:hover:not(:disabled) {
   background: var(--surface-hover);
   color: var(--text);
 }
 
+/* Danger — ação destrutiva (delete/cancelar) */
+.ds-btn-danger {
+  background: var(--danger-border);    /* #EF4444 sólido — máximo contraste */
+  color: #FFFFFF;
+}
+.ds-btn-danger:hover:not(:disabled) {
+  background: #DC2626;                  /* red-600 */
+}
+
+/* ── Inputs ────────────────────────────────────────────────── */
 .ds-input {
-  background: var(--surface);
+  background: var(--surface-sunken);    /* afundado vs surface — visual de campo */
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.8125rem;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  padding: 0.5625rem 0.75rem;
+  font-size: 0.875rem;
+  transition: background-color 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+.ds-input::placeholder { color: var(--text-muted); opacity: 1; }
+.ds-input:hover:not(:disabled):not(:focus) {
+  border-color: var(--border-strong);
 }
 .ds-input:focus {
   outline: none;
+  background: var(--surface);
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px var(--primary-soft);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.ds-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Forma base do badge — combine com .ds-status-{success,warning,danger,info} */
@@ -584,22 +771,34 @@ tr.row--pausado:hover {
 }
 
 /* ── Sidebar items (light + dark) ──────────────────────────
- * Hover/active funcionam pros dois temas via tokens. Substitui
- * o "hover:bg-white/[0.04]" que era invisível no light. */
-/* Sidebar item normal: usa --text (preto denso) em vez de --text-muted
- * pra dar peso real no light. Hover/active mantêm padrão design system. */
+ * Padrão SaaS premium: estado padrão muted, hover lifta levemente,
+ * active recebe pill com primary-soft + texto primary.
+ */
 .sidebar-item {
-  color: var(--text);
+  color: var(--text-muted);
   background: transparent;
-  transition: background 0.15s, color 0.15s;
+  font-weight: 400;
+  transition: background 0.12s, color 0.12s;
 }
 .sidebar-item:hover {
   background: var(--surface-hover);
+  color: var(--text);
 }
-.sidebar-item-active {
+.sidebar-item-active,
+.sidebar-item-active:hover {
   background: var(--primary-soft);
   color: var(--primary);
-  font-weight: 600;
+  font-weight: 500;
+}
+.sidebar-item-active svg {
+  color: var(--primary);
+}
+
+/* Sub-grupos aninhados: borda lateral mais sutil + indent suave */
+.sidebar-subgroup {
+  margin-left: 14px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
 }
 
 /* Linha/card selecionado — bg primary-soft + barra lateral primary.
@@ -906,3 +1105,13 @@ html:not(.dark) [class*="bg-zinc-900/"],
 html:not(.dark) [class*="bg-zinc-800/"] { background-color: var(--surface-hover); }
 html:not(.dark) [class*="border-zinc-800/"],
 html:not(.dark) [class*="border-zinc-700/"] { border-color: var(--border); }
+
+/* Sidebar — logo ERPServ no rodapé: roxo no light, branco no dark */
+html:not(.dark) .sidebar-erpserv-logo {
+  filter: brightness(0) saturate(100%) invert(28%) sepia(86%) saturate(2756%) hue-rotate(238deg) brightness(91%) contrast(95%);
+  opacity: 0.9;
+}
+html.dark .sidebar-erpserv-logo {
+  filter: grayscale(1) invert(1) brightness(10);
+  opacity: 0.4;
+}

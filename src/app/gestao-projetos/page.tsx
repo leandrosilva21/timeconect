@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { api, ApiError } from '@/lib/api'
+import { uploadDirect } from '@/lib/upload'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
 import { Project, PaginatedResponse, HourContribution } from '@/types'
@@ -171,7 +172,9 @@ function calcProjHours(p: ProjectWithTeam): { displaySold: number; consumedHours
 function coordinationMeta(p: ProjectWithTeam, displaySold: number) {
   const raw = (p.coordination_hours != null && String(p.coordination_hours) !== '') ? Number(p.coordination_hours) : null
   const explicit = raw != null && raw > 0
-  const bank = explicit ? raw! : displaySold
+  // Banco apontável inclui o APORTE (aporte soma com as contratadas).
+  const aporte = Math.max(0, Number((p as any).total_available_hours ?? displaySold) - displaySold)
+  const bank = (explicit ? raw! : displaySold) + aporte
   const consumed = Number(p.coordination_consumed_hours ?? 0)
   const saldo = Math.round((bank - consumed) * 100) / 100
   const pct = bank > 0 ? (consumed / bank) * 100 : 0
@@ -814,7 +817,7 @@ interface ProjectEditForm {
   observacoes_contrato: string
   max_expense_per_consultant: string
   timesheet_retroactive_limit_days: string
-  allow_manual_timesheets: boolean; allow_negative_balance: boolean
+  allow_manual_timesheets: boolean; allow_negative_balance: boolean; client_follows_timesheets: boolean
   movidesk_integration_enabled: boolean
   coordinator_ids: number[]; consultant_ids: number[]; consultant_group_ids: number[]
   kanban_coordinator_override_id: string
@@ -877,6 +880,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     timesheet_retroactive_limit_days: d.timesheet_retroactive_limit_days != null ? String(d.timesheet_retroactive_limit_days) : '',
     allow_manual_timesheets:         d.allow_manual_timesheets ?? true,
     allow_negative_balance:          d.allow_negative_balance ?? false,
+    client_follows_timesheets:       (d as any).client_follows_timesheets ?? true,
     movidesk_integration_enabled:    (d as any).movidesk_integration_enabled ?? false,
     coordinator_ids:                 (d.coordinators ?? d.approvers ?? []).map((c: any) => c.id),
     consultant_ids:                  (d.consultants ?? []).map((c: any) => c.id),
@@ -1014,20 +1018,27 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
   const toggleId = (ids: number[], id: number) => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]
   const setF = (key: keyof ProjectEditForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [key]: e.target.value }))
+  // "Horas de Gestão" é derivado do % (coordinator_hours) sobre as Horas Consultor.
+  // Draft local pra permitir digitar suave; quando null, mostra o valor derivado do %.
+  const [gestaoDraft, setGestaoDraft] = useState<string | null>(null)
 
   const handleSave = async (hourlyRateEffectiveFrom?: string) => {
     if (!form.name.trim()) { toast.error('Nome obrigatório'); return }
     if (codeExists) { toast.error('Código já existe em outro projeto. Altere o código antes de salvar.'); return }
     // Horas de coordenação obrigatórias para projetos que não são On Demand
     // (no On Demand o campo nem aparece — backend recebe 0 como fallback).
-    const ctNameForSave = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase() ?? ''
+    const ctNameForSave = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase()
+      ?? (d.contract_type_display ?? d.contract_type?.name ?? '').toLowerCase()
     const isOnDemandSave = ctNameForSave.includes('on demand') || form.tipo_faturamento === 'on_demand'
-    if (!isOnDemandSave && form.coordination_hours === '') {
-      toast.error('Horas de Coordenação obrigatórias.')
+    // Horas Apontáveis só para Fechado/BH Fixo. BH Mensal, Cloud/SaaS e On Demand não têm.
+    const editIsBhMensal = ctNameForSave.includes('mensal')
+    const editIsMensalidade = ctNameForSave === 'cloud' || ctNameForSave === 'saas'
+    if (!isOnDemandSave && !editIsBhMensal && !editIsMensalidade && form.coordination_hours === '') {
+      toast.error('Horas Apontáveis obrigatórias.')
       return
     }
     // Horas de coordenação não podem exceder as horas vendidas (contratadas) do projeto.
-    if (form.coordination_hours !== '' && form.sold_hours !== '' && Number(form.coordination_hours) > Number(form.sold_hours)) {
+    if (!editIsBhMensal && form.coordination_hours !== '' && form.sold_hours !== '' && Number(form.coordination_hours) > Number(form.sold_hours)) {
       toast.error(`Horas de coordenação não podem ser maiores que as horas vendidas (${form.sold_hours}h).`)
       return
     }
@@ -1042,6 +1053,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
         encerramento_date:    form.encerramento_date || null,
         allow_manual_timesheets: form.allow_manual_timesheets,
         allow_negative_balance:  form.allow_negative_balance,
+        client_follows_timesheets: form.client_follows_timesheets,
         movidesk_integration_enabled: form.movidesk_integration_enabled,
         cobra_despesa_cliente:   form.cobra_despesa_cliente,
         observacoes_contrato: form.observacoes_contrato || null,
@@ -1065,7 +1077,8 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
       if (form.consultant_hours !== '')      payload.consultant_hours             = Number(form.consultant_hours)
       if (form.coordinator_hours !== '')     payload.coordinator_hours            = Number(form.coordinator_hours)
       // '' envia 0 pra permitir zerar o banco de coordenação (volta ao fallback operacional).
-      payload.coordination_hours = form.coordination_hours === '' ? 0 : Number(form.coordination_hours)
+      // BH Mensal nunca tem horas de coordenação → força 0 independente do valor antigo.
+      payload.coordination_hours = editIsBhMensal ? 0 : (form.coordination_hours === '' ? 0 : Number(form.coordination_hours))
       // initial_* sempre enviam: '' vira 0 pra permitir zerar valor existente.
       payload.initial_hours_consumed = form.initial_hours_consumed === '' ? 0 : Number(form.initial_hours_consumed)
       payload.initial_cost           = form.initial_cost === '' ? 0 : Number(form.initial_cost)
@@ -1113,7 +1126,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
         const fd = new FormData()
         fd.append('file', file)
         fd.append('type', type)
-        await fetch(`/api/v1/projects/${project.id}/attachments`, { method: 'POST', credentials: 'same-origin', body: fd })
+        await uploadDirect(`/projects/${project.id}/attachments`, fd)
       }
       setPendingAttach([])
     }
@@ -1362,8 +1375,13 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
               {/* Financeiro — On Demand mostra só Valor da Hora; demais tipos mostram tudo. */}
               <SecTitle>Financeiro</SecTitle>
               {(() => {
-                const ctNameForm = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase() ?? ''
+                const ctNameForm = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase()
+                  ?? (d.contract_type_display ?? d.contract_type?.name ?? '').toLowerCase()
                 const isOnDemandForm = ctNameForm.includes('on demand') || form.tipo_faturamento === 'on_demand'
+                // Horas Apontáveis/Gestão só p/ Fechado e BH Fixo — esconde nos demais.
+                const editIsBhMensal = ctNameForm.includes('mensal')
+                const editIsMensalidade = ctNameForm === 'cloud' || ctNameForm === 'saas'
+                const showApontaveis = !isOnDemandForm && !editIsBhMensal && !editIsMensalidade
                 return (
               <>
               <div className="grid grid-cols-2 gap-3">
@@ -1412,31 +1430,59 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                     }))
                   }} style={iStyle} placeholder="0" step="1" /></div>
                 )}
-                {!isOnDemandForm && (
-                  <div><label style={lStyle}>% Horas Coordenador</label><input type="number" value={form.coordinator_hours} onChange={setF('coordinator_hours')} style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
+                {showApontaveis && (
+                  <div><label style={lStyle}>Percentual Gestão (%)</label><input type="number" value={form.coordinator_hours}
+                    onChange={e => { setGestaoDraft(null); setForm(f => ({ ...f, coordinator_hours: e.target.value })) }}
+                    style={iStyle} placeholder="0" step="1" min="0" max="100" /></div>
                 )}
+                {showApontaveis && (() => {
+                  // Horas de Gestão = (Percentual Gestão / 100) × Horas Vendidas (contratadas).
+                  // Bidirecional: editar aqui recalcula o %; editar o % recalcula isto. Deriva do %.
+                  const base = Number(form.sold_hours || 0)
+                  const pct  = Number(form.coordinator_hours || 0)
+                  const derived = base > 0 ? Math.round((pct / 100) * base * 100) / 100 : 0
+                  const shown = gestaoDraft ?? (derived ? String(derived) : '')
+                  return (
+                    <div>
+                      <label style={lStyle}>Horas de Gestão</label>
+                      <input type="number" value={shown} min="0" step="0.5" disabled={base <= 0}
+                        onChange={e => {
+                          const v = e.target.value
+                          setGestaoDraft(v)
+                          const h = Number(v) || 0
+                          if (base > 0) setForm(f => ({ ...f, coordinator_hours: String(Math.round((h / base) * 100 * 100) / 100) }))
+                        }}
+                        onBlur={() => setGestaoDraft(null)}
+                        style={iStyle} placeholder="0" />
+                      <p className="text-[10px] mt-1" style={{ color: 'var(--text-light)' }}>
+                        {base > 0 ? `${pct || 0}% de ${base}h (vendidas)` : 'Informe Horas Contratadas para calcular'}
+                      </p>
+                    </div>
+                  )
+                })()}
                 {!isOnDemandForm && (
+                  <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
+                )}
+                {!isOnDemandForm && (() => {
+                  // Saving ERPSERV (read-only) = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
+                  const sold = Number(form.sold_hours || 0)
+                  const cons = Number(form.consultant_hours || 0)
+                  const coordPct = Number(form.coordinator_hours || 0)
+                  const gestao = sold > 0 ? (coordPct / 100) * sold : 0
+                  const sobra = Math.round((sold - cons - gestao) * 100) / 100
+                  return (
+                    <div><label style={lStyle}>Saving ERPSERV</label><input type="text" value={isNaN(sobra) ? '—' : `${sobra}h`} readOnly tabIndex={-1} style={{ ...iStyle, opacity: 0.7, cursor: 'default' }} /></div>
+                  )
+                })()}
+                {showApontaveis && (
                   <div>
-                    <label style={lStyle}>Horas de Coordenação <span style={{ color: 'var(--danger-border)' }}>*</span></label>
+                    <label style={lStyle}>Horas Apontáveis <span style={{ color: 'var(--danger-border)' }}>*</span></label>
                     <input type="number" required value={form.coordination_hours} onChange={setF('coordination_hours')} style={iStyle} placeholder="0" step="0.5" min="0" max={form.sold_hours || undefined} />
                     {form.coordination_hours !== '' && form.sold_hours !== '' && Number(form.coordination_hours) > Number(form.sold_hours) && (
                       <p className="text-[10px] mt-1" style={{ color: 'var(--danger-border)' }}>Não pode exceder as horas vendidas ({form.sold_hours}h).</p>
                     )}
                   </div>
                 )}
-                {!isOnDemandForm && (
-                  <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
-                )}
-                {!isOnDemandForm && (() => {
-                  // Sobra de horas (read-only): contratadas − consultor − (%coordenador × consultor).
-                  const sold = Number(form.sold_hours || 0)
-                  const cons = Number(form.consultant_hours || 0)
-                  const coordPct = Number(form.coordinator_hours || 0)
-                  const sobra = Math.round((sold - cons - (coordPct / 100) * cons) * 100) / 100
-                  return (
-                    <div><label style={lStyle}>Sobra de Horas</label><input type="text" value={isNaN(sobra) ? '—' : `${sobra}h`} readOnly tabIndex={-1} style={{ ...iStyle, opacity: 0.7, cursor: 'default' }} /></div>
-                  )
-                })()}
               </div>
               {/* Histórico: oculto em On Demand novo (sem valor); mostra em On Demand
                   legado pra permitir zerar valores migrados do sistema anterior.
@@ -1502,6 +1548,15 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 </div>
               </div>
               <Toggle2 checked={form.allow_negative_balance} onChange={v => setForm(p => ({ ...p, allow_negative_balance: v }))} label="Permitir saldo negativo de horas" />
+              {(() => {
+                const ctn = optContractTypes.find(c => String(c.id) === form.contract_type_id)?.name?.toLowerCase() ?? ''
+                if (!ctn.includes('banco de horas fixo')) return null
+                return (
+                  <Toggle2 checked={form.client_follows_timesheets}
+                    onChange={v => setForm(p => ({ ...p, client_follows_timesheets: v }))}
+                    label="Cliente acompanha apontamento (se desligado, o cliente não vê os apontamentos e o saldo aparece zerado — tudo consumido)" />
+                )
+              })()}
               <Toggle2
                 checked={form.movidesk_integration_enabled}
                 onChange={v => setForm(p => ({ ...p, movidesk_integration_enabled: v }))}
@@ -2284,7 +2339,7 @@ export default function GestaoProjetosPage() {
     const a = document.createElement('a'); a.href = url; a.download = att.original_name; a.click(); URL.revokeObjectURL(url)
   }
   const [viewProjectLoading, setViewProjectLoading] = useState(false)
-  const [viewProjectTab, setViewProjectTab] = useState<'overview' | 'cost'>('overview')
+  const [viewProjectTab, setViewProjectTab] = useState<'overview' | 'extrato' | 'cost'>('overview')
   // Histórico de valores-hora (somente leitura) — GET /projects/{id}/change-history?field_name=hourly_rate
   const [rateHistoryOpen, setRateHistoryOpen] = useState(false)
   const [rateHistory, setRateHistory] = useState<any[]>([])
@@ -3048,7 +3103,7 @@ export default function GestaoProjetosPage() {
                                 <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--warning-border)' }}>{c.pending_hours.toFixed(1)}h</td>
                                 <td className="px-3 py-2.5 tabular-nums text-[11px]" style={{ color: 'var(--text-muted)' }}>
                                   {c.consultant_hourly_rate != null ? formatBRL(c.consultant_hourly_rate) : '—'}
-                                  {c.consultant_rate_type === 'monthly' && <span className="ml-1 opacity-60">÷180</span>}
+                                  {c.consultant_rate_type === 'monthly' && <span className="ml-1 opacity-60">÷160</span>}
                                 </td>
                                 <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text)' }}>{formatBRL(c.cost)}</td>
                               </tr>
@@ -3159,6 +3214,8 @@ export default function GestaoProjetosPage() {
                   hoursPerMonth={aportesProject.sold_hours ?? 0}
                   accumulated={(aportesProject as any).accumulated_sold_hours ?? null}
                   endDate={(aportesProject as any).encerramento_date ?? null}
+                  projectId={aportesProject.id}
+                  canEditConsumption={isAdmin || isCoordenador}
                 />
               )}
               {contribLoading && <p className="text-xs text-center py-8" style={{ color: 'var(--text-light)' }}>Carregando aportes...</p>}
@@ -3431,7 +3488,7 @@ export default function GestaoProjetosPage() {
 
               {/* Tab nav */}
               <div className="flex gap-1 px-6 border-b" style={{ borderColor: 'var(--border)' }}>
-                {(['overview', 'cost'] as const).filter(t => t !== 'cost' || user?.type !== 'coordenador').map(t => (
+                {(['overview', 'extrato', 'cost'] as const).filter(t => t !== 'cost' || user?.type !== 'coordenador').map(t => (
                   <button key={t} onClick={() => {
                     setViewProjectTab(t)
                     if (t === 'cost' && !viewCostSummary && !viewCostLoading) {
@@ -3444,7 +3501,7 @@ export default function GestaoProjetosPage() {
                   }}
                     className="px-4 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap"
                     style={{ color: viewProjectTab === t ? 'var(--text)' : 'var(--text-muted)', borderBottom: viewProjectTab === t ? '2px solid var(--primary)' : '2px solid transparent', marginBottom: '-1px' }}>
-                    {t === 'overview' ? 'Visão Geral' : 'Custo'}
+                    {t === 'overview' ? 'Visão Geral' : t === 'extrato' ? 'Extrato' : 'Custo'}
                   </button>
                 ))}
               </div>
@@ -3603,7 +3660,7 @@ export default function GestaoProjetosPage() {
                                       <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--warning-border)' }}>{c.pending_hours.toFixed(1)}h</td>
                                       <td className="px-3 py-2.5 tabular-nums text-[11px]" style={{ color: 'var(--text-muted)' }}>
                                         {c.consultant_hourly_rate != null ? fmtBRL(c.consultant_hourly_rate) : '—'}
-                                        {c.consultant_rate_type === 'monthly' && <span className="ml-1 opacity-60">÷180</span>}
+                                        {c.consultant_rate_type === 'monthly' && <span className="ml-1 opacity-60">÷160</span>}
                                       </td>
                                       <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text)' }}>{fmtBRL(c.cost)}</td>
                                     </tr>
@@ -3621,6 +3678,12 @@ export default function GestaoProjetosPage() {
                     })()}
                   </div>
                 )}
+                {viewProjectTab === 'extrato' && (
+                  <div className="p-6">
+                    <MonthlyAccrualTable projectId={p.id} canEditConsumption={isAdmin || isCoordenador} />
+                  </div>
+                )}
+
                 {viewProjectTab === 'overview' && (
                 <div className="grid grid-cols-2 gap-0 divide-x" style={{ borderColor: 'var(--border)' }}>
 
@@ -3675,7 +3738,6 @@ export default function GestaoProjetosPage() {
                           {p.weighted_hourly_rate != null && <Row label="Taxa Média Ponderada" value={fmtBRL(p.weighted_hourly_rate)} />}
                           <Row label="Hora Adicional" value={fmtBRL(p.additional_hourly_rate)} />
                           <Row label="Custo Inicial" value={fmtBRL(p.initial_cost)} />
-                          {p.save_erpserv != null && p.save_erpserv > 0 && <Row label="Save ERPSERV" value={fmtBRL(p.save_erpserv)} />}
                           {p.max_expense_per_consultant != null && <Row label="Limite Despesa/Consultor" value={fmtBRL(p.max_expense_per_consultant)} />}
                           {p.expense_responsible_party && <Row label="Resp. Despesas" value={p.expense_responsible_party === 'client' ? 'Cliente' : 'Consultoria'} />}
                         </div>
@@ -3689,12 +3751,20 @@ export default function GestaoProjetosPage() {
 
                     {/* Horas — swap p/ coordenação quando o usuário logado é coordenador do projeto */}
                     {(() => {
-                      const vp = viewProject
+                      // Preferir viewProjectFull (do /projects/{id}) sobre o cache da lista (viewProject)
+                      // — garante que mudanças no DB (ex: accumulated_sold_hours recalculado) chegam à modal
+                      // sem depender do TTL da listagem.
+                      const vp: any = viewProjectFull ?? viewProject
                       const operationalVendidas = ((vp?.vendidas_projeto_hours ?? p.sold_hours) ?? 0) + (vp?.vendidas_aporte_hours ?? 0)
                       const isCoordView = isCoordinatorOf(p, user?.id)
                       const cm = isCoordView ? coordinationMeta(p, operationalVendidas) : null
                       const cardVendidas = isCoordView ? cm!.bank : operationalVendidas
-                      const cardConsumed = isCoordView ? cm!.consumed : (vp?.consumed_hours ?? p.consumed_hours ?? consumed)
+                      // initial_hours_consumed (HS Consumidas Iniciais) entra no consumido só
+                      // no fallback logado — quando vem consumed_hours (gestaoMode) já está somado.
+                      // Sem isso, "Consumidas" mostrava só o logado e divergia do Saldo (que já
+                      // subtrai a inicial via general_hours_balance).
+                      const cardInitialConsumed = Number((vp as any)?.initial_hours_consumed ?? (p as any)?.initial_hours_consumed) || 0
+                      const cardConsumed = isCoordView ? cm!.consumed : (vp?.consumed_hours ?? p.consumed_hours ?? (consumed + cardInitialConsumed))
                       const cardTotal    = cardVendidas
                       const cardSaldo    = isCoordView ? cm!.saldo : (vp?.general_hours_balance ?? (cardVendidas - cardConsumed))
                       const cardPct      = cardTotal > 0 ? (cardConsumed / cardTotal) * 100 : 0
@@ -3752,8 +3822,10 @@ export default function GestaoProjetosPage() {
                           {p.hour_contribution != null && p.hour_contribution > 0 && <Row label="Aporte Inicial" value={`${p.hour_contribution}h`} />}
                           {viewProjectFull?.full_contributions_hours != null && viewProjectFull.full_contributions_hours > 0 && <Row label="Total Aportes" value={`${fmt(viewProjectFull.full_contributions_hours, 1)}h`} />}
                           {p.exceeded_hour_contribution != null && <Row label="Aporte Excedido" value={`${p.exceeded_hour_contribution}h`} />}
+                          {p.coordinator_hours != null && <Row label="Percentual Gestão" value={`${p.coordinator_hours}%`} />}
+                          {p.coordinator_hours != null && p.sold_hours != null && <Row label="Horas de Gestão" value={`${Math.round((Number(p.coordinator_hours) / 100) * Number(p.sold_hours) * 100) / 100}h`} />}
                           {p.consultant_hours != null && <Row label="Horas Consultores" value={`${p.consultant_hours}h`} />}
-                          {p.coordinator_hours != null && <Row label="Horas Coordenadores" value={`${p.coordinator_hours}h`} />}
+                          {p.sold_hours != null && p.consultant_hours != null && p.coordinator_hours != null && <Row label="Saving ERPSERV" value={`${Math.round((Number(p.sold_hours) - Number(p.consultant_hours) - (Number(p.coordinator_hours) / 100) * Number(p.sold_hours)) * 100) / 100}h`} />}
                           {p.initial_hours_consumed != null && p.initial_hours_consumed > 0 && <Row label="HS Consumidas Iniciais" value={`${p.initial_hours_consumed}h`} />}
                           <Row label="% Consumido" value={<span style={{ color: hs.text }}>{totalAvail > 0 ? `${Math.round(pct)}%` : '—'}</span>} />
                         </div>
@@ -3762,15 +3834,7 @@ export default function GestaoProjetosPage() {
                       )
                     })()}
 
-                    {/* Horas mensais incrementadas (acúmulo do banco mensal) — só BH Mensal */}
-                    {((p.contract_type_display ?? p.contract_type?.name ?? '').toLowerCase().includes('mensal')) && (
-                      <MonthlyAccrualTable
-                        startDate={(p as any).start_date ?? null}
-                        hoursPerMonth={p.sold_hours ?? 0}
-                        accumulated={(p as any).accumulated_sold_hours ?? null}
-                        endDate={(p as any).encerramento_date ?? null}
-                      />
-                    )}
+                    {/* Extrato mês a mês migrou para a aba "Extrato" do modal. */}
 
                     {/* Horas de Coordenação — card de governança p/ admin (quando há banco explícito).
                         Pro coordenador o TOP Horas já faz o swap, então omite aqui. */}
@@ -3780,7 +3844,7 @@ export default function GestaoProjetosPage() {
                       if (isCoordinatorOf(p, user?.id)) return null
                       return (
                         <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>Horas de Coordenação</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-light)' }}>Horas Apontáveis</p>
                           <div className="rounded-xl p-4" style={{ border: `1px solid ${cm.color}55`, background: 'var(--surface)' }}>
                             <div className="grid grid-cols-3 gap-2 mb-3">
                               <div><p className="text-[10px]" style={{ color: 'var(--text-light)' }}>Vendidas</p><p className="text-sm font-bold" style={{ color: 'var(--text)' }}>{fmt(cm.bank, 1)}h</p></div>

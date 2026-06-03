@@ -156,7 +156,7 @@ function TimesheetsModal({
             <table className="w-full text-xs">
               <thead className="sticky top-0" style={{ background: 'var(--brand-surface)' }}>
                 <tr style={{ borderBottom: '1px solid var(--brand-border)' }}>
-                  {['Data', 'Ticket', 'Tempo', 'Colaborador', 'Projeto', 'Descrição', 'Status', ''].map(h => (
+                  {['Data', 'Ticket', 'Tempo', 'Colaborador', 'Projeto', 'Descrição', ''].map(h => (
                     <th key={h} className="px-4 py-3 text-left font-semibold uppercase tracking-wider"
                       style={{ color: 'var(--brand-subtle)' }}>{h}</th>
                   ))}
@@ -203,15 +203,6 @@ function TimesheetsModal({
                           </div>
                         </div>
                       ) : <span style={{ color: 'var(--brand-muted)' }}>—</span>}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold"
-                        style={{
-                          background: `${STATUS_COLOR[ts.status] ?? '#6B7280'}22`,
-                          color: STATUS_COLOR[ts.status] ?? '#6B7280',
-                        }}>
-                        {STATUS_LABEL[ts.status] ?? ts.status}
-                      </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {ts.id && (
@@ -606,19 +597,19 @@ export default function DashboardIndicators({ basePath, params, disabled = false
           )}
         </ChartCard>
 
-        {/* 2 — Horas por Módulo */}
-        <ChartCard title="Horas por Módulo" onOpen={() => openModal(baseParams)}>
-          {data.service.length === 0 ? <Empty /> : (
+        {/* 2 — Motivo de Abertura (trocado de posição com Módulos) */}
+        <ChartCard title="Motivo de Abertura" onOpen={() => openModal(baseParams)}>
+          {data.category.length === 0 ? <Empty /> : (
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={data.service} style={CHART_STYLE}
+              <BarChart data={data.category} style={CHART_STYLE}
                 margin={{ top: 0, right: 16, left: 0, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
-                <XAxis dataKey="service" tick={AXIS_TICK} angle={-30} textAnchor="end" interval={0} />
-                <YAxis tick={AXIS_TICK} tickFormatter={v => `${v}h`} />
-                <Tooltip content={<CustomTooltip valueLabel="Horas" />} cursor={CURSOR} />
-                <Bar dataKey="total_hours" name="Horas" radius={[6, 6, 0, 0]} style={{ cursor: 'pointer' }}
-                  onClick={(d: any) => openModal(buildTimesheetsParams(params, { ticket_service: d.service }))}>
-                  {data.service.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} fillOpacity={0.85} />)}
+                <XAxis dataKey="category" tick={AXIS_TICK} angle={-30} textAnchor="end" interval={0} />
+                <YAxis tick={AXIS_TICK} allowDecimals={false} />
+                <Tooltip content={<CustomTooltip valueLabel="Tickets" />} cursor={CURSOR} />
+                <Bar dataKey="ticket_count" name="Tickets" radius={[6, 6, 0, 0]} style={{ cursor: 'pointer' }}
+                  onClick={(d: any) => openModal(buildTimesheetsParams(params, { category: d.category }))}>
+                  {data.category.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} fillOpacity={0.85} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -663,49 +654,43 @@ export default function DashboardIndicators({ basePath, params, disabled = false
           )}
         </ChartCard>
 
-        {/* 5 — Motivo de Abertura */}
-        <ChartCard title="Motivo de Abertura" onOpen={() => openModal(baseParams)}>
-          {data.category.length === 0 ? <Empty /> : (
+        {/* 5 — Horas por Módulo (trocado de posição c/ Motivo de Abertura, full-width) */}
+        <ChartCard title="Horas por Módulo" fullWidth onOpen={() => openModal(baseParams)}>
+          {data.service.length === 0 ? <Empty /> : (
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={data.category} style={CHART_STYLE}
+              <BarChart data={data.service} style={CHART_STYLE}
                 margin={{ top: 0, right: 16, left: 0, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
-                <XAxis dataKey="category" tick={AXIS_TICK} angle={-30} textAnchor="end" interval={0} />
-                <YAxis tick={AXIS_TICK} allowDecimals={false} />
-                <Tooltip content={<CustomTooltip valueLabel="Tickets" />} cursor={CURSOR} />
-                <Bar dataKey="ticket_count" name="Tickets" radius={[6, 6, 0, 0]} style={{ cursor: 'pointer' }}
-                  onClick={(d: any) => openModal(buildTimesheetsParams(params, { category: d.category }))}>
-                  {data.category.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} fillOpacity={0.85} />)}
+                <XAxis dataKey="service" tick={AXIS_TICK} angle={-30} textAnchor="end" interval={0} />
+                <YAxis tick={AXIS_TICK} tickFormatter={v => `${v}h`} />
+                <Tooltip content={<CustomTooltip valueLabel="Horas" />} cursor={CURSOR} />
+                <Bar dataKey="total_hours" name="Horas" radius={[6, 6, 0, 0]} style={{ cursor: 'pointer' }}
+                  onClick={(d: any) => openModal(buildTimesheetsParams(params, { ticket_service: d.service }))}>
+                  {data.service.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} fillOpacity={0.85} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
         </ChartCard>
 
-        {/* 6 — Tickets acima de 8h */}
-        <ChartCard title="Tickets acima de 08 horas" onOpen={() => openModal(baseParams)}>
-          {data.above8.length === 0 ? <Empty /> : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={data.above8} style={CHART_STYLE}
-                margin={{ top: 0, right: 16, left: 0, bottom: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
-                <XAxis dataKey="ticket_id" tick={AXIS_TICK} angle={-30} textAnchor="end" interval={0} />
-                <YAxis tick={AXIS_TICK} tickFormatter={v => `${v}h`} />
-                <Tooltip content={<CustomTooltip valueLabel="Horas" />} cursor={CURSOR} />
-                <Bar dataKey="total_hours" name="Horas" radius={[6, 6, 0, 0]}
-                  fill="#EF4444" fillOpacity={0.8} style={{ cursor: 'pointer' }}
-                  onClick={(d: any) => openModal(buildTimesheetsParams(params, { ticket: d.ticket_id }))} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </ChartCard>
-
-        {/* 7+8 — Evolução Mensal */}
+        {/* 6 — Evolução Mensal (Tickets acima de 8h removido) */}
         {(() => {
+          // Ordena cronologicamente: parse "mes/ano" e compara (year, month).
+          const MONTH_ABBR_TO_NUM: Record<string, number> = {
+            jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6,
+            jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12,
+          }
+          const monthKey = (s: string): number => {
+            const m = /^([a-zà-ú]{3,})\/?(\d{2,4})$/i.exec(s.trim().toLowerCase())
+            if (!m) return 0
+            const mon = MONTH_ABBR_TO_NUM[m[1].slice(0, 3)] ?? 0
+            const y = Number(m[2].length === 2 ? '20' + m[2] : m[2])
+            return y * 12 + mon
+          }
           const allMonths = Array.from(new Set([
             ...data.monthlyTix.map(d => d.month),
             ...data.monthlyConsum.map(d => d.month),
-          ])).sort()
+          ])).sort((a, b) => monthKey(a) - monthKey(b))
           const combined = allMonths.map(month => ({
             month,
             ticket_count:   data.monthlyTix.find(d => d.month === month)?.ticket_count   ?? 0,

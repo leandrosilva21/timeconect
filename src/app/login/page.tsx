@@ -31,7 +31,9 @@ function LoginForm() {
     setError('')
     setLoading(true)
     try {
-      const { requiresPasswordChange } = await login(email, password)
+      // trim: senha colada do e-mail costuma vir com espaço/quebra invisível ao redor,
+      // o que fazia o login falhar como "Credenciais inválidas" mesmo com a senha certa.
+      const { requiresPasswordChange } = await login(email.trim(), password.trim())
       router.replace(requiresPasswordChange ? '/alterar-senha' : '/dashboard')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Credenciais inválidas')
@@ -201,7 +203,8 @@ export default function LoginPage() {
                 alt="ERPServ"
                 width={96}
                 height={32}
-                style={{ objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.75 }}
+                className="login-erpserv-logo"
+                style={{ objectFit: 'contain' }}
               />
             </div>
 
@@ -211,7 +214,7 @@ export default function LoginPage() {
                 <MinutorIcon size={19} />
               </div>
               <div>
-                <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: '#FFFFFF', lineHeight: 1.05 }}>
+                <h1 className="login-title" style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: '#FFFFFF', lineHeight: 1.05 }}>
                   Minutor
                 </h1>
                 <p style={{ margin: '4px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.38)', fontWeight: 400, letterSpacing: 0 }}>
@@ -247,6 +250,12 @@ export default function LoginPage() {
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
+        /* Splash do login é sempre escuro — escapa do rule global que força h1 preto no light */
+        html h1.login-title,
+        html:not(.dark) h1.login-title,
+        html.dark h1.login-title { color: #FFFFFF !important; }
+        /* Logo ERPServ: branco em ambos os temas (splash é sempre escuro) */
+        .login-erpserv-logo { filter: brightness(0) invert(1); opacity: 0.85; }
         .login-input::placeholder { color: rgba(255,255,255,0.22); }
         .login-input:focus {
           border: 1px solid rgba(0,212,232,0.55) !important;

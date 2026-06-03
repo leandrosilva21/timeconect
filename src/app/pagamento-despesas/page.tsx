@@ -9,8 +9,8 @@ import { formatBRL } from '@/lib/format'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { ExpenseViewModal } from '@/components/ui/expense-view-modal'
 import {
-  DollarSign, CheckCircle2, Receipt, ChevronDown,
-  Search, X, Check, RotateCcw, Eye, Undo2,
+  DollarSign, CheckCircle2, Receipt, ChevronDown, Handshake,
+  Search, X, Check, RotateCcw, Eye, Zap, CalendarClock,
 } from 'lucide-react'
 import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
@@ -35,6 +35,14 @@ function fmtBRL(v: number | string | null | undefined) {
   if (v == null || v === '') return '—'
   const n = typeof v === 'string' ? parseFloat(v) : v
   return formatBRL(isNaN(n) ? 0 : n)
+}
+
+// Status de aprovação da despesa (aba "Outros").
+const EXP_STATUS_LABEL: Record<string, string> = {
+  pending: 'Pendente', rejected: 'Rejeitado', adjustment_requested: 'Ajuste Solicitado', approved: 'Aprovado',
+}
+const EXP_STATUS_VARIANT: Record<string, string> = {
+  pending: 'pending', rejected: 'rejected', adjustment_requested: 'warning', approved: 'approved',
 }
 
 // ─── SearchSelect ─────────────────────────────────────────────────────────────
@@ -133,10 +141,10 @@ function SearchSelect({
 
 function SummaryCard({ label, value, sub, icon: Icon, accent }: {
   label: string; value: string; sub?: string
-  icon: React.ElementType; accent: 'primary' | 'success' | 'warning'
+  icon: React.ElementType; accent: 'primary' | 'success' | 'warning' | 'info'
 }) {
-  const color = accent === 'primary' ? '#00F5FF' : accent === 'success' ? '#10B981' : '#F59E0B'
-  const bg = accent === 'primary' ? 'rgba(0,245,255,0.08)' : accent === 'success' ? 'rgba(16,185,129,0.10)' : 'rgba(245,158,11,0.10)'
+  const color = accent === 'primary' ? '#00F5FF' : accent === 'success' ? '#10B981' : accent === 'info' ? '#8B5CF6' : '#F59E0B'
+  const bg = accent === 'primary' ? 'rgba(0,245,255,0.08)' : accent === 'success' ? 'rgba(16,185,129,0.10)' : accent === 'info' ? 'rgba(139,92,246,0.12)' : 'rgba(245,158,11,0.10)'
   return (
     <div
       className="rounded-2xl p-5 flex flex-col gap-3"
@@ -184,12 +192,18 @@ export default function PagamentoDespesasPage() {
     return `${now.getFullYear()}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`
   })
   const [selectedUser, setSelectedUser] = useState('')
-  const [paidFilter,  setPaidFilter]   = useState<'pending' | 'paid' | 'all'>('pending')
+  const [selectedCoordinator, setSelectedCoordinator] = useState('')
+  const [paidFilter,  setPaidFilter]   = useState<'pending' | 'no_fechamento' | 'paid' | 'all'>('pending')
+  // Aba principal: 'pagamento' (aprovadas, fluxo de pagamento) | 'outros' (demais status).
+  const [mainTab, setMainTab] = useState<'pagamento' | 'outros'>('pagamento')
+  // Filtro de status da aba "Outros" ('' = todos exceto aprovado).
+  const [statusFilter, setStatusFilter] = useState<'' | 'pending' | 'rejected' | 'adjustment_requested'>('')
   const [page, setPage]   = useState(1)
   const [hasNext, setHasNext] = useState(false)
 
   // ── Data ──
-  const [users,    setUsers]    = useState<UserOption[]>([])
+  const [users,        setUsers]        = useState<UserOption[]>([])
+  const [coordinators, setCoordinators] = useState<UserOption[]>([])
   const [items,    setItems]    = useState<Expense[]>([])
   const [loading,  setLoading]  = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -199,11 +213,6 @@ export default function PagamentoDespesasPage() {
   const [viewExp,     setViewExp]     = useState<Expense | null>(null)
   const [viewLoading, setViewLoading] = useState(false)
 
-  // ── Revert modal ──
-  const [revertTarget,  setRevertTarget]  = useState<Expense | null>(null)
-  const [revertReason,  setRevertReason]  = useState('')
-  const [reverting,     setReverting]     = useState(false)
-
   // Load consultants
   useEffect(() => {
     api.get<any>('/users?pageSize=200&exclude_type=cliente')
@@ -211,15 +220,35 @@ export default function PagamentoDespesasPage() {
       .catch(() => {})
   }, [])
 
+  // Load coordinators (filtro de coordenador)
+  useEffect(() => {
+    api.get<any>('/users?pageSize=200&type=coordenador')
+      .then(r => setCoordinators(Array.isArray(r?.items) ? r.items : []))
+      .catch(() => {})
+  }, [])
+
   const buildParams = useCallback(() => {
-    const p = new URLSearchParams({ page: String(page), per_page: '100', status: 'approved' })
+    const p = new URLSearchParams({ page: String(page), per_page: '100' })
+    if (mainTab === 'pagamento') {
+      p.set('status', 'approved')
+      if (paidFilter === 'paid') p.set('is_paid', 'true')
+      // 'pending' e 'no_fechamento' são ambos não-pagos no backend; a separação
+      // (parceiro vs não-parceiro) é feita client-side em visibleItems.
+      if (paidFilter === 'pending' || paidFilter === 'no_fechamento') p.set('is_paid', 'false')
+    } else {
+      // Aba "Outros": despesas não-aprovadas. Status específico, ou todos exceto aprovado.
+      if (statusFilter) {
+        p.set('status', statusFilter)
+      } else {
+        ;['pending', 'rejected', 'adjustment_requested'].forEach(s => p.append('status[]', s))
+      }
+    }
     if (dateFrom) p.set('start_date', dateFrom)
     if (dateTo)   p.set('end_date', dateTo)
     if (selectedUser) p.set('user_id[]', selectedUser)
-    if (paidFilter === 'paid')    p.set('is_paid', 'true')
-    if (paidFilter === 'pending') p.set('is_paid', 'false')
+    if (selectedCoordinator) p.set('coordinator_id', selectedCoordinator)
     return p
-  }, [page, dateFrom, dateTo, selectedUser, paidFilter])
+  }, [page, dateFrom, dateTo, selectedUser, selectedCoordinator, paidFilter, mainTab, statusFilter])
 
   const fetchData = useCallback(() => {
     setLoading(true)
@@ -237,11 +266,17 @@ export default function PagamentoDespesasPage() {
   useEffect(() => { fetchData() }, [fetchData])
 
   // ── Totals ──
-  const totalAmount   = useMemo(() => items.reduce((a, e) => a + (e.amount ?? 0), 0), [items])
+  // amount vem como string do backend (cast decimal:2 do Laravel) → coagir p/ número,
+  // senão o reduce concatena strings em vez de somar.
+  const totalAmount   = useMemo(() => items.reduce((a, e) => a + (Number(e.amount) || 0), 0), [items])
   const paidItems     = useMemo(() => items.filter(e => e.is_paid), [items])
-  const pendingItems  = useMemo(() => items.filter(e => !e.is_paid), [items])
-  const paidAmount    = useMemo(() => paidItems.reduce((a, e) => a + (e.amount ?? 0), 0), [paidItems])
-  const pendingAmount = useMemo(() => pendingItems.reduce((a, e) => a + (e.amount ?? 0), 0), [pendingItems])
+  // Parceiro não-pago = "pago no fechamento" (será quitado no fechamento, não é pagamento avulso).
+  const noFechamentoItems = useMemo(() => items.filter(e => !e.is_paid && (e.user?.partner_id != null || e.pagar_no_fechamento)), [items])
+  // A Pagar = só os que precisam de pagamento avulso (não-parceiro, não-pagos, não-encaminhados ao fechamento).
+  const pendingItems  = useMemo(() => items.filter(e => !e.is_paid && e.user?.partner_id == null && !e.pagar_no_fechamento), [items])
+  const paidAmount    = useMemo(() => paidItems.reduce((a, e) => a + (Number(e.amount) || 0), 0), [paidItems])
+  const pendingAmount = useMemo(() => pendingItems.reduce((a, e) => a + (Number(e.amount) || 0), 0), [pendingItems])
+  const noFechamentoAmount = useMemo(() => noFechamentoItems.reduce((a, e) => a + (Number(e.amount) || 0), 0), [noFechamentoItems])
 
   // ── Toggle paid ──
   const togglePaid = useCallback(async (exp: Expense, forcePaid?: boolean) => {
@@ -253,6 +288,23 @@ export default function PagamentoDespesasPage() {
       toast.success(newVal ? 'Despesa marcada como paga.' : 'Marcação removida.')
     } catch {
       toast.error('Erro ao atualizar pagamento.')
+    } finally {
+      setPaying(p => { const s = new Set(p); s.delete(exp.id); return s })
+    }
+  }, [])
+
+  // ── Encaminhar ao fechamento do consultor (ou voltar p/ A Pagar) ──
+  const toggleFechamento = useCallback(async (exp: Expense) => {
+    const newVal = !exp.pagar_no_fechamento
+    setPaying(p => new Set(p).add(exp.id))
+    try {
+      await api.post(`/expenses/${exp.id}/set-fechamento`, { pagar_no_fechamento: newVal })
+      setItems(prev => prev.map(e => e.id === exp.id
+        ? { ...e, pagar_no_fechamento: newVal, is_paid: newVal ? false : e.is_paid }
+        : e))
+      toast.success(newVal ? 'Encaminhada ao fechamento do consultor.' : 'Voltou para A Pagar.')
+    } catch {
+      toast.error('Erro ao atualizar.')
     } finally {
       setPaying(p => { const s = new Set(p); s.delete(exp.id); return s })
     }
@@ -279,30 +331,17 @@ export default function PagamentoDespesasPage() {
     finally { setViewLoading(false) }
   }, [])
 
-  // ── Revert approval ──
-  const submitRevert = useCallback(async () => {
-    if (!revertTarget) return
-    setReverting(true)
-    try {
-      await api.post(`/expenses/${revertTarget.id}/reverse-approval`, {})
-      toast.success('Aprovação estornada com sucesso.')
-    } catch (err: any) {
-      const msg: string = (err as any)?.message ?? ''
-      if (msg.toLowerCase().includes('aprovada')) {
-        toast.info('Despesa já havia sido estornada anteriormente.')
-      } else {
-        toast.error(msg || 'Erro ao estornar aprovação.')
-      }
-    } finally {
-      setReverting(false)
-      setRevertTarget(null)
-      setRevertReason('')
-      fetchData()
-    }
-  }, [revertTarget, fetchData])
+  // ── Itens visíveis na tabela (filtro de STATUS) ──
+  const visibleItems = useMemo(() => {
+    if (mainTab !== 'pagamento') return items // aba "Outros status": já filtrado por statusFilter no fetch
+    if (paidFilter === 'pending')       return items.filter(e => !e.is_paid && e.user?.partner_id == null && !e.pagar_no_fechamento)
+    if (paidFilter === 'no_fechamento') return items.filter(e => !e.is_paid && (e.user?.partner_id != null || e.pagar_no_fechamento))
+    if (paidFilter === 'paid')          return items.filter(e => e.is_paid)
+    return items
+  }, [items, paidFilter, mainTab])
 
   // ── Selection ──
-  const visibleIds  = useMemo(() => items.filter(e => !e.is_paid).map(e => e.id), [items])
+  const visibleIds  = useMemo(() => visibleItems.filter(e => !e.is_paid).map(e => e.id), [visibleItems])
   const allSelected = visibleIds.length > 0 && visibleIds.every(id => selected.has(id))
   const toggleAll   = () => allSelected ? setSelected(new Set()) : setSelected(new Set(visibleIds))
   const toggleOne   = (id: number) => setSelected(prev => {
@@ -329,8 +368,30 @@ export default function PagamentoDespesasPage() {
           }
         />
 
-        {/* Summary */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Aba principal */}
+        <div className="flex rounded-xl border overflow-hidden text-sm w-fit"
+          style={{ borderColor: 'var(--brand-border)' }}>
+          {([
+            ['pagamento', 'Pagamento'],
+            ['outros',    'Outros status'],
+          ] as const).map(([val, lbl]) => (
+            <button
+              key={val}
+              onClick={() => { setMainTab(val); setPage(1); setSelected(new Set()) }}
+              className="px-5 py-2 font-medium transition-colors"
+              style={{
+                background: mainTab === val ? 'rgba(0,245,255,0.12)' : 'transparent',
+                color: mainTab === val ? 'var(--text)' : 'var(--text-muted)',
+              }}
+            >
+              {lbl}
+            </button>
+          ))}
+        </div>
+
+        {/* Summary (só na aba Pagamento) */}
+        {mainTab === 'pagamento' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <SummaryCard
             label="Total Aprovadas"
             value={fmtBRL(totalAmount)}
@@ -346,6 +407,13 @@ export default function PagamentoDespesasPage() {
             accent="warning"
           />
           <SummaryCard
+            label="A Pagar no Fechamento"
+            value={fmtBRL(noFechamentoAmount)}
+            sub={`${noFechamentoItems.length} despesa${noFechamentoItems.length !== 1 ? 's' : ''} de parceiro`}
+            icon={Handshake}
+            accent="info"
+          />
+          <SummaryCard
             label="Pagas"
             value={fmtBRL(paidAmount)}
             sub={`${paidItems.length} despesa${paidItems.length !== 1 ? 's' : ''}`}
@@ -353,6 +421,7 @@ export default function PagamentoDespesasPage() {
             accent="success"
           />
         </div>
+        )}
 
         {/* Filters */}
         <div className="flex flex-wrap items-end gap-4 p-5 rounded-2xl"
@@ -385,38 +454,72 @@ export default function PagamentoDespesasPage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Coordenador</label>
+            <SearchSelect
+              value={selectedCoordinator}
+              onChange={v => { setSelectedCoordinator(v); setPage(1) }}
+              options={coordinators}
+              placeholder="Todos os coordenadores"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Status</label>
-            <div className="flex rounded-xl border overflow-hidden text-sm"
-              style={{ borderColor: 'var(--brand-border)' }}>
-              {([
-                ['pending', 'A Pagar'],
-                ['paid',    'Pagas'],
-                ['all',     'Todas'],
-              ] as const).map(([val, lbl]) => (
-                <button
-                  key={val}
-                  onClick={() => { setPaidFilter(val); setPage(1) }}
-                  className="px-4 py-2 font-medium transition-colors"
-                  style={{
-                    background: paidFilter === val ? 'rgba(0,245,255,0.12)' : 'transparent',
-                    color: paidFilter === val ? 'var(--text)' : 'var(--text-muted)',
-                  }}
-                >
-                  {lbl}
-                </button>
-              ))}
-            </div>
+            {mainTab === 'pagamento' ? (
+              <div className="flex rounded-xl border overflow-hidden text-sm"
+                style={{ borderColor: 'var(--brand-border)' }}>
+                {([
+                  ['pending',       'A Pagar'],
+                  ['no_fechamento', 'No Fechamento'],
+                  ['paid',          'Pagas'],
+                  ['all',           'Todas'],
+                ] as const).map(([val, lbl]) => (
+                  <button
+                    key={val}
+                    onClick={() => { setPaidFilter(val); setPage(1) }}
+                    className="px-4 py-2 font-medium transition-colors"
+                    style={{
+                      background: paidFilter === val ? 'rgba(0,245,255,0.12)' : 'transparent',
+                      color: paidFilter === val ? 'var(--text)' : 'var(--text-muted)',
+                    }}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex rounded-xl border overflow-hidden text-sm"
+                style={{ borderColor: 'var(--brand-border)' }}>
+                {([
+                  ['',                     'Todos'],
+                  ['pending',              'Pendente'],
+                  ['rejected',             'Rejeitado'],
+                  ['adjustment_requested', 'Ajuste'],
+                ] as const).map(([val, lbl]) => (
+                  <button
+                    key={val || 'todos'}
+                    onClick={() => { setStatusFilter(val); setPage(1) }}
+                    className="px-4 py-2 font-medium transition-colors"
+                    style={{
+                      background: statusFilter === val ? 'rgba(0,245,255,0.12)' : 'transparent',
+                      color: statusFilter === val ? 'var(--text)' : 'var(--text-muted)',
+                    }}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Table */}
         {loading ? (
           <SkeletonTable rows={8} cols={7} />
-        ) : items.length === 0 ? (
+        ) : visibleItems.length === 0 ? (
           <EmptyState
             icon={Receipt}
             title="Nenhuma despesa encontrada"
-            description="Ajuste os filtros para visualizar as despesas aprovadas."
+            description="Ajuste os filtros para visualizar as despesas."
           />
         ) : (
           <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--brand-border)' }}>
@@ -424,40 +527,45 @@ export default function PagamentoDespesasPage() {
               <Table>
                 <Thead>
                   <Tr baseBackground="var(--brand-surface)">
-                    <Th>
-                      <input
-                        type="checkbox"
-                        checked={allSelected}
-                        onChange={toggleAll}
-                        className="w-4 h-4 rounded accent-cyan-400"
-                      />
-                    </Th>
+                    {mainTab === 'pagamento' && (
+                      <Th>
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={toggleAll}
+                          className="w-4 h-4 rounded accent-cyan-400"
+                        />
+                      </Th>
+                    )}
                     <Th>Data</Th>
                     <Th>Consultor</Th>
+                    <Th>Coordenador</Th>
                     <Th>Projeto</Th>
                     <Th>Cliente</Th>
                     <Th>Categoria</Th>
                     <Th right>Valor</Th>
-                    <Th>Status Pag.</Th>
+                    <Th>{mainTab === 'pagamento' ? 'Status Pag.' : 'Status'}</Th>
                     <Th right>Ações</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {items.map(exp => {
+                  {visibleItems.map(exp => {
                     const isPaid    = !!exp.is_paid
                     const isLoading = paying.has(exp.id)
                     return (
                       <Tr key={exp.id} baseBackground="transparent">
-                        <Td>
-                          {!isPaid && (
-                            <input
-                              type="checkbox"
-                              checked={selected.has(exp.id)}
-                              onChange={() => toggleOne(exp.id)}
-                              className="w-4 h-4 rounded accent-cyan-400"
-                            />
-                          )}
-                        </Td>
+                        {mainTab === 'pagamento' && (
+                          <Td>
+                            {!isPaid && (
+                              <input
+                                type="checkbox"
+                                checked={selected.has(exp.id)}
+                                onChange={() => toggleOne(exp.id)}
+                                className="w-4 h-4 rounded accent-cyan-400"
+                              />
+                            )}
+                          </Td>
+                        )}
                         <Td mono>{fmtDate(exp.expense_date)}</Td>
                         <Td>
                           <span style={{ color: 'var(--brand-text)' }}>
@@ -465,7 +573,14 @@ export default function PagamentoDespesasPage() {
                           </span>
                         </Td>
                         <Td>
-                          <span className="truncate max-w-[160px] block" title={(exp.project as any)?.name}>
+                          {(() => {
+                            const coords = ((exp.project as any)?.coordinators ?? []) as Array<{ name?: string }>
+                            const nomes = coords.map(c => c?.name).filter(Boolean).join(', ')
+                            return <span className="truncate max-w-[160px] block" title={nomes}>{nomes || '—'}</span>
+                          })()}
+                        </Td>
+                        <Td>
+                          <span className="truncate max-w-[280px] block" title={(exp.project as any)?.name}>
                             {(exp.project as any)?.name ?? '—'}
                           </span>
                         </Td>
@@ -483,9 +598,15 @@ export default function PagamentoDespesasPage() {
                           </span>
                         </Td>
                         <Td>
-                          {isPaid
-                            ? <Badge variant="success">Pago</Badge>
-                            : <Badge variant="warning">A Pagar</Badge>
+                          {mainTab === 'pagamento'
+                            ? (isPaid
+                                ? <Badge variant="success">Pago</Badge>
+                                : exp.user?.partner_id != null
+                                  ? <Badge variant="success">Pago no fechamento</Badge>
+                                  : <Badge variant="warning">A Pagar</Badge>)
+                            : <Badge variant={EXP_STATUS_VARIANT[exp.status] ?? 'default'}>
+                                {exp.status_display ?? EXP_STATUS_LABEL[exp.status] ?? exp.status}
+                              </Badge>
                           }
                         </Td>
                         <Td right>
@@ -499,21 +620,16 @@ export default function PagamentoDespesasPage() {
                             >
                               <Eye size={11} /> Ver
                             </button>
-                            {/* Estornar aprovação — apenas se não estiver paga */}
-                            {!isPaid && (
-                              <button
-                                onClick={() => setRevertTarget(exp)}
-                                title="Estornar aprovação"
-                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
-                                style={{ background: 'rgba(249,115,22,0.10)', color: '#F97316' }}
-                              >
-                                <Undo2 size={11} /> Estornar
-                              </button>
-                            )}
-                            {/* Pagar / Desfazer */}
+                            {/* Pagar / Desfazer (aba pagamento) */}
+                            {mainTab === 'pagamento' && (
                             <button
                               disabled={isLoading}
                               onClick={() => togglePaid(exp)}
+                              title={isPaid
+                                ? 'Desfazer pagamento'
+                                : exp.user?.partner_id != null
+                                  ? 'Pagar agora — antecipa o pagamento que seria feito no fechamento do parceiro'
+                                  : 'Marcar despesa como paga'}
                               className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
                               style={isPaid
                                 ? { background: 'rgba(239,68,68,0.10)', color: '#EF4444' }
@@ -524,10 +640,32 @@ export default function PagamentoDespesasPage() {
                                 <span className="w-3 h-3 border border-current rounded-full border-t-transparent animate-spin" />
                               ) : isPaid ? (
                                 <><RotateCcw size={11} /> Desfazer</>
+                              ) : exp.user?.partner_id != null ? (
+                                <><Zap size={11} /> Pagar</>
                               ) : (
                                 <><CheckCircle2 size={11} /> Pagar</>
                               )}
                             </button>
+                            )}
+                            {/* No fechamento / Voltar — qualquer consultor não-parceiro, não-pago */}
+                            {mainTab === 'pagamento' && !isPaid && exp.user?.partner_id == null && (
+                            <button
+                              disabled={isLoading}
+                              onClick={() => toggleFechamento(exp)}
+                              title={exp.pagar_no_fechamento
+                                ? 'Voltar para A Pagar (pagamento avulso)'
+                                : 'Encaminhar ao fechamento do consultor — será pago no fechamento'}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                              style={exp.pagar_no_fechamento
+                                ? { background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }
+                                : { background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }
+                              }
+                            >
+                              {exp.pagar_no_fechamento
+                                ? <><RotateCcw size={11} /> A Pagar</>
+                                : <><CalendarClock size={11} /> No fechamento</>}
+                            </button>
+                            )}
                           </div>
                         </Td>
                       </Tr>
@@ -557,63 +695,6 @@ export default function PagamentoDespesasPage() {
       {viewLoading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="w-10 h-10 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-        </div>
-      )}
-
-      {/* ── Modal Estornar Aprovação ── */}
-      {revertTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={e => { if (e.target === e.currentTarget) setRevertTarget(null) }}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-5"
-            style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
-          >
-            {/* Header */}
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                style={{ background: 'rgba(249,115,22,0.12)' }}>
-                <Undo2 size={16} color="#F97316" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold" style={{ color: 'var(--brand-text)' }}>Estornar Aprovação</h3>
-                <p className="text-xs" style={{ color: 'var(--brand-muted)' }}>
-                  Despesa #{revertTarget.id} · {revertTarget.formatted_amount ?? fmtBRL(revertTarget.amount)}
-                </p>
-              </div>
-            </div>
-
-            {/* Info */}
-            <div className="rounded-xl p-3 text-sm space-y-1"
-              style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.2)' }}>
-              <p style={{ color: '#F97316' }}>
-                Esta ação irá reverter a aprovação da despesa, retornando-a ao status <strong>pendente</strong>.
-              </p>
-            </div>
-
-            {/* Buttons */}
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={() => setRevertTarget(null)}
-                className="flex-1 py-2 rounded-xl text-sm font-semibold transition-all"
-                style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)' }}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={submitRevert}
-                disabled={reverting}
-                className="flex-1 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                style={{ background: 'rgba(249,115,22,0.15)', color: '#F97316', border: '1px solid rgba(249,115,22,0.3)' }}
-              >
-                {reverting
-                  ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  : <><Undo2 size={13} /> Confirmar Estorno</>
-                }
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

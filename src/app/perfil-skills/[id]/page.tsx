@@ -8,7 +8,7 @@ import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import {
   ArrowLeft, ArrowRight, Check, User as UserIcon, Clock,
-  Star, Layers, Briefcase, Save,
+  Star, Layers, Briefcase, Save, Search,
 } from 'lucide-react'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -550,12 +550,52 @@ function StepSkills({
   edits: Record<number, any>
   setEdits: React.Dispatch<React.SetStateAction<Record<number, any>>>
 }) {
-  const filteredGroups = skillsByCat.filter(([cat]) => categories.includes(cat))
+  // Filtros locais pra navegar lista longa
+  const [search, setSearch]                 = useState('')
+  const [levelFilter, setLevelFilter]       = useState<Array<number | 'unset'>>([])
+  const [onlyFormsReview, setOnlyFormsReview] = useState(false)
+
   const csBySkill = useMemo(() => {
     const m = new Map<number, ConsultantSkill>()
     cs.forEach(c => m.set(c.skill_id, c))
     return m
   }, [cs])
+
+  // Filtrar por categoria + busca + toggles. Mantém só categorias com itens visíveis.
+  const filteredGroups = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return skillsByCat
+      .filter(([cat]) => categories.includes(cat))
+      .map(([cat, items]) => {
+        const visible = items.filter(sk => {
+          if (q && !sk.name.toLowerCase().includes(q)) return false
+          const e = edits[sk.id]
+          if (levelFilter.length > 0) {
+            // Resolve weight do nível atual; 'unset' se não tem level_id
+            const currentLevelId = e?.level_id
+            if (!currentLevelId) {
+              if (!levelFilter.includes('unset')) return false
+            } else {
+              const lvl = levels.find(l => l.id === currentLevelId)
+              const weight = lvl?.weight
+              if (weight == null || !levelFilter.includes(weight)) return false
+            }
+          }
+          if (onlyFormsReview) {
+            const existing = csBySkill.get(sk.id)
+            if (existing?.source !== 'forms_import') return false
+          }
+          return true
+        })
+        return [cat, visible] as const
+      })
+      .filter(([, items]) => items.length > 0)
+  }, [skillsByCat, categories, search, levelFilter, onlyFormsReview, edits, csBySkill, levels])
+
+  const totalVisible = filteredGroups.reduce((sum, [, items]) => sum + items.length, 0)
+  const totalAll = skillsByCat
+    .filter(([cat]) => categories.includes(cat))
+    .reduce((sum, [, items]) => sum + items.length, 0)
 
   if (filteredGroups.length === 0) {
     return (
@@ -581,10 +621,94 @@ function StepSkills({
       <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
         {title}
       </h3>
-      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
         Para cada skill que você tem, indique nível e (opcional) anos de experiência e tipo de atuação.
         Skills em branco são ignoradas.
       </p>
+
+      {/* ── Filtros locais ───────────────────────────────────────────────── */}
+      <div style={{ marginBottom: 14, padding: '10px 12px', background: 'var(--surface-hover, transparent)', border: '1px solid var(--border)', borderRadius: 6 }}>
+        <div style={{ position: 'relative', marginBottom: 8 }}>
+          <Search size={12} style={{
+            position: 'absolute', left: 9, top: '50%',
+            transform: 'translateY(-50%)', color: 'var(--text-muted)',
+          }} />
+          <input
+            className="ds-input"
+            style={{ paddingLeft: 28, fontSize: 11, height: 30, width: '100%' }}
+            placeholder="Buscar skill por nome (ex: SIGAFIN, Java...)"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        {/* Chips de nível (multi-select): inclui as MESMAS opções do dropdown de seleção */}
+        <div className="flex items-center gap-1 flex-wrap" style={{ marginBottom: 6 }}>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, marginRight: 4, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+            Nível:
+          </span>
+          {([
+            { v: 'unset' as const, label: '— sem nível —' },
+            ...levels.map(l => ({ v: l.weight, label: l.name })),
+          ]).map(opt => {
+            const on = levelFilter.includes(opt.v as number | 'unset')
+            return (
+              <button
+                key={String(opt.v)}
+                type="button"
+                onClick={() => setLevelFilter(prev =>
+                  prev.includes(opt.v as number | 'unset')
+                    ? prev.filter(x => x !== opt.v)
+                    : [...prev, opt.v as number | 'unset']
+                )}
+                style={{
+                  fontSize: 10, padding: '3px 9px', borderRadius: 3,
+                  background: on ? 'var(--primary-soft)' : 'transparent',
+                  border: '1px solid',
+                  borderColor: on ? 'var(--primary)' : 'var(--border)',
+                  color: on ? 'var(--primary)' : 'var(--text-muted)',
+                  fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setOnlyFormsReview(v => !v)}
+            style={{
+              fontSize: 10, padding: '3px 9px', borderRadius: 3,
+              background: onlyFormsReview ? 'var(--warning-bg)' : 'transparent',
+              border: '1px solid',
+              borderColor: onlyFormsReview ? 'var(--warning-border)' : 'var(--border)',
+              color: onlyFormsReview ? 'var(--warning)' : 'var(--text-muted)',
+              fontWeight: 600, cursor: 'pointer',
+            }}
+            title="Skills importadas do Forms — recomendado revisar"
+          >
+            Só forms (revisar)
+          </button>
+          {(search || levelFilter.length > 0 || onlyFormsReview) && (
+            <button
+              type="button"
+              onClick={() => { setSearch(''); setLevelFilter([]); setOnlyFormsReview(false) }}
+              style={{
+                fontSize: 10, padding: '3px 9px', borderRadius: 3,
+                background: 'transparent', border: '1px solid var(--border)',
+                color: 'var(--text-muted)', cursor: 'pointer',
+              }}
+            >
+              limpar
+            </button>
+          )}
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+            {totalVisible}/{totalAll} skills visíveis
+          </span>
+        </div>
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         {filteredGroups.map(([cat, items]) => (

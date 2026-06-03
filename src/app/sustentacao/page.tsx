@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { sanitizeHtml, previewText } from '@/lib/sanitize'
 import { AppLayout } from '@/components/layout/app-layout'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/use-auth'
@@ -15,8 +16,12 @@ import {
 import {
   AlertTriangle, CheckCircle, Clock, TrendingUp, Users, DollarSign,
   Activity, BarChart2, List, Shield, Globe, Zap, RefreshCw, Wrench,
-  ChevronDown, Check,
+  ChevronDown, Check, CheckSquare, X as CloseIcon, Eye, FileText,
 } from 'lucide-react'
+import { TimesheetsScreen }            from '@/components/screens/TimesheetsScreen'
+import { ExpensesScreen }              from '@/components/screens/ExpensesScreen'
+import { ApprovalsScreen }             from '@/components/screens/ApprovalsScreen'
+import { AuditoriaApontamentosScreen } from '@/components/screens/AuditoriaApontamentosScreen'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -171,6 +176,16 @@ const TABS = [
   { id: 'evolution',    label: 'Evolução',           icon: TrendingUp },
   { id: 'debug',        label: 'Diagnóstico',        icon: Wrench },
 ]
+
+const ROUTINE_TABS = [
+  { id: 'timesheets', label: 'Apontamentos', icon: Clock,          desc: 'Horas lançadas em projetos de sustentação' },
+  { id: 'expenses',   label: 'Despesas',     icon: DollarSign,     desc: 'Reembolsos e despesas dos projetos'        },
+  { id: 'approvals',  label: 'Aprovações',   icon: CheckSquare,    desc: 'Apontamentos/despesas pendentes'           },
+  { id: 'auditoria',  label: 'Auditoria',    icon: FileText,       desc: 'Histórico de alterações de apontamentos'   },
+  { id: 'triagem',    label: 'Lançamentos não identificados', icon: AlertTriangle, desc: 'Apontamentos atribuídos ao Usuário/Cliente/Projeto Padrão (revisão manual)' },
+] as const
+
+type RoutineTabId = typeof ROUTINE_TABS[number]['id']
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -634,19 +649,41 @@ function MultiSelect({ label, options, selected, onChange, placeholder = 'Buscar
               style={{ background: '#27272a', color: '#e4e4e7', border: 'none' }} />
           </div>
           <div className="overflow-y-auto">
-            <button type="button" onClick={() => onChange([])}
-              className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-zinc-800"
-              style={{ color: selected.length === 0 ? '#00F5FF' : '#a1a1aa' }}>
-              {selected.length === 0 ? <Check size={12} /> : <span className="w-3 shrink-0" />}
-              Todos
-            </button>
+            {filtered.length > 0 && (() => {
+              const vals = filtered.map(o => o.value)
+              const allSel = vals.every(v => selected.includes(v))
+              return (
+                <button type="button"
+                  onClick={() => allSel
+                    ? onChange(selected.filter(v => !vals.includes(v)))
+                    : onChange(Array.from(new Set([...selected, ...vals])))}
+                  className="w-full text-left px-3 py-2 text-xs font-semibold flex items-center gap-2 hover:bg-zinc-800"
+                  style={{ color: 'var(--primary)', borderBottom: '1px solid var(--brand-border)' }}>
+                  <span className="w-3.5 h-3.5 rounded flex-shrink-0 flex items-center justify-center border"
+                    style={{ borderColor: 'var(--primary)', background: allSel ? 'var(--primary)' : 'var(--surface)' }}>
+                    {allSel && <Check size={9} color="var(--primary-fg)" strokeWidth={3} />}
+                  </span>
+                  {allSel ? 'Desmarcar todos' : 'Selecionar todos'}{search ? ' (filtrados)' : ''}
+                </button>
+              )
+            })()}
+            {selected.length > 0 && (
+              <button type="button" onClick={() => onChange([])}
+                className="w-full text-left px-3 py-1.5 text-xs font-semibold hover:bg-zinc-800"
+                style={{ color: '#a1a1aa', borderBottom: '1px solid var(--brand-border)' }}>
+                Limpar seleção
+              </button>
+            )}
             {filtered.map(opt => {
               const checked = selected.includes(opt.value)
               return (
                 <button type="button" key={opt.value} onClick={() => toggle(opt.value)}
                   className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-zinc-800"
-                  style={{ color: checked ? '#00F5FF' : '#e4e4e7' }}>
-                  {checked ? <Check size={12} className="shrink-0" /> : <span className="w-3 shrink-0" />}
+                  style={{ color: checked ? 'var(--primary)' : '#e4e4e7', fontWeight: checked ? 500 : 400 }}>
+                  <span className="w-3.5 h-3.5 rounded flex-shrink-0 flex items-center justify-center border"
+                    style={{ borderColor: checked ? 'var(--primary)' : 'var(--border-strong)', background: checked ? 'var(--primary)' : 'var(--surface)' }}>
+                    {checked && <Check size={9} color="var(--primary-fg)" strokeWidth={3} />}
+                  </span>
                   {opt.label}
                 </button>
               )
@@ -721,6 +758,16 @@ export default function SustentacaoPage() {
   }, [user, router])
 
   const [tab, setTab]         = useState('kpis')
+
+  // Centralzinha de rotinas (independente das tabs de indicadores).
+  // null = mostra indicadores; setado = mostra a tela completa da rotina.
+  const [routineTab, setRoutineTab] = useState<RoutineTabId | null>(null)
+
+  // ─── Rotinas embarcadas: apontamentos / despesas / aprovações ───────────────
+  const [routineRows, setRoutineRows] = useState<any[]>([])
+  const [routineTotal, setRoutineTotal] = useState(0)
+  const [routineLoading, setRoutineLoading] = useState(false)
+  const [routineDetail, setRoutineDetail] = useState<any | null>(null)
   const [loading, setLoading] = useState(false)
   const [filterMode, setFilterMode] = useState<'month' | 'period'>('month')
 
@@ -732,6 +779,10 @@ export default function SustentacaoPage() {
     return d.toISOString().split('T')[0]
   })
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0])
+
+  // As abas Apontamentos/Despesas/Aprovações/Auditoria agora renderizam as telas
+  // completas do menu (TimesheetsScreen/ExpensesScreen/etc.) com scope='sustentacao',
+  // que fazem o próprio fetch. O fetch legado em /sustentacao/{tab} foi descontinuado.
 
   // Computa from/to a partir do modo ativo
   const from = filterMode === 'month' && refMonth && refYear
@@ -935,36 +986,88 @@ export default function SustentacaoPage() {
         </div>
       </div>
 
-      {/* ── Tabs ── */}
-      <div className="flex gap-1 px-6 pt-3 pb-0 border-b shrink-0 overflow-x-auto" style={{ borderColor: 'var(--brand-border)' }}>
-        {TABS.map(t => {
-          const Icon = t.icon
-          const active = tab === t.id
-          return (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs whitespace-nowrap border-b-2 transition-colors"
-              style={{
-                borderColor: active ? 'var(--primary)' : 'transparent',
-                color: active ? 'var(--text)' : 'var(--text-muted)',
-                fontWeight: active ? 600 : 500,
-              }}>
-              <Icon size={13} />
-              {t.label}
+      {/* ── Central de Lançamentos — sempre visível (navegação entre rotinas) ── */}
+      <div className="px-6 pt-3 shrink-0">
+        <div
+          className="rounded-xl px-3 py-2 flex items-center gap-2 flex-wrap"
+          style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
+        >
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Zap size={12} style={{ color: 'var(--primary)' }} />
+            <h3 className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text)' }}>
+              Central de Lançamentos
+            </h3>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap flex-1">
+            {ROUTINE_TABS.map(r => {
+              const Icon = r.icon
+              const active = routineTab === r.id
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => setRoutineTab(r.id)}
+                  title={r.desc}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors"
+                  style={{
+                    background: active ? 'rgba(0,245,255,0.10)' : 'var(--brand-bg)',
+                    border: active ? '1px solid var(--primary)' : '1px solid var(--brand-border)',
+                    color: active ? 'var(--primary)' : 'var(--text)',
+                  }}
+                >
+                  <Icon size={12} />
+                  <span>{r.label}</span>
+                </button>
+              )
+            })}
+          </div>
+          {routineTab && (
+            <button
+              onClick={() => setRoutineTab(null)}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium transition-colors shrink-0"
+              style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)', color: 'var(--text-muted)' }}
+              title="Voltar aos indicadores do portal"
+            >
+              <CloseIcon size={11} /> Home do Portal
             </button>
-          )
-        })}
+          )}
+        </div>
       </div>
+
+      {/* ── Tabs (Indicadores) — escondidas quando uma rotina está ativa ── */}
+      {!routineTab && (
+        <div className="flex gap-1 px-6 pt-3 pb-0 border-b shrink-0 overflow-x-auto" style={{ borderColor: 'var(--brand-border)' }}>
+          {TABS.map(t => {
+            const Icon = t.icon
+            const active = tab === t.id
+            return (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs whitespace-nowrap border-b-2 transition-colors"
+                style={{
+                  borderColor: active ? 'var(--primary)' : 'transparent',
+                  color: active ? 'var(--text)' : 'var(--text-muted)',
+                  fontWeight: active ? 600 : 500,
+                }}>
+                <Icon size={13} />
+                {t.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Header da rotina ativa removido — o destaque do card na Central de
+          Lançamentos + o botão "Voltar à Home do Portal" já fazem o papel. */}
 
       {/* ── Content ── */}
       <div className="flex-1 overflow-y-auto p-6">
-        {loading && (
+        {!routineTab && loading && (
           <div className="flex items-center gap-2 text-zinc-500 text-sm mb-4">
             <RefreshCw size={14} className="animate-spin" /> Carregando...
           </div>
         )}
 
         {/* VISÃO EXECUTIVA */}
-        {tab === 'kpis' && kpis && (
+        {!routineTab && tab === 'kpis' && kpis && (
           <div className="space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <KpiCard label="Tickets Abertos" value={kpis.total_open} icon={Activity}
@@ -988,7 +1091,7 @@ export default function SustentacaoPage() {
         )}
 
         {/* INDICADORES — Dashboard Executivo */}
-        {tab === 'indicadores' && indicadores && (() => {
+        {!routineTab && tab === 'indicadores' && indicadores && (() => {
           const { pct_critical, pct_stopped, sla_breach_pct, avg_resolution_hours, lead_time_avg_hours, aging, pct_hours_consumed, total_sold_h, total_used_h, hours_per_ticket, top_clients, by_category, by_urgency } = indicadores
 
           const kpiColor = (v: number | null, thresholds: [number, number]): string => {
@@ -1141,7 +1244,7 @@ export default function SustentacaoPage() {
         })()}
 
         {/* FILA OPERACIONAL */}
-        {tab === 'queue' && queue && (
+        {!routineTab && tab === 'queue' && queue && (
           <div className="space-y-3">
           {/* Painel Contextual */}
           {contextStats && (
@@ -1371,7 +1474,7 @@ export default function SustentacaoPage() {
         )}
 
         {/* SLA */}
-        {tab === 'sla' && slaData && (
+        {!routineTab && tab === 'sla' && slaData && (
           <div className="space-y-6">
             {slaData.breaching_now.length > 0 && (
               <div className="rounded-xl border border-red-500/30 p-4" style={{ background: 'rgba(239,68,68,0.05)' }}>
@@ -1451,7 +1554,7 @@ export default function SustentacaoPage() {
         )}
 
         {/* PRODUTIVIDADE */}
-        {tab === 'productivity' && productivity && (
+        {!routineTab && tab === 'productivity' && productivity && (
           <div className="space-y-6">
             <div className="overflow-auto rounded-xl border" style={{ borderColor: 'var(--brand-border)' }}>
               <table className="w-full text-xs">
@@ -1495,7 +1598,7 @@ export default function SustentacaoPage() {
         )}
 
         {/* FINANCEIRO */}
-        {tab === 'financial' && financial && (
+        {!routineTab && tab === 'financial' && financial && (
           <div className="space-y-6">
             <div className="overflow-auto rounded-xl border" style={{ borderColor: 'var(--brand-border)' }}>
               <table className="w-full text-xs">
@@ -1536,7 +1639,7 @@ export default function SustentacaoPage() {
         )}
 
         {/* POR CLIENTE */}
-        {tab === 'clients' && clients && (
+        {!routineTab && tab === 'clients' && clients && (
           <div className="space-y-6">
             <div className="overflow-auto rounded-xl border" style={{ borderColor: 'var(--brand-border)' }}>
               <table className="w-full text-xs">
@@ -1569,7 +1672,7 @@ export default function SustentacaoPage() {
         )}
 
         {/* DISTRIBUIÇÃO */}
-        {tab === 'distribution' && distribution && (
+        {!routineTab && tab === 'distribution' && distribution && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               { title: 'Por Urgência',    data: distribution.by_urgency },
@@ -1598,7 +1701,7 @@ export default function SustentacaoPage() {
         )}
 
         {/* EVOLUÇÃO */}
-        {tab === 'evolution' && evolution && (
+        {!routineTab && tab === 'evolution' && evolution && (
           <div className="space-y-6">
             <Section title="Evolução Mensal (últimos 12 meses)">
               {evolution.monthly.length === 0
@@ -1642,8 +1745,16 @@ export default function SustentacaoPage() {
           <p className="text-zinc-500 text-sm">Carregando dados...</p>
         )}
 
-        {/* DIAGNÓSTICO */}
-        {tab === 'debug' && (
+        {/* ── CENTRALZINHA: telas idênticas às do menu, escopadas a Sustentação.
+            Acionadas pelos cards da Centralzinha (state routineTab), independentes
+            das tabs de indicadores. Override de coord é respeitado via ?scope=. ── */}
+        {routineTab === 'timesheets' && <TimesheetsScreen            scope="sustentacao" embedded />}
+        {routineTab === 'expenses'   && <ExpensesScreen              scope="sustentacao" embedded />}
+        {routineTab === 'approvals'  && <ApprovalsScreen             scope="sustentacao" embedded />}
+        {routineTab === 'auditoria'  && <AuditoriaApontamentosScreen scope="sustentacao" embedded />}
+        {routineTab === 'triagem'    && <TimesheetsScreen            scope="sustentacao" embedded triagemPadrao />}
+
+        {!routineTab && tab === 'debug' && (
           <DiagnosticoTab
             debugClientes={debugClientes}
             debugResponsaveis={debugResponsaveis}
@@ -1670,5 +1781,172 @@ export default function SustentacaoPage() {
       </div>
     </div>
     </AppLayout>
+  )
+}
+
+// ─── Routine table (timesheets / expenses / approvals) ───────────────────────
+
+function RoutineTable({ kind, rows, total, loading, onRowClick }: {
+  kind: 'timesheets' | 'expenses' | 'approvals'
+  rows: any[]
+  total: number
+  loading: boolean
+  onRowClick: (r: any) => void
+}) {
+  const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  const isExp = kind === 'expenses'
+  const title = kind === 'timesheets' ? 'Apontamentos — Sustentação'
+              : kind === 'expenses'   ? 'Despesas — Sustentação'
+              : 'Aprovações pendentes — Sustentação'
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+      <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--brand-border)' }}>
+        <div>
+          <h3 className="text-sm font-semibold text-white">{title}</h3>
+          <p className="text-xs mt-0.5 text-zinc-400">{total} registros no período</p>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        {loading ? (
+          <div className="py-10 text-center text-sm text-zinc-400">Carregando…</div>
+        ) : rows.length === 0 ? (
+          <div className="py-10 text-center text-sm text-zinc-400">Sem registros no período.</div>
+        ) : isExp ? (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-zinc-400" style={{ borderBottom: '1px solid var(--brand-border)' }}>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Data</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Colaborador</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Projeto</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Categoria</th>
+                <th className="text-right px-3 py-2 text-xs uppercase tracking-wide">Valor</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id} className="cursor-pointer text-white" style={{ borderBottom: '1px solid var(--brand-border)' }} onClick={() => onRowClick(r)}>
+                  <td className="px-3 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                  <td className="px-3 py-2">{r.user?.name ?? '—'}</td>
+                  <td className="px-3 py-2"><span className="font-mono text-xs text-zinc-400">{r.project?.code}</span> · {r.project?.name}</td>
+                  <td className="px-3 py-2">{r.category?.name ?? '—'}</td>
+                  <td className="px-3 py-2 text-right font-mono whitespace-nowrap">{fmtBRL(Number(r.amount) || 0)}</td>
+                  <td className="px-3 py-2 text-xs">{r.status_display ?? r.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-zinc-400" style={{ borderBottom: '1px solid var(--brand-border)' }}>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Data</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Solicitante</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Consultor</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Ticket</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Título</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Descrição</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Início</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Fim</th>
+                <th className="text-right px-3 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Esforço (h)</th>
+                <th className="text-left  px-3 py-2 text-xs uppercase tracking-wide">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id} className="cursor-pointer text-white" style={{ borderBottom: '1px solid var(--brand-border)' }} onClick={() => onRowClick(r)}>
+                  <td className="px-3 py-2 whitespace-nowrap">{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                  <td className="px-3 py-2">{r.requester ?? '—'}</td>
+                  <td className="px-3 py-2">{r.user?.name ?? '—'}</td>
+                  <td className="px-3 py-2">
+                    {r.ticket ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${r.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-cyan-400 hover:underline" onClick={e => e.stopPropagation()}>#{r.ticket}</a> : <span className="text-zinc-500">—</span>}
+                  </td>
+                  <td className="px-3 py-2 max-w-xs truncate text-zinc-300" title={r.ticket_subject ?? ''}>{r.ticket_subject ?? '—'}</td>
+                  <td className="px-3 py-2 max-w-sm truncate text-zinc-300" title={previewText(r.description)}>{previewText(r.description) || '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{r.start_time ?? '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{r.end_time ?? '—'}</td>
+                  <td className="px-3 py-2 text-right font-mono whitespace-nowrap">{((r.effort_minutes ?? 0) / 60).toFixed(2)}</td>
+                  <td className="px-3 py-2 text-xs">{r.status_display ?? r.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function RoutineDetailModal({ item, kind, onClose }: { item: any; kind: 'timesheets'|'expenses'|'approvals'; onClose: () => void }) {
+  const fmtDateBR = (iso: string | null) => iso ? iso.split('-').reverse().join('/') : '—'
+  const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  const isExp = kind === 'expenses'
+  const period = (!isExp && item.start_time && item.end_time) ? `${item.start_time} – ${item.end_time}` : null
+  const hours = ((item.effort_minutes ?? 0) / 60)
+  const hoursDisplay = `${Math.floor(hours)}:${String(Math.round((hours - Math.floor(hours)) * 60)).padStart(2, '0')}`
+  return (
+    <div className="fixed inset-0 z-[90] flex items-start justify-center p-4 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.75)' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="w-full max-w-2xl mt-8 rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+        <div className="px-6 py-5 flex items-start justify-between gap-4" style={{ borderBottom: '1px solid var(--brand-border)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(0,245,255,0.10)' }}>
+              {isExp ? <DollarSign size={20} className="text-cyan-400" /> : <Clock size={20} className="text-cyan-400" />}
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">{isExp ? 'Detalhe da Despesa' : 'Detalhe do Apontamento'}</h3>
+              <p className="text-xs mt-0.5 text-zinc-400">#{item.id} · {fmtDateBR(item.date)}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-md hover:opacity-70 text-zinc-400"><CloseIcon size={18} /></button>
+        </div>
+        <div className="p-6 space-y-3 text-white text-sm">
+          {period && (
+            <div className="rounded-xl p-4 mb-2" style={{ background: 'rgba(0,245,255,0.05)', border: '1px solid rgba(0,245,255,0.2)' }}>
+              <p className="text-xs uppercase tracking-wider mb-1 text-zinc-400">Período</p>
+              <p className="text-2xl font-bold text-cyan-400">{period} <span className="text-base font-normal text-zinc-400">({hoursDisplay})</span></p>
+            </div>
+          )}
+          <div className="rounded-xl divide-y" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+            <div className="px-4 py-2.5"><div className="text-[10px] uppercase tracking-wider text-zinc-400">Data</div><div className="text-sm font-medium">{fmtDateBR(item.date)}</div></div>
+            <div className="px-4 py-2.5"><div className="text-[10px] uppercase tracking-wider text-zinc-400">Colaborador</div><div className="text-sm font-medium">{item.user?.name ?? '—'}</div></div>
+            <div className="px-4 py-2.5"><div className="text-[10px] uppercase tracking-wider text-zinc-400">Cliente</div><div className="text-sm font-medium">{item.customer ?? '—'}</div></div>
+            <div className="px-4 py-2.5"><div className="text-[10px] uppercase tracking-wider text-zinc-400">Projeto</div><div className="text-sm font-medium">{item.project?.name ?? '—'}</div></div>
+            {isExp && (
+              <>
+                <div className="px-4 py-2.5"><div className="text-[10px] uppercase tracking-wider text-zinc-400">Categoria</div><div className="text-sm font-medium">{item.category?.name ?? '—'}</div></div>
+                <div className="px-4 py-2.5"><div className="text-[10px] uppercase tracking-wider text-zinc-400">Valor</div><div className="text-sm font-medium font-mono">{fmtBRL(Number(item.amount) || 0)}</div></div>
+              </>
+            )}
+            {!isExp && item.ticket && (
+              <div className="px-4 py-2.5"><div className="text-[10px] uppercase tracking-wider text-zinc-400">Ticket</div><div className="text-sm font-medium"><a href={`https://erpserv.movidesk.com/Ticket/Edit/${item.ticket}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-cyan-400 hover:underline">#{item.ticket}{item.ticket_subject ? ` · ${item.ticket_subject}` : ''}</a></div></div>
+            )}
+          </div>
+          {item.description && (
+            <div className="rounded-xl p-4" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+              <div className="text-xs uppercase tracking-wider font-semibold mb-2 text-zinc-400">{isExp ? 'Descrição' : 'Observação'}</div>
+              <div
+                className="text-sm leading-relaxed
+                  [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5
+                  [&_a]:underline [&_a]:text-[var(--primary)]
+                  [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:overflow-x-auto
+                  [&_code]:break-words
+                  [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse
+                  [&_th]:border [&_th]:border-[var(--border)] [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-semibold
+                  [&_td]:border [&_td]:border-[var(--border)] [&_td]:px-2 [&_td]:py-1.5 [&_td]:align-top
+                  [&_h1]:text-base [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1.5
+                  [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5
+                  [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1
+                  [&_hr]:my-3 [&_hr]:border-[var(--border)]
+                "
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.description) }}
+              />
+            </div>
+          )}
+          <div className="flex justify-end pt-2">
+            <button onClick={onClose} className="px-5 py-2 rounded-lg text-sm font-medium text-white" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--brand-border)' }}>Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

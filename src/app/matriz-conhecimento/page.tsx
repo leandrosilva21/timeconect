@@ -145,6 +145,17 @@ export default function MatrizConhecimentoPage() {
     })()
   }, [])
 
+  // Deep-link: ?consultor=N auto-seleciona o consultor (window.location pra evitar Suspense boundary)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const consultorParam = params.get('consultor')
+    if (consultorParam) {
+      const n = Number(consultorParam)
+      if (!isNaN(n)) setSelectedConsultant(n)
+    }
+  }, [])
+
   // ── Carrega skills do consultor selecionado ────────────────────────────────
   const loadConsultantSkills = useCallback(async (consultantId: number) => {
     setLoadingSkills(true)

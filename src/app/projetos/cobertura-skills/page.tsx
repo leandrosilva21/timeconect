@@ -1,10 +1,11 @@
 'use client'
 
 import { AppLayout } from '@/components/layout/app-layout'
+import Link from 'next/link'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
-import { UserCheck, FolderOpen, AlertTriangle, CheckCircle2, Sparkles, Plus, AlertOctagon, Users } from 'lucide-react'
+import { UserCheck, FolderOpen, AlertTriangle, CheckCircle2, Sparkles, Plus, AlertOctagon, Users, Flame, Check } from 'lucide-react'
 
 interface ProjectOption {
   id: number
@@ -55,12 +56,38 @@ interface Recommendation {
   skills_match: number
   skills_total: number
   type: 'internal' | 'partner' | 'candidate'
+  pending?: boolean
   gaps: RecommendationGap[]
 }
 interface RecommendationsResponse {
   project: { id: number; name: string }
   required_count?: number
   recommendations: Recommendation[]
+  message?: string
+}
+
+interface MatchRow {
+  consultant_id: number
+  name: string
+  email: string
+  status: 'new' | 'screening' | 'approved' | 'rejected' | 'hired' | 'allocated'
+  is_pending: boolean
+  triage_score: number
+  availability: number
+  match_score: number
+  fit: 'Alto' | 'Médio' | 'Baixo'
+  coverage: { covered: number; total: number; ratio: number }
+  skill_score: number
+  avg_skill_weight: number
+  protheus_years_experience: number | null
+  penalties: string[]
+  missing_critical: boolean
+  gaps: RecommendationGap[]
+}
+interface CandidateMatchResponse {
+  project: { id: number; name: string }
+  required_count?: number
+  matches: MatchRow[]
   message?: string
 }
 
@@ -94,6 +121,9 @@ export default function CoberturaSkillsPage() {
   const [team, setTeam]                         = useState<TeamRecoResponse | null>(null)
   const [loadingTeam, setLoadingTeam]           = useState(false)
   const [allocatingTeam, setAllocatingTeam]     = useState(false)
+  const [triageQueueCount, setTriageQueueCount] = useState(0)
+  const [matchRows, setMatchRows]               = useState<MatchRow[]>([])
+  const [loadingMatch, setLoadingMatch]         = useState(false)
 
   useEffect(() => {
     (async () => {
@@ -193,6 +223,77 @@ export default function CoberturaSkillsPage() {
     }
   }, [selectedProject, team, coverage, loadRecos, loadTeam])
 
+  const loadCandidateMatch = useCallback(async (projectId: number) => {
+    setLoadingMatch(true)
+    try {
+      const r = await api.get<CandidateMatchResponse>(`/projects/${projectId}/candidate-match`)
+      setMatchRows(r.matches ?? [])
+    } catch {
+      setMatchRows([])
+    } finally {
+      setLoadingMatch(false)
+    }
+  }, [])
+
+  const approveCandidate = useCallback(async (m: MatchRow) => {
+    setAllocatingId(m.consultant_id)
+    try {
+      await api.patch(`/candidates/${m.consultant_id}/status`, { status: 'approved' })
+      toast.success(`✓ ${m.name} aprovado — clique em Alocar pra adicionar ao projeto`)
+      // Otimisticamente: marca essa row como não-pending; libera botão Alocar
+      setMatchRows(prev => prev.map(x =>
+        x.consultant_id === m.consultant_id
+          ? { ...x, is_pending: false, status: 'approved' as const }
+          : x
+      ))
+      // Atualiza também triage queue count
+      api.get<{ total: number }>('/candidates/triage-queue?limit=10')
+        .then(r => setTriageQueueCount(r.total ?? 0))
+        .catch(() => {})
+    } catch {
+      toast.error(`Erro ao aprovar ${m.name}`)
+    } finally {
+      setAllocatingId(null)
+    }
+  }, [])
+
+  const allocateCandidate = useCallback(async (m: MatchRow) => {
+    if (selectedProject == null) return
+    if (m.is_pending) {
+      toast.error('Aprove o candidato antes de alocar.')
+      return
+    }
+    const beforeCovered = countCovered(coverage)
+    const totalRequired = coverage?.required_skills.length ?? 0
+    setAllocatingId(m.consultant_id)
+    try {
+      await api.post(`/projects/${selectedProject}/allocate`, {
+        consultant_id: m.consultant_id,
+        score: m.match_score,
+        with_caveat: m.match_score < 0.9,
+        risk_reason: m.match_score < 0.9
+          ? `Candidato · match ${Math.round(m.match_score * 100)}% · ${m.coverage.covered}/${m.coverage.total} skills`
+          : null,
+      })
+      setMatchRows(prev => prev.filter(x => x.consultant_id !== m.consultant_id))
+      const refreshedCov = await api.get<CoverageResponse>(`/projects/${selectedProject}/gaps`)
+      setCoverage(refreshedCov)
+      // Atualiza recommendations/team/triage também
+      loadRecos(selectedProject)
+      loadTeam(selectedProject)
+      loadCandidateMatch(selectedProject)
+      const afterCovered = countCovered(refreshedCov)
+      const tag = totalRequired > 0
+        ? ` · cobertura ${beforeCovered}/${totalRequired} → ${afterCovered}/${totalRequired}`
+        : ''
+      toast.success(`✓ ${m.name} alocado${tag}`)
+    } catch {
+      toast.error(`Erro ao alocar ${m.name}`)
+    } finally {
+      setAllocatingId(null)
+    }
+  }, [selectedProject, coverage, loadRecos, loadTeam, loadCandidateMatch])
+
   const countCovered = (cov: CoverageResponse | null): number =>
     cov?.required_skills.filter(s => s.consultants_covering > 0).length ?? 0
 
@@ -233,16 +334,36 @@ export default function CoberturaSkillsPage() {
   }, [selectedProject, coverage])
 
   useEffect(() => {
+    // Triage queue é independente do projeto selecionado
+    api.get<{ triage_queue: any[]; total: number }>('/candidates/triage-queue?limit=10')
+      .then(r => setTriageQueueCount(r.total ?? 0))
+      .catch(() => setTriageQueueCount(0))
+  }, [])
+
+  // Deep-link: ?project=N seleciona projeto (window.location pra evitar Suspense boundary)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const projectParam = params.get('project')
+    if (projectParam) {
+      const n = Number(projectParam)
+      if (!isNaN(n)) setSelectedProject(n)
+    }
+  }, [])
+
+  useEffect(() => {
     if (selectedProject != null) {
       loadCoverage(selectedProject)
       loadRecos(selectedProject)
       loadTeam(selectedProject)
+      loadCandidateMatch(selectedProject)
     } else {
       setCoverage(null)
       setRecos([])
       setTeam(null)
+      setMatchRows([])
     }
-  }, [selectedProject, loadCoverage, loadRecos, loadTeam])
+  }, [selectedProject, loadCoverage, loadRecos, loadTeam, loadCandidateMatch])
 
   const summary = useMemo(() => {
     if (!coverage) return null
@@ -298,6 +419,35 @@ export default function CoberturaSkillsPage() {
                 POST /api/v1/projects/{coverage.project.id}/required-skills
               </code>.
             </p>
+          </div>
+        )}
+
+        {/* ── Banner: candidatos pré-triagem com potencial ──────────────── */}
+        {selectedProject && triageQueueCount > 0 && (
+          <div className="ds-card ds-card-pad ds-card-highlight-warning"
+               style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div className="flex items-center gap-2">
+              <Flame size={16} style={{ color: 'var(--warning-border)' }} />
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
+                  {triageQueueCount} {triageQueueCount === 1 ? 'candidato com potencial' : 'candidatos com potencial'}
+                </p>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                  Candidatos em triagem com score ≥ 80 — alguns podem caber neste projeto
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/candidatos"
+              style={{
+                fontSize: 12, padding: '6px 12px', borderRadius: 4,
+                background: 'transparent', border: '1px solid var(--warning-border)',
+                color: 'var(--warning)', fontWeight: 600, textDecoration: 'none',
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+              }}
+            >
+              Ver candidatos →
+            </Link>
           </div>
         )}
 
@@ -518,6 +668,165 @@ export default function CoberturaSkillsPage() {
           </div>
         )}
 
+        {/* ── Candidatos para este projeto (auto-match) ─────────────────── */}
+        {selectedProject && (loadingMatch || matchRows.length > 0) && (
+          <div className="ds-card ds-card-pad" style={{ marginTop: 8 }}>
+            <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
+              <Flame size={16} style={{ color: 'var(--warning-border)' }} />
+              <h3 style={{ fontSize: 14, margin: 0, color: 'var(--text)', fontWeight: 600 }}>
+                Candidatos para este projeto
+              </h3>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>
+                {matchRows.length} {matchRows.length === 1 ? 'match' : 'matches'}
+              </span>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
+              Match auto entre candidatos (approved + pending com triage ≥ 80) e as skills exigidas deste projeto
+            </p>
+
+            {loadingMatch && (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Calculando matches…</p>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {matchRows.map(m => {
+                const pct = Math.round(m.match_score * 100)
+                const fitColor = m.fit === 'Alto'
+                  ? { bg: 'var(--success-bg)', fg: 'var(--success)', border: 'var(--success-border)' }
+                  : m.fit === 'Médio'
+                  ? { bg: 'var(--warning-bg)', fg: 'var(--warning)', border: 'var(--warning-border)' }
+                  : { bg: 'var(--danger-bg)', fg: 'var(--danger)', border: 'var(--danger-border)' }
+                const allocating = allocatingId === m.consultant_id
+
+                // Compor "motivo" do match
+                const reasonParts: string[] = []
+                reasonParts.push(`${m.coverage.covered}/${m.coverage.total} skills cobertas`)
+                if (m.protheus_years_experience != null) reasonParts.push(`${m.protheus_years_experience} anos Protheus`)
+                reasonParts.push(`disp ${Math.round(m.availability * 100)}%`)
+                reasonParts.push(`triage ${Math.round(m.triage_score)}`)
+                if (m.penalties.includes('critical-skill-missing')) reasonParts.push('⚠ skill crítica ausente')
+                if (m.penalties.includes('low-availability')) reasonParts.push('⚠ disp baixa')
+                const reason = reasonParts.join(' · ')
+
+                return (
+                  <div
+                    key={m.consultant_id}
+                    style={{
+                      borderLeft: `3px solid ${fitColor.border}`,
+                      borderRadius: 4,
+                      padding: '12px 14px',
+                      background: 'transparent',
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <span className="text-sm" style={{ color: 'var(--text)', fontWeight: 600 }}>{m.name}</span>
+                        <span style={{
+                          fontSize: 10, color: 'var(--text-muted)', border: '1px solid var(--border)',
+                          padding: '1px 6px', borderRadius: 3, fontWeight: 500,
+                          textTransform: 'uppercase', letterSpacing: '0.04em',
+                        }}>
+                          Candidato
+                        </span>
+                        {m.is_pending && (
+                          <span style={{
+                            fontSize: 10, color: 'var(--warning)',
+                            background: 'var(--warning-bg)', border: '1px solid var(--warning-border)',
+                            padding: '1px 6px', borderRadius: 3, fontWeight: 600,
+                            textTransform: 'uppercase', letterSpacing: '0.04em',
+                          }} title={`Status: ${m.status} · ainda não aprovado`}>
+                            ⏳ {m.status}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span style={{
+                          fontSize: 14, fontWeight: 700, color: 'var(--text)',
+                          minWidth: 44, textAlign: 'right',
+                        }}>
+                          {pct}%
+                        </span>
+                        <span style={{
+                          fontSize: 11, fontWeight: 600,
+                          padding: '4px 10px', borderRadius: 4,
+                          background: fitColor.bg, color: fitColor.fg,
+                          border: `1px solid ${fitColor.border}`,
+                        }}>
+                          {m.fit}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, fontStyle: 'italic' }}>
+                      ↪ {reason}
+                    </p>
+
+                    {m.gaps.length > 0 && (
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                        <span style={{ fontWeight: 600 }}>Gaps:</span>{' '}
+                        {m.gaps.slice(0, 4).map((g, i) => (
+                          <span key={`${m.consultant_id}-g-${g.skill.id}-${i}`}>
+                            {i > 0 && ', '}
+                            {g.skill.name} ({g.type === 'missing' ? 'não possui' : `${g.actual_level} → ${g.required_level}`})
+                          </span>
+                        ))}
+                        {m.gaps.length > 4 && ` e mais ${m.gaps.length - 4}`}
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 10 }}>
+                      {m.is_pending ? (
+                        <button
+                          type="button"
+                          disabled={allocating}
+                          onClick={() => approveCandidate(m)}
+                          style={{
+                            fontSize: 12, padding: '6px 14px', borderRadius: 4,
+                            background: 'var(--success-bg)', border: '1px solid var(--success-border)',
+                            color: 'var(--success)', fontWeight: 600, cursor: 'pointer',
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                            opacity: allocating ? 0.6 : 1,
+                          }}
+                          title="Move pra coluna Aprovado antes de alocar (pipeline com revisão)"
+                        >
+                          <Check size={12} /> Aprovar
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="ds-btn-primary"
+                          disabled={allocating}
+                          onClick={() => allocateCandidate(m)}
+                          style={{ fontSize: 12, padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        >
+                          <Plus size={12} />
+                          Alocar
+                        </button>
+                      )}
+                      <Link
+                        href={`/perfil-skills/${m.consultant_id}`}
+                        style={{
+                          fontSize: 12, padding: '6px 12px', borderRadius: 4,
+                          background: 'transparent', border: '1px solid var(--border)',
+                          color: 'var(--text)', fontWeight: 500, textDecoration: 'none',
+                          display: 'inline-flex', alignItems: 'center', gap: 5,
+                        }}
+                      >
+                        Ver perfil
+                      </Link>
+                    </div>
+                  </div>
+                )
+              })}
+              {!loadingMatch && matchRows.length === 0 && (
+                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Nenhum candidato bate com os critérios deste projeto (precisa triage ≥ 50; pending precisa ≥ 80).
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ── Sugestões de Alocação ─────────────────────────────────────── */}
         {selectedProject && (
           <div className="ds-card ds-card-pad" style={{ marginTop: 8 }}>
@@ -589,6 +898,17 @@ export default function CoberturaSkillsPage() {
                             }}>
                               {typeBadge}
                             </span>
+                            {r.pending && (
+                              <span style={{
+                                fontSize: 10, color: 'var(--warning)',
+                                background: 'var(--warning-bg)',
+                                border: '1px solid var(--warning-border)',
+                                padding: '1px 6px', borderRadius: 3, fontWeight: 600,
+                                textTransform: 'uppercase', letterSpacing: '0.04em',
+                              }} title="Em triagem — score alto mas ainda não aprovado">
+                                ⏳ pendente
+                              </span>
+                            )}
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
                             {r.skills_match}/{r.skills_total} skills cobertas
