@@ -818,6 +818,7 @@ interface ProjectEditForm {
   timesheet_retroactive_limit_days: string
   allow_manual_timesheets: boolean; allow_negative_balance: boolean
   movidesk_integration_enabled: boolean
+  extrato_visivel_cliente: boolean
   coordinator_ids: number[]; consultant_ids: number[]; consultant_group_ids: number[]
   kanban_coordinator_override_id: string
 }
@@ -880,6 +881,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
     allow_manual_timesheets:         d.allow_manual_timesheets ?? true,
     allow_negative_balance:          d.allow_negative_balance ?? false,
     movidesk_integration_enabled:    d.movidesk_integration_enabled ?? false,
+    extrato_visivel_cliente:         (d as any).extrato_visivel_cliente ?? true,
     coordinator_ids:                 (d.coordinators ?? d.approvers ?? []).map((c: any) => c.id),
     consultant_ids:                  (d.consultants ?? []).map((c: any) => c.id),
     consultant_group_ids:            (d.consultant_groups ?? []).map((g: any) => g.id),
@@ -1045,6 +1047,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
         allow_manual_timesheets: form.allow_manual_timesheets,
         allow_negative_balance:  form.allow_negative_balance,
         movidesk_integration_enabled: form.movidesk_integration_enabled,
+        extrato_visivel_cliente: form.extrato_visivel_cliente,
         cobra_despesa_cliente:   form.cobra_despesa_cliente,
         observacoes_contrato: form.observacoes_contrato || null,
         condicao_pagamento:   form.condicao_pagamento || null,
@@ -1511,6 +1514,11 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 checked={form.movidesk_integration_enabled}
                 onChange={v => setForm(p => ({ ...p, movidesk_integration_enabled: v }))}
                 label="Receber integração Movidesk (apontamentos importados deste cliente caem neste projeto)"
+              />
+              <Toggle2
+                checked={form.extrato_visivel_cliente}
+                onChange={v => setForm(p => ({ ...p, extrato_visivel_cliente: v }))}
+                label="Cliente vê o Extrato (Situação do Contrato mês a mês) no perfil dele"
               />
 
               {/* Override de Coordenador (sustentação) — só admin */}
