@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { useActivityAportes } from '@/hooks/use-activity-aportes'
 import { useApiQuery } from '@/hooks/use-query'
 import { useProjectStages } from '@/hooks/use-project-stages'
+import { cronogramaPoolHours } from '@/lib/cronograma-pool'
 
 interface Props {
   deliveryId: number
@@ -19,6 +20,7 @@ interface Props {
 
 interface ProjectBalance {
   sold_hours?: number | string | null
+  coordination_hours?: number | string | null
 }
 
 function num(v: unknown): number {
@@ -62,11 +64,11 @@ export function ActivityAporteDialog({
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
 
-  // Saldo do projeto = sold − SUM(deliveries.hours_planned across stages).
+  // Saldo do projeto = pool liberado à gestão − SUM(deliveries.hours_planned across stages).
   // Como o frontend ainda não tem essa SUM direto, usamos a soma das stages (aproximação razoável; backend é authoritative).
-  const sold = num(project?.sold_hours)
+  const pool = cronogramaPoolHours(project)
   const allocated = useMemo(() => stages.reduce((s, st) => s + num(st.hours_planned), 0), [stages])
-  const remaining = sold - allocated
+  const remaining = pool - allocated
   const aporteValue = Number(hours)
   const isValid = Number.isFinite(aporteValue) && aporteValue !== 0
   const projectedRemaining = isValid ? remaining - aporteValue : remaining

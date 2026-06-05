@@ -27,6 +27,7 @@ export interface ScheduleResponse {
     id: number
     name: string
     sold_hours: number
+    coordination_hours?: number | string | null
     start_date: string | null
     expected_end_date: string | null
     /** Fase 7: calendário operacional flexível (sábado/feriado como dias úteis). */

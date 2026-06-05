@@ -9,6 +9,7 @@ import {
   Layers, CheckSquare, Play, Lock, UserCheck, CalendarClock,
 } from 'lucide-react'
 import { useProjectSchedule } from '@/hooks/use-project-schedule'
+import { cronogramaPoolHours } from '@/lib/cronograma-pool'
 import { useAuth } from '@/hooks/use-auth'
 import { useExecutiveMode } from '@/hooks/use-executive-mode'
 import { KpiCard } from '@/components/ui/kpi-card'
@@ -267,7 +268,7 @@ export default function CronogramaPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {project && (
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              Saldo do projeto: <strong style={{ color: 'var(--text)' }}>{project.sold_hours}h</strong>
+              Liberado à gestão: <strong style={{ color: 'var(--text)' }}>{cronogramaPoolHours(project)}h</strong>
             </span>
           )}
           <button
