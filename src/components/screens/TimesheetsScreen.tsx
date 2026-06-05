@@ -11,7 +11,7 @@ import {
   Clock, RefreshCw, FileSpreadsheet, Plus, Pencil,
   Trash2, X, Globe, Webhook, MoreVertical, Eye, Search, ChevronDown,
   Paperclip, Calendar, Building2, FolderOpen, Ticket, Hash,
-  FileText, CheckCircle, User, CalendarDays, ChevronLeft, ChevronRight, DollarSign, TrendingUp, RotateCcw, AlertTriangle,
+  FileText, CheckCircle, User, CalendarDays, ChevronLeft, ChevronRight, DollarSign, TrendingUp, RotateCcw, AlertTriangle, SlidersHorizontal,
 } from 'lucide-react'
 import { ConfirmDeleteModal } from '@/components/ui/confirm-delete-modal'
 import { TimesheetViewModal } from '@/components/ui/timesheet-view-modal'
@@ -30,6 +30,7 @@ import {
   Badge, Button, Select, TextInput, Pagination,
   EmptyState, SkeletonTable,
 } from '@/components/ds'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -435,6 +436,109 @@ function ExtraPctModal({ ids, initialClientPct, initialConsultantPct, isBillable
   )
 }
 
+// ─── Modal: ajuste em massa de Cliente/Projeto ───────────────────────────────
+// Reatribui cliente+projeto dos apontamentos selecionados (incl. APROVADOS — o
+// endpoint bulk-update-project-customer não checa status). Cores via tokens DS.
+function BulkProjectCustomerModal({ ids, customers, approvedCount, onClose, onSaved }: {
+  ids: number[]
+  customers: SelectOption[]
+  approvedCount: number
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [customerId, setCustomerId] = useState('')
+  const [projectId, setProjectId]   = useState('')
+  const [projects, setProjects]     = useState<SelectOption[]>([])
+  const [loadingProjects, setLoadingProjects] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  // Projetos do cliente escolhido (mesmo endpoint minimal usado nos filtros).
+  useEffect(() => {
+    setProjectId('')
+    setProjects([])
+    if (!customerId) return
+    setLoadingProjects(true)
+    const items = (r: any) => Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
+    api.get<any>(`/projects?minimal=true&pageSize=2000&customer_id=${customerId}`)
+      .then(r => setProjects(items(r).map((p: any) => ({ id: p.id, name: p.code ? `${p.code} — ${p.name}` : p.name }))))
+      .catch(() => setProjects([]))
+      .finally(() => setLoadingProjects(false))
+  }, [customerId])
+
+  const save = async () => {
+    if (!customerId) { toast.error('Selecione o cliente'); return }
+    if (!projectId)  { toast.error('Selecione o projeto'); return }
+    setSaving(true)
+    try {
+      await api.put('/timesheets/bulk-update-project-customer', {
+        ids,
+        customer_id: Number(customerId),
+        project_id:  Number(projectId),
+      })
+      toast.success(`Cliente/projeto atualizado em ${ids.length} apontamento${ids.length > 1 ? 's' : ''}`)
+      onSaved()
+      onClose()
+    } catch {
+      toast.error('Erro ao atualizar cliente/projeto')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative rounded-2xl p-6 w-full max-w-md mx-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+            Alterar Cliente/Projeto — {ids.length} apontamento{ids.length > 1 ? 's' : ''}
+          </h3>
+          <button onClick={onClose} className="p-1 rounded-lg transition-colors hover:opacity-70" style={{ color: 'var(--text-muted)' }}>
+            <X size={14} />
+          </button>
+        </div>
+
+        {approvedCount > 0 && (
+          <p className="text-[11px] mb-3" style={{ color: 'var(--warning)' }}>
+            ⚠ {approvedCount} aprovado{approvedCount > 1 ? 's' : ''} na seleção — também {approvedCount > 1 ? 'serão alterados' : 'será alterado'}.
+          </p>
+        )}
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs" style={{ color: 'var(--text-muted)' }}>Cliente</label>
+            <div className="mt-1">
+              <SearchSelect value={customerId} onChange={setCustomerId} options={customers} placeholder="Selecionar cliente..." />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs" style={{ color: 'var(--text-muted)' }}>Projeto</label>
+            <div className="mt-1">
+              <SearchSelect
+                value={projectId}
+                onChange={setProjectId}
+                options={projects}
+                placeholder={!customerId ? 'Escolha o cliente primeiro' : loadingProjects ? 'Carregando…' : 'Selecionar projeto...'}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-5 justify-end">
+          <button onClick={onClose}
+            className="px-3 py-2 rounded-xl text-xs transition-colors"
+            style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+            Cancelar
+          </button>
+          <button onClick={save} disabled={saving || !customerId || !projectId}
+            className="px-4 py-2 rounded-xl text-xs font-semibold disabled:opacity-40 transition-all"
+            style={{ background: 'var(--brand-primary)', color: 'var(--primary-fg)' }}>
+            {saving ? 'Salvando...' : 'Aplicar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Row actions ─────────────────────────────────────────────────────────────
 
 interface RowMenuItem { label: string; icon: React.ReactNode; onClick: () => void; danger?: boolean }
@@ -682,7 +786,7 @@ function toHHMM(mins: number): string {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
-function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'sustentacao'; embedded?: boolean; triagemPadrao?: boolean } = {}) {
+function TimesheetsPageContent({ scope, embedded, triagemPadrao, leadOptions }: { scope?: 'sustentacao' | 'investimento'; embedded?: boolean; triagemPadrao?: boolean; leadOptions?: { id: number; name: string }[] } = {}) {
   // Filtro de dimensão pra modo Triagem: '' = todos (OR), ou 'user'|'customer'|'project'
   const [triagemField, setTriagemField] = useState<string>('')
   const { user } = useAuth()
@@ -713,7 +817,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
       origins:          [] as string[],
       serviceTypeIds:   [] as string[],
       contractTypeIds:  [] as string[],
-      categoriaServico: '' as '' | 'sustentacao' | 'projeto' | 'bizify' | 'investimento',
+      categoriaServico: (scope === 'investimento' ? 'investimento' : '') as '' | 'sustentacao' | 'projeto' | 'bizify' | 'investimento',
       customerIds:      spCustomerId ? [spCustomerId] : [] as string[],
       coordinatorIds:   [] as string[],
       executiveIds:     [] as string[],
@@ -764,10 +868,13 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
   const [coordinators, setCoordinators] = useState<SelectOption[]>([])
   const [executives, setExecutives]     = useState<SelectOption[]>([])
   const [consultants, setConsultants]   = useState<SelectOption[]>([])
+  // Mobile: painel de filtros vira Drawer (off-canvas) acionado pelo botão "Filtros".
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [viewItem, setViewItem]       = useState<Timesheet | null>(null)
   const [viewLoading, setViewLoading] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [extraPctModalData, setExtraPctModalData] = useState<{ ids: number[]; ts?: Timesheet } | null>(null)
+  const [bulkPcOpen, setBulkPcOpen] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
   const [reprocessResult, setReprocessResult] = useState<string | null>(null)
   const [reverseRejectionModal, setReverseRejectionModal] = useState<{ open: boolean; tsId?: number }>({ open: false })
@@ -776,6 +883,15 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
   const [logsModalTsId, setLogsModalTsId] = useState<number | null>(null)
   // Hover preview do apontamento (tooltip fixo no canto superior direito)
   const hover = useTimesheetHover()
+  // Em telas de toque o hover do card é desligado: no iOS o 1º toque viraria "hover"
+  // (mostra tooltip) e suprimiria o clique, impedindo o modal de abrir.
+  const [isTouch, setIsTouch] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(pointer: coarse)')
+    const s = () => setIsTouch(mq.matches); s()
+    mq.addEventListener('change', s)
+    return () => mq.removeEventListener('change', s)
+  }, [])
   const [conflictItem, setConflictItem]   = useState<ConflictTimesheet | null>(null)
 
   const handleReprocessMovidesk = async (ids?: number[]) => {
@@ -880,6 +996,8 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
   // Sem cliente selecionado: traz todos. Com 1+ clientes: traz só os daquele(s) cliente(s).
   useEffect(() => {
     if (isCliente) return
+    // Escopo investimento: o filtro de projeto vira filtro de LEAD (opções = leads).
+    if (scope === 'investimento' && leadOptions) { setProjectsList(leadOptions); return }
     const items = (r: any) => Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
     const params = new URLSearchParams({ minimal: 'true', pageSize: '2000' })
     if (customerIds.length === 1) {
@@ -897,7 +1015,29 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
         setProjectsList(list)
       })
       .catch(() => {})
-  }, [isCliente, customerIds])
+  }, [isCliente, customerIds, scope, leadOptions])
+
+  // Opções do filtro de projeto em árvore: filho aparece sob o pai com seta ↳ (azul).
+  const projectTreeOptions = useMemo(() => {
+    const list = projectsList as Array<{ id: number; name: string; parent_project_id?: number | null }>
+    const ids = new Set(list.map(p => p.id))
+    const byParent = new Map<number | null, typeof list>()
+    for (const p of list) {
+      const key = p.parent_project_id && ids.has(p.parent_project_id) ? p.parent_project_id : null
+      const arr = byParent.get(key) ?? []
+      arr.push(p); byParent.set(key, arr)
+    }
+    const sortName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'pt-BR')
+    const out: { id: number; name: string; depth: number }[] = []
+    const walk = (parentId: number | null, depth: number) => {
+      for (const p of (byParent.get(parentId) ?? []).sort(sortName)) {
+        out.push({ id: p.id, name: p.name, depth })
+        walk(p.id, depth + 1)
+      }
+    }
+    walk(null, 0)
+    return out
+  }, [projectsList])
 
   // Limpa seleção de projetos quando o cliente muda (evita IDs órfãos).
   useEffect(() => {
@@ -914,7 +1054,8 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
     origins.forEach(v => p.append('origin[]', v))
     serviceTypeIds.forEach(v => p.append('service_type_id[]', v))
     contractTypeIds.forEach(v => p.append('contract_type_id[]', v))
-    if (categoriaServico) p.set('categoria_servico', categoriaServico)
+    if (scope === 'investimento') p.set('categoria_servico', 'investimento')
+    else if (categoriaServico) p.set('categoria_servico', categoriaServico)
     if (isCliente && user?.customer_id) p.set('customer_id', String(user.customer_id))
     else customerIds.forEach(v => p.append('customer_id[]', v))
     coordinatorIds.forEach(v => p.append('coordinator_id[]', v))
@@ -933,7 +1074,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
     if (projectId)     p.set('project_id', projectId)
     projectIds.forEach(v => p.append('project_id[]', v))
     if (sortField)     p.set('order', sortDir === 'desc' ? `-${sortField}` : sortField)
-    if (scope)         p.set('scope', scope)
+    if (scope === 'sustentacao') p.set('scope', scope)
     if (triagemPadrao) p.set('triagem_padrao', '1')
     if (triagemPadrao && triagemField) p.set('triagem_field', triagemField)
     return p.toString()
@@ -1029,10 +1170,14 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
     () => (data?.items ?? []).filter(ts => selectedIds.has(ts.id)).reduce((sum, ts) => sum + ts.effort_minutes, 0),
     [data?.items, selectedIds]
   )
+  const selectedApprovedCount = useMemo(
+    () => (data?.items ?? []).filter(ts => selectedIds.has(ts.id) && ts.status === 'approved').length,
+    [data?.items, selectedIds]
+  )
 
   return (
-    <div>
-      <div className={embedded ? '' : 'max-w-7xl mx-auto'}>
+    <div className="w-full max-w-full overflow-x-hidden">
+      <div className={embedded ? 'min-w-0' : 'max-w-7xl mx-auto min-w-0'}>
         <PageHeader
           icon={Clock}
           title="Apontamentos"
@@ -1049,7 +1194,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
                 </Button>
               )}
               {!isCliente && (
-                <Button variant="primary" size="sm" icon={Plus} onClick={() => setNewModalOpen(true)}>Novo</Button>
+                <Button variant="primary" size="sm" icon={Plus} onClick={() => setNewModalOpen(true)} className="w-full sm:w-auto">Novo</Button>
               )}
             </>
           }
@@ -1064,14 +1209,39 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
           </div>
         )}
 
-        {/* Filters */}
+        {/* Botão "Filtros" — só mobile (abre o Drawer) */}
+        <div className="md:hidden mb-3">
+          <button
+            onClick={() => setFiltersOpen(true)}
+            className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl text-sm font-medium"
+            style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)', color: 'var(--text)' }}
+          >
+            <SlidersHorizontal size={15} /> Filtros{hasFilters ? ' • ativos' : ''}
+          </button>
+        </div>
+
+        {/* Backdrop do Drawer (mobile) */}
+        {filtersOpen && (
+          <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={() => setFiltersOpen(false)} />
+        )}
+
+        {/* Filters — inline no desktop/tablet, Drawer off-canvas no mobile */}
         <div
-          className="p-4 rounded-2xl mb-4 space-y-3"
-          style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}
+          className={`p-4 mb-4 space-y-3 ${filtersOpen ? 'block' : 'hidden'} md:block
+            fixed inset-y-0 left-0 z-50 w-[86%] max-w-xs overflow-y-auto rounded-none shadow-2xl
+            md:static md:z-auto md:w-auto md:max-w-none md:overflow-visible md:rounded-2xl md:shadow-none`}
+          style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)', WebkitOverflowScrolling: 'touch' }}
         >
+          {/* Cabeçalho do Drawer (mobile) */}
+          <div className="flex items-center justify-between md:hidden">
+            <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Filtros</span>
+            <button onClick={() => setFiltersOpen(false)} className="p-1 rounded-lg" style={{ color: 'var(--text-muted)' }} aria-label="Fechar filtros">
+              <X size={16} />
+            </button>
+          </div>
           {/* Chips de categoria de serviço */}
           {/* Linha 1: selects */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
             {isCliente ? (
               // Filtros para cliente: apenas Projeto
               <>
@@ -1100,8 +1270,8 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
                 <MultiSelect
                   value={projectIds}
                   onChange={v => { setProjectIds(v); resetPage() }}
-                  options={projectsList}
-                  placeholder="Todos os projetos"
+                  options={projectTreeOptions}
+                  placeholder={scope === 'investimento' ? 'Todos os leads' : 'Todos os projetos'}
                 />
                 {!triagemPadrao && coordinators.length > 0 && (
                   <MultiSelect
@@ -1180,7 +1350,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
                 onChange={(f, t) => { setStartDate(f); setEndDate(t); setRefMonth(null); setRefYear(null); resetPage() }}
               />
             )}
-            {!isCliente && ([
+            {!isCliente && scope !== 'investimento' && ([
               { id: 'sustentacao',  label: 'Sustentação', color: '#f59e0b',            bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)' },
               { id: 'projeto',      label: 'Projeto',     color: '#00F5FF',            bg: 'rgba(0,245,255,0.12)',   border: 'rgba(0,245,255,0.35)' },
               { id: 'bizify',       label: 'Bizify',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
@@ -1240,7 +1410,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
 
         {/* Pills de tipo de contrato — apenas para cliente */}
         {isCliente && clienteContractTypes.length > 0 && (
-          <div className="flex items-center gap-1 p-1 rounded-xl w-fit mb-4"
+          <div className="flex flex-wrap items-center gap-1 p-1 rounded-xl max-w-full mb-4"
             style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
             <button
               onClick={() => { setContractTypeIds([]); resetPage() }}
@@ -1266,7 +1436,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
         )}
 
         {/* Status pills — oculto para clientes e em modo Triagem */}
-        {!isCliente && !triagemPadrao && <div className="flex items-center gap-1 p-1 rounded-xl w-fit mb-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+        {!isCliente && !triagemPadrao && <div className="flex flex-wrap items-center gap-1 p-1 rounded-xl max-w-full mb-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
           {STATUS_PILLS.map(s => (
             <button
               key={s.value}
@@ -1284,7 +1454,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
         </div>}
 
         {/* Pills Triagem: filtra por dimensão padrão (user/customer/project) */}
-        {triagemPadrao && <div className="flex items-center gap-1 p-1 rounded-xl w-fit mb-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+        {triagemPadrao && <div className="flex flex-wrap items-center gap-1 p-1 rounded-xl max-w-full mb-6" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
           {[
             { value: '',         label: 'Todos' },
             { value: 'user',     label: 'Usuário' },
@@ -1369,6 +1539,9 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
         ) : error ? (
           <div className="py-10 text-center text-sm" style={{ color: 'var(--brand-danger)' }}>{error}</div>
         ) : (
+          <>
+          {/* Desktop: tabela (inalterada) */}
+          <div className="hidden md:block">
           <Table>
             <Thead>
               <tr>
@@ -1487,19 +1660,11 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
                             {ts.status === 'released' && <Badge variant="approved">Liberado</Badge>}
                           </>
                         )
-                        : (() => {
-                            const hasReason = ts.rejection_reason && (ts.status === 'rejected' || ts.status === 'adjustment_requested')
-                            const badge = <Badge variant={ts.status}>{ts.status_display ?? ts.status}</Badge>
-                            if (!hasReason) return badge
-                            return (
-                              <span className="relative group/reason inline-flex">
-                                {badge}
-                                <span className="pointer-events-none absolute bottom-full left-0 mb-1.5 z-50 hidden group-hover/reason:block bg-zinc-800 border border-zinc-700 text-zinc-200 text-[10px] rounded px-2 py-1 shadow-lg whitespace-nowrap max-w-[240px] truncate">
-                                  {ts.rejection_reason}
-                                </span>
-                              </span>
-                            )
-                          })()
+                        : (
+                            <ReasonTooltip status={ts.status} reason={ts.rejection_reason}>
+                              <Badge variant={ts.status}>{ts.status_display ?? ts.status}</Badge>
+                            </ReasonTooltip>
+                          )
                       }
                       {ts.is_paid && <Badge variant="success">Pago</Badge>}
                     </span>
@@ -1563,6 +1728,9 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
                     >
                       {ts.project?.name ?? `Projeto #${ts.project_id}`}
                     </button>
+                    {(ts as any).real_project?.name && (
+                      <span className="block text-[10px]" style={{ color: 'var(--text-light)' }}>Real: {(ts as any).real_project.name}</span>
+                    )}
                   </Td>
                   <Td muted className="hidden lg:table-cell truncate max-w-[160px]">
                     {ts.ticket_subject ?? '—'}
@@ -1594,6 +1762,63 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
               ))}
             </Tbody>
           </Table>
+          </div>
+
+          {/* Mobile: cards compactos — toca p/ abrir detalhe (igual desktop), muda de cor ao tocar */}
+          <div className="md:hidden space-y-2">
+            {(data?.items.length ?? 0) === 0 ? (
+              <EmptyState icon={Clock} title="Nenhum apontamento encontrado" description="Tente ajustar os filtros ou criar um novo apontamento." />
+            ) : data?.items.map(ts => {
+              const cliente = ts.customer?.name ?? ts.project?.customer?.name ?? null
+              const projeto = ts.project?.name ?? `Projeto #${ts.project_id}`
+              return (
+                <div key={ts.id} onClick={() => openView(ts)} {...(isTouch ? {} : hover.bind(ts))}
+                  className="rounded-lg border p-2.5 cursor-pointer transition-colors bg-[var(--brand-surface)] active:bg-[var(--surface-hover)] md:hover:bg-[var(--surface-hover)]"
+                  style={{ borderColor: 'var(--brand-border)' }}>
+                  {/* Linha 1: [checkbox] colaborador/projeto + menu */}
+                  <div className="flex items-center gap-2">
+                    {(isAdmin || isCoordenador) && (
+                      <input type="checkbox" className="w-3.5 h-3.5 accent-cyan-400 shrink-0 cursor-pointer"
+                        checked={selectedIds.has(ts.id)} onClick={e => e.stopPropagation()}
+                        onChange={e => setSelectedIds(prev => { const next = new Set(prev); if (e.target.checked) next.add(ts.id); else next.delete(ts.id); return next })} />
+                    )}
+                    <span className="font-medium text-sm truncate flex-1 min-w-0" style={{ color: 'var(--brand-text)' }}>
+                      {(isAdmin || isCoordenador) ? (ts.user?.name ?? '—') : projeto}
+                    </span>
+                    <div onClick={e => e.stopPropagation()} className="shrink-0">
+                      <RowActions
+                        id={ts.id}
+                        onView={() => openView(ts)}
+                        onDeleted={refetch}
+                        viewOnly={isCliente}
+                        onShowLogs={(isAdmin || isCoordenador) ? () => setLogsModalTsId(ts.id) : undefined}
+                        onShowConflict={ts.status === 'conflicted' ? () => setConflictItem(ts as unknown as ConflictTimesheet) : undefined}
+                        onExtraPct={(isAdmin || isCoordenador) ? () => setExtraPctModalData({ ids: [ts.id], ts }) : undefined}
+                        onRelease={(isAdmin || isCoordenador) && ts.is_internal_action && ts.status === 'internal' ? () => handleRelease(ts.id) : undefined}
+                        onReverseApproval={(isAdmin || isCoordenador) && ts.status === 'approved' ? () => handleReverseApproval(ts.id) : undefined}
+                        onReverseRelease={(isAdmin || isCoordenador) && ts.is_internal_action && ts.status === 'released' ? () => handleReverseRelease(ts.id) : undefined}
+                        onReverseRejection={(isAdmin || isCoordenador) && (ts.status === 'rejected' || ts.status === 'adjustment_requested') ? () => { setReverseRejectionModal({ open: true, tsId: ts.id }); setReverseRejectionReason('') } : undefined}
+                      />
+                    </div>
+                  </div>
+                  {/* Linha 2: status */}
+                  <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                    {ts.is_internal_action
+                      ? (<><Badge variant="internal">Ação Interna</Badge>{ts.status === 'released' && <Badge variant="approved">Liberado</Badge>}</>)
+                      : (<ReasonTooltip status={ts.status} reason={ts.rejection_reason}><Badge variant={ts.status}>{ts.status_display ?? ts.status}</Badge></ReasonTooltip>)}
+                    {ts.is_paid && <Badge variant="success">Pago</Badge>}
+                  </div>
+                  {/* Linha 3: resumo (data · tempo · cliente · projeto) */}
+                  <div className="mt-1.5 text-[11px] truncate" style={{ color: 'var(--brand-subtle)' }}>
+                    {formatDate(ts.date)} · <span style={{ color: 'var(--brand-primary)' }}>{formatMinutes(ts.effort_minutes)}</span>
+                    {(isAdmin || isCoordenador) && cliente ? ` · ${cliente}` : ''}
+                    {(isAdmin || isCoordenador) ? ` · ${projeto}` : ''}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          </>
         )}
 
         {/* Pagination */}
@@ -1649,6 +1874,13 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
             <span style={{ color: 'var(--brand-primary)', fontWeight: 600 }}>{formatMinutes(selectedMinutes)}</span>
           </span>
           <button
+            onClick={() => setBulkPcOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all"
+            style={{ background: '#3f3f46', color: '#e4e4e7' }}
+          >
+            <FolderOpen size={11} /> Cliente/Projeto
+          </button>
+          <button
             onClick={() => setExtraPctModalData({ ids: Array.from(selectedIds) })}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all"
             style={{ background: 'var(--brand-primary)', color: 'var(--primary-fg)' }}
@@ -1670,6 +1902,17 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
             <X size={14} className="text-zinc-400" />
           </button>
         </div>
+      )}
+
+      {/* Bulk Cliente/Projeto Modal */}
+      {bulkPcOpen && (
+        <BulkProjectCustomerModal
+          ids={Array.from(selectedIds)}
+          customers={customers}
+          approvedCount={selectedApprovedCount}
+          onClose={() => setBulkPcOpen(false)}
+          onSaved={() => { refetch(); setSelectedIds(new Set()) }}
+        />
       )}
 
       {/* ExtraPct Modal */}
@@ -1740,16 +1983,18 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao }: { scope?: 'su
 }
 
 export interface TimesheetsScreenProps {
-  scope?: 'sustentacao'
+  scope?: 'sustentacao' | 'investimento'
   embedded?: boolean
   /** Filtra timesheets atribuídos ao Usuário/Cliente/Projeto Padrão Movidesk (OR). Usado pela rotina Triagem. */
   triagemPadrao?: boolean
+  /** No escopo investimento, transforma o filtro de Projeto em filtro de Lead. */
+  leadOptions?: { id: number; name: string }[]
 }
 
 export function TimesheetsScreen(props: TimesheetsScreenProps = {}) {
   return (
     <Suspense>
-      <TimesheetsPageContent scope={props.scope} embedded={props.embedded} triagemPadrao={props.triagemPadrao} />
+      <TimesheetsPageContent scope={props.scope} embedded={props.embedded} triagemPadrao={props.triagemPadrao} leadOptions={props.leadOptions} />
     </Suspense>
   )
 }

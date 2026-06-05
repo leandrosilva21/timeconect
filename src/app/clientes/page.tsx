@@ -62,7 +62,26 @@ export default function ClientesPage() {
   const [filterStatus, setFilterStatus] = useState<'todos' | 'ativo' | 'inativo'>('todos')
   const [executives, setExecutives] = useState<Executive[]>([])
   const [modal, setModal] = useState<{ open: boolean; item?: CustomerFull }>({ open: false })
-  const [form, setForm] = useState({ name: '', company_name: '', cgc: '', code_prefix: '', active: true, executive_id: '' })
+  const [form, setForm] = useState({ name: '', company_name: '', cgc: '', code_prefix: '', active: true, executive_id: '', emails_administrativos: [] as string[], secondary_cgcs: [] as string[] })
+  const [novoCgcCli, setNovoCgcCli] = useState('')
+  const addCgcCli = () => {
+    const c = novoCgcCli.replace(/\D/g, '')
+    if (!c) return
+    if (![11, 14].includes(c.length)) { toast.error('CNPJ/CPF deve ter 14 ou 11 dígitos'); return }
+    setForm(f => (f.secondary_cgcs.includes(c) || c === f.cgc.replace(/\D/g, '')) ? f : { ...f, secondary_cgcs: [...f.secondary_cgcs, c] })
+    setNovoCgcCli('')
+  }
+  const removeCgcCli = (c: string) => setForm(f => ({ ...f, secondary_cgcs: f.secondary_cgcs.filter(x => x !== c) }))
+  const fmtCnpjBR = (c: string) => c.length === 14 ? c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : c.length === 11 ? c.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4') : c
+  const [novoEmailCli, setNovoEmailCli] = useState('')
+  const addEmailCli = () => {
+    const e = novoEmailCli.trim().toLowerCase()
+    if (!e) return
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) { toast.error('E-mail inválido'); return }
+    setForm(f => f.emails_administrativos.includes(e) ? f : { ...f, emails_administrativos: [...f.emails_administrativos, e] })
+    setNovoEmailCli('')
+  }
+  const removeEmailCli = (e: string) => setForm(f => ({ ...f, emails_administrativos: f.emails_administrativos.filter(x => x !== e) }))
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<number | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id?: number }>({ open: false })
@@ -109,7 +128,8 @@ export default function ClientesPage() {
   }
 
   const openCreate = () => {
-    setForm({ name: '', company_name: '', cgc: '', code_prefix: '', active: true, executive_id: '' })
+    setForm({ name: '', company_name: '', cgc: '', code_prefix: '', active: true, executive_id: '', emails_administrativos: [], secondary_cgcs: [] })
+    setNovoEmailCli('')
     setModal({ open: true })
   }
 
@@ -121,7 +141,10 @@ export default function ClientesPage() {
       code_prefix: item.code_prefix ?? '',
       active: item.active,
       executive_id: item.executive_id ? String(item.executive_id) : '',
+      emails_administrativos: (item as CustomerFull & { emails_administrativos?: string[] }).emails_administrativos ?? [],
+      secondary_cgcs: item.secondary_cgcs ?? [],
     })
+    setNovoEmailCli('')
     setModal({ open: true, item })
   }
 
@@ -267,6 +290,29 @@ export default function ClientesPage() {
                   />
                 </div>
                 <div>
+                  <Label className="text-xs text-zinc-400">CNPJ(s) secundário(s) de faturamento</Label>
+                  {form.secondary_cgcs.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {form.secondary_cgcs.map(c => (
+                        <span key={c} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium font-mono"
+                          style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--primary)' }}>
+                          {fmtCnpjBR(c)}
+                          <button onClick={() => removeCgcCli(c)} className="leading-none" style={{ color: 'var(--primary)' }}>×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2 mt-1.5">
+                    <Input value={novoCgcCli}
+                      onChange={e => setNovoCgcCli(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCgcCli() } }}
+                      placeholder="adicionar CNPJ…"
+                      className="bg-zinc-800 border-zinc-700 text-white h-9 text-xs font-mono" />
+                    <Button variant="outline" onClick={addCgcCli} className="h-9 text-xs border-zinc-700 text-zinc-300 shrink-0">Adicionar</Button>
+                  </div>
+                  <p className="mt-1 text-[11px] text-zinc-500">Une os recebimentos do Keruak (Rentabilidade › Clientes) destes CNPJs sob este cliente.</p>
+                </div>
+                <div>
                   <Label className="text-xs text-zinc-400">Prefixo de Código (3 letras)</Label>
                   <Input
                     value={form.code_prefix}
@@ -287,6 +333,29 @@ export default function ClientesPage() {
                     <option value="">Sem executivo</option>
                     {executives.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
                   </select>
+                </div>
+                <div>
+                  <Label className="text-xs text-zinc-400">E-mails administrativos</Label>
+                  {form.emails_administrativos.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {form.emails_administrativos.map(e => (
+                        <span key={e} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium"
+                          style={{ background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-border)' }}>
+                          {e}
+                          <button onClick={() => removeEmailCli(e)} className="leading-none" style={{ color: 'var(--success)' }}>×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2 mt-1.5">
+                    <Input value={novoEmailCli} type="email"
+                      onChange={e => setNovoEmailCli(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addEmailCli() } }}
+                      placeholder="adicionar e-mail…"
+                      className="bg-zinc-800 border-zinc-700 text-white h-9 text-xs" />
+                    <Button variant="outline" onClick={addEmailCli} className="h-9 text-xs border-zinc-700 text-zinc-300 shrink-0">Adicionar</Button>
+                  </div>
+                  <p className="mt-1 text-[11px] text-zinc-500">Mesma lista usada no fechamento e nos comunicados (reajuste) do cliente.</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button

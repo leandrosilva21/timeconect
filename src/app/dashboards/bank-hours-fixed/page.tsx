@@ -2,7 +2,7 @@
 
 import { formatBRL } from '@/lib/format'
 import { AppLayout } from '@/components/layout/app-layout'
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { sanitizeHtml, previewText } from '@/lib/sanitize'
 import { useAuth } from '@/hooks/use-auth'
@@ -42,6 +42,7 @@ interface SummaryData {
   contributed_hours_history?: ContributionItem[]
   has_support?: boolean
   has_architecture?: boolean
+  has_children?: boolean
 }
 
 interface ContributionItem {
@@ -246,7 +247,7 @@ export default function BankHoursFixedPage() {
   // Projeto "leaf": um único projeto selecionado, sem sub-projetos de Arquitetura/Sustentação.
   // Apontamentos vão direto no Total Geral; abas e cards monetários ficam ocultos.
   const isLeafProject = !!selectedProject && summary != null
-    && !(summary.has_architecture) && !(summary.has_support)
+    && !(summary.has_architecture) && !(summary.has_support) && !(summary.has_children)
 
   useEffect(() => {
     if (isLeafProject && activeTab === 'projects') setActiveTab('total')
@@ -519,6 +520,54 @@ export default function BankHoursFixedPage() {
       .catch(() => setMaintList([]))
       .finally(() => setLoadingMaint(false))
   }, [baseParams, resolveMonthYear, hasFilters, dateFilterCleared, dateFrom, dateTo])
+
+  // Aba Projetos: por padrão lista TODOS os projetos (all-time). Só na Auster o
+  // filtro de data (mês/ano ou período) recorta a lista pela DATA DE INÍCIO do
+  // projeto — pedido específico do cliente Auster.
+  const displayedProjects = useMemo(() => {
+    if (!isAusterContext) return projectsList
+    if (dateFrom && dateTo) {
+      return projectsList.filter(p => p.start_date && p.start_date >= dateFrom && p.start_date <= dateTo)
+    }
+    if (refMonth && refYear) {
+      const ym = `${refYear}-${String(refMonth).padStart(2, '0')}`
+      return projectsList.filter(p => p.start_date && p.start_date.slice(0, 7) === ym)
+    }
+    return projectsList
+  }, [isAusterContext, projectsList, dateFrom, dateTo, refMonth, refYear])
+
+  const projectsFilterHint = (() => {
+    if (!isAusterContext) return null
+    if (dateFrom && dateTo) {
+      const fmt = (s: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); return m ? `${m[3]}/${m[2]}/${m[1]}` : s }
+      return `Início entre ${fmt(dateFrom)} e ${fmt(dateTo)}`
+    }
+    if (refMonth && refYear) return `Início em ${MONTH_NAMES_PT[refMonth - 1]} ${refYear}`
+    return null
+  })()
+
+  function exportProjectsToXLSX() {
+    if (displayedProjects.length === 0) return
+    const data = displayedProjects.map(p => {
+      const contributions = p.total_contributions_hours || p.hour_contribution || 0
+      return {
+        'Código': p.code ?? '',
+        'Projeto': p.name ?? '',
+        'Status': p.status_display ?? '',
+        'Tipo': p.contract_type_display ?? '',
+        'Horas Vendidas': p.sold_hours ?? 0,
+        'Aporte (h)': contributions || 0,
+        'Consumo (h)': Number((p.consumed_hours ?? 0).toFixed(2)),
+        'Saldo (h)': Number((p.hours_balance ?? 0).toFixed(2)),
+        'Início': p.start_date ? fmtDate(p.start_date) : '',
+      }
+    })
+    const ws = XLSX.utils.json_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Projetos')
+    const stamp = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `projetos_${stamp}.xlsx`)
+  }
 
   useEffect(() => { fetchSummary() }, [fetchSummary])
   useEffect(() => { if (activeTab === 'projects')    fetchProjects()    }, [fetchProjects, activeTab])
@@ -889,9 +938,8 @@ export default function BankHoursFixedPage() {
 
             {/* ── PROJETOS ── */}
             {activeTab === 'projects' && (
-              // A aba Projetos IGNORA o filtro de data (mês/período) — sempre lista
-              // TODOS os projetos do contrato com seu consumo acumulado (all-time).
-              // O filtro de data continua valendo só nas outras abas (Total Geral etc).
+              // Por padrão lista TODOS os projetos (all-time, consumo acumulado).
+              // Exceção Auster: o filtro de data recorta a lista pela data de início.
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-4">
                   <KpiCard
@@ -901,7 +949,16 @@ export default function BankHoursFixedPage() {
                     accent="primary"
                   />
                 </div>
-                <ProjectsTable items={projectsList} loading={loadingProjects} />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {projectsFilterHint ? (
+                    <span className="text-xs px-3 py-1.5 rounded-full font-medium inline-flex items-center gap-1.5"
+                      style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}>
+                      <Calendar size={13} /> {projectsFilterHint} · {displayedProjects.length} projeto{displayedProjects.length === 1 ? '' : 's'}
+                    </span>
+                  ) : <span />}
+                  <ExportButton onClick={exportProjectsToXLSX} disabled={displayedProjects.length === 0} />
+                </div>
+                <ProjectsTable items={displayedProjects} loading={loadingProjects} />
               </div>
             )}
 
@@ -1434,11 +1491,8 @@ function InlineTimesheetsTable({ rows, loading, variant = 'maintenance', onRowCl
 }
 
 function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loading: boolean }) {
-  const fmtH = (mins: number) => {
-    const h = Math.floor(mins / 60)
-    const m = Math.abs(mins % 60)
-    return `${h}:${String(m).padStart(2, '0')}`
-  }
+  // Apuração em horas DECIMAIS (não HH:MM) — ex.: 44h42min = 44,70h → "44.70h".
+  const fmtH = (mins: number) => `${((mins ?? 0) / 60).toFixed(2)}h`
   if (!loading && rows.length === 0) return null
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
@@ -1456,6 +1510,7 @@ function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loading: boo
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Ticket</th>
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Título</th>
                 <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Solicitante</th>
+                <th className="text-left  px-4 py-2 text-xs uppercase tracking-wide">Status Ticket</th>
                 <th className="text-right px-4 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Total no período</th>
                 <th className="text-right px-4 py-2 text-xs uppercase tracking-wide whitespace-nowrap">Total histórico</th>
               </tr>
@@ -1468,18 +1523,29 @@ function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loading: boo
                   </td>
                   <td className="px-4 py-2" style={{ color: 'var(--text)' }}>{tk.title ?? '—'}</td>
                   <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{tk.requester ?? '—'}</td>
+                  <td className="px-4 py-2">
+                    {(() => {
+                      if (!tk.status) return <span style={{ color: 'var(--text-light)' }}>—</span>
+                      const b = String(tk.base_status ?? tk.status).toLowerCase()
+                      const c =
+                        /cancel/.test(b)                                          ? '#ef4444' :
+                        /(resolv|closed|fechad|encerrad)/.test(b)                 ? '#22c55e' :
+                        /(stop|parad|aguard|pend|espera)/.test(b)                 ? '#f59e0b' :
+                        /(new|novo|attend|atend|andamento|aberto|open)/.test(b)   ? '#00b8d4' :
+                                                                                    '#9ca3af'
+                      return (
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap"
+                          style={{ color: c, background: `${c}22`, border: `1px solid ${c}55` }}>
+                          {tk.status}
+                        </span>
+                      )
+                    })()}
+                  </td>
                   <td className="px-4 py-2 text-right font-mono">{fmtH(tk.period_minutes)}</td>
                   <td className="px-4 py-2 text-right font-mono" style={{ color: 'var(--text-muted)' }}>{fmtH(tk.lifetime_minutes)}</td>
                 </tr>
               ))}
             </tbody>
-            <tfoot>
-              <tr style={{ borderTop: '1px solid var(--border)', fontWeight: 600 }}>
-                <td colSpan={3} className="px-4 py-2 text-right">Totais ({rows.length} {rows.length === 1 ? 'ticket' : 'tickets'})</td>
-                <td className="px-4 py-2 text-right font-mono">{fmtH(rows.reduce((s, r) => s + (r.period_minutes || 0), 0))}</td>
-                <td className="px-4 py-2 text-right font-mono">{fmtH(rows.reduce((s, r) => s + (r.lifetime_minutes || 0), 0))}</td>
-              </tr>
-            </tfoot>
           </table>
         )}
       </div>

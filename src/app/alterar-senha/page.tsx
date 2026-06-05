@@ -40,11 +40,15 @@ export default function AlterarSenhaPage() {
     e.preventDefault()
     setError('')
 
-    if (newPassword !== confirmPassword) {
+    // trim p/ não gravar senha com espaço/quebra nas pontas — o login trima na entrada,
+    // então uma senha salva com whitespace nas bordas falharia no próximo acesso.
+    const np = newPassword.trim()
+    const cp = confirmPassword.trim()
+    if (np !== cp) {
       setError('A confirmação da senha não confere')
       return
     }
-    if (newPassword.length < 8) {
+    if (np.length < 8) {
       setError('A nova senha deve ter pelo menos 8 caracteres')
       return
     }
@@ -52,8 +56,8 @@ export default function AlterarSenhaPage() {
     setLoading(true)
     try {
       await api.post('/auth/change-temporary-password', {
-        new_password:              newPassword,
-        new_password_confirmation: confirmPassword,
+        new_password:              np,
+        new_password_confirmation: cp,
       })
       await logout()
       router.replace('/login?senha_alterada=1')

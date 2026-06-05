@@ -145,6 +145,7 @@ export interface CustomerFull {
   name: string
   company_name?: string
   cgc?: string
+  secondary_cgcs?: string[]
   code_prefix?: string | null
   active: boolean
   executive_id?: number | null
@@ -228,8 +229,10 @@ export interface Expense {
   expense_type: string
   payment_method: string
   status: string
+  rejection_reason?: string
   charge_client: boolean
   is_paid: boolean
+  pagar_no_fechamento?: boolean
   paid_by?: number
   paid_at?: string
   receipt_path?: string

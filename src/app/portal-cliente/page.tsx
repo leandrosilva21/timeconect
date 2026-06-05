@@ -74,7 +74,7 @@ interface CustomerOpt { id: number; name: string }
 
 function fmtH(h: number | null | undefined) {
   if (h === null || h === undefined) return '—'
-  return h.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 'h'
+  return h.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'h'
 }
 
 const HEALTH_META: Record<Health, { label: string; color: string; bg: string }> = {

@@ -31,6 +31,7 @@ interface UserData {
   type?: string | null
   extra_permissions?: string[]
   can_timesheet_sustentacao?: boolean
+  is_bizify?: boolean
   full_name?: string | null
   cpf?: string | null
   matricula?: string | null
@@ -317,6 +318,7 @@ const EMPTY_FORM = {
   partner_id: '' as number | '',
   extra_permissions: [] as string[],
   can_timesheet_sustentacao: false,
+  is_bizify: false,
   // Folha de pagamento
   full_name: '',
   cpf: '',
@@ -429,6 +431,7 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
           partner_id:           item.partner_id  ?? '',
           extra_permissions:          item.extra_permissions ?? [],
           can_timesheet_sustentacao:  item.can_timesheet_sustentacao ?? false,
+          is_bizify:                  item.is_bizify ?? false,
           full_name:                  item.full_name ?? '',
           cpf:                        item.cpf ?? '',
           matricula:                  item.matricula ?? '',
@@ -463,6 +466,7 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
       }
       if (form.hourly_rate) payload.hourly_rate = parseFloat(form.hourly_rate)
       if (form.daily_hours) payload.daily_hours = parseFloat(form.daily_hours)
+      payload.is_bizify = form.is_bizify
       if (form.profiles.includes('consultor') && form.consultant_type) {
         payload.consultant_type       = form.consultant_type
         payload.bank_hours_start_date = form.bank_hours_start_date || null
@@ -943,6 +947,15 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
                 value={form.can_timesheet_sustentacao}
                 onChange={() => setForm(f => ({ ...f, can_timesheet_sustentacao: !f.can_timesheet_sustentacao }))}
                 label="Pode apontar manualmente em sustentação"
+              />
+            )}
+
+            {/* ── Funcionário Bizify (separa do resultado ERPSERV no fechamento) ── */}
+            {isConsultor && (
+              <Toggle
+                value={form.is_bizify}
+                onChange={() => setForm(f => ({ ...f, is_bizify: !f.is_bizify }))}
+                label="Funcionário Bizify (sai dos cards ERPSERV e vai pra aba Bizify no fechamento)"
               />
             )}
 

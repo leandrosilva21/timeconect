@@ -20,13 +20,14 @@ import {
   exportRelatorioToExcel,
   type RelatorioRow, type RelatorioMeta,
 } from '@/lib/exportRelatorioApontamentos'
+import { useTableSort } from '@/hooks/use-table-sort'
 
 type FilterMode = 'month' | 'period'
 type DateField  = 'date' | 'created_at'
 type StatusKey  = 'pending' | 'approved'
 
 interface Customer    { id: number; name: string }
-interface Project     { id: number; name: string }
+interface Project     { id: number; name: string; parent_project_id?: number | null }
 interface ServiceType { id: number; name: string }
 
 interface TicketSummaryRow {
@@ -78,10 +79,9 @@ function fmtTimeHM(t: string | null | undefined): string {
   return t.length >= 5 ? t.slice(0, 5) : t
 }
 
-function minutesToHHMM(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return `${h}:${String(m).padStart(2, '0')}`
+// Apuração 100% em horas DECIMAIS (não HH:MM) — ex.: 8h30 = 8,50h → "8.50h".
+function fmtHoras(minutes: number): string {
+  return `${((minutes ?? 0) / 60).toFixed(2)}h`
 }
 
 function parseRequester(v: RawTimesheet['ticket_solicitante']): string {
@@ -102,14 +102,18 @@ export default function RelatorioApontamentosPage() {
   const [serviceTypes,    setServiceTypes]    = useState<ServiceType[]>([])
   const [serviceTypeIds,  setServiceTypeIds]  = useState<string[]>([])
 
-  const [dateField,  setDateField]  = useState<DateField>('date')
   const [filterMode, setFilterMode] = useState<FilterMode>('month')
   const [refMonth,   setRefMonth]   = useState<number | null>(today.getMonth() + 1)
   const [refYear,    setRefYear]    = useState<number | null>(today.getFullYear())
+  // Competência (serviço): Mês/Ano (refMonth/refYear) ou Período (startDate/endDate).
   const [startDate,  setStartDate]  = useState('')
   const [endDate,    setEndDate]    = useState('')
+  // Digitação (created_at) — range opcional que filtra a lista; vazio = 100% da competência.
+  const [digFrom, setDigFrom] = useState('')
+  const [digTo,   setDigTo]   = useState('')
 
-  const [statuses, setStatuses] = useState<StatusKey[]>(['pending', 'approved'])
+  // Status fixo: relatório sempre considera pendentes + aprovados (sem toggle).
+  const statuses: StatusKey[] = ['pending', 'approved']
 
   const [items,    setItems]    = useState<RawTimesheet[]>([])
   const [ticketSummary, setTicketSummary] = useState<TicketSummaryRow[]>([])
@@ -117,16 +121,8 @@ export default function RelatorioApontamentosPage() {
   const [loading,  setLoading]  = useState(false)
   const [showPreview, setShowPreview] = useState(false)
 
-  // ── Default period to current month
-  useEffect(() => {
-    if (filterMode === 'month' && refMonth && refYear && (!startDate || !endDate)) {
-      const mm = String(refMonth).padStart(2, '0')
-      const last = new Date(refYear, refMonth, 0).getDate()
-      setStartDate(`${refYear}-${mm}-01`)
-      setEndDate(`${refYear}-${mm}-${String(last).padStart(2, '0')}`)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Em Mês/Ano o período é a COMPETÊNCIA (derivada de refMonth/refYear); o range de digitação
+  // (startDate/endDate) começa vazio = 100% da competência. Sem auto-preencher no mount.
 
   // ── Load customers
   useEffect(() => {
@@ -154,7 +150,7 @@ export default function RelatorioApontamentosPage() {
     api.get<any>(`/projects?customer_id=${customerId}&pageSize=500`)
       .then(r => {
         const list: any[] = Array.isArray(r) ? r : r?.items ?? r?.data ?? []
-        setProjects(list.map(p => ({ id: p.id, name: p.name })).sort((a, b) => a.name.localeCompare(b.name)))
+        setProjects(list.map(p => ({ id: p.id, name: p.name, parent_project_id: p.parent_project_id ?? null })))
       })
       .catch(() => setProjects([]))
     setProjectIds([])
@@ -170,10 +166,40 @@ export default function RelatorioApontamentosPage() {
     return { label: '' }
   }, [filterMode, refMonth, refYear, startDate, endDate])
 
+  // COMPETÊNCIA = mês do SERVIÇO. Mês/Ano → bounds do mês; Período → o range escolhido.
+  // O range de DIGITAÇÃO (digFrom/digTo) é separado e opcional — vazio = 100% da competência.
+  const competenciaStart = filterMode === 'month' && refMonth && refYear
+    ? `${refYear}-${String(refMonth).padStart(2, '0')}-01`
+    : startDate
+  const competenciaEnd = filterMode === 'month' && refMonth && refYear
+    ? `${refYear}-${String(refMonth).padStart(2, '0')}-${String(new Date(refYear, refMonth, 0).getDate()).padStart(2, '0')}`
+    : endDate
+
   const customerName = useMemo(
     () => customers.find(c => String(c.id) === String(customerId))?.name ?? '',
     [customers, customerId],
   )
+
+  // Opções do seletor de projetos em árvore: filho aparece sob o pai com "↳".
+  const projectOptions = useMemo(() => {
+    const ids = new Set(projects.map(p => p.id))
+    const byParent = new Map<number | null, Project[]>()
+    for (const p of projects) {
+      const key = p.parent_project_id && ids.has(p.parent_project_id) ? p.parent_project_id : null
+      const arr = byParent.get(key) ?? []
+      arr.push(p); byParent.set(key, arr)
+    }
+    const sortName = (a: Project, b: Project) => a.name.localeCompare(b.name, 'pt-BR')
+    const out: { id: number; name: string; depth: number }[] = []
+    const walk = (parentId: number | null, depth: number) => {
+      for (const p of (byParent.get(parentId) ?? []).sort(sortName)) {
+        out.push({ id: p.id, name: p.name, depth })
+        walk(p.id, depth + 1)
+      }
+    }
+    walk(null, 0)
+    return out
+  }, [projects])
 
   // Regra especial VEDAMOTORS: coluna "Título" do relatório vira "TICKET ERPSERV".
   // Quando o ticket bate o padrão (5 dígitos), mantém o título original.
@@ -198,34 +224,35 @@ export default function RelatorioApontamentosPage() {
     return match ? match[0] : 'Sem ticket'
   }
 
-  const toggleStatus = (s: StatusKey) => {
-    setStatuses(prev => {
-      const has = prev.includes(s)
-      if (has && prev.length === 1) return prev // não deixa zerar
-      return has ? prev.filter(x => x !== s) : [...prev, s]
-    })
-  }
-
   async function loadReport() {
     if (!customerId) { toast.error('Selecione um cliente'); return }
-    if (!startDate || !endDate) { toast.error('Defina o período'); return }
+    if (!competenciaStart || !competenciaEnd) {
+      toast.error(filterMode === 'month' ? 'Selecione a competência (mês/ano)' : 'Defina a competência (período)'); return
+    }
     setLoading(true)
     try {
+      // Competência = data do SERVIÇO (sempre). Digitação = created_at (range opcional).
+      const applyDates = (q: URLSearchParams) => {
+        if (competenciaStart) q.set('competencia_start', competenciaStart)
+        if (competenciaEnd)   q.set('competencia_end',   competenciaEnd)
+        if (digFrom || digTo) {
+          q.set('date_field', 'created_at')
+          if (digFrom) q.set('start_date', digFrom)
+          if (digTo)   q.set('end_date',   digTo)
+        }
+      }
+
       const p = new URLSearchParams()
       p.set('customer_id', String(customerId))
-      p.set('start_date',  startDate)
-      p.set('end_date',    endDate)
       p.set('pageSize',    '2000')
-      if (dateField === 'created_at') p.set('date_field', 'created_at')
+      applyDates(p)
       statuses.forEach(s => p.append('status[]', s))
       projectIds.forEach(id => p.append('project_id[]', id))
       serviceTypeIds.forEach(id => p.append('service_type_id[]', id))
 
       const summaryParams = new URLSearchParams()
       summaryParams.set('customer_id', String(customerId))
-      summaryParams.set('start_date',  startDate)
-      summaryParams.set('end_date',    endDate)
-      if (dateField === 'created_at') summaryParams.set('date_field', 'created_at')
+      applyDates(summaryParams)
       statuses.forEach(s => summaryParams.append('status[]', s))
       projectIds.forEach(id => summaryParams.append('project_id[]', id))
       serviceTypeIds.forEach(id => summaryParams.append('service_type_id[]', id))
@@ -236,9 +263,11 @@ export default function RelatorioApontamentosPage() {
       ])
 
       const list: RawTimesheet[] = Array.isArray(r?.items) ? r.items : []
+      // Ordena pela DATA DO SERVIÇO (competência) — assim os atrasados (digitados depois)
+      // aparecem na posição do serviço, e não jogados pro fim por created_at.
       list.sort((a, b) => {
-        const ai = a.created_at ?? a.date
-        const bi = b.created_at ?? b.date
+        const ai = (a.date ?? a.created_at ?? '').slice(0, 10)
+        const bi = (b.date ?? b.created_at ?? '').slice(0, 10)
         if (ai !== bi) return ai < bi ? -1 : 1
         return (a.start_time ?? '').localeCompare(b.start_time ?? '')
       })
@@ -261,12 +290,40 @@ export default function RelatorioApontamentosPage() {
     () => items.reduce((acc, t) => acc + (t.effort_minutes ?? 0), 0),
     [items],
   )
-  const totalHHMM = minutesToHHMM(totalMinutes)
+  const totalHoras = fmtHoras(totalMinutes)
   const emittedAt = fmtDateBR(today.toISOString().slice(0, 10))
+
+  // Ordenação por coluna (só na TABELA da tela; o relatório/PDF mantém a ordem por serviço).
+  const { sorted: sortedItems, thProps } = useTableSort<RawTimesheet>(items, (t, k) => {
+    switch (k) {
+      case 'date_inclusion': return t.created_at ?? ''
+      case 'date_service':   return t.date ?? ''
+      case 'status':         return t.status ?? ''
+      case 'requester':      return parseRequester(t.ticket_solicitante)
+      case 'consultant':     return t.user?.name ?? ''
+      case 'ticket':         return t.ticket ?? ''
+      case 'title':          return t.ticket_subject ?? ''
+      case 'description':    return previewText(t.observation)
+      case 'start':          return t.start_time ?? ''
+      case 'end':            return t.end_time ?? ''
+      case 'effort':         return t.effort_minutes ?? 0
+      default:               return ''
+    }
+  })
+
+  // Straggler: digitado FORA da competência (created_at fora do período), mas serviço dentro.
+  // Só sinaliza quando filtrando por "Data do apontamento" — no modo "Data de inclusão" tudo está dentro.
+  function isLateInclusion(t: RawTimesheet): boolean {
+    if (!t.created_at || !competenciaStart || !competenciaEnd) return false
+    // Destacado quando digitado FORA da competência (serviço dentro, lançado depois).
+    const c = t.created_at.slice(0, 10)
+    return c < competenciaStart || c > competenciaEnd
+  }
 
   function buildRows(): RelatorioRow[] {
     return items.map(t => ({
       date_inclusion: fmtDateBR(t.created_at),
+      date_inclusion_late: isLateInclusion(t),
       requester:      parseRequester(t.ticket_solicitante),
       consultant:     t.user?.name ?? '',
       ticket:         t.ticket ?? '',
@@ -274,7 +331,7 @@ export default function RelatorioApontamentosPage() {
       description:    previewText(t.observation),
       start_time:     fmtTimeHM(t.start_time),
       end_time:       fmtTimeHM(t.end_time),
-      effort_hours:   t.effort_hours ?? minutesToHHMM(t.effort_minutes ?? 0),
+      effort_hours:   fmtHoras(t.effort_minutes ?? 0),
       effort_decimal: Math.round(((t.effort_minutes ?? 0) / 60) * 100) / 100,
       date_service:   fmtDateBR(t.date),
     }))
@@ -285,7 +342,7 @@ export default function RelatorioApontamentosPage() {
       client:       customerName,
       period:       periodInfo.label,
       emittedAt,
-      totalHours:   totalHHMM,
+      totalHours:   totalHoras,
       totalRecords: items.length,
       ticketHeader: isVedamotors ? 'Ticket ERPSERV' : 'Ticket',
       titleHeader:  isVedamotors ? 'Ticket Vedamotors' : 'Título',
@@ -400,7 +457,7 @@ export default function RelatorioApontamentosPage() {
             <MultiSelect
               value={projectIds}
               onChange={setProjectIds}
-              options={projects}
+              options={projectOptions}
               placeholder={projects.length === 0 ? 'Selecione um cliente' : 'Todos os projetos'}
               fullWidth
               disabled={!customerId || projects.length === 0}
@@ -421,33 +478,24 @@ export default function RelatorioApontamentosPage() {
             />
           </div>
 
+          {/* COMPETÊNCIA (mês do serviço) — Mês/Ano ou Período. Trava a data do serviço. */}
           <div>
             <label className="block text-xs mb-1.5" style={{ color: 'var(--brand-muted)' }}>
-              Filtrar por
+              Competência (mês do serviço)
             </label>
-            <div className="flex rounded-lg border overflow-hidden text-xs h-9" style={{ borderColor: 'var(--brand-border)' }}>
-              {(['date', 'created_at'] as const).map(f => (
-                <button
-                  key={f} type="button" onClick={() => setDateField(f)}
-                  className="flex-1 px-3 font-medium transition-colors"
-                  style={{
-                    background: dateField === f ? 'var(--primary)' : 'transparent',
-                    color:      dateField === f ? 'var(--primary-fg)' : 'var(--text-muted)',
-                  }}
-                >
-                  {f === 'date' ? 'Data do apontamento' : 'Data de inclusão'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs mb-1.5" style={{ color: 'var(--brand-muted)' }}>Período</label>
             <div className="flex items-center gap-2 flex-wrap">
               <div className="flex rounded-lg border overflow-hidden text-xs" style={{ borderColor: 'var(--brand-border)' }}>
                 {(['month', 'period'] as const).map(mode => (
                   <button
-                    key={mode} type="button" onClick={() => setFilterMode(mode)}
+                    key={mode} type="button"
+                    onClick={() => {
+                      setFilterMode(mode)
+                      if (mode === 'month') {
+                        if (!refMonth) setRefMonth(today.getMonth() + 1)
+                        if (!refYear) setRefYear(today.getFullYear())
+                        setStartDate(''); setEndDate('')
+                      }
+                    }}
                     className="px-3 py-1.5 font-medium transition-colors"
                     style={{
                       background: filterMode === mode ? 'var(--primary)' : 'transparent',
@@ -463,14 +511,8 @@ export default function RelatorioApontamentosPage() {
                   month={refMonth}
                   year={refYear}
                   onChange={(m, y) => {
-                    if (m === 0) { setRefMonth(null); setRefYear(null); setStartDate(''); setEndDate('') }
-                    else {
-                      const mm = String(m).padStart(2, '0')
-                      const last = new Date(y, m, 0).getDate()
-                      setRefMonth(m); setRefYear(y)
-                      setStartDate(`${y}-${mm}-01`)
-                      setEndDate(`${y}-${mm}-${String(last).padStart(2, '0')}`)
-                    }
+                    if (m === 0) { setRefMonth(null); setRefYear(null) }
+                    else { setRefMonth(m); setRefYear(y) }
                   }}
                 />
               ) : (
@@ -482,32 +524,33 @@ export default function RelatorioApontamentosPage() {
               )}
             </div>
           </div>
+
+          {/* DIGITAÇÃO (opcional) — filtra a lista por quando foi lançado; vazio = 100% da competência. */}
+          <div>
+            <label className="block text-xs mb-1.5" style={{ color: 'var(--brand-muted)' }}>
+              Digitação (opcional)
+            </label>
+            <div className="flex items-center gap-2">
+              <DateRangePicker
+                from={digFrom}
+                to={digTo}
+                onChange={(f, t) => { setDigFrom(f); setDigTo(t) }}
+              />
+              {(digFrom || digTo) && (
+                <button type="button" onClick={() => { setDigFrom(''); setDigTo('') }}
+                  className="text-[11px] px-2 py-1 rounded" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>
+                  limpar
+                </button>
+              )}
+            </div>
+            <p className="text-[10px] mt-1" style={{ color: 'var(--brand-subtle)' }}>
+              Filtra por quando foi lançado; vazio traz 100% da competência. Digitados fora do mês ficam destacados.
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-end gap-3 justify-between">
           <div className="flex items-end gap-3 flex-wrap">
-            <div>
-              <label className="block text-xs mb-1.5" style={{ color: 'var(--brand-muted)' }}>Status</label>
-              <div className="flex gap-2">
-                {(['pending', 'approved'] as StatusKey[]).map(s => {
-                  const active = statuses.includes(s)
-                  const styles = s === 'pending'
-                    ? { color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.35)' }
-                    : { color: '#10B981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.35)' }
-                  return (
-                    <button
-                      key={s} type="button" onClick={() => toggleStatus(s)}
-                      className="px-3 h-8 rounded-lg text-xs font-medium transition-colors"
-                      style={active
-                        ? { background: styles.bg, color: styles.color, border: `1px solid ${styles.border}` }
-                        : { background: 'transparent', color: 'var(--brand-subtle)', border: '1px solid var(--brand-border)' }}
-                    >
-                      {STATUS_LABEL[s]}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
             <Button variant="primary" icon={Search} loading={loading} onClick={loadReport} disabled={!customerId}>
               {loading ? 'Carregando...' : 'Gerar relatório'}
             </Button>
@@ -540,7 +583,7 @@ export default function RelatorioApontamentosPage() {
               <div>Competência: <span style={{ color: 'var(--brand-text)' }}>{periodInfo.label || '—'}</span></div>
               <div>Emitido em: <span style={{ color: 'var(--brand-text)' }}>{emittedAt}</span></div>
               <div>
-                Total: <span className="font-semibold" style={{ color: 'var(--brand-primary)' }}>{totalHHMM}</span>
+                Total: <span className="font-semibold" style={{ color: 'var(--brand-primary)' }}>{totalHoras}</span>
                 <span className="mx-2" style={{ color: 'var(--brand-subtle)' }}>•</span>
                 <span style={{ color: 'var(--brand-text)' }}>{items.length}</span> registro{items.length === 1 ? '' : 's'}
               </div>
@@ -583,9 +626,22 @@ export default function RelatorioApontamentosPage() {
                   <div className="text-sm text-gray-700">
                     <span className="font-semibold">Competência:</span> {periodInfo.label}
                   </div>
+                  <div className="text-sm text-gray-700">
+                    <span className="font-semibold">Digitação:</span>{' '}
+                    {(digFrom || digTo)
+                      ? `${digFrom ? fmtDateBR(digFrom) : '…'} a ${digTo ? fmtDateBR(digTo) : '…'}`
+                      : 'Todas (100% da competência)'}
+                  </div>
                   <div className="text-xs text-gray-400 mt-1">Emitido em {emittedAt}</div>
                 </div>
               </div>
+
+              {/* Legenda do destaque (digitação fora da competência) */}
+              {items.some(isLateInclusion) && (
+                <div className="px-10 pt-3 text-xs" style={{ color: '#b45309', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
+                  <b>⚠ Em laranja:</b> apontamentos com <b>serviço dentro da competência</b> porém <b>digitados fora dela</b> (lançados depois) — entram neste período.
+                </div>
+              )}
 
               {/* Tabela */}
               <div className="px-10 py-6 table-scroll">
@@ -624,7 +680,18 @@ export default function RelatorioApontamentosPage() {
                             return (
                               <Fragment key={`${gi}-${i}`}>
                                 <tr style={{ background: bg, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                                  <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtDateBR(t.created_at)}</td>
+                                  {(() => {
+                                    const late = isLateInclusion(t)
+                                    return (
+                                      <td className="px-3 pt-2 pb-1 text-xs text-center whitespace-nowrap"
+                                        style={late
+                                          ? { color: '#b45309', fontWeight: 700, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties
+                                          : { color: '#374151' }}
+                                        title={late ? 'Digitado fora da competência (serviço no período, lançado depois)' : undefined}>
+                                        {late && '⚠ '}{fmtDateBR(t.created_at)}
+                                      </td>
+                                    )
+                                  })()}
                                   <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center">{parseRequester(t.ticket_solicitante) || '—'}</td>
                                   <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center">{t.user?.name ?? '—'}</td>
                                   <td className="px-3 pt-2 pb-1 text-xs text-gray-500 text-center">
@@ -638,7 +705,7 @@ export default function RelatorioApontamentosPage() {
                                   <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtTimeHM(t.start_time) || '—'}</td>
                                   <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtTimeHM(t.end_time) || '—'}</td>
                                   <td className="px-3 pt-2 pb-1 text-xs text-center font-semibold text-gray-800 tabular-nums whitespace-nowrap">
-                                    {t.effort_hours ?? minutesToHHMM(t.effort_minutes ?? 0)}
+                                    {fmtHoras(t.effort_minutes ?? 0)}
                                   </td>
                                   <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">{fmtDateBR(t.date)}</td>
                                 </tr>
@@ -653,7 +720,7 @@ export default function RelatorioApontamentosPage() {
                           })}
                           <tr style={{ background: '#faf9ff', borderBottom: '2px solid #c4b5fd', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
                             <td colSpan={7} className="px-3 py-1.5 text-right text-xs font-semibold text-gray-600">Subtotal — {g.name} ({g.rows.length} reg.)</td>
-                            <td className="px-3 py-1.5 text-right text-xs font-bold tabular-nums" style={{ color: '#5b21b6' }}>{minutesToHHMM(g.mins)}</td>
+                            <td className="px-3 py-1.5 text-right text-xs font-bold tabular-nums" style={{ color: '#5b21b6' }}>{fmtHoras(g.mins)}</td>
                             <td />
                           </tr>
                         </Fragment>
@@ -666,7 +733,7 @@ export default function RelatorioApontamentosPage() {
                         Total ({items.length} registro{items.length === 1 ? '' : 's'})
                       </td>
                       <td className="px-3 py-2 text-right text-sm font-bold tabular-nums" style={{ color: '#5b21b6' }}>
-                        {totalHHMM}
+                        {totalHoras}
                       </td>
                       <td />
                     </tr>
@@ -706,27 +773,14 @@ export default function RelatorioApontamentosPage() {
                           <td className="px-3 py-2 text-xs text-gray-700">{tk.title ?? '—'}</td>
                           <td className="px-3 py-2 text-xs text-gray-700">{tk.requester ?? '—'}</td>
                           <td className="px-3 py-2 text-xs text-right font-semibold text-gray-800 tabular-nums whitespace-nowrap">
-                            {minutesToHHMM(tk.period_minutes)}
+                            {fmtHoras(tk.period_minutes)}
                           </td>
                           <td className="px-3 py-2 text-xs text-right font-semibold tabular-nums whitespace-nowrap" style={{ color: '#5b21b6' }}>
-                            {minutesToHHMM(tk.lifetime_minutes)}
+                            {fmtHoras(tk.lifetime_minutes)}
                           </td>
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot>
-                      <tr style={{ background: '#ede9fe', borderTop: '2px solid #5b21b6', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}>
-                        <td colSpan={3} className="px-3 py-2 text-right text-sm font-semibold text-gray-700">
-                          Totais ({ticketSummary.length} ticket{ticketSummary.length === 1 ? '' : 's'})
-                        </td>
-                        <td className="px-3 py-2 text-right text-sm font-bold tabular-nums text-gray-800 whitespace-nowrap">
-                          {minutesToHHMM(ticketSummary.reduce((acc, t) => acc + t.period_minutes, 0))}
-                        </td>
-                        <td className="px-3 py-2 text-right text-sm font-bold tabular-nums whitespace-nowrap" style={{ color: '#5b21b6' }}>
-                          {minutesToHHMM(ticketSummary.reduce((acc, t) => acc + t.lifetime_minutes, 0))}
-                        </td>
-                      </tr>
-                    </tfoot>
                   </table>
                 </div>
               )}
@@ -761,23 +815,31 @@ export default function RelatorioApontamentosPage() {
           <Table>
             <Thead>
               <tr>
-                <Th>Data Inclusão</Th>
-                <Th>Status</Th>
-                <Th>Solicitante</Th>
-                <Th>Consultor</Th>
-                <Th>Ticket</Th>
-                <Th>Título</Th>
-                <Th>Descrição</Th>
-                <Th className="text-center">Início</Th>
-                <Th className="text-center">Fim</Th>
-                <Th right>Esforço</Th>
-                <Th>Data do Serviço</Th>
+                <Th {...thProps('date_inclusion')}>Data Inclusão</Th>
+                <Th {...thProps('date_service')}>Data do Serviço</Th>
+                <Th {...thProps('status')}>Status</Th>
+                <Th {...thProps('requester')}>Solicitante</Th>
+                <Th {...thProps('consultant')}>Consultor</Th>
+                <Th {...thProps('ticket')}>Ticket</Th>
+                <Th {...thProps('title')}>Título</Th>
+                <Th {...thProps('description')}>Descrição</Th>
+                <Th className="text-center" {...thProps('start')}>Início</Th>
+                <Th className="text-center" {...thProps('end')}>Fim</Th>
+                <Th right {...thProps('effort')}>Esforço</Th>
               </tr>
             </Thead>
             <Tbody>
-              {items.map((t, i) => (
+              {sortedItems.map((t, i) => (
                 <Tr key={i}>
-                  <Td className="whitespace-nowrap">{fmtDateBR(t.created_at)}</Td>
+                  <Td className="whitespace-nowrap">
+                    <span
+                      style={isLateInclusion(t) ? { color: 'var(--warning)', fontWeight: 600 } : undefined}
+                      title={isLateInclusion(t) ? 'Digitado fora da competência (serviço no mês, lançado depois)' : undefined}
+                    >
+                      {isLateInclusion(t) && '⚠ '}{fmtDateBR(t.created_at)}
+                    </span>
+                  </Td>
+                  <Td className="whitespace-nowrap">{fmtDateBR(t.date)}</Td>
                   <Td>
                     <Badge variant={t.status ?? 'default'}>{STATUS_LABEL[t.status ?? ''] ?? t.status}</Badge>
                   </Td>
@@ -795,22 +857,20 @@ export default function RelatorioApontamentosPage() {
                   </Td>
                   <Td className="text-center">{fmtTimeHM(t.start_time)}</Td>
                   <Td className="text-center">{fmtTimeHM(t.end_time)}</Td>
-                  <Td right className="font-semibold">{t.effort_hours ?? minutesToHHMM(t.effort_minutes ?? 0)}</Td>
-                  <Td className="whitespace-nowrap">{fmtDateBR(t.date)}</Td>
+                  <Td right className="font-semibold">{fmtHoras(t.effort_minutes ?? 0)}</Td>
                 </Tr>
               ))}
               <tr style={{ background: 'var(--brand-bg)', borderTop: '2px solid var(--brand-border)' }}>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className="px-5 py-3.5 text-right font-bold"
                   style={{ color: 'var(--brand-text)' }}
                 >
                   Total
                 </td>
                 <td className="px-5 py-3.5 text-right font-bold" style={{ color: 'var(--brand-primary)' }}>
-                  {totalHHMM}
+                  {totalHoras}
                 </td>
-                <td />
               </tr>
             </Tbody>
           </Table>

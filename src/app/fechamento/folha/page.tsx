@@ -29,11 +29,19 @@ interface FolhaRow {
   is_socio: boolean
   // Linha de parceiro Raho (azul, identificada, editável como sócio).
   is_raho?: boolean
+  // Linha consolidada do parceiro (exceto Raho): apuração total no parceiro admin.
+  is_parceiro_total?: boolean
   partner_label?: string | null
   // Valores ORIGINAIS calculados do mês (Raho) — p/ legenda "original" quando alterado.
   producao_calc?: number
   valor_hora_calc?: number
   horas_calc?: number
+  // Componentes do fechamento do consultor (puxados): produção = serv − desc − adiant + adic + desp.
+  fech_serv?: number
+  fech_desconto?: number
+  fech_adiantamento?: number
+  fech_adicional?: number
+  fech_desp?: number  // despesa já incorporada à produção (cooperado)
   // Cooperado desativado no cadastro (ainda aparece em "Ativos", em cor âmbar).
   inativo: boolean
   // Linha ocultada da folha do mês. cancelado=true some de "Ativos" e vai p/ "Canceladas".
@@ -50,7 +58,8 @@ interface FolhaRow {
   valor_hora: number
   producao: number
   variavel: number
-  reemb: number
+  reemb: number        // ajuste manual (editável)
+  reemb_auto?: number  // despesas pagas no fechamento do mês (read-only, calculado no BE)
   descontos: number
   adiantamento: number
   horista_mensalista: string
@@ -322,6 +331,18 @@ export default function FechamentoFolhaPage() {
     return [...socios, ...outros]
   }, [rows, filterUserIds, tab, categoria])
 
+  // Totais da folha (ao vivo, conforme o estado editável) — alimentam os cards do topo.
+  const totals = useMemo(() => {
+    let rend = 0, deb = 0, liq = 0
+    for (const r of visibleRows) {
+      const e = edits[r.row_key]
+      if (!e) continue
+      const { totalRend, totalDebitos, liquido } = calc(r, e)
+      rend += totalRend; deb += totalDebitos; liq += liquido
+    }
+    return { rend, deb, liq, count: visibleRows.length }
+  }, [visibleRows, edits]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Atualiza um campo editável de uma linha no estado local (keyed por row_key).
   function setEdit<K extends keyof EditState>(rowKey: string, key: K, value: EditState[K]) {
     setEdits(prev => ({
@@ -403,7 +424,7 @@ export default function FechamentoFolhaPage() {
       status: 'Contratado',
       nome: '',
       dias: 0,
-      horas: 180,
+      horas: 160,
       horas_apontamentos: 0,
       valor_hora: 0,
       producao: 0,
@@ -429,7 +450,7 @@ export default function FechamentoFolhaPage() {
         matricula: '',
         status: 'Contratado',
         nome: '',
-        horas: 180,
+        horas: 160,
         valor_hora: 0,
         producao: 0,
       },
@@ -487,12 +508,15 @@ export default function FechamentoFolhaPage() {
   // Colunas calculadas — recomputadas ao vivo a partir do estado editável + auto.
   // Espelha as fórmulas que o .xls vai produzir (lá são vermelhas / não importadas).
   // Produção: nas linhas normais é auto (r.producao); nas de sócio é editável (e.producao).
+  // Reemb total = manual (e.reemb) + auto (r.reemb_auto, calculado no BE a partir das
+  // despesas pagas no fechamento do mês). reemb_auto é read-only no FE.
   function calc(r: FolhaRow, e: EditState) {
-    const producao = (r.is_socio || r.is_raho) ? e.producao : r.producao
-    const totalRend = producao + e.variavel + e.reemb
+    const producao = e.producao // editável p/ todos os cooperados (override salvo na folha)
+    const reembAuto = r.reemb_auto ?? 0
+    const totalRend = producao + e.variavel + e.reemb + reembAuto
     const totalDebitos = e.descontos + e.adiantamento
     const liquido = totalRend - totalDebitos
-    return { totalRend, totalDebitos, liquido }
+    return { totalRend, totalDebitos, liquido, reembAuto }
   }
 
   // ─── Salvar ───────────────────────────────────────────────────────────────
@@ -546,6 +570,7 @@ export default function FechamentoFolhaPage() {
           // Horas é somente-leitura na grade: enviamos null para que o backend
           // use as horas dos apontamentos do período (o contrato aceita null).
           horas_trabalhadas: null,
+          producao: e.producao, // produção agora é editável p/ todos os cooperados
           variavel: e.variavel,
           reemb: e.reemb,
           descontos_diversos: e.descontos,
@@ -563,6 +588,7 @@ export default function FechamentoFolhaPage() {
         const base = {
           ...r,
           dias: e.dias,
+          producao: e.producao,
           variavel: e.variavel,
           reemb: e.reemb,
           descontos: e.descontos,
@@ -665,7 +691,7 @@ export default function FechamentoFolhaPage() {
           title="Folha Cooperativa"
           subtitle={`Valores por consultor — ${fmtYearMonth(yearMonth)}`}
           actions={
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <input
                 type="month"
                 value={yearMonth}
@@ -771,6 +797,31 @@ export default function FechamentoFolhaPage() {
             </div>
           }
         />
+
+        {/* Cards de totais da folha */}
+        {!loading && rows.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-xl p-4" style={{ background: 'var(--primary-soft)', border: '1px solid var(--ring)' }}>
+              <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Total da Folha (Líquido)</p>
+              <p className="text-2xl font-bold mt-1 tabular-nums" style={{ color: 'var(--primary)' }}>{formatBRL(totals.liq)}</p>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-light)' }}>{totals.count} cooperado{totals.count !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+              <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Total Rendimentos</p>
+              <p className="text-2xl font-bold mt-1 tabular-nums" style={{ color: 'var(--text)' }}>{formatBRL(totals.rend)}</p>
+            </div>
+            <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+              <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Total Débitos</p>
+              <p className="text-2xl font-bold mt-1 tabular-nums" style={{ color: 'var(--danger)' }}>{formatBRL(totals.deb)}</p>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-light)' }}>descontos + adiantamentos</p>
+            </div>
+            <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+              <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Cooperados</p>
+              <p className="text-2xl font-bold mt-1 tabular-nums" style={{ color: 'var(--text)' }}>{totals.count}</p>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-light)' }}>{tab === 'canceladas' ? 'canceladas' : 'ativos'}</p>
+            </div>
+          </div>
+        )}
 
         {/* Legenda dos grupos de coluna */}
         {!loading && rows.length > 0 && (
@@ -902,7 +953,7 @@ export default function FechamentoFolhaPage() {
                   {visibleRows.map(r => {
                     const e = edits[r.row_key]
                     if (!e) return null
-                    const { totalRend, totalDebitos, liquido } = calc(r, e)
+                    const { totalRend, totalDebitos, liquido, reembAuto } = calc(r, e)
                     const socio = r.is_socio
                     // Raho: identidade (cpf/nome/status) read-only do usuário, mas VALORES editáveis.
                     const valEditable = socio || !!r.is_raho
@@ -920,6 +971,8 @@ export default function FechamentoFolhaPage() {
                       ? 'var(--danger-bg)'
                       : r.is_raho
                         ? 'rgba(59,130,246,0.13)' // azul — parceiro Raho
+                        : r.is_parceiro_total
+                          ? 'rgba(20,184,166,0.12)' // teal — parceiro consolidado (apuração total)
                         : socio
                           ? 'var(--success-bg)'
                           : afastado
@@ -986,6 +1039,13 @@ export default function FechamentoFolhaPage() {
                                   {r.partner_label ?? 'Raho'}
                                 </span>
                               )}
+                              {r.is_parceiro_total && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                                  style={{ background: 'rgba(20,184,166,0.2)', color: '#14b8a6' }}
+                                  title="Apuração total do parceiro">
+                                  {r.partner_label ?? 'Parceiro'}
+                                </span>
+                              )}
                               {afastado && (
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0"
                                   style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>
@@ -1008,7 +1068,7 @@ export default function FechamentoFolhaPage() {
                           />
                         </Td>
 
-                        {/* ── Horas: editável p/ sócio e Raho; normal = 180 fixo ── */}
+                        {/* ── Horas: editável p/ sócio e Raho; normal = 160 fixo ── */}
                         <Td right mono className={valEditable ? undefined : 'text-zinc-300 tabular-nums'}>
                           {valEditable ? (
                             <MaskedNum
@@ -1031,28 +1091,69 @@ export default function FechamentoFolhaPage() {
                               className={cellInputClass}
                               style={cellInputStyle}
                             />
-                          ) : fmtNum(r.valor_hora, 2)}
+                          ) : r.is_parceiro_total ? '—' : fmtNum(r.valor_hora, 2)}
                         </Td>
 
-                        {/* ── Produção: editável p/ sócio e Raho; read-only normal ── */}
-                        <Td right className={valEditable ? undefined : 'text-zinc-300'}>
-                          {valEditable ? (
-                            <div className="flex flex-col items-end gap-0.5">
-                              <MaskedNum
-                                value={e.producao}
-                                decimals={2}
-                                onChange={v => setEdit(r.row_key, 'producao', v)}
-                                className={cellInputClass}
-                                style={cellInputStyle}
-                              />
-                              {r.is_raho && r.producao_calc != null && Math.abs(e.producao - r.producao_calc) > 0.005 && (
-                                <span className="text-[10px] whitespace-nowrap" style={{ color: 'var(--text-light)' }}
-                                  title="Valor calculado do mês (antes da alteração)">
-                                  orig: {formatBRL(r.producao_calc)}
-                                </span>
-                              )}
-                            </div>
-                          ) : formatBRL(r.producao)}
+                        {/* ── Produção: editável p/ todos; legendas = produção calculada + despesa do mês ── */}
+                        <Td right>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <MaskedNum
+                              value={e.producao}
+                              decimals={2}
+                              onChange={v => setEdit(r.row_key, 'producao', v)}
+                              className={cellInputClass}
+                              style={cellInputStyle}
+                            />
+                            {(() => {
+                              const prod = e.producao || 0
+                              const serv = r.fech_serv ?? 0
+                              const fdesc = r.fech_desconto ?? 0
+                              const fadi = r.fech_adiantamento ?? 0
+                              const fadic = r.fech_adicional ?? 0
+                              const fdesp = r.fech_desp ?? 0
+                              const temFech = serv !== 0 || fdesc !== 0 || fadi !== 0 || fadic !== 0
+                              // Cooperado: legenda com os MESMOS ajustes do fechamento do consultor.
+                              // A despesa JÁ está dentro da produção: serv − desc − adiant + adic + desp = produção.
+                              const parts: { k: string; txt: string }[] = []
+                              let totalVal: number
+                              if (temFech) {
+                                parts.push({ k: 'serv', txt: `serv: ${formatBRL(serv)}` })
+                                if (fdesc > 0) parts.push({ k: 'desc', txt: `− desc: ${formatBRL(fdesc)}` })
+                                if (fadi > 0)  parts.push({ k: 'adiant', txt: `− adiant: ${formatBRL(fadi)}` })
+                                if (fadic > 0) parts.push({ k: 'adic', txt: `+ adic: ${formatBRL(fadic)}` })
+                                if (fdesp > 0) parts.push({ k: 'desp', txt: `+ desp: ${formatBRL(fdesp)}` })
+                                totalVal = prod // produção já inclui a despesa
+                              } else {
+                                // Sócio / linha manual sem vínculo de fechamento: usa os campos da folha.
+                                parts.push({ k: 'prod', txt: `prod: ${formatBRL(prod)}` })
+                                if ((e.variavel || 0) !== 0) parts.push({ k: 'var', txt: `+ var: ${formatBRL(e.variavel || 0)}` })
+                                if ((e.reemb || 0) !== 0)    parts.push({ k: 'reemb', txt: `+ reemb: ${formatBRL(e.reemb || 0)}` })
+                                if ((e.descontos || 0) !== 0)    parts.push({ k: 'desc', txt: `− desc: ${formatBRL(e.descontos || 0)}` })
+                                if ((e.adiantamento || 0) !== 0) parts.push({ k: 'adiant', txt: `− adiant: ${formatBRL(e.adiantamento || 0)}` })
+                                if (reembAuto > 0) parts.push({ k: 'desp', txt: `+ desp: ${formatBRL(reembAuto)}` })
+                                totalVal = prod + reembAuto
+                              }
+                              // Produção editada manualmente difere do calculado do fechamento.
+                              const overridden = temFech && r.producao_calc != null && Math.abs(r.producao_calc - prod) > 0.01
+                              return (
+                                <>
+                                  {parts.map(p => (
+                                    <span key={p.k} className="text-[10px] whitespace-nowrap" style={{ color: 'var(--text-light)' }}>{p.txt}</span>
+                                  ))}
+                                  <span className="text-[10px] whitespace-nowrap font-semibold" style={{ color: 'var(--text-muted)' }}
+                                    title="Total da produção (já inclui a despesa)">
+                                    total: {formatBRL(totalVal)}
+                                  </span>
+                                  {overridden && (
+                                    <span className="text-[10px] whitespace-nowrap" style={{ color: 'var(--warning)' }}
+                                      title="Produção editada manualmente (difere do cálculo do fechamento)">
+                                      prod. editada (calc: {formatBRL(r.producao_calc!)})
+                                    </span>
+                                  )}
+                                </>
+                              )
+                            })()}
+                          </div>
                         </Td>
 
                         {/* ── Editável (sempre): Variável ── */}
@@ -1066,15 +1167,20 @@ export default function FechamentoFolhaPage() {
                           />
                         </Td>
 
-                        {/* ── Editável (sempre): Reemb ── */}
+                        {/* ── Editável (sempre): Reemb (manual + auto) ──
+                            reemb_auto vem do BE: soma das despesas pagas no fechamento do mês
+                            (Expense.is_paid=true + expense_date no mês). É read-only.
+                            Input continua editando só a parte manual (admin pode ajustar a diferença). */}
                         <Td right>
-                          <MaskedNum
-                            value={e.reemb}
-                            decimals={2}
-                            onChange={v => setEdit(r.row_key, 'reemb', v)}
-                            className={cellInputClass}
-                            style={cellInputStyle}
-                          />
+                          <div className="flex flex-col items-end gap-0.5" title="Reemb = manual (input) + auto (despesas 'pagar no fechamento' do mês)">
+                            <MaskedNum
+                              value={e.reemb}
+                              decimals={2}
+                              onChange={v => setEdit(r.row_key, 'reemb', v)}
+                              className={cellInputClass}
+                              style={cellInputStyle}
+                            />
+                          </div>
                         </Td>
 
                         {/* ── Calculado: Total Rend ── */}

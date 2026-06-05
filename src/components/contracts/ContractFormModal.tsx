@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api } from '@/lib/api'
+import { uploadDirect } from '@/lib/upload'
 import { toast } from 'sonner'
 import { Plus, X, Trash2, FileText, Download, ExternalLink, CheckCircle } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/search-select'
@@ -73,9 +74,9 @@ interface Contract {
 interface SelectOption { id: number; name: string; code_prefix?: string | null }
 
 // Regra de combinação Tipo de Serviço × Tipo de Contrato:
-// - Projeto     → permite: BH Fixo, BH Mensal, Fechado, On Demand (proíbe: SaaS, Cloud)
-// - Sustentação → permite: BH Fixo, BH Mensal, On Demand, Cloud   (proíbe: Fechado, SaaS)
-// - Bizify      → permite: BH Fixo, Fechado, On Demand, SaaS      (proíbe: BH Mensal, Cloud)
+// - Projeto     → permite: BH Fixo, BH Mensal, Fechado          (proíbe: On Demand, SaaS, Cloud)
+// - Sustentação → permite: BH Fixo, BH Mensal, On Demand, Cloud (proíbe: Fechado, SaaS)
+// - Bizify      → permite: BH Fixo, Fechado, On Demand, SaaS    (proíbe: BH Mensal, Cloud)
 // Subprojeto (filho) → adicionalmente proíbe BH Mensal, SaaS e Cloud (mensalidade
 // fica no projeto pai; filho herda regra de cobrança).
 // O contract_type atualmente selecionado é sempre mantido visível (caso de edição
@@ -262,23 +263,16 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
       // Load full contract data
       api.get<Contract>(`/contracts/${editContract.id}`).then(full => {
         setInternalEdit(full)
-        // Parse o código do projeto pra pré-popular os campos seq/ano/subSeq.
-        // Formato: PREFIX001-26  ou  PREFIX001-26-01 (subprojeto)
-        // Fonte: project.code (quando o projeto já foi gerado) ou project_code_preview
-        // (campo do contrato que reserva o código antes da geração).
-        const savedCode = (full.project?.code ?? (full as any).project_code_preview ?? '') as string
-        const codeMatch = savedCode.match(/^[A-Za-z]+(\d+)-(\d+)(?:-(\d+))?/)
-        const parsedSeq    = codeMatch?.[1] ?? ''
-        const parsedYear   = codeMatch?.[2] ?? CURRENT_YEAR_2D
-        const parsedSubSeq = codeMatch?.[3] ?? ''
+        // Parse o código existente (ex: "AVN005-26" ou "AVN005-26-01") pros segmentos
+        const codeMatch = ((full as any).project_code_preview ?? '').match(/^[A-Za-z]+(\d+)-(\d{2})(?:-(\d{2}))?$/)
         setForm({
           customer_id:           String(full.customer_id),
           project_name:          (full as any).project_name ?? '',
           is_subproject:         !!(full as any).parent_project_id,
-          sub_seq:               parsedSubSeq,
+          sub_seq:               codeMatch?.[3] ?? '',
           parent_project_id:     (full as any).parent_project_id ? String((full as any).parent_project_id) : '',
-          code_seq:              parsedSeq,
-          code_year:             parsedYear,
+          code_seq:              codeMatch?.[1] ?? '',
+          code_year:             codeMatch?.[2] ?? CURRENT_YEAR_2D,
           categoria:             full.categoria,
           service_type_id:       full.service_type_id ? String(full.service_type_id) : '',
           contract_type_id:      full.contract_type_id ? String(full.contract_type_id) : '',
@@ -438,18 +432,12 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
   // Mensalidade: Cloud e SaaS — só "Valor do Contrato" como mensalidade fixa.
   const isMensalidade = ctNameLower === 'cloud' || ctNameLower === 'saas'
   const isFechado   = !!selectedContractType && !isOnDemand && !isBankHours && !isMensalidade
+  // BH Mensal: banco de horas que não é fixo. Não tem horas de coordenador.
+  const isBhMensal  = isBankHours && !ctNameLower.includes('fixo')
+  const isBhFixo    = isBankHours && ctNameLower.includes('fixo')
 
-  // Saving = margem de horas da operação (read-only).
-  // Aparece para qualquer tipo de contrato que tenha horas_contratadas
-  // (Fechado, BH Fixo, BH Mensal). Antes só Fechado.
-  const saveErpserv = useMemo(() => {
-    if (isOnDemand || isMensalidade) return null
-    const sold    = Number(form.horas_contratadas) || 0
-    if (sold <= 0) return null
-    const consult = Number(form.horas_consultor) || 0
-    const coord   = Number(form.pct_horas_coordenador) || 0
-    return sold - consult - Math.round((coord / 100) * consult)
-  }, [isOnDemand, isMensalidade, form.horas_contratadas, form.horas_consultor, form.pct_horas_coordenador])
+  // "Horas de Gestão" derivado do Percentual Gestão sobre as Horas Vendidas (contratadas).
+  const [gestaoDraft, setGestaoDraft] = useState<string | null>(null)
 
   // Derived: project code preview
   const selectedCustomerObj = useMemo(
@@ -499,16 +487,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
         fd.append('motivo',            form.aporte_motivo)
         if (form.aporte_descricao) fd.append('description', form.aporte_descricao)
         if (!isChildTarget && pendProposta) fd.append('proposta', pendProposta.file)
-        const res = await fetch(`/api/v1/projects/${form.aporte_target_project_id}/hour-contributions`, {
-          method: 'POST',
-          credentials: 'same-origin',
-          body: fd,
-        })
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}))
-          toast.error(err?.message ?? 'Erro ao criar aporte')
-          return
-        }
+        await uploadDirect(`/projects/${form.aporte_target_project_id}/hour-contributions`, fd)
         toast.success(isChildTarget
           ? 'Aporte registrado no projeto filho (consumindo do saldo do pai)'
           : 'Aporte criado — card disponível no Kanban')
@@ -527,8 +506,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
     if (form.is_subproject && !form.parent_project_id)                   { toast.error('Selecione o projeto pai para o subprojeto'); setActiveTab(0); return }
     if (!isOnDemand && !isMensalidade && !form.horas_contratadas)        { toast.error('Informe as horas contratadas'); setActiveTab(4); return }
     if (isMensalidade && !form.valor_projeto)                            { toast.error('Informe o Valor do Contrato (mensalidade)'); setActiveTab(4); return }
-    // Subprojeto On Demand não tem Valor do Projeto — herda lógica do pai
-    if (isOnDemand && !isMensalidade && !form.is_subproject && !form.valor_projeto) { toast.error('Informe o Valor do Projeto'); setActiveTab(4); return }
+    if (isOnDemand && !isMensalidade && !form.valor_projeto)             { toast.error('Informe o Valor do Projeto'); setActiveTab(4); return }
 
     setSaving(true)
     try {
@@ -548,8 +526,8 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
         valor_projeto:         form.valor_projeto ? Number(form.valor_projeto) : null,
         valor_hora:            form.valor_hora ? Number(form.valor_hora) : null,
         hora_adicional:        form.hora_adicional ? Number(form.hora_adicional) : null,
-        pct_horas_coordenador: form.pct_horas_coordenador ? Number(form.pct_horas_coordenador) : null,
-        horas_coordenacao:     form.horas_coordenacao ? Number(form.horas_coordenacao) : null,
+        pct_horas_coordenador: isBhMensal ? null : (form.pct_horas_coordenador ? Number(form.pct_horas_coordenador) : null),
+        horas_coordenacao:     isBhMensal ? null : (form.horas_coordenacao ? Number(form.horas_coordenacao) : null),
         horas_consultor:       form.horas_consultor ? Number(form.horas_consultor) : null,
         expectativa_inicio:    form.expectativa_inicio || null,
         condicao_pagamento:    form.condicao_pagamento || null,
@@ -574,11 +552,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
           const fd = new FormData()
           fd.append('file', file)
           fd.append('type', type)
-          await fetch(`/api/v1/contracts/${contract.id}/attachments`, {
-            method: 'POST',
-            credentials: 'same-origin',
-            body: fd,
-          })
+          await uploadDirect(`/contracts/${contract.id}/attachments`, fd)
         }
         setUploading(false)
       }
@@ -1002,45 +976,6 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                 />
               </div>
 
-              {/* Aprovação do Cliente / Proposta — atalho de upload (mesma funcionalidade
-                  da aba Anexos, mas visível na aba Cliente pra não precisar trocar de tab). */}
-              <div>
-                <label className={labelCls}>Aprovação do Cliente / Proposta Assinada</label>
-                {(() => {
-                  const existing = internalEdit?.attachments?.filter(a => a.type === 'proposta') ?? []
-                  const pendingPropostas = pendingFiles.filter(pf => pf.type === 'proposta')
-                  return (
-                    <>
-                      <input
-                        type="file"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt,.csv,.zip"
-                        onChange={e => {
-                          const f = e.target.files?.[0]
-                          if (f) { setPendingFiles(p => [...p, { file: f, type: 'proposta' }]); e.target.value = '' }
-                        }}
-                        className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-1 focus:ring-cyan-500/40 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:bg-cyan-500/10 file:text-cyan-300 hover:file:bg-cyan-500/20 file:cursor-pointer"
-                        style={inputStyle}
-                      />
-                      {existing.length > 0 && (
-                        <p className="text-[11px] text-emerald-400 mt-1">
-                          ✓ {existing.length} arquivo(s) já enviado(s): {existing.map(a => a.original_name).join(', ')}
-                        </p>
-                      )}
-                      {pendingPropostas.length > 0 && (
-                        <p className="text-[11px] text-cyan-400 mt-1">
-                          + {pendingPropostas.length} arquivo(s) aguardando upload
-                        </p>
-                      )}
-                      {existing.length === 0 && pendingPropostas.length === 0 && (
-                        <p className="text-[10px] mt-1" style={{ color: 'var(--text-light)' }}>
-                          Anexe a aprovação formal (PDF, imagem ou e-mail exportado) — máx 20 MB
-                        </p>
-                      )}
-                    </>
-                  )
-                })()}
-              </div>
-
               {/* Projeto Pai */}
               {form.customer_id && form.is_subproject && (
                 <div>
@@ -1219,8 +1154,6 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-3">Valores e Horas</p>
                 <div className="grid grid-cols-3 gap-3">
-                  {/* Subprojeto On Demand não tem Valor do Projeto — fechamento financeiro fica no pai */}
-                  {!(isOnDemand && form.is_subproject) && (
                   <div>
                     <label className={labelCls}>
                       {isMensalidade ? 'Valor do Contrato (R$) — mensalidade' : 'Valor do Projeto (R$)'}
@@ -1236,7 +1169,6 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                       }}
                       className={inputCls} style={inputStyle} />
                   </div>
-                  )}
                   {!isMensalidade && !isOnDemand && (
                     <div>
                       <label className={labelCls}>Valor da Hora (R$)</label>
@@ -1260,28 +1192,42 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                         className={inputCls} style={inputStyle} />
                     </div>
                   )}
-                  {!isOnDemand && !isMensalidade && (
+                  {(isFechado || isBhFixo) && (
                     <div>
-                      <label className={labelCls}>% Horas Coordenador</label>
+                      <label className={labelCls}>Percentual Gestão (%)</label>
                       <input type="number" min="0" max="100" step="1" placeholder="0"
                         value={form.pct_horas_coordenador}
-                        onChange={e => setForm(f => ({ ...f, pct_horas_coordenador: e.target.value }))}
+                        onChange={e => { setGestaoDraft(null); setForm(f => ({ ...f, pct_horas_coordenador: e.target.value })) }}
                         className={inputCls} style={inputStyle} />
                     </div>
                   )}
-                  {/* Horas de Coordenação (CA v1) — banco fixo do coord; copiado pro projeto ao gerar. */}
-                  {!isOnDemand && (
-                    <div>
-                      <label className={labelCls}>Horas de Coordenação</label>
-                      <input type="number" min="0" step="0.5" placeholder="0"
-                        value={form.horas_coordenacao}
-                        onChange={e => setForm(f => ({ ...f, horas_coordenacao: e.target.value }))}
-                        className={inputCls} style={inputStyle} />
-                      <p className="text-[10px] mt-1 text-zinc-500">Banco fixo de horas do coordenador. Copiado pro projeto ao gerar.</p>
-                    </div>
-                  )}
-                  {/* Horas Consultor aparece sempre que faz sentido (Fechado, BH Fixo, BH Mensal). */}
-                  {!isOnDemand && !isMensalidade && (
+                  {(isFechado || isBhFixo) && (() => {
+                    // Horas de Gestão = (Percentual Gestão / 100) × Horas Vendidas (contratadas).
+                    // Bidirecional: editar aqui recalcula o %; editar o % recalcula isto.
+                    const base = Number(form.horas_contratadas) || 0
+                    const pct  = Number(form.pct_horas_coordenador) || 0
+                    const derived = base > 0 ? Math.round((pct / 100) * base * 100) / 100 : 0
+                    const shown = gestaoDraft ?? (derived ? String(derived) : '')
+                    return (
+                      <div>
+                        <label className={labelCls}>Horas de Gestão</label>
+                        <input type="number" min="0" step="0.5" placeholder="0" disabled={base <= 0}
+                          value={shown}
+                          onChange={e => {
+                            const v = e.target.value
+                            setGestaoDraft(v)
+                            const h = Number(v) || 0
+                            if (base > 0) setForm(f => ({ ...f, pct_horas_coordenador: String(Math.round((h / base) * 100 * 100) / 100) }))
+                          }}
+                          onBlur={() => setGestaoDraft(null)}
+                          className={inputCls} style={inputStyle} />
+                        <p className="text-[10px] mt-1 text-zinc-500">
+                          {base > 0 ? `${pct || 0}% de ${base}h (vendidas)` : 'Informe Horas Contratadas para calcular'}
+                        </p>
+                      </div>
+                    )
+                  })()}
+                  {(isFechado || isBhFixo) && (
                     <div>
                       <label className={labelCls}>Horas Consultor</label>
                       <input type="number" min="0" step="1" placeholder="0"
@@ -1290,11 +1236,32 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                         className={inputCls} style={inputStyle} />
                     </div>
                   )}
-                  {saveErpserv != null && (
+                  {(isFechado || isBhFixo) && (() => {
+                    // Saving ERPSERV = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
+                    const sold    = Number(form.horas_contratadas) || 0
+                    const consult = Number(form.horas_consultor) || 0
+                    const pct     = Number(form.pct_horas_coordenador) || 0
+                    const gestao  = sold > 0 ? (pct / 100) * sold : 0
+                    const sobra   = Math.round((sold - consult - gestao) * 100) / 100
+                    return (
+                      <div>
+                        <label className={labelCls}>Saving ERPSERV</label>
+                        <input readOnly tabIndex={-1} value={`${sobra}h`}
+                          className={inputCls} style={{ ...inputStyle, opacity: 0.6, cursor: 'default' }} />
+                      </div>
+                    )
+                  })()}
+                  {(isFechado || isBhFixo) && (
                     <div>
-                      <label className={labelCls}>Saving</label>
-                      <input readOnly value={saveErpserv}
-                        className={inputCls} style={{ ...inputStyle, opacity: 0.5, cursor: 'not-allowed' }} />
+                      <label className={labelCls}>Horas Apontáveis <span className="text-red-400">*</span></label>
+                      <input type="number" min="0" step="0.5" placeholder="0"
+                        value={form.horas_coordenacao}
+                        onChange={e => setForm(f => ({ ...f, horas_coordenacao: e.target.value }))}
+                        className={inputCls} style={inputStyle} />
+                      <p className="text-[10px] mt-1 text-zinc-500">Banco de horas apontáveis. Copiado pro projeto ao gerar.</p>
+                      {form.horas_coordenacao !== '' && form.horas_contratadas !== '' && Number(form.horas_coordenacao) > Number(form.horas_contratadas) && (
+                        <p className="text-[10px] mt-1 text-red-400">Não pode exceder as horas vendidas ({form.horas_contratadas}h).</p>
+                      )}
                     </div>
                   )}
                 </div>

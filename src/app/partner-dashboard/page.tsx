@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { api, ApiError } from '@/lib/api'
+import { NotasPjCell, type NotasPayload } from '@/components/fechamento/NotasPjCell'
 import { exportTimesheetsToExcel } from '@/lib/exportTimesheets'
 import { TimesheetFormModal } from '@/components/ui/timesheet-form-modal'
 import { formatBRL, formatNumber } from '@/lib/format'
@@ -95,6 +96,89 @@ interface ExpenseItem {
 }
 
 type Tab = 'consultores' | 'apontamentos' | 'despesas' | 'indicadores'
+
+// ─── Recebimento do fechamento (espelha a tela do admin) ──────────────────────
+
+interface MyClosing {
+  tipo: 'consultor' | 'parceiro'
+  total_servico: number
+  total_despesas: number
+  total_base: number
+  desconto: number
+  desconto_desc: string | null
+  adiantamento: number
+  adicional: number
+  adicional_desc: string | null
+  recebimento: number
+}
+
+/**
+ * Bloco "Recebimento do fechamento" — mostra o MESMO valor que o admin vê na tela de
+ * fechamento do parceiro: total base + ajustes (desconto/adiantamento/adicional com
+ * motivos) e o recebimento final em destaque. Só renderiza ajustes ≠ 0.
+ */
+function MyClosingBlock({ closing }: { closing: MyClosing | null }) {
+  if (!closing) return null
+
+  const temAjustes = closing.desconto !== 0 || closing.adiantamento !== 0 || closing.adicional !== 0
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--brand-border)', background: 'var(--brand-surface)' }}>
+      <div className="px-5 py-3.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--brand-border)' }}>
+        <DollarSign size={15} style={{ color: 'var(--primary)' }} />
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Recebimento do fechamento</h3>
+      </div>
+      <div className="px-5 py-4 space-y-2.5">
+        <div className="flex items-center justify-between text-sm">
+          <span style={{ color: 'var(--brand-muted)' }}>Total do fechamento</span>
+          <span className="font-semibold tabular-nums" style={{ color: 'var(--brand-text)' }}>{formatBRL(closing.total_servico)}</span>
+        </div>
+        {closing.total_despesas > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span style={{ color: 'var(--brand-muted)' }}>+ Despesa</span>
+            <span className="font-medium tabular-nums shrink-0 ml-3" style={{ color: 'var(--success)' }}>+ {formatBRL(closing.total_despesas)}</span>
+          </div>
+        )}
+        {temAjustes && (
+          <div className="space-y-2 pt-1 mt-1 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+            {closing.desconto !== 0 && (
+              <div className="flex items-start justify-between text-sm">
+                <div className="min-w-0">
+                  <span style={{ color: 'var(--brand-muted)' }}>− Desconto</span>
+                  {closing.desconto_desc && (
+                    <p className="text-[11px] mt-0.5 break-words" style={{ color: 'var(--brand-subtle)' }}>{closing.desconto_desc}</p>
+                  )}
+                </div>
+                <span className="font-medium tabular-nums shrink-0 ml-3" style={{ color: 'var(--danger)' }}>− {formatBRL(closing.desconto)}</span>
+              </div>
+            )}
+            {closing.adiantamento !== 0 && (
+              <div className="flex items-start justify-between text-sm">
+                <span style={{ color: 'var(--brand-muted)' }}>− Adiantamento</span>
+                <span className="font-medium tabular-nums shrink-0 ml-3" style={{ color: 'var(--danger)' }}>− {formatBRL(closing.adiantamento)}</span>
+              </div>
+            )}
+            {closing.adicional !== 0 && (
+              <div className="flex items-start justify-between text-sm">
+                <div className="min-w-0">
+                  <span style={{ color: 'var(--brand-muted)' }}>+ Adicional</span>
+                  {closing.adicional_desc && (
+                    <p className="text-[11px] mt-0.5 break-words" style={{ color: 'var(--brand-subtle)' }}>{closing.adicional_desc}</p>
+                  )}
+                </div>
+                <span className="font-medium tabular-nums shrink-0 ml-3" style={{ color: 'var(--success)' }}>+ {formatBRL(closing.adicional)}</span>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="flex items-center justify-between pt-2.5 mt-1 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+          <span className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Recebimento</span>
+          <span className="text-lg font-bold tabular-nums" style={{ color: 'var(--success)' }}>{formatBRL(closing.recebimento)}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const STATUS_COLORS: Record<string, string> = {
   pending:              'bg-yellow-500/15 text-yellow-400',
@@ -214,14 +298,63 @@ function KpiCard({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Card do Painel do Parceiro: o admin do parceiro (parceiro_admin) envia a NFS-e + Nota de
+ * débito do parceiro no mês. O GET retorna `notas: null` se o parceiro não for PJ → o card some.
+ * Só upload — o aceite/recusa é do administrativo (Fechamento → Parceiro).
+ */
+function NotasFiscaisParceiroCard({ partnerId, yearMonth }: { partnerId: number; yearMonth: string }) {
+  const [notas, setNotas] = useState<NotasPayload>(null)
+  const [isPj, setIsPj] = useState<boolean | null>(null)
+  // Recebimento esperado do fechamento (o valor da nota deve ser igual a ele).
+  const [expectedValue, setExpectedValue] = useState<number | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    api.get<{ notas: NotasPayload }>(`/fechamento/notas/parceiro/${partnerId}/${yearMonth}`)
+      .then(r => { if (alive) { setNotas(r.notas ?? null); setIsPj(r.notas != null) } })
+      .catch(() => { if (alive) setIsPj(false) })
+    api.get<{ data: { recebimento: number } }>(`/my-closing/${yearMonth}`)
+      .then(r => { if (alive) setExpectedValue(r?.data?.recebimento ?? null) })
+      .catch(() => { if (alive) setExpectedValue(null) })
+    return () => { alive = false }
+  }, [partnerId, yearMonth])
+
+  if (isPj !== true) return null
+
+  return (
+    <div className="rounded-xl border p-4" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
+      <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--text)' }}>Notas Fiscais (PJ)</h3>
+      <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>Envie a NFS-e do parceiro neste mês. O administrativo valida (aceita ou recusa com motivo).</p>
+      <NotasPjCell type="parceiro" id={partnerId} yearMonth={yearMonth} notas={notas} canDecide={false} canUpload expectedValue={expectedValue} onChanged={setNotas} />
+    </div>
+  )
+}
+
 export default function PartnerDashboardPage() {
   const { user } = useAuth()
   const router = useRouter()
+  const isAdmin = user?.type === 'admin' || user?.type === 'administrativo'
 
   useEffect(() => {
     if (!user) return
-    if (user.type !== 'parceiro_admin' || !user.is_executive) router.replace('/dashboard')
-  }, [user, router])
+    // parceiro_admin executivo (dono) OU admin/administrativo (Visão Externa) podem ver.
+    if (!isAdmin && (user.type !== 'parceiro_admin' || !user.is_executive)) router.replace('/dashboard')
+  }, [user, router, isAdmin])
+
+  // Admin escolhe qual parceiro previsualizar (Visão Externa).
+  const [partners, setPartners] = useState<{ id: number; name: string }[]>([])
+  const [partnerId, setPartnerId] = useState('')
+  useEffect(() => {
+    if (!isAdmin) return
+    api.get<{ items?: { id: number; name: string }[]; data?: { id: number; name: string }[] }>('/partners?pageSize=500')
+      .then(r => {
+        const list = (r.items ?? r.data ?? []).map(p => ({ id: p.id, name: p.name }))
+        setPartners(list)
+        setPartnerId(prev => prev || (list[0] ? String(list[0].id) : ''))
+      })
+      .catch(() => {})
+  }, [isAdmin])
 
   const [data, setData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -249,6 +382,18 @@ export default function PartnerDashboardPage() {
 
   const [consultantId, setConsultantId] = useState('')
   const [newTsOpen, setNewTsOpen] = useState(false)
+
+  // ── Recebimento do fechamento (mesmo valor que o admin vê) ──
+  const [myClosing, setMyClosing] = useState<MyClosing | null>(null)
+  useEffect(() => {
+    const ym = `${year}-${pad(month + 1)}`
+    let alive = true
+    setMyClosing(null)
+    api.get<{ data: MyClosing }>(`/my-closing/${ym}`)
+      .then(r => { if (alive) setMyClosing(r?.data ?? null) })
+      .catch(() => { if (alive) setMyClosing(null) })
+    return () => { alive = false }
+  }, [year, month])
 
   // ── Timesheets tab state ──
   const [timesheets, setTimesheets]     = useState<TimesheetItem[]>([])
@@ -333,11 +478,13 @@ export default function PartnerDashboardPage() {
   const [evoLoaded,  setEvoLoaded]      = useState(false)
 
   const load = useCallback(() => {
+    if (isAdmin && !partnerId) { setLoading(false); return }
     setLoading(true)
     setTsLoaded(false)
     setExpLoaded(false)
     setEvoLoaded(false)
     const qs = new URLSearchParams({ start_date: startDate, end_date: endDate })
+    if (isAdmin && partnerId) qs.set('partner_id', partnerId)
     api.get<ReportData & { error?: string }>(`/partner/report?${qs}`)
       .then(r => {
         if (r.error) { toast.error(r.error); return }
@@ -345,7 +492,7 @@ export default function PartnerDashboardPage() {
       })
       .catch(() => toast.error('Erro ao carregar dados do parceiro'))
       .finally(() => setLoading(false))
-  }, [startDate, endDate])
+  }, [startDate, endDate, isAdmin, partnerId])
 
   useEffect(() => { load() }, [load])
 
@@ -358,42 +505,47 @@ export default function PartnerDashboardPage() {
       while (m < 0) { m += 12; y-- }
       const sd = `${y}-${pad(m + 1)}-01`
       const ed = `${y}-${pad(m + 1)}-${pad(new Date(y, m + 1, 0).getDate())}`
-      return api.get<ReportData>(`/partner/report?start_date=${sd}&end_date=${ed}`)
+      const pq = isAdmin && partnerId ? `&partner_id=${partnerId}` : ''
+      return api.get<ReportData>(`/partner/report?start_date=${sd}&end_date=${ed}${pq}`)
         .then(r => ({ label: `${MONTHS_PT[m]}/${String(y).slice(2)}`, horas: r.kpis?.total_hours ?? 0, receita: r.kpis?.total_amount ?? 0 }))
         .catch(() => ({ label: MONTHS_PT[m], horas: 0, receita: 0 }))
     })
     Promise.all(requests).then(results => { setEvoData(results); setEvoLoaded(true) }).finally(() => setEvoLoading(false))
-  }, [month, year])
+  }, [month, year, isAdmin, partnerId])
+
+  // Admin não tem "team_view" de parceiro — escopa pelos consultores do parceiro
+  // selecionado (vindos do report). parceiro_admin usa team_view normalmente.
+  const scopeTeamQs = useCallback((qs: URLSearchParams) => {
+    if (isAdmin) {
+      const ids = consultantId ? [consultantId] : (data?.consultants ?? []).map(c => String(c.id))
+      if (!ids.length) return false
+      ids.forEach(id => qs.append('user_id[]', id))
+    } else {
+      qs.set('team_view', '1')
+      if (consultantId) qs.set('user_id', consultantId)
+    }
+    return true
+  }, [isAdmin, consultantId, data])
 
   const loadTimesheets = useCallback(() => {
     setTsLoading(true)
-    const qs = new URLSearchParams({
-      team_view: '1',
-      start_date: startDate,
-      end_date: endDate,
-      pageSize: '200',
-    })
-    if (consultantId) qs.set('user_id', consultantId)
+    const qs = new URLSearchParams({ start_date: startDate, end_date: endDate, pageSize: '200' })
+    if (!scopeTeamQs(qs)) { setTimesheets([]); setTsLoaded(true); setTsLoading(false); return }
     api.get<{ items: TimesheetItem[] }>(`/timesheets?${qs}`)
       .then(r => { setTimesheets(r.items ?? []); setTsLoaded(true) })
       .catch(() => toast.error('Erro ao carregar apontamentos'))
       .finally(() => setTsLoading(false))
-  }, [startDate, endDate, consultantId])
+  }, [startDate, endDate, scopeTeamQs])
 
   const loadExpenses = useCallback(() => {
     setExpLoading(true)
-    const qs = new URLSearchParams({
-      team_view: '1',
-      start_date: startDate,
-      end_date: endDate,
-      pageSize: '200',
-    })
-    if (consultantId) qs.set('user_id', consultantId)
+    const qs = new URLSearchParams({ start_date: startDate, end_date: endDate, pageSize: '200' })
+    if (!scopeTeamQs(qs)) { setExpenses([]); setExpLoaded(true); setExpLoading(false); return }
     api.get<{ items: ExpenseItem[] }>(`/expenses?${qs}`)
       .then(r => { setExpenses(r.items ?? []); setExpLoaded(true) })
       .catch(() => toast.error('Erro ao carregar despesas'))
       .finally(() => setExpLoading(false))
-  }, [startDate, endDate, consultantId])
+  }, [startDate, endDate, scopeTeamQs])
 
   useEffect(() => {
     if (activeTab === 'apontamentos') loadTimesheets()
@@ -537,7 +689,7 @@ export default function PartnerDashboardPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
 
         {/* ── Header ── */}
         <div className="flex items-start justify-between gap-4">
@@ -588,6 +740,23 @@ export default function PartnerDashboardPage() {
               </button>
             </div>
           </div>
+
+          {isAdmin && (
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-medium" style={{ color: 'var(--brand-subtle)' }}>Parceiro</label>
+              <select
+                value={partnerId}
+                onChange={e => { setPartnerId(e.target.value); setConsultantId('') }}
+                className="px-2.5 py-1.5 rounded-lg text-sm bg-[#0A0A0B] border outline-none text-white min-w-[200px]"
+                style={{ borderColor: 'var(--brand-border)' }}
+              >
+                {partners.length === 0 && <option value="">Carregando…</option>}
+                {partners.map(p => (
+                  <option key={p.id} value={String(p.id)}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {data && data.consultants.length > 1 && (
             <div className="flex flex-col gap-1">
@@ -655,6 +824,13 @@ export default function PartnerDashboardPage() {
           </div>
         ) : null}
 
+        {/* Recebimento do fechamento — mesmo valor que o admin vê, perto do KPI Total a Receber */}
+        {activeTab === 'consultores' && <MyClosingBlock closing={myClosing} />}
+
+        {data?.partner?.id && (
+          <NotasFiscaisParceiroCard partnerId={data.partner.id} yearMonth={`${year}-${pad(month + 1)}`} />
+        )}
+
         {/* ── Tabs ── */}
         <div
           className="rounded-xl overflow-hidden"
@@ -689,7 +865,7 @@ export default function PartnerDashboardPage() {
 
           {/* ── Consultores tab ── */}
           {activeTab === 'consultores' && (
-            <div style={{ background: 'var(--brand-surface)' }}>
+            <div className="overflow-x-auto" style={{ background: 'var(--brand-surface)' }}>
               <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--brand-border)' }}>
                 <h2 className="text-sm font-semibold text-white">Consultores</h2>
                 {data && (
@@ -786,7 +962,7 @@ export default function PartnerDashboardPage() {
 
           {/* ── Apontamentos tab ── */}
           {activeTab === 'apontamentos' && (
-            <div style={{ background: 'var(--brand-surface)' }}>
+            <div className="overflow-x-auto" style={{ background: 'var(--brand-surface)' }}>
               <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--brand-border)' }}>
                 <h2 className="text-sm font-semibold text-white">Apontamentos da Equipe</h2>
                 <div className="flex items-center gap-3">
@@ -907,7 +1083,7 @@ export default function PartnerDashboardPage() {
 
           {/* ── Despesas tab ── */}
           {activeTab === 'despesas' && (
-            <div style={{ background: 'var(--brand-surface)' }}>
+            <div className="overflow-x-auto" style={{ background: 'var(--brand-surface)' }}>
               <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--brand-border)' }}>
                 <h2 className="text-sm font-semibold text-white">Despesas da Equipe</h2>
                 <div className="flex items-center gap-3">
@@ -1035,7 +1211,7 @@ export default function PartnerDashboardPage() {
                   {/* 2. Performance por Consultor */}
                   <div>
                     <p className="text-[11px] uppercase tracking-widest font-semibold mb-3" style={{ color: 'var(--brand-subtle)' }}>Performance por Consultor</p>
-                    <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--brand-border)' }}>
+                    <div className="rounded-xl overflow-x-auto" style={{ border: '1px solid var(--brand-border)' }}>
                       <table className="w-full text-sm">
                         <thead>
                           <tr style={{ background: 'var(--brand-bg)', borderBottom: '1px solid var(--brand-border)' }}>

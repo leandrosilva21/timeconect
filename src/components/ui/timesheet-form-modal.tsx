@@ -6,7 +6,7 @@ import { api, ApiError } from '@/lib/api'
 import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
 
-interface SelectOption { id: number; name: string; service_type_code?: string | null }
+interface SelectOption { id: number; name: string; service_type_code?: string | null; is_investimento_comercial?: boolean; categoria_interna?: string | null }
 
 interface Props {
   open: boolean
@@ -143,7 +143,7 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
   const [conflictData, setConflictData] = useState<{ date: string; start_time?: string; end_time?: string; customer_name?: string; project_name?: string } | null>(null)
 
   const [form, setForm] = useState({
-    user_id: '', customer_id: '', project_id: '',
+    user_id: '', customer_id: '', project_id: '', real_project_id: '',
     date: new Date().toISOString().split('T')[0],
     start_time: '', end_time: '', total_hours: '',
     ticket: '', observation: '',
@@ -161,7 +161,7 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
     setUseTotal(false)
     setTimeDriver('end')
     setForm({
-      user_id: '', customer_id: '', project_id: '',
+      user_id: '', customer_id: '', project_id: '', real_project_id: '',
       date: new Date().toISOString().split('T')[0],
       start_time: '', end_time: '', total_hours: '',
       ticket: '', observation: '',
@@ -221,7 +221,7 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
       .then(r => {
         if (!cancelled) setProjects(
           Array.isArray(r?.items)
-            ? r.items.map((p: any) => ({ id: p.id, name: p.name, service_type_code: p.service_type?.code ?? null }))
+            ? r.items.map((p: any) => ({ id: p.id, name: p.name, service_type_code: p.service_type?.code ?? null, is_investimento_comercial: !!p.is_investimento_comercial, categoria_interna: p.categoria_interna ?? null }))
             : []
         )
       })
@@ -254,8 +254,16 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.start_time, form.end_time, form.total_hours, useTotal, timeDriver])
 
+  // ERPSERV (empresa própria): investimentos internos não pedem Projeto Real.
+  const selectedCustomer = customers.find(c => String(c.id) === form.customer_id) as any
+  const isErpservCustomer = String(selectedCustomer?.name ?? '').trim().toUpperCase() === 'ERPSERV'
+
   const save = async () => {
     if (!form.project_id) { toast.error('Selecione um projeto'); return }
+    const selProj = projects.find(p => String(p.id) === form.project_id) as any
+    // Investimento da própria ERPSERV não pede Projeto Real (interno, sem projeto de cliente real).
+    const isInvestimento = !!selProj?.is_investimento_comercial && !isErpservCustomer
+    if (isInvestimento && !form.real_project_id) { toast.error('Selecione o Projeto Real'); return }
     if (useTotal) {
       if (!form.total_hours) { toast.error('Informe o total de horas'); return }
     } else {
@@ -266,6 +274,7 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
     try {
       const body: Record<string, any> = {
         project_id:  Number(form.project_id),
+        ...(isInvestimento && form.real_project_id ? { real_project_id: Number(form.real_project_id) } : {}),
         date:        form.date,
         start_time:  form.start_time || undefined,
         end_time:    form.end_time || undefined,
@@ -360,13 +369,43 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
               <div className="mt-1">
                 <SearchSelect
                   value={form.project_id}
-                  onChange={v => setForm(f => ({ ...f, project_id: v }))}
+                  onChange={v => setForm(f => ({ ...f, project_id: v, real_project_id: '' }))}
                   options={projects}
                   placeholder={form.customer_id ? 'Selecione o projeto...' : 'Selecione o cliente primeiro'}
                   disabled={!form.customer_id}
                 />
               </div>
             </div>
+
+            {/* Projeto Real — só para projetos de INVESTIMENTO (apontamento contabiliza no
+                investimento; o real é referência e define o coordenador que aprova). */}
+            {(() => {
+              const sel = projects.find(p => String(p.id) === form.project_id) as any
+              // ERPSERV: investimento interno não pede Projeto Real.
+              if (!sel?.is_investimento_comercial || isErpservCustomer) return null
+              const soSustentacao = sel?.categoria_interna === 'Suporte'
+              const realOpts = projects.filter(p => {
+                if ((p as any).is_investimento_comercial || String(p.id) === form.project_id) return false
+                if (soSustentacao && (p as any).service_type_code !== 'sustentacao') return false
+                return true
+              })
+              return (
+                <div>
+                  <Label className="text-xs text-zinc-400">Projeto Real *</Label>
+                  <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-light)' }}>
+                    Projeto verdadeiro da hora. O apontamento continua contabilizado no investimento; o coordenador do projeto real aprova.{soSustentacao ? ' (apenas projetos de Sustentação)' : ''}
+                  </p>
+                  <div className="mt-1">
+                    <SearchSelect
+                      value={form.real_project_id}
+                      onChange={v => setForm(f => ({ ...f, real_project_id: v }))}
+                      options={realOpts}
+                      placeholder="Selecione o projeto real..."
+                    />
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Data */}
             <div>
@@ -408,8 +447,9 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
                 </div>
                 <div>
                   <Label className="text-xs text-zinc-400">Total {timeDriver === 'total' ? '*' : ''}</Label>
-                  <input type="text" inputMode="numeric" value={form.total_hours} placeholder="ex: 2:30"
-                    onChange={e => { const v = e.target.value.replace(/[^\d:]/g, ''); setTimeDriver('total'); setForm(f => ({ ...f, total_hours: v })) }}
+                  {/* Aceita HH:MM ("2:30"), decimal com . ou , ("2.5", "2,5") e inteiro ("2"). parseHHMM converte. */}
+                  <input type="text" inputMode="decimal" value={form.total_hours} placeholder="ex: 2:30 ou 2,5"
+                    onChange={e => { const v = e.target.value.replace(/[^\d:.,]/g, ''); setTimeDriver('total'); setForm(f => ({ ...f, total_hours: v })) }}
                     className="mt-1 w-full px-3 py-2 rounded-xl text-sm outline-none" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)" }} />
                 </div>
               </div>
@@ -424,8 +464,9 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
                 </div>
                 <div>
                   <Label className="text-xs text-zinc-400">Total de Horas *</Label>
-                  <input type="text" inputMode="numeric" value={form.total_hours} placeholder="ex: 2:30"
-                    onChange={e => { const v = e.target.value.replace(/[^\d:]/g, ''); setForm(f => ({ ...f, total_hours: v })) }}
+                  {/* Aceita HH:MM ("2:30"), decimal com . ou , ("2.5", "2,5") e inteiro ("2"). parseHHMM converte. */}
+                  <input type="text" inputMode="decimal" value={form.total_hours} placeholder="ex: 2:30 ou 2,5"
+                    onChange={e => { const v = e.target.value.replace(/[^\d:.,]/g, ''); setForm(f => ({ ...f, total_hours: v })) }}
                     className="mt-1 w-full px-3 py-2 rounded-xl text-sm outline-none" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)" }} />
                 </div>
               </>

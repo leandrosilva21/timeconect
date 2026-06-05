@@ -2,13 +2,16 @@
 
 import { AppLayout } from '@/components/layout/app-layout'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
-import { api, ApiError, toRelativePath } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
+import { fetchAndOpenLegacyUrl } from '@/lib/attachments'
+import { NotasPjCell, type NotasPayload } from '@/components/fechamento/NotasPjCell'
 import { previewText, sanitizeHtml } from '@/lib/sanitize'
 import { formatBRL } from '@/lib/format'
 import { exportTimesheetsToExcel } from '@/lib/exportTimesheets'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -79,6 +82,7 @@ interface ExpenseItem {
   charge_client: boolean
   is_paid: boolean
   receipt_url?: string
+  rejection_reason?: string | null
 }
 
 interface ProjectOption { id: number; name: string; code: string; customer?: { id: number; name: string }; service_type?: { id: number; name: string; code: string } }
@@ -154,6 +158,96 @@ function fmtYearMonth(ym: string): string {
   return `${months[parseInt(m) - 1]}/${y}`
 }
 
+// ─── Recebimento do fechamento (espelha a tela do admin) ──────────────────────
+
+interface MyClosing {
+  tipo: 'consultor' | 'parceiro'
+  total_servico: number
+  total_despesas: number
+  total_base: number
+  desconto: number
+  desconto_desc: string | null
+  adiantamento: number
+  adicional: number
+  adicional_desc: string | null
+  recebimento: number
+}
+
+/**
+ * Bloco "Recebimento do fechamento" — mostra o MESMO valor que o admin vê na tela de
+ * fechamento: total base + ajustes (desconto/adiantamento/adicional com motivos) e o
+ * recebimento final em destaque. Só renderiza as linhas de ajuste ≠ 0.
+ */
+function RecebimentoFechamentoBlock({ closing }: { closing: MyClosing | null }) {
+  if (!closing) return null
+
+  const temAjustes = closing.desconto !== 0 || closing.adiantamento !== 0 || closing.adicional !== 0
+
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--brand-border)', background: 'var(--brand-surface)' }}>
+      <div className="px-5 py-3.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--brand-border)' }}>
+        <DollarSign size={15} style={{ color: 'var(--primary)' }} />
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Recebimento do fechamento</h3>
+      </div>
+
+      <div className="px-5 py-4 space-y-2.5">
+        {/* Total do fechamento (serviço) */}
+        <div className="flex items-center justify-between text-sm">
+          <span style={{ color: 'var(--brand-muted)' }}>Total do fechamento</span>
+          <span className="font-semibold tabular-nums" style={{ color: 'var(--brand-text)' }}>{formatBRL(closing.total_servico)}</span>
+        </div>
+
+        {/* Despesa do mês (entra no recebimento) */}
+        {closing.total_despesas > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span style={{ color: 'var(--brand-muted)' }}>+ Despesa</span>
+            <span className="font-medium tabular-nums shrink-0 ml-3" style={{ color: 'var(--success)' }}>+ {formatBRL(closing.total_despesas)}</span>
+          </div>
+        )}
+
+        {temAjustes && (
+          <div className="space-y-2 pt-1 mt-1 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+            {closing.desconto !== 0 && (
+              <div className="flex items-start justify-between text-sm">
+                <div className="min-w-0">
+                  <span style={{ color: 'var(--brand-muted)' }}>− Desconto</span>
+                  {closing.desconto_desc && (
+                    <p className="text-[11px] mt-0.5 break-words" style={{ color: 'var(--brand-subtle)' }}>{closing.desconto_desc}</p>
+                  )}
+                </div>
+                <span className="font-medium tabular-nums shrink-0 ml-3" style={{ color: 'var(--danger)' }}>− {formatBRL(closing.desconto)}</span>
+              </div>
+            )}
+            {closing.adiantamento !== 0 && (
+              <div className="flex items-start justify-between text-sm">
+                <span style={{ color: 'var(--brand-muted)' }}>− Adiantamento</span>
+                <span className="font-medium tabular-nums shrink-0 ml-3" style={{ color: 'var(--danger)' }}>− {formatBRL(closing.adiantamento)}</span>
+              </div>
+            )}
+            {closing.adicional !== 0 && (
+              <div className="flex items-start justify-between text-sm">
+                <div className="min-w-0">
+                  <span style={{ color: 'var(--brand-muted)' }}>+ Adicional</span>
+                  {closing.adicional_desc && (
+                    <p className="text-[11px] mt-0.5 break-words" style={{ color: 'var(--brand-subtle)' }}>{closing.adicional_desc}</p>
+                  )}
+                </div>
+                <span className="font-medium tabular-nums shrink-0 ml-3" style={{ color: 'var(--success)' }}>+ {formatBRL(closing.adicional)}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Recebimento final em destaque */}
+        <div className="flex items-center justify-between pt-2.5 mt-1 border-t" style={{ borderColor: 'var(--brand-border)' }}>
+          <span className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Recebimento</span>
+          <span className="text-lg font-bold tabular-nums" style={{ color: 'var(--success)' }}>{formatBRL(closing.recebimento)}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function HBBalancePill({ value, size = 'sm' }: { value: number; size?: 'sm' | 'lg' }) {
   const isPos  = value > 0
   const isNeg  = value < 0
@@ -173,7 +267,7 @@ function HBBalancePill({ value, size = 'sm' }: { value: number; size?: 'sm' | 'l
 // ─── Horista Payment Section ──────────────────────────────────────────────────
 
 function HoristaPaymentSection({
-  yearMonth, workedHours, billableHours, guaranteedHours, hourlyRate, expTotal, expPaid, proporcional, prorationRatio,
+  yearMonth, workedHours, billableHours, guaranteedHours, hourlyRate, expTotal, expPaid, proporcional, prorationRatio, recebimento,
 }: {
   yearMonth: string
   workedHours: number
@@ -184,6 +278,7 @@ function HoristaPaymentSection({
   expPaid: number
   proporcional?: boolean
   prorationRatio?: number
+  recebimento?: number | null
 }) {
   const totalService = hourlyRate > 0 ? billableHours * hourlyRate : 0
   const expAllTotal  = expTotal + expPaid
@@ -208,13 +303,15 @@ function HoristaPaymentSection({
         )}
       </div>
 
-      {/* CENTRO — valor serviços */}
+      {/* CENTRO — Total a Receber = recebimento do fechamento (com ajustes) quando disponível */}
       <div className="flex flex-col gap-1 border-l border-zinc-800 pl-8">
         <div className="text-[42px] font-extrabold leading-none tracking-tight text-[#00F5FF]">
-          {hourlyRate > 0 ? formatBRL(totalService) : '—'}
+          {recebimento != null ? formatBRL(recebimento) : (hourlyRate > 0 ? formatBRL(totalService) : '—')}
         </div>
         <span className="text-[11px] text-zinc-600 mt-1">
-          {hourlyRate > 0 ? `${fmtHours(billableHours)} × ${formatBRL(hourlyRate)}/h` : 'Taxa não configurada'}
+          {recebimento != null
+            ? 'recebimento do fechamento (com ajustes)'
+            : (hourlyRate > 0 ? `${fmtHours(billableHours)} × ${formatBRL(hourlyRate)}/h` : 'Taxa não configurada')}
         </span>
       </div>
 
@@ -369,7 +466,7 @@ function ParceiroSimplesSection({
 function HBPaymentSection({ data, fixedSalary, expTotal, expPaid, showExtras = true }: { data: HourBankMonth; fixedSalary: number; expTotal: number; expPaid: number; showExtras?: boolean }) {
   const hasExtra     = showExtras && data.accumulated_balance > 0
   const extraHours   = hasExtra ? data.accumulated_balance : 0
-  const valorHoraExt = fixedSalary > 0 ? fixedSalary / 180 : 0
+  const valorHoraExt = fixedSalary > 0 ? fixedSalary / 160 : 0
   const totalExtra   = hasExtra ? extraHours * valorHoraExt : 0
   const totalSalario = fixedSalary + totalExtra
   const expAllTotal  = expTotal + expPaid
@@ -590,23 +687,8 @@ function periodBounds(year: number, month: number): { startDate: string; endDate
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-async function fetchAndOpenFile(url: string, download = false) {
-  const res = await fetch(toRelativePath(url), { credentials: 'same-origin' })
-  if (!res.ok) throw new Error('not_found')
-  const blob = await res.blob()
-  const cd = res.headers.get('content-disposition') ?? ''
-  const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
-  const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg') ?? 'pdf'
-  const filename = match?.[1]?.replace(/['"]/g, '') ?? `comprovante.${ext}`
-  const blobUrl = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = blobUrl
-  if (download) { a.download = filename } else { a.target = '_blank'; a.rel = 'noopener noreferrer' }
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
-}
+// FASE 11.2.FE — Helper centralizado em src/lib/attachments.ts.
+const fetchAndOpenFile = fetchAndOpenLegacyUrl
 
 async function openReceiptUrl(url: string) {
   try { await fetchAndOpenFile(url) }
@@ -1150,7 +1232,6 @@ function TableSkeleton({ cols }: { cols: number }) {
 }
 
 function StatusBadge({ status, display, reason }: { status: string; display?: string; reason?: string | null }) {
-  const hasReason = !!reason && (status === 'rejected' || status === 'adjustment_requested')
   if (status === 'approved') {
     return (
       <span className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full border bg-green-500/15 text-green-400 border-green-500/25">
@@ -1159,19 +1240,12 @@ function StatusBadge({ status, display, reason }: { status: string; display?: st
       </span>
     )
   }
-  const badge = (
-    <Badge variant="outline" className={`text-[10px] font-medium border ${STATUS_COLORS[status] ?? 'text-zinc-400 border-zinc-700'}`}>
-      {STATUS_LABELS[status] ?? display ?? status}
-    </Badge>
-  )
-  if (!hasReason) return badge
   return (
-    <span className="relative group/reason inline-flex">
-      {badge}
-      <span className="pointer-events-none absolute bottom-full left-0 mb-1.5 z-50 hidden group-hover/reason:block bg-zinc-800 border border-zinc-700 text-zinc-200 text-[10px] rounded px-2 py-1 shadow-lg whitespace-nowrap max-w-[240px] truncate">
-        {reason}
-      </span>
-    </span>
+    <ReasonTooltip status={status} reason={reason}>
+      <Badge variant="outline" className={`text-[10px] font-medium border ${STATUS_COLORS[status] ?? 'text-zinc-400 border-zinc-700'}`}>
+        {STATUS_LABELS[status] ?? display ?? status}
+      </Badge>
+    </ReasonTooltip>
   )
 }
 
@@ -1442,6 +1516,51 @@ const EMPTY_EXP = {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+/**
+ * Card self-contained: o consultor PJ envia suas NFS-e + Nota de débito do mês.
+ * Busca o estado via GET /fechamento/notas/consultor/{id}/{ym}; se a resposta vier
+ * `notas: null` (consultor não-PJ), o card não aparece. Só upload — o aceite/recusa é do admin.
+ */
+function MinhasNotasFiscaisCard({ userId }: { userId: number }) {
+  const [ym, setYm] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [notas, setNotas] = useState<NotasPayload>(null)
+  const [isPj, setIsPj] = useState<boolean | null>(null)
+  // Recebimento esperado do fechamento (o valor da nota deve ser igual a ele).
+  const [expectedValue, setExpectedValue] = useState<number | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    api.get<{ notas: NotasPayload }>(`/fechamento/notas/consultor/${userId}/${ym}`)
+      .then(r => { if (alive) { setNotas(r.notas ?? null); setIsPj(r.notas != null) } })
+      .catch(() => { if (alive) setIsPj(false) })
+    api.get<{ data: { recebimento: number } }>(`/my-closing/${ym}`)
+      .then(r => { if (alive) setExpectedValue(r?.data?.recebimento ?? null) })
+      .catch(() => { if (alive) setExpectedValue(null) })
+    return () => { alive = false }
+  }, [userId, ym])
+
+  if (isPj !== true) return null // não-PJ ou ainda carregando: não mostra
+
+  return (
+    <div className="mb-4 rounded-xl border p-4" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
+      <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--brand-text)' }}>Minhas Notas Fiscais (PJ)</h3>
+        <input
+          type="month"
+          value={ym}
+          onChange={e => setYm(e.target.value)}
+          className="px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs"
+        />
+      </div>
+      <p className="text-xs text-zinc-500 mb-3">Envie a NFS-e do mês. O administrativo valida (aceita ou recusa com motivo).</p>
+      <NotasPjCell type="consultor" id={userId} yearMonth={ym} notas={notas} canDecide={false} canUpload expectedValue={expectedValue} onChanged={setNotas} />
+    </div>
+  )
+}
+
 export default function MeuPainelPage() {
   const { user } = useAuth()
   const isCoordenador = user?.type === 'coordenador'
@@ -1532,6 +1651,9 @@ export default function MeuPainelPage() {
   const [hbLoading,    setHbLoading]    = useState(false)
   const [hbKey,        setHbKey]        = useState(0)
   const [hbStartDate,  setHbStartDate]  = useState<string | null>(null)
+
+  // ── Recebimento do fechamento (mesmo valor que o admin vê) ──────────────────
+  const [myClosing, setMyClosing] = useState<MyClosing | null>(null)
 
   // ── Support data ───────────────────────────────────────────────────────────
   const [projects,       setProjects]       = useState<ProjectOption[]>([])
@@ -1644,6 +1766,18 @@ export default function MeuPainelPage() {
   useEffect(() => { loadTimesheets() }, [loadTimesheets])
   useEffect(() => { loadExpenses() },  [loadExpenses])
 
+  // ── Recebimento do fechamento do próprio usuário (espelha a tela do admin) ──
+  useEffect(() => {
+    if (!user?.id) return
+    const ym = `${year}-${String(month + 1).padStart(2, '0')}`
+    let alive = true
+    setMyClosing(null)
+    api.get<{ data: MyClosing }>(`/my-closing/${ym}`)
+      .then(r => { if (alive) setMyClosing(r?.data ?? null) })
+      .catch(() => { if (alive) setMyClosing(null) })
+    return () => { alive = false }
+  }, [year, month, user?.id])
+
   // Reset pages when period changes
   useEffect(() => { setTsPage(1); setExpPage(1) }, [startDate, endDate])
 
@@ -1665,7 +1799,7 @@ export default function MeuPainelPage() {
     if (!user?.id) return
     const rawRate = (user as any)?.hourly_rate ?? 0
     const rType   = (user as any)?.rate_type ?? 'hourly'
-    const rate    = rawRate > 0 ? (rType === 'monthly' ? rawRate / 180 : rawRate) : 0
+    const rate    = rawRate > 0 ? (rType === 'monthly' ? rawRate / 160 : rawRate) : 0
 
     async function load() {
       setHistoryLoading(true)
@@ -1936,12 +2070,12 @@ export default function MeuPainelPage() {
   const maxProjectMin  = tsByProject[0]?.minutes  ?? 1
   const maxCustomerMin = tsByCustomer[0]?.minutes ?? 1
 
-  // Taxa efetiva: horistas usam o valor direto; mensalistas dividem por 180
+  // Taxa efetiva: horistas usam o valor direto; mensalistas dividem por 160
   const hourlyRate      = Number((user as any)?.hourly_rate ?? 0)
   const rateType        = (user as any)?.rate_type ?? 'hourly'
   const guaranteedHours = (user as any)?.guaranteed_hours != null ? Number((user as any).guaranteed_hours) : null
   const effectiveRate   = hourlyRate > 0
-    ? (rateType === 'monthly' ? hourlyRate / 180 : hourlyRate)
+    ? (rateType === 'monthly' ? hourlyRate / 160 : hourlyRate)
     : 0
   const tsPctExtraMin = useMemo(() =>
     timesheets.reduce((acc, ts) => acc + (ts.consultant_extra_pct
@@ -1999,7 +2133,7 @@ export default function MeuPainelPage() {
   const hbBeforeStart = hbStartYM !== null && hbSelectedYM < hbStartYM
   const hbExtraHours  = !hbBeforeStart && hbCurrent && hbCurrent.accumulated_balance > 0
     ? hbCurrent.accumulated_balance : 0
-  const hbExtraValue  = hourlyRate > 0 ? hbExtraHours * (hourlyRate / 180) : 0
+  const hbExtraValue  = hourlyRate > 0 ? hbExtraHours * (hourlyRate / 160) : 0
   const hbServiceVal  = hourlyRate + hbExtraValue
   const hbTotalGeral  = hbServiceVal + expTotal
 
@@ -2155,6 +2289,8 @@ export default function MeuPainelPage() {
   return (
     <AppLayout title="Meu Painel">
 
+      {user?.id && <MinhasNotasFiscaisCard userId={user.id} />}
+
       {/* ── Sticky sub-header (period nav + tabs) ── */}
       <div
         ref={stickyHeaderRef}
@@ -2204,7 +2340,7 @@ export default function MeuPainelPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-0.5 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+        <div className="flex gap-0.5 border-b overflow-x-auto" style={{ borderColor: 'var(--brand-border)' }}>
           {TABS.map(tab => {
             const Icon = tab.icon
             const active = validTab === tab.id
@@ -2239,6 +2375,7 @@ export default function MeuPainelPage() {
               billableHours={billableHours}
               guaranteedHours={guaranteedHours}
               hourlyRate={hourlyRate}
+              recebimento={myClosing?.recebimento ?? null}
               expTotal={expTotal}
               expPaid={expPaid}
               proporcional={isProporcional}
@@ -2397,6 +2534,9 @@ export default function MeuPainelPage() {
             />
           )}
 
+          {/* Recebimento do fechamento — mesmo valor que o admin vê na tela de fechamento */}
+          <RecebimentoFechamentoBlock closing={myClosing} />
+
           {/* Recent lists */}
           <div className="grid md:grid-cols-2 gap-4">
 
@@ -2466,7 +2606,7 @@ export default function MeuPainelPage() {
                           </div>
                           <div className="flex items-center gap-2.5 shrink-0">
                             <span className="text-xs font-semibold text-zinc-300">{exp.formatted_amount}</span>
-                            <StatusBadge status={exp.status} display={exp.status_display} />
+                            <StatusBadge status={exp.status} display={exp.status_display} reason={exp.rejection_reason} />
                             {exp.status === 'approved' && (exp.is_paid
                               ? <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400">Pago</span>
                               : <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-950 text-amber-400">Em aberto</span>
@@ -2783,7 +2923,7 @@ export default function MeuPainelPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3.5">
-                        <StatusBadge status={exp.status} display={exp.status_display} />
+                        <StatusBadge status={exp.status} display={exp.status_display} reason={exp.rejection_reason} />
                       </td>
                       <td className="px-4 py-3.5">
                         {exp.is_paid
@@ -3063,7 +3203,7 @@ export default function MeuPainelPage() {
 
             {/* Tabela Detalhamento */}
             {tsByProject.length > 0 ? (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-x-auto">
                 <div className="px-5 py-4 border-b border-zinc-800">
                   <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Detalhamento</h3>
                 </div>
@@ -3379,6 +3519,9 @@ export default function MeuPainelPage() {
             )}
           </div>
 
+          {/* Recebimento do fechamento — mesmo valor que o admin vê na tela de fechamento */}
+          <RecebimentoFechamentoBlock closing={myClosing} />
+
           {isFixo ? (
             /* ── Fixo: valor mensal fixo + horas trabalhadas (sem extras) ── */
             timesheets.length === 0 ? (
@@ -3488,6 +3631,7 @@ export default function MeuPainelPage() {
                     billableHours={billableHours}
                     guaranteedHours={guaranteedProrated}
                     hourlyRate={hourlyRate}
+                    recebimento={myClosing?.recebimento ?? null}
                     expTotal={expTotal}
                     expPaid={expPaid}
                     proporcional={isProporcional}

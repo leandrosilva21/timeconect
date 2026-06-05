@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { api, ApiError, toRelativePath } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
+import { fetchAndOpenLegacyUrl } from '@/lib/attachments'
 import { Expense, PaginatedResponse } from '@/types'
 import { Button as UIButton } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,6 +12,7 @@ import {
   PageHeader, Table, Thead, Th, Tbody, Tr, Td,
   Badge, Button, SkeletonTable, EmptyState, Pagination,
 } from '@/components/ds'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import {
   Receipt, ChevronLeft, ChevronRight, Plus, Pencil, Trash2,
   X, Paperclip, Eye, Building2, FolderOpen, Tag,
@@ -18,28 +20,16 @@ import {
 } from 'lucide-react'
 import { ConfirmDeleteModal } from '@/components/ui/confirm-delete-modal'
 import { ExpenseViewModal } from '@/components/ui/expense-view-modal'
+import { ExpenseHoverTooltip, useExpenseHover } from '@/components/ui/timesheet-hover-tooltip'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
+import { useTableSort } from '@/hooks/use-table-sort'
+import * as XLSX from 'xlsx'
 
-async function fetchAndOpenFile(url: string, download = false) {
-  const res = await fetch(toRelativePath(url), { credentials: 'same-origin' })
-  if (!res.ok) throw new Error('not_found')
-  const blob = await res.blob()
-  const cd = res.headers.get('content-disposition') ?? ''
-  const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
-  const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg') ?? 'pdf'
-  const filename = match?.[1]?.replace(/['"]/g, '') ?? `comprovante.${ext}`
-  const blobUrl = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = blobUrl
-  if (download) { a.download = filename } else { a.target = '_blank'; a.rel = 'noopener noreferrer' }
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
-}
+// FASE 11.2.FE — Helper centralizado em src/lib/attachments.ts.
+const fetchAndOpenFile = fetchAndOpenLegacyUrl
 
 function ReceiptLink({ url }: { url: string }) {
   const [loading, setLoading] = useState(false)
@@ -431,7 +421,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
   const isCoordenador    = user?.type === 'coordenador'
   const isAdmin          = user?.type === 'admin'
   const isAdministrativo = user?.type === 'administrativo'
-  const canActAsUser     = isAdmin || isCoordenador
+  const canActAsUser     = isAdmin || isCoordenador || isAdministrativo
   const isCliente        = user?.type === 'cliente'
   const canPay           = isAdmin || isAdministrativo
   // Chip "Meus projetos / Todos" pra coordenador (idem Apontamentos / Demandas).
@@ -483,7 +473,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
   const [revertReason,     setRevertReason]     = useState('')
   const [reverting,        setReverting]        = useState(false)
   const [form, setForm] = useState({
-    customer_id: '', project_id: '', expense_category_id: '', expense_date: '',
+    customer_id: '', project_id: '', real_project_id: '', expense_category_id: '', expense_date: '',
     description: '', amount: '', expense_type: 'reimbursement',
     payment_method: 'pix', charge_client: false, user_id: '',
   })
@@ -609,7 +599,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
   }, [modal.open, form.customer_id])
 
   const openCreate = () => {
-    setForm({ customer_id: '', project_id: '', expense_category_id: '', expense_date: new Date().toISOString().split('T')[0], description: '', amount: '', expense_type: 'reimbursement', payment_method: 'pix', charge_client: false, user_id: '' })
+    setForm({ customer_id: '', project_id: '', real_project_id: '', expense_category_id: '', expense_date: new Date().toISOString().split('T')[0], description: '', amount: '', expense_type: 'reimbursement', payment_method: 'pix', charge_client: false, user_id: '' })
     setReceipt(null)
     loadOptions()
     setModal({ open: true })
@@ -620,6 +610,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
     setForm({
       customer_id: custId,
       project_id: String(item.project_id),
+      real_project_id: String((item as any).real_project_id ?? ''),
       expense_category_id: String(item.expense_category_id),
       expense_date: item.expense_date,
       description: item.description,
@@ -637,15 +628,18 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
   const save = async () => {
     setSaving(true)
     try {
+      const selProj = (projects as any[]).find(p => String(p.id) === form.project_id)
+      const isInvestimento = !!selProj?.is_investimento_comercial
+      if (isInvestimento && !form.real_project_id) { toast.error('Selecione o Projeto Real'); setSaving(false); return }
       const fd = new FormData()
       fd.append('project_id', form.project_id)
+      if (isInvestimento && form.real_project_id) fd.append('real_project_id', form.real_project_id)
       fd.append('expense_category_id', form.expense_category_id)
       fd.append('expense_date', form.expense_date)
       fd.append('description', form.description)
       fd.append('amount', form.amount)
       fd.append('expense_type', form.expense_type)
       fd.append('payment_method', form.payment_method)
-      fd.append('charge_client', form.charge_client ? '1' : '0')
       if (canActAsUser && form.user_id) fd.append('user_id', form.user_id)
       if (receipt) fd.append('receipt', receipt)
       if (modal.item) fd.append('_method', 'PUT')
@@ -723,6 +717,63 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
     }
   }
 
+  // ─── Ordenação client-side da página atual (campos aninhados via accessor) ───
+  const items = data?.items ?? []
+  const expenseSortAccessor = useCallback((row: Expense, key: string): unknown => {
+    switch (key) {
+      case 'expense_date': return row.expense_date
+      case 'user':         return row.user?.name ?? ''
+      case 'project':      return row.project?.name ?? ''
+      case 'customer':     return row.project?.customer?.name ?? ''
+      case 'description':  return row.description ?? ''
+      case 'category':     return row.category?.name ?? ''
+      case 'service_type': return (row.project as any)?.service_type?.name ?? ''
+      case 'amount':       return Number(row.amount) || 0
+      case 'status':       return row.status ?? ''
+      case 'is_paid':      return row.is_paid ? 1 : 0
+      case 'created_at':   return row.created_at ?? ''
+      default:             return (row as any)[key]
+    }
+  }, [])
+  const { sorted: sortedItems, thProps } = useTableSort(items, expenseSortAccessor)
+  const expHover = useExpenseHover()
+
+  // ─── Exportar Excel (apenas a página visível ordenada — mesma regra do print) ──
+  const exportToExcel = () => {
+    if (sortedItems.length === 0) {
+      toast.info('Sem despesas para exportar — ajuste os filtros.')
+      return
+    }
+    const STATUS_LABEL_LOCAL: Record<string, string> = {
+      pending: 'Pendente', approved: 'Aprovado', rejected: 'Rejeitado', adjustment_requested: 'Ajuste',
+    }
+    const rows = sortedItems.map(e => ({
+      Data: e.expense_date ? e.expense_date.split('-').reverse().join('/') : '',
+      Colaborador: e.user?.name ?? '',
+      Projeto: e.project?.name ?? '',
+      Cliente: e.project?.customer?.name ?? '',
+      Descrição: e.description ?? '',
+      Categoria: e.category?.name ?? '',
+      'Tipo de Serviço': (e.project as any)?.service_type?.name ?? '',
+      Valor: Number(e.amount) || 0,
+      Status: STATUS_LABEL_LOCAL[e.status] ?? e.status ?? '',
+      Pagamento: e.is_paid ? 'Pago' : 'Em aberto',
+      'Cobrar Cliente': e.charge_client ? 'Sim' : 'Não',
+      'Inclusão': e.created_at ? new Date(e.created_at).toLocaleString('pt-BR') : '',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    // Formatação BRL na coluna H (Valor) — XLSX aceita numFmt por célula.
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1')
+    for (let r = 1; r <= range.e.r; r++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c: 7 })]
+      if (cell) cell.z = '"R$" #,##0.00'
+    }
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Despesas')
+    const stamp = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `despesas_${stamp}.xlsx`)
+  }
+
   return (
     <div>
       <div className={embedded ? '' : 'max-w-7xl mx-auto'}>
@@ -732,6 +783,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
           subtitle="Registro de despesas e reembolsos"
           actions={
             <>
+              <Button variant="ghost" size="sm" icon={Download} onClick={exportToExcel} disabled={sortedItems.length === 0}>Exportar Excel</Button>
               <Button variant="ghost" size="sm" icon={RefreshCw} onClick={load}>Atualizar</Button>
               {!isCliente && <Button variant="primary" size="sm" icon={Plus} onClick={openCreate}>Nova</Button>}
             </>
@@ -774,7 +826,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
               <MultiSelect value={executiveIds}   onChange={v => { setExecutiveIds(v);   setPage(1) }} options={executives}   placeholder="Todos os executivos"   />
             </div>
           )}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-lg border border-zinc-700 overflow-hidden text-xs">
               {(['month', 'period'] as const).map((mode) => (
                 <button key={mode} onClick={() => setFilterMode(mode)}
@@ -908,33 +960,32 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
         {/* Tabela */}
         {loading ? (
           <SkeletonTable rows={8} cols={7} />
+        ) : sortedItems.length === 0 ? (
+          <EmptyState icon={Receipt} title="Nenhuma despesa encontrada" description="Tente ajustar os filtros ou criar uma nova despesa." />
         ) : (
+          <>
+          {/* Desktop: tabela (inalterada) */}
+          <div className="hidden md:block">
           <Table>
             <Thead>
               <tr>
                 {!isCliente && <Th className="w-10" />}
-                <Th>Data</Th>
-                <Th>Colaborador</Th>
-                <Th className="hidden md:table-cell">Projeto</Th>
-                {!isCliente && <Th className="hidden sm:table-cell">Cliente</Th>}
-                {!isCliente && <Th>Descrição</Th>}
-                {!isCliente && <Th className="hidden lg:table-cell">Categoria</Th>}
-                <Th className="hidden xl:table-cell">Tipo de Serviço</Th>
-                <Th right>Valor</Th>
-                {!isCliente && <Th>Status</Th>}
-                {!isCliente && <Th>Pagamento</Th>}
-                <Th className="hidden lg:table-cell">Inclusão</Th>
+                <Th {...thProps('expense_date')}>Data</Th>
+                <Th {...thProps('user')}>Colaborador</Th>
+                <Th {...thProps('project')} className="hidden md:table-cell">Projeto</Th>
+                {!isCliente && <Th {...thProps('customer')} className="hidden sm:table-cell">Cliente</Th>}
+                {!isCliente && <Th {...thProps('description')}>Descrição</Th>}
+                {!isCliente && <Th {...thProps('category')} className="hidden lg:table-cell">Categoria</Th>}
+                <Th {...thProps('service_type')} className="hidden xl:table-cell">Tipo de Serviço</Th>
+                <Th {...thProps('amount')} right>Valor</Th>
+                {!isCliente && <Th {...thProps('status')}>Status</Th>}
+                {!isCliente && <Th {...thProps('is_paid')}>Pagamento</Th>}
+                <Th {...thProps('created_at')} className="hidden lg:table-cell">Inclusão</Th>
               </tr>
             </Thead>
             <Tbody>
-              {data?.items.length === 0 ? (
-                <tr>
-                  <td colSpan={isCliente ? 4 : 11}>
-                    <EmptyState icon={Receipt} title="Nenhuma despesa encontrada" description="Tente ajustar os filtros ou criar uma nova despesa." />
-                  </td>
-                </tr>
-              ) : data?.items.map(exp => (
-                <Tr key={exp.id} onClick={() => setViewItem(exp)}>
+              {sortedItems.map(exp => (
+                <Tr key={exp.id} onClick={() => setViewItem(exp)} {...expHover.bind(exp)}>
                   {!isCliente && (
                     <Td className="w-10">
                       <div onClick={e => e.stopPropagation()}>
@@ -959,7 +1010,12 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
                   )}
                   <Td className="whitespace-nowrap font-medium">{formatDate(exp.expense_date)}</Td>
                   <Td muted className="truncate max-w-[140px]">{exp.user?.name ?? '—'}</Td>
-                  <Td muted className="hidden md:table-cell truncate max-w-[260px]">{exp.project?.name ?? '—'}</Td>
+                  <Td muted className="hidden md:table-cell truncate max-w-[260px]">
+                    {exp.project?.name ?? '—'}
+                    {(exp as any).real_project?.name && (
+                      <span className="block text-[10px]" style={{ color: 'var(--text-light)' }}>Real: {(exp as any).real_project.name}</span>
+                    )}
+                  </Td>
                   {!isCliente && <Td muted className="hidden sm:table-cell truncate max-w-[120px]">{exp.project?.customer?.name ?? '—'}</Td>}
                   {!isCliente && (
                     <Td className="max-w-[200px]">
@@ -976,7 +1032,7 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
                       ? Number((exp.project as any).max_expense_per_consultant)
                       : Number(exp.amount))}
                   </Td>
-                  {!isCliente && <Td><Badge variant={exp.status as any}>{STATUS_LABEL[exp.status] ?? exp.status}</Badge></Td>}
+                  {!isCliente && <Td><ReasonTooltip status={exp.status} reason={exp.rejection_reason}><Badge variant={exp.status as any}>{STATUS_LABEL[exp.status] ?? exp.status}</Badge></ReasonTooltip></Td>}
                   {!isCliente && (
                     <Td>
                       {exp.is_paid
@@ -992,6 +1048,96 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
               ))}
             </Tbody>
           </Table>
+          </div>
+
+          {/* Mobile: cards (um por despesa, sem scroll horizontal) */}
+          <div className="md:hidden space-y-2">
+            {sortedItems.map(exp => (
+              <div
+                key={exp.id}
+                onClick={() => setViewItem(exp)}
+                className="rounded-xl border p-3 active:opacity-80 transition"
+                style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}
+              >
+                {/* Linha 1: descrição + valor (+ menu) */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {isCliente ? (
+                      <span className="font-medium truncate" style={{ color: 'var(--brand-text)' }}>
+                        {exp.project?.name ?? '—'}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="font-medium truncate" style={{ color: 'var(--brand-text)' }}>
+                          {exp.description}
+                        </span>
+                        {exp.receipt_url && (
+                          <Paperclip size={11} aria-label="Tem comprovante" style={{ color: 'var(--brand-subtle)', flexShrink: 0 }} />
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className={`font-bold text-sm ${exp.is_paid ? 'opacity-40' : ''}`}
+                      style={{ color: exp.is_paid ? 'var(--brand-muted)' : 'var(--brand-primary)' }}>
+                      {formatCurrency(isCliente && (exp.project as any)?.max_expense_per_consultant != null
+                        ? Number((exp.project as any).max_expense_per_consultant)
+                        : Number(exp.amount))}
+                    </span>
+                    {!isCliente && (
+                      <div onClick={e => e.stopPropagation()}>
+                        <RowMenu items={[
+                          { label: 'Visualizar', icon: <Eye size={12} />, onClick: () => setViewItem(exp) },
+                          ...(canEdit(exp) ? [
+                            { label: 'Editar', icon: <Pencil size={12} />, onClick: () => openEdit(exp) },
+                            { label: 'Excluir', icon: <Trash2 size={12} />, onClick: () => remove(exp.id), danger: true },
+                          ] : []),
+                          ...(exp.receipt_url ? [
+                            { label: 'Ver Comprovante', icon: <Paperclip size={12} />, onClick: () => openReceipt(exp.receipt_url!) },
+                          ] : []),
+                          ...(canPay && (exp.status === 'approved' || exp.is_paid) ? [
+                            { label: exp.is_paid ? 'Desmarcar Pago' : 'Marcar como Pago', icon: <DollarSign size={12} />, onClick: () => togglePaid(exp) },
+                          ] : []),
+                          ...(canPay && exp.status === 'approved' && !exp.is_paid ? [
+                            { label: 'Estornar Aprovação', icon: <Undo2 size={12} />, onClick: () => setRevertTarget(exp), danger: true },
+                          ] : []),
+                        ]} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Linha 2: meta (Data · Colaborador · Projeto) */}
+                <div className="mt-1 text-[11px] truncate" style={{ color: 'var(--brand-subtle)' }}>
+                  {isCliente ? (
+                    <>{formatDate(exp.expense_date)}</>
+                  ) : (
+                    <>
+                      {formatDate(exp.expense_date)}
+                      {exp.user?.name && <> · {exp.user.name}</>}
+                      {exp.project?.name && <> · {exp.project.name}</>}
+                    </>
+                  )}
+                </div>
+
+                {/* Linha 3: status + pagamento (oculto p/ cliente) */}
+                {!isCliente && (
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <ReasonTooltip status={exp.status} reason={exp.rejection_reason}>
+                      <Badge variant={exp.status as any}>{STATUS_LABEL[exp.status] ?? exp.status}</Badge>
+                    </ReasonTooltip>
+                    {exp.is_paid
+                      ? <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400">Pago</span>
+                      : (exp.user?.partner_id != null && exp.status === 'approved')
+                        ? <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400">Pago no fechamento</span>
+                        : <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-950 text-amber-400">Em aberto</span>
+                    }
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          </>
         )}
 
         {/* Paginação */}
@@ -1048,12 +1194,37 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
                 <div className="mt-1">
                   <SearchSelect
                     value={form.project_id}
-                    onChange={v => setForm(f => ({ ...f, project_id: v }))}
+                    onChange={v => setForm(f => ({ ...f, project_id: v, real_project_id: '' }))}
                     options={projects}
                     placeholder="Selecione o projeto..."
                   />
                 </div>
               </div>
+
+              {/* Projeto Real — só para projetos de INVESTIMENTO (despesa contabiliza no investimento). */}
+              {(() => {
+                const sel = (projects as any[]).find(p => String(p.id) === form.project_id)
+                if (!sel?.is_investimento_comercial) return null
+                const soSustentacao = sel?.categoria_interna === 'Suporte'
+                const realOpts = (projects as any[]).filter(p => {
+                  if (p.is_investimento_comercial || String(p.id) === form.project_id) return false
+                  if (soSustentacao && p.service_type?.code !== 'sustentacao') return false
+                  return true
+                })
+                return (
+                  <div>
+                    <Label className="text-xs text-zinc-400">Projeto Real *{soSustentacao ? ' (Sustentação)' : ''}</Label>
+                    <div className="mt-1">
+                      <SearchSelect
+                        value={form.real_project_id}
+                        onChange={v => setForm(f => ({ ...f, real_project_id: v }))}
+                        options={realOpts}
+                        placeholder="Selecione o projeto real..."
+                      />
+                    </div>
+                  </div>
+                )
+              })()}
               <div>
                 <Label className="text-xs text-zinc-400">Categoria *</Label>
                 <div className="mt-1">
@@ -1082,15 +1253,6 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
                 <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                   className="mt-1 bg-zinc-800 border-zinc-700 text-white h-9 text-xs" />
               </div>
-              {modal.item && (
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setForm(f => ({ ...f, charge_client: !f.charge_client }))}
-                    className={`w-8 h-4 rounded-full transition-colors relative ${form.charge_client ? 'bg-blue-600' : 'bg-zinc-700'}`}>
-                    <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${form.charge_client ? 'left-4' : 'left-0.5'}`} />
-                  </button>
-                  <Label className="text-xs text-zinc-400">Cobrar do cliente</Label>
-                </div>
-              )}
               <div>
                 <Label className="text-xs text-zinc-400">Comprovante</Label>
                 <div className="mt-1 flex items-center gap-2">
@@ -1114,6 +1276,8 @@ export function ExpensesScreen({ scope, embedded }: ExpensesScreenProps = {}) {
       )}
 
       {/* Modal: Visualizar Despesa */}
+      <ExpenseHoverTooltip exp={expHover.exp} />
+
       {viewItem && (
         <ExpenseViewModal
           expense={viewItem}

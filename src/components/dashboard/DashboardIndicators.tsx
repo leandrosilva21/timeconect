@@ -156,7 +156,7 @@ function TimesheetsModal({
             <table className="w-full text-xs">
               <thead className="sticky top-0" style={{ background: 'var(--brand-surface)' }}>
                 <tr style={{ borderBottom: '1px solid var(--brand-border)' }}>
-                  {['Data', 'Ticket', 'Tempo', 'Colaborador', 'Projeto', 'Descrição', 'Status', ''].map(h => (
+                  {['Data', 'Ticket', 'Tempo', 'Colaborador', 'Projeto', 'Descrição', ''].map(h => (
                     <th key={h} className="px-4 py-3 text-left font-semibold uppercase tracking-wider"
                       style={{ color: 'var(--brand-subtle)' }}>{h}</th>
                   ))}
@@ -203,15 +203,6 @@ function TimesheetsModal({
                           </div>
                         </div>
                       ) : <span style={{ color: 'var(--brand-muted)' }}>—</span>}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold"
-                        style={{
-                          background: `${STATUS_COLOR[ts.status] ?? '#6B7280'}22`,
-                          color: STATUS_COLOR[ts.status] ?? '#6B7280',
-                        }}>
-                        {STATUS_LABEL[ts.status] ?? ts.status}
-                      </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {ts.id && (

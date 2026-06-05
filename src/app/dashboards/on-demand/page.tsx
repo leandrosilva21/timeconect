@@ -62,7 +62,8 @@ interface ProjectItem {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function fmtH(h: number | null | undefined) { return (h ?? 0).toFixed(1) }
+// 2 casas p/ bater com o "Valor a pagar" (horas decimais × valor/hora). Ex.: 49,42h × 148 = 7.314,16.
+function fmtH(h: number | null | undefined) { return (h ?? 0).toFixed(2) }
 function fmtBRL(v: number | null | undefined) {
   if (v == null) return '—'
   return formatBRL(v ?? 0)
@@ -136,6 +137,9 @@ export default function OnDemandPage() {
   const router = useRouter()
   const isAdmin   = user?.type === 'admin'
   const isCliente = user?.type === 'cliente'
+  // Digitação (filtro + coluna + destaque) liberado p/ admin/interno; no perfil de
+  // CLIENTE fica exclusivo da Vedamotors (customer_id 176). Demais clientes: só competência.
+  const showDigitacao = !isCliente || user?.customer_id === 176
   const canReverseApproval = !!user && user.type !== 'consultor' && user.type !== 'cliente'
 
   useEffect(() => {
@@ -156,6 +160,9 @@ export default function OnDemandPage() {
   const [refMonth, setRefMonth] = useState<number | null>(now.getMonth() + 1)
   const [refYear,  setRefYear]  = useState<number | null>(now.getFullYear())
   const [filterMode, setFilterMode] = useState<'month' | 'period'>('month')
+  // Sustentação: range de DIGITAÇÃO opcional (created_at) — filtra SÓ a lista de apontamentos.
+  const [digFrom, setDigFrom] = useState('')
+  const [digTo,   setDigTo]   = useState('')
 
   const [summary,       setSummary]       = useState<SummaryData | null>(null)
   const [loadingSummary, setLoadingSummary] = useState(false)
@@ -167,6 +174,13 @@ export default function OnDemandPage() {
   const [projectsList, setProjectsList] = useState<ProjectItem[]>([])
   const [loadingProjects, setLoadingProjects] = useState(false)
 
+  // Competência (mês do serviço) = o próprio filtro de DATA (Mês/Ano → mês; Período → range).
+  // Trava a data do serviço dos apontamentos da Sustentação (além de dirigir o consumo).
+  const competenciaFrom = filterMode === 'month' && refMonth && refYear
+    ? `${refYear}-${String(refMonth).padStart(2, '0')}-01` : dateFrom
+  const competenciaTo = filterMode === 'month' && refMonth && refYear
+    ? `${refYear}-${String(refMonth).padStart(2, '0')}-${String(new Date(refYear, refMonth, 0).getDate()).padStart(2, '0')}` : dateTo
+
   // Componentes embarcados (Sustentação + Despesas) — reusam endpoints do BH Fixo
   const mxKind: 'maintenance' | 'expenses' = activeTab === 'expenses' ? 'expenses' : 'maintenance'
   const { rows: mxRows, loading: mxLoading, ticketSummary: mxTicketSummary, ticketLoading: mxTicketLoading, reload: reloadMx } = useMaintenanceInline({
@@ -174,8 +188,10 @@ export default function OnDemandPage() {
     kind: mxKind,
     customerId: (selectedCustomer as number) || user?.customer_id,
     projectId: (selectedProject as number) || null,
-    dateFrom,
-    dateTo,
+    competenciaFrom,
+    competenciaTo,
+    digFrom: showDigitacao ? digFrom : '',
+    digTo:   showDigitacao ? digTo   : '',
   })
   const [mxDetail, setMxDetail] = useState<any | null>(null)
   const [indicatorParams, setIndicatorParams] = useState<URLSearchParams>(new URLSearchParams())
@@ -340,9 +356,11 @@ export default function OnDemandPage() {
               </div>
             )
           })()}
-          {/* Filtro de data */}
+          {/* Filtro de data = COMPETÊNCIA (mês do serviço): dirige consumo + trava o serviço dos apontamentos. */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Data</label>
+            <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>
+              {activeTab === 'maintenance' ? 'Competência (serviço)' : 'Data'}
+            </label>
             <div className="flex items-center gap-2">
               <div className="flex rounded-lg border border-zinc-700 overflow-hidden text-xs">
                 {(['month', 'period'] as const).map((mode) => (
@@ -370,6 +388,21 @@ export default function OnDemandPage() {
                 />
               )}
             </div>
+            {/* Sustentação: range de DIGITAÇÃO opcional — filtra SÓ a lista de apontamentos (não muda consumo).
+                Vazio = traz 100% da competência (qualquer data de digitação). */}
+            {activeTab === 'maintenance' && showDigitacao && (
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Digitação</span>
+                <DateRangePicker from={digFrom} to={digTo} onChange={(f, t) => { setDigFrom(f); setDigTo(t) }} />
+                {(digFrom || digTo) && (
+                  <button onClick={() => { setDigFrom(''); setDigTo('') }}
+                    className="text-[11px] px-2 py-1 rounded" style={{ color: 'var(--text-muted)', border: '1px solid var(--brand-border)' }}>
+                    limpar
+                  </button>
+                )}
+                <span className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>(opcional — vazio traz 100% da competência)</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -484,8 +517,8 @@ export default function OnDemandPage() {
             {/* ── SUSTENTAÇÃO ── */}
             {activeTab === 'maintenance' && isSustentacaoContract && (
               <div className="space-y-4">
-                <MxExportButton onClick={() => exportMaintenanceToXLSX('maintenance', mxRows)} disabled={mxRows.length === 0} />
-                <MxTimesheets rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} onReverseApproved={canReverseApproval} onReverseSuccess={reloadMx} />
+                <MxExportButton onClick={() => exportMaintenanceToXLSX('maintenance', mxRows, showDigitacao)} disabled={mxRows.length === 0} />
+                <MxTimesheets rows={mxRows} loading={mxLoading} variant="maintenance" onRowClick={setMxDetail} onReverseApproved={canReverseApproval} onReverseSuccess={reloadMx} clientView={isCliente} showDigitacao={showDigitacao} />
                 <MxTicketSummary rows={mxTicketSummary} loading={mxTicketLoading} />
               </div>
             )}
@@ -640,11 +673,8 @@ function InlineTimesheetsTable({ rows, loading, onReverseApproved, onReverseSucc
 }
 
 function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loading: boolean }) {
-  const fmtHHMM = (mins: number) => {
-    const h = Math.floor(mins / 60)
-    const m = Math.abs(mins % 60)
-    return `${h}:${String(m).padStart(2, '0')}`
-  }
+  // Apuração em horas DECIMAIS (não HH:MM) — ex.: 44h42min = 44,70h → "44.70h".
+  const fmtHoras = (mins: number) => `${((mins ?? 0) / 60).toFixed(2)}h`
   if (!loading && rows.length === 0) return null
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
@@ -674,16 +704,16 @@ function InlineTicketSummaryTable({ rows, loading }: { rows: any[]; loading: boo
                   </td>
                   <td className="px-4 py-2" style={{ color: 'var(--text)' }}>{tk.title ?? '—'}</td>
                   <td className="px-4 py-2" style={{ color: 'var(--text-muted)' }}>{tk.requester ?? '—'}</td>
-                  <td className="px-4 py-2 text-right font-mono">{fmtHHMM(tk.period_minutes)}</td>
-                  <td className="px-4 py-2 text-right font-mono" style={{ color: 'var(--text-muted)' }}>{fmtHHMM(tk.lifetime_minutes)}</td>
+                  <td className="px-4 py-2 text-right font-mono">{fmtHoras(tk.period_minutes)}</td>
+                  <td className="px-4 py-2 text-right font-mono" style={{ color: 'var(--text-muted)' }}>{fmtHoras(tk.lifetime_minutes)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr style={{ borderTop: '1px solid var(--border)', fontWeight: 600 }}>
                 <td colSpan={3} className="px-4 py-2 text-right">Totais ({rows.length} {rows.length === 1 ? 'ticket' : 'tickets'})</td>
-                <td className="px-4 py-2 text-right font-mono">{fmtHHMM(rows.reduce((s, r) => s + (r.period_minutes || 0), 0))}</td>
-                <td className="px-4 py-2 text-right font-mono">{fmtHHMM(rows.reduce((s, r) => s + (r.lifetime_minutes || 0), 0))}</td>
+                <td className="px-4 py-2 text-right font-mono">{fmtHoras(rows.reduce((s, r) => s + (r.period_minutes || 0), 0))}</td>
+                <td className="px-4 py-2 text-right font-mono">{fmtHoras(rows.reduce((s, r) => s + (r.lifetime_minutes || 0), 0))}</td>
               </tr>
             </tfoot>
           </table>

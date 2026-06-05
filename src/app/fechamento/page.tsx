@@ -7,6 +7,7 @@ import { formatBRL } from '@/lib/format'
 import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { useAuth } from '@/hooks/use-auth'
 import { usePersistedFilters } from '@/hooks/use-persisted-filters'
+import { useTableSort } from '@/hooks/use-table-sort'
 import { toast } from 'sonner'
 import {
   DollarSign, TrendingUp, BarChart2, UserCheck, AlertTriangle,
@@ -132,6 +133,7 @@ function marginColor(pct: number): string {
 // ─── Subcomponentes de aba ───────────────────────────────────────────────────
 
 function TabProducao({ data, loading }: { data: ProducaoRow[]; loading: boolean }) {
+  const { sorted, thProps } = useTableSort(data)
   if (loading) return <SkeletonTable rows={6} cols={8} />
   if (!data.length) return <EmptyState icon={BarChart2} title="Sem produção" description="Nenhum apontamento encontrado para o período." />
 
@@ -139,18 +141,18 @@ function TabProducao({ data, loading }: { data: ProducaoRow[]; loading: boolean 
     <Table>
       <Thead>
         <Tr>
-          <Th>Consultor</Th>
-          <Th>Projeto</Th>
-          <Th>Cliente</Th>
-          <Th>Tipo Contrato</Th>
-          <Th right>Hs Aprov.</Th>
-          <Th right>Hs Pend.</Th>
-          <Th right>Despesas Aprov.</Th>
-          <Th right>Despesas Pend.</Th>
+          <Th {...thProps('consultor_nome')}>Consultor</Th>
+          <Th {...thProps('projeto_nome')}>Projeto</Th>
+          <Th {...thProps('cliente_nome')}>Cliente</Th>
+          <Th {...thProps('tipo_contrato')}>Tipo Contrato</Th>
+          <Th right {...thProps('horas_aprovadas')}>Hs Aprov.</Th>
+          <Th right {...thProps('horas_pendentes')}>Hs Pend.</Th>
+          <Th right {...thProps('despesas_aprovadas')}>Despesas Aprov.</Th>
+          <Th right {...thProps('despesas_pendentes')}>Despesas Pend.</Th>
         </Tr>
       </Thead>
       <Tbody>
-        {data.map((row, i) => (
+        {sorted.map((row, i) => (
           <Tr key={i}>
             <Td>
               <div className="font-medium text-xs" style={{ color: 'var(--brand-text)' }}>{row.consultor_nome}</div>
@@ -206,7 +208,7 @@ function TabCusto({ data, loading }: { data: CustoData | null; loading: boolean 
                 <Td right className="tabular-nums text-xs">{r.horas.toFixed(1)}h</Td>
                 <Td right className="tabular-nums text-xs" style={{ color: 'var(--brand-muted)' }}>
                   {r.valor_hora > 0 ? formatBRL(r.valor_hora) : '—'}
-                  {r.rate_type === 'monthly' && <span className="ml-1 text-[10px] opacity-60">÷180</span>}
+                  {r.rate_type === 'monthly' && <span className="ml-1 text-[10px] opacity-60">÷160</span>}
                 </Td>
                 <Td right className="tabular-nums text-xs font-bold" style={{ color: 'var(--brand-text)' }}>{formatBRL(r.total)}</Td>
               </Tr>
@@ -312,7 +314,7 @@ function TabConsolidado({ data, loading }: { data: Consolidado | null; loading: 
 
   return (
     <div className="space-y-5 max-w-2xl mx-auto">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {[
           { label: 'Custo Interno',   value: formatBRL(data.total_custo_interno),   icon: UserCheck,  color: '#00F5FF' },
           { label: 'Custo Parceiros', value: formatBRL(data.total_custo_parceiros), icon: UserCheck,  color: '#a78bfa' },
@@ -364,7 +366,7 @@ function TabRelatorio({ data, loading }: { data: Consolidado | null; loading: bo
 
   return (
     <div className="max-w-lg mx-auto">
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--brand-border)' }}>
+      <div className="rounded-xl overflow-x-auto" style={{ border: '1px solid var(--brand-border)' }}>
         <div className="px-4 py-3" style={{ background: 'var(--brand-bg)' }}>
           <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Relatório Financeiro do Período</p>
         </div>
@@ -590,7 +592,7 @@ export default function FechamentoPage() {
 
   return (
     <AppLayout title="Fechamento">
-      <div className="flex flex-col gap-5 p-6 h-full">
+      <div className="flex flex-col gap-5 p-4 md:p-6 h-full">
 
         {/* Header */}
         <PageHeader
@@ -652,7 +654,7 @@ export default function FechamentoPage() {
         )}
 
         {/* Tab bar */}
-        <div className="flex gap-1 border-b" style={{ borderColor: 'var(--brand-border)' }}>
+        <div className="flex gap-1 border-b overflow-x-auto" style={{ borderColor: 'var(--brand-border)' }}>
           {TABS.map(t => {
             const active = tab === t.id
             return (

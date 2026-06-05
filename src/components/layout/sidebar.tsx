@@ -43,6 +43,7 @@ import {
   UserPlus,
   Search,
   Inbox,
+  Mail,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
@@ -94,6 +95,7 @@ const NAV_COORDINATOR: NavEntry[] = [
       { label: 'Apontamentos', href: '/timesheets', icon: Clock },
       { label: 'Despesas',     href: '/expenses',   icon: Receipt },
       { label: 'Aprovações',   href: '/approvals',  icon: CheckSquare },
+      { label: 'Atrasos (integração)', href: '/timesheets/atrasos', icon: CalendarClock },
       { label: 'Auditoria',    href: '/auditoria/apontamentos', icon: FileText },
     ],
   },
@@ -114,7 +116,7 @@ const NAV: NavEntry[] = [
     items: [
       { label: 'Gestão de Projetos',       href: '/gestao-projetos',          icon: Layers },
       { label: 'Kanban Contratos',         href: '/contratos/kanban',         icon: LayoutGrid },
-      { label: 'Demandas e Projetos',      href: '/contratos/pipeline',       icon: Layers, matchPaths: ['/portal-cliente/nova-requisicao'] },
+      { label: 'Demandas e Projetos',      href: '/contratos/pipeline',       icon: Layers },
       { label: 'Investimento Interno',      href: '/investimento-comercial',   icon: TrendingUp },
     ],
   },
@@ -134,6 +136,7 @@ const NAV: NavEntry[] = [
       { label: 'Apontamentos', href: '/timesheets', icon: Clock },
       { label: 'Despesas',     href: '/expenses',   icon: Receipt },
       { label: 'Aprovações',   href: '/approvals',  icon: CheckSquare },
+      { label: 'Atrasos (integração)', href: '/timesheets/atrasos', icon: CalendarClock },
       { label: 'Auditoria',    href: '/auditoria/apontamentos', icon: FileText },
     ],
   },
@@ -147,7 +150,7 @@ const NAV: NavEntry[] = [
         label: 'Cliente',
         icon: Building2,
         items: [
-          { label: 'Home do Cliente',        href: '/portal-cliente',                icon: Building2, exactMatch: true },
+          { label: 'Home do Cliente',        href: '/portal-cliente',                icon: Building2 },
           { label: 'Banco de Horas Fixo',    href: '/dashboards/bank-hours-fixed',   icon: BarChart2 },
           { label: 'Banco de Horas Mensais', href: '/dashboards/bank-hours-monthly', icon: CalendarClock },
           { label: 'On Demand',              href: '/dashboards/on-demand',           icon: Zap },
@@ -183,8 +186,9 @@ const NAV: NavEntry[] = [
       { label: 'Clientes',            href: '/fechamento/cliente',      icon: Building2  },
       { label: 'Parceiros',           href: '/fechamento/parceiro',     icon: Handshake  },
       { label: 'Consultores',         href: '/fechamento/consultor',    icon: UserCheck  },
-      { label: 'Folha Cooperativa',  href: '/fechamento/folha',        icon: FileSpreadsheet },
+      { label: 'Folha Cooperativa',   href: '/fechamento/folha',        icon: FileSpreadsheet },
       { label: 'Contratos',           href: '/fechamento/contratos',    icon: FileText   },
+      { label: 'Reajuste de Contrato', href: '/fechamento/reajustes',   icon: TrendingUp },
       { label: 'Pagamento Despesas',  href: '/pagamento-despesas',      icon: DollarSign },
     ],
   },
@@ -193,7 +197,9 @@ const NAV: NavEntry[] = [
     label: 'Relatórios',
     icon: FileText,
     items: [
-      { label: 'Apontamentos', href: '/relatorios/apontamentos', icon: Clock },
+      { label: 'Apontamentos',  href: '/relatorios/apontamentos',  icon: Clock },
+      { label: 'Pagamentos',    href: '/relatorios/pagamentos',    icon: DollarSign },
+      { label: 'Rentabilidade', href: '/relatorios/rentabilidade', icon: TrendingUp },
     ],
   },
   // 🧪 Features experimentais — só em DEV1 (escondidas em homolog/prod)
@@ -219,6 +225,7 @@ const NAV: NavEntry[] = [
       { label: 'Categorias de Despesa', href: '/cadastros?tab=expense_categories', icon: Tag },
       { label: 'Tipos de Despesa',      href: '/cadastros?tab=expense_types',     icon: Receipt },
       { label: 'Formas de Pagamento',   href: '/cadastros?tab=payment_methods',   icon: CreditCard },
+      { label: 'Modelos de E-mail',     href: '/cadastros?tab=email_templates',   icon: Mail },
       { label: 'Parceiros',             href: '/partners',                        icon: Handshake },
       { label: 'Saldo Inicial de Tickets', href: '/cadastros/saldo-inicial-tickets', icon: Ticket },
       { label: 'Integração Movidesk',   href: '/configuracoes/movidesk',          icon: Webhook },
@@ -240,11 +247,21 @@ function itemClass(active: boolean): string {
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-function SidebarInner({ user }: { user: User }) {
+function SidebarInner({ user, mobileOpen = false, onClose }: { user: User; mobileOpen?: boolean; onClose?: () => void }) {
   const pathname     = usePathname()
   const searchParams = useSearchParams()
-  const [collapsed,   setCollapsed]   = useState(false)
+  const [collapsedRaw, setCollapsed]  = useState(false)
   const [openGroups,  setOpenGroups]  = useState<string[]>([])
+  // No mobile o menu é um drawer de largura cheia — nunca colapsado (ícones-só é coisa de desktop).
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    const sync = () => setIsMobile(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+  const collapsed = collapsedRaw && !isMobile
 
   const isConsultor        = user?.type === 'consultor'
   const isCoordenador      = user?.type === 'coordenador'
@@ -304,6 +321,10 @@ function SidebarInner({ user }: { user: User }) {
 
       // Meu Painel — primeiro item para TODOS os coordenadores
       nav.unshift({ type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard })
+
+      // Investimento Interno — disponível para TODOS os coordenadores (apontamentos,
+      // aprovação e gestão dos investimentos internos / leads da ERPSERV).
+      nav.push({ type: 'item', label: 'Investimento Interno', href: '/investimento-comercial', icon: TrendingUp })
 
       // Demandas e Projetos — posição 2 para coordenador de projetos
       // ("Gestão de Projetos" foi removida — governança ficou no painel/Demandas)
@@ -385,8 +406,9 @@ function SidebarInner({ user }: { user: User }) {
             { label: 'Clientes',           href: '/fechamento/cliente',   icon: Building2 },
             { label: 'Parceiros',          href: '/fechamento/parceiro',  icon: Handshake },
             { label: 'Consultores',        href: '/fechamento/consultor', icon: Users },
-            { label: 'Folha Cooperativa', href: '/fechamento/folha',     icon: FileSpreadsheet },
+            { label: 'Folha Cooperativa',  href: '/fechamento/folha',     icon: FileSpreadsheet },
             { label: 'Contratos',          href: '/fechamento/contratos', icon: FileText  },
+            { label: 'Reajuste de Contrato', href: '/fechamento/reajustes', icon: TrendingUp },
             { label: 'Pagamento Despesas', href: '/pagamento-despesas',   icon: DollarSign },
           ],
         },
@@ -416,9 +438,8 @@ function SidebarInner({ user }: { user: User }) {
         .filter(([code]) => clienteContractCodes.has(code))
         .map(([, item]) => item)
       const nav: NavEntry[] = [
-        { type: 'item', label: 'Home',                 href: '/portal-cliente',              icon: Building2 },
-        // 'Minhas atividades' temporariamente oculta — não pronta pra prod
-        { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline',          icon: LayoutGrid },
+        { type: 'item', label: 'Home',                 href: '/portal-cliente',      icon: Building2 },
+        { type: 'item', label: 'Demandas e Projetos', href: '/contratos/pipeline',  icon: LayoutGrid },
       ]
       if (dashItems.length > 0) {
         nav.push({ type: 'group', label: 'Contratos', icon: FileText, items: dashItems })
@@ -432,7 +453,6 @@ function SidebarInner({ user }: { user: User }) {
     if (isConsultor) {
       const baseNav: NavEntry[] = [
         { type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard },
-        { type: 'item', label: 'Início',     href: '/dashboard',  icon: Home },
         ...(IS_DEV1 ? [{ type: 'item' as const, label: 'Meus Cards', href: '/meus-cards', icon: Inbox }] : []),
       ]
 
@@ -472,16 +492,14 @@ function SidebarInner({ user }: { user: User }) {
       const base = href.split('?')[0]
       return pathname === base || pathname.startsWith(base + '/')
     }
-    const matchItem = (item: { href: string; matchPaths?: string[] }) =>
-      matchHref(item.href) || (item.matchPaths?.some(p => pathname === p || pathname.startsWith(p + '/')) ?? false)
     for (const entry of visibleNav) {
       if (entry.type !== 'group') continue
       for (const i of entry.items) {
         if ('href' in i) {
-          if (matchItem(i)) { auto.push(entry.label); break }
+          if (matchHref(i.href)) { auto.push(entry.label); break }
         } else {
           // sub-grupo: abre o pai e o sub-grupo se algum leaf casar
-          if (i.items.some(leaf => matchItem(leaf))) {
+          if (i.items.some(leaf => matchHref(leaf.href))) {
             auto.push(entry.label)
             auto.push(`${entry.label}/${i.label}`)
             break
@@ -518,16 +536,45 @@ function SidebarInner({ user }: { user: User }) {
     return true
   }
   const isNavLink = (x: NavLink | NavSubGroup): x is NavLink => (x as any).href !== undefined
-  const subGroupActive = (sg: NavSubGroup) => sg.items.some(i => isActive(i.href, i.matchPaths, i.exactMatch))
+  const subGroupActive = (sg: NavSubGroup) => sg.items.some(i => isActive(i.href, undefined, i.exactMatch))
   const groupActive = (g: NavGroup) => g.items.some(i =>
-    isNavLink(i) ? isActive(i.href, i.matchPaths, i.exactMatch) : subGroupActive(i)
+    isNavLink(i) ? isActive(i.href, undefined, i.exactMatch) : subGroupActive(i)
   )
 
   return (
+    <>
+      {/* Backdrop do drawer (só mobile, quando aberto) */}
+      <div
+        onClick={onClose}
+        className={cn('fixed inset-0 z-40 bg-black/50 md:hidden transition-opacity duration-200',
+          mobileOpen ? 'opacity-100' : 'opacity-0 pointer-events-none')}
+        aria-hidden
+      />
+    {/* Container que CLIPA o drawer off-screen no mobile — é `fixed` (fora da
+        cadeia de altura do conteúdo, então não quebra `h-full`/h:100% no iOS).
+        No desktop vira `contents` e some, deixando o <aside> fluir normalmente. */}
+    <div className="fixed inset-0 z-50 overflow-x-hidden pointer-events-none md:static md:inset-auto md:z-auto md:overflow-visible md:pointer-events-auto md:contents">
     <aside
-      className={cn('flex flex-col h-screen border-r transition-all duration-200 shrink-0', collapsed ? 'w-[60px]' : 'w-[248px]')}
+      className={cn(
+        'flex flex-col border-r transition-transform duration-200',
+        // Mobile: drawer off-canvas (absolute dentro do container fixo → clipado)
+        'absolute inset-y-0 left-0 w-[248px] pointer-events-auto',
+        mobileOpen ? 'translate-x-0' : '-translate-x-full',
+        // Desktop: estático no fluxo, altura cheia, colapso opcional
+        'md:static md:h-screen md:shrink-0 md:translate-x-0 md:transition-all',
+        collapsedRaw ? 'md:w-[60px]' : 'md:w-[248px]',
+      )}
       style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}
     >
+      {/* Fechar (só mobile) */}
+      <button
+        onClick={onClose}
+        aria-label="Fechar menu"
+        className="md:hidden absolute top-3 right-3 z-10 p-1.5 rounded-md transition-colors hover:bg-zinc-800"
+        style={{ color: 'var(--text-muted)' }}
+      >
+        <ChevronLeft size={16} />
+      </button>
       {/* ── Logo ── */}
       <div
         className="flex items-center gap-8 h-18 px-5 border-b shrink-0"
@@ -617,7 +664,7 @@ function SidebarInner({ user }: { user: User }) {
               <div key={group.label} className="space-y-0.5">
                 {flatLinks(group.items).map(sub => {
                   const SubIcon = sub.icon
-                  const subActive = isActive(sub.href, sub.matchPaths, sub.exactMatch)
+                  const subActive = isActive(sub.href, undefined, sub.exactMatch)
                   const subItem = (
                     <Link
                       key={sub.href}
@@ -676,7 +723,7 @@ function SidebarInner({ user }: { user: User }) {
                             <div className="ml-3 mt-0.5 space-y-0.5 border-l pl-2" style={{ borderColor: 'var(--brand-border)' }}>
                               {sub.items.map(leaf => {
                                 const LeafIcon = leaf.icon
-                                const leafActive = isActive(leaf.href, leaf.matchPaths, leaf.exactMatch)
+                                const leafActive = isActive(leaf.href, undefined, leaf.exactMatch)
                                 return (
                                   <Link
                                     key={leaf.href}
@@ -698,7 +745,7 @@ function SidebarInner({ user }: { user: User }) {
                     }
                     // Link folha tradicional
                     const SubIcon = sub.icon
-                    const subActive = isActive(sub.href, sub.matchPaths, sub.exactMatch)
+                    const subActive = isActive(sub.href, undefined, sub.exactMatch)
                     return (
                       <Link
                         key={sub.href}
@@ -733,10 +780,10 @@ function SidebarInner({ user }: { user: User }) {
         </div>
       )}
 
-      {/* ── Collapse toggle ── */}
+      {/* ── Collapse toggle (só desktop) ── */}
       <button
         onClick={() => setCollapsed(c => !c)}
-        className="flex items-center justify-center h-10 border-t transition-colors"
+        className="hidden md:flex items-center justify-center h-10 border-t transition-colors"
         style={{ borderColor: 'var(--brand-border)', color: 'var(--text-muted)' }}
         onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -744,13 +791,15 @@ function SidebarInner({ user }: { user: User }) {
         {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
       </button>
     </aside>
+    </div>
+    </>
   )
 }
 
-export function Sidebar({ user }: { user: User }) {
+export function Sidebar({ user, mobileOpen, onClose }: { user: User; mobileOpen?: boolean; onClose?: () => void }) {
   return (
     <Suspense>
-      <SidebarInner user={user} />
+      <SidebarInner user={user} mobileOpen={mobileOpen} onClose={onClose} />
     </Suspense>
   )
 }

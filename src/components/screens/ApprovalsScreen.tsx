@@ -16,7 +16,8 @@ import { MonthYearPicker } from '@/components/ui/month-year-picker'
 import { TimesheetViewModal } from '@/components/ui/timesheet-view-modal'
 import { TimesheetHoverTooltip, useTimesheetHover } from '@/components/ui/timesheet-hover-tooltip'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { api, ApiError, toRelativePath } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
+import { fetchAsBlob } from '@/lib/attachments'
 import { previewText } from '@/lib/sanitize'
 import { exportTimesheetsToExcel } from '@/lib/exportTimesheets'
 import { useAuth } from '@/hooks/use-auth'
@@ -285,16 +286,8 @@ function StatusPills({ value, onChange, options }: {
 
 // ─── Receipt helpers ──────────────────────────────────────────────────────────
 
-async function fetchReceipt(url: string): Promise<{ blobUrl: string; filename: string }> {
-  const res = await fetch(toRelativePath(url), { credentials: 'same-origin' })
-  if (!res.ok) throw new Error('not_found')
-  const blob = await res.blob()
-  const cd = res.headers.get('content-disposition') ?? ''
-  const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
-  const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg') ?? 'pdf'
-  const filename = match?.[1]?.replace(/['"]/g, '') ?? `comprovante.${ext}`
-  return { blobUrl: URL.createObjectURL(blob), filename }
-}
+// FASE 11.2.FE — Helper centralizado em src/lib/attachments.ts.
+const fetchReceipt = fetchAsBlob
 
 function triggerAnchor(href: string, download?: string) {
   const a = document.createElement('a')
@@ -360,15 +353,15 @@ function ExpInfoRow({ icon: Icon, label, value, children, last }: {
   children?: React.ReactNode; last?: boolean
 }) {
   return (
-    <div className={`flex items-start gap-4 px-5 py-4 ${!last ? 'border-b' : ''}`}
+    <div className={`flex items-center gap-2.5 px-3.5 py-1.5 ${!last ? 'border-b' : ''}`}
       style={!last ? { borderColor: 'var(--brand-border)' } : undefined}>
-      <span className="mt-0.5 shrink-0 p-2 rounded-lg"
+      <span className="shrink-0 p-1 rounded-md"
         style={{ background: 'rgba(0,245,255,0.06)', color: 'var(--brand-primary)' }}>
-        <Icon size={14} />
+        <Icon size={12} />
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-[11px] uppercase tracking-widest mb-1" style={{ color: 'var(--brand-subtle)' }}>{label}</p>
-        {children ?? <p className="text-sm font-medium" style={{ color: 'var(--brand-text)' }}>{value ?? '—'}</p>}
+        <p className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>{label}</p>
+        {children ?? <p className="text-[13px] font-medium" style={{ color: 'var(--brand-text)' }}>{value ?? '—'}</p>}
       </div>
     </div>
   )
@@ -408,26 +401,26 @@ function ExpApproveModal({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 overflow-y-auto"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="relative w-full max-w-2xl mt-8 rounded-2xl shadow-2xl"
+      <div className="relative w-full max-w-lg mt-6 rounded-2xl shadow-2xl"
         style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
         <button onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2 rounded-lg hover:bg-white/5 transition-colors"
+          className="absolute top-3 right-3 z-10 p-1.5 rounded-lg hover:bg-white/5 transition-colors"
           style={{ color: 'var(--brand-subtle)' }}>
-          <X size={18} />
+          <X size={16} />
         </button>
 
         {/* Header */}
-        <div className="px-6 pt-6 pb-5 flex items-start gap-4">
-          <div className="p-3 rounded-2xl shrink-0" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>
-            <Receipt size={20} />
+        <div className="px-4 pt-3.5 pb-2.5 flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg shrink-0" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>
+            <Receipt size={16} />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-lg font-semibold" style={{ color: 'var(--brand-text)' }}>Detalhes da Despesa</h3>
-            <p className="text-xs mt-1" style={{ color: 'var(--brand-subtle)' }}>#{item.id} · {fmt(item.expense_date)}</p>
+            <h3 className="text-base font-semibold" style={{ color: 'var(--brand-text)' }}>Detalhes da Despesa</h3>
+            <p className="text-[11px]" style={{ color: 'var(--brand-subtle)' }}>#{item.id} · {fmt(item.expense_date)}</p>
           </div>
         </div>
 
-        <div className="px-6 pb-6 space-y-4">
+        <div className="px-4 pb-4 space-y-2">
           {/* Status + Categoria */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
@@ -441,10 +434,10 @@ function ExpApproveModal({
           </div>
 
           {/* Valor hero */}
-          <div className="rounded-2xl px-5 py-5"
+          <div className="rounded-xl px-3.5 py-2.5 flex items-baseline justify-between gap-2"
             style={{ background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.15)' }}>
-            <p className="text-[11px] uppercase tracking-widest mb-1.5" style={{ color: 'var(--brand-subtle)' }}>Valor Total</p>
-            <p className="text-3xl font-bold" style={{ color: 'var(--brand-primary)' }}>{fmtBRL(Number(item.amount))}</p>
+            <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--brand-subtle)' }}>Valor Total</p>
+            <p className="text-xl font-bold" style={{ color: 'var(--brand-primary)' }}>{fmtBRL(Number(item.amount))}</p>
           </div>
 
           {/* Info card */}
@@ -465,11 +458,11 @@ function ExpApproveModal({
           {item.description && (
             <div className="rounded-2xl overflow-hidden"
               style={{ background: 'var(--brand-bg)', border: '1px solid var(--brand-border)' }}>
-              <div className="flex items-center gap-2 px-5 py-3" style={{ borderBottom: '1px solid var(--brand-border)' }}>
-                <FileText size={14} style={{ color: 'var(--brand-primary)' }} />
-                <span className="text-[11px] uppercase tracking-widest font-medium" style={{ color: 'var(--brand-subtle)' }}>Descrição</span>
+              <div className="flex items-center gap-2 px-3.5 py-2" style={{ borderBottom: '1px solid var(--brand-border)' }}>
+                <FileText size={13} style={{ color: 'var(--brand-primary)' }} />
+                <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: 'var(--brand-subtle)' }}>Descrição</span>
               </div>
-              <p className="px-5 py-4 text-sm leading-relaxed" style={{ color: 'var(--brand-muted)' }}>{item.description}</p>
+              <p className="px-3.5 py-2 text-[13px] leading-relaxed" style={{ color: 'var(--brand-muted)' }}>{item.description}</p>
             </div>
           )}
 
@@ -483,19 +476,19 @@ function ExpApproveModal({
 
           {/* Cobrar do cliente */}
           {mode === 'approve' && !isOwn && (
-            <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 px-4 py-3 space-y-3">
+            <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 px-3.5 py-2.5 space-y-2">
               <p className={`text-xs font-semibold ${submitted && chargeClient === null ? 'text-red-400' : 'text-zinc-300'}`}>
                 Cobrar do cliente? *
               </p>
-              <div className="flex gap-3">
+              <div className="flex gap-2">
                 <button type="button" onClick={() => setChargeClient(true)}
-                  className={`flex-1 py-2.5 rounded-xl border text-xs font-medium transition-all ${
+                  className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${
                     chargeClient === true ? 'bg-green-600/20 border-green-500 text-green-300' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
                   }`}>
                   Sim — cobrar do cliente
                 </button>
                 <button type="button" onClick={() => setChargeClient(false)}
-                  className={`flex-1 py-2.5 rounded-xl border text-xs font-medium transition-all ${
+                  className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${
                     chargeClient === false ? 'bg-orange-600/20 border-orange-500 text-orange-300' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
                   }`}>
                   Não — absorver internamente
@@ -567,13 +560,18 @@ function ExpApproveModal({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export interface ApprovalsScreenProps {
-  scope?: 'sustentacao'
+  scope?: 'sustentacao' | 'investimento'
   embedded?: boolean
+  /** No escopo investimento, transforma o filtro de Projeto em filtro de Lead. */
+  leadOptions?: { id: number; name: string }[]
 }
 
-export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) {
+export function ApprovalsScreen({ scope, embedded, leadOptions }: ApprovalsScreenProps = {}) {
   const { user } = useAuth()
   const isCoordenador = user?.type === 'coordenador'
+  // Chip "Meus projetos / Todos" pra coordenador (idem Apontamentos / Despesas).
+  // Default 'meus' = fila familiar do coord; 'todos' libera a fila inteira do time.
+  const [coordScope, setCoordScope] = useState<'meus' | 'todos'>('meus')
   const hover = useTimesheetHover()
 
   const { filters: flt, set: setFilter, clear: clearPersistedFilters } = usePersistedFilters(
@@ -660,32 +658,47 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
       const l = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
       setCoordinators(l.map((u: any) => ({ id: u.id, name: u.name })))
     }).catch(() => {})
-    api.get<any>('/users?pageSize=100&is_executive=true').then(r => {
+    // Endpoint canônico de executivos: exclui parceiro_admin (gestores) e users de cliente.
+    // /users?is_executive=true traria os Parceiros Gestores (mesma flag) por engano.
+    api.get<any>('/executives?pageSize=100').then(r => {
       const l = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
       setExecutives(l.map((u: any) => ({ id: u.id, name: u.name })))
     }).catch(() => {})
-    api.get<any>('/projects?minimal=true&pageSize=200&status=active').then(r => {
-      const l = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
-      setProjects(l.map((p: any) => ({ id: p.id, name: p.name })))
-    }).catch(() => {})
+    if (scope === 'investimento' && leadOptions) {
+      // Escopo investimento: o filtro de projeto vira filtro de LEAD.
+      setProjects(leadOptions)
+    } else {
+      api.get<any>('/projects?minimal=true&pageSize=200&status=active').then(r => {
+        const l = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
+        setProjects(l.map((p: any) => ({ id: p.id, name: p.name })))
+      }).catch(() => {})
+    }
     api.get<any>('/customers?pageSize=500').then(r => {
       const l = Array.isArray(r?.items) ? r.items : Array.isArray(r?.data) ? r.data : []
       setCustomers(l.map((c: any) => ({ id: c.id, name: c.name })))
     }).catch(() => {})
-  }, [])
+  }, [scope, leadOptions])
 
   const filterParams = useMemo(() => {
     const p = new URLSearchParams()
     if (dateFrom)      p.set('date_from',      dateFrom)
     if (dateTo)        p.set('date_to',        dateTo)
     if (userId)        p.set('user_id',        userId)
-    if (coordinatorId) p.set('coordinator_id', coordinatorId)
+    // Coordenador: chip 'Meus projetos' injeta coordinator_id=user.id; o BE
+    // (PR #57) confia no FE pra escopar. Filtro manual de coord (dropdown)
+    // tem prioridade sobre o chip quando preenchido.
+    if (coordinatorId) {
+      p.set('coordinator_id', coordinatorId)
+    } else if (isCoordenador && coordScope === 'meus' && user?.id) {
+      p.set('coordinator_id', String(user.id))
+    }
     if (executiveId)   p.set('executive_id',   executiveId)
     if (projectId)     p.set('project_id',     projectId)
     if (customerId)    p.set('customer_id',    customerId)
-    if (categoriaServico) p.set('categoria_servico', categoriaServico)
+    if (scope === 'investimento') p.set('categoria_servico', 'investimento')
+    else if (categoriaServico) p.set('categoria_servico', categoriaServico)
     return p.toString()
-  }, [dateFrom, dateTo, userId, coordinatorId, executiveId, projectId, customerId, categoriaServico])
+  }, [dateFrom, dateTo, userId, coordinatorId, executiveId, projectId, customerId, categoriaServico, isCoordenador, coordScope, user?.id, scope])
 
   const loadTs = useCallback(async () => {
     setTsLoading(true)
@@ -693,7 +706,7 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
       const p = new URLSearchParams(filterParams)
       p.set('page', String(tsPage)); p.set('per_page', '100')
       if (tsStatus) p.set('status', tsStatus)
-      if (scope)    p.set('scope', scope)
+      if (scope === 'sustentacao') p.set('scope', scope)
       const r = await api.get<any>(`/approvals/timesheets?${p}`)
       setTsItems(Array.isArray(r?.data) ? r.data : [])
       setTsPag(r?.pagination ?? null)
@@ -923,6 +936,28 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
         })}
       </div>
 
+      {/* Chip "Meus projetos / Todos" — coordenador, perto da tabela
+          (mesmo padrão de Apontamentos / Despesas: PRs #36/#33).
+          Filtro de Coordenador no card abaixo (dropdown) tem prioridade sobre o chip. */}
+      {isCoordenador && (
+        <div className="mb-3 inline-flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+          {(['meus', 'todos'] as const).map(opt => {
+            const active = coordScope === opt
+            return (
+              <button key={opt} onClick={() => setCoordScope(opt)}
+                className="px-3 py-1.5 text-xs font-semibold transition-colors"
+                style={{
+                  background: active ? 'var(--primary)' : 'var(--surface)',
+                  color: active ? 'var(--primary-fg)' : 'var(--text-muted)',
+                  borderRight: opt === 'meus' ? '1px solid var(--border)' : undefined,
+                }}>
+                {opt === 'meus' ? 'Meus projetos' : 'Todos'}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* ── Filters ── */}
       <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900">
         <button onClick={() => setShowFilters(v => !v)}
@@ -971,7 +1006,7 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
                   onChange={(f, t) => { setDateFrom(f); setDateTo(t); setRefMonth(null); setRefYear(null) }}
                 />
               )}
-              {([
+              {scope !== 'investimento' && ([
                 { id: 'sustentacao',  label: 'Sustentação', color: '#f59e0b',            bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)' },
                 { id: 'projeto',      label: 'Projeto',     color: '#00F5FF',            bg: 'rgba(0,245,255,0.12)',   border: 'rgba(0,245,255,0.35)' },
                 { id: 'bizify',       label: 'Bizify',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
@@ -1018,7 +1053,7 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
                 options={customers}
               />
               <SearchableSelect
-                label="Projeto"
+                label={scope === 'investimento' ? 'Lead' : 'Projeto'}
                 value={projectId}
                 onChange={setProjectId}
                 options={projects}
@@ -1074,8 +1109,8 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
         </div>
       )}
 
-      {/* ── Table ── */}
-      <div className="rounded-xl border border-zinc-800 overflow-x-auto overflow-y-clip">
+      {/* ── Table (desktop) ── */}
+      <div className="hidden md:block rounded-xl border border-zinc-800 overflow-x-auto overflow-y-clip">
         <table className="w-full min-w-max text-xs">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-zinc-800 bg-zinc-900">
@@ -1266,6 +1301,102 @@ export function ApprovalsScreen({ scope, embedded }: ApprovalsScreenProps = {}) 
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* ── Cards (mobile) ── */}
+      <div className="md:hidden space-y-2">
+        {/* Loading */}
+        {currentLoading && Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="rounded-xl border p-3" style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+            <Skeleton className="h-3 w-full mb-1.5" />
+            <Skeleton className="h-7 w-40" />
+          </div>
+        ))}
+
+        {/* Empty */}
+        {!currentLoading && currentItems.length === 0 && (
+          <div className="rounded-xl border px-3 py-16 text-center text-zinc-500"
+            style={{ borderColor: 'var(--brand-border)', background: 'var(--brand-surface)' }}>
+            <CheckSquare size={28} className="mx-auto mb-2 opacity-20" />
+            <p className="text-sm">Nenhum item pendente de aprovação</p>
+            {hasFilters && (
+              <button onClick={clearFilters} className="mt-2 text-xs text-blue-400 hover:text-blue-300">
+                Limpar filtros
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Timesheets cards — compacto: toca p/ abrir detalhe (igual desktop), muda de cor ao tocar */}
+        {!currentLoading && tab === 'timesheets' && tsItems.map(ts => (
+          <div key={ts.id} onClick={() => openTsView(ts)}
+            className={`rounded-lg border p-2.5 cursor-pointer transition-colors bg-[var(--brand-surface)] active:bg-[var(--surface-hover)] md:hover:bg-[var(--surface-hover)] ${
+              selected.includes(ts.id) ? 'ring-1 ring-blue-500/40' : ''
+            }`}
+            style={{ borderColor: 'var(--brand-border)' }}>
+            {/* Linha 1: checkbox + colaborador + menu */}
+            <div className="flex items-center gap-2">
+              <span onClick={e => e.stopPropagation()} className="shrink-0 flex">
+                <input type="checkbox" checked={selected.includes(ts.id)} onChange={() => toggleOne(ts.id)}
+                  className="rounded border-zinc-600 bg-zinc-800 accent-blue-500" />
+              </span>
+              <span className="font-medium text-sm truncate flex-1 min-w-0" style={{ color: 'var(--brand-text)' }}>{ts.user?.name ?? '—'}</span>
+              <div onClick={e => e.stopPropagation()} className="shrink-0">
+                <RowMenu items={[
+                  { label: 'Visualizar', icon: <Eye size={12} />, onClick: () => openTsView(ts) },
+                  { label: 'Aprovar', icon: <Check size={12} />, onClick: () => approveTs(ts.id), disabled: actioning === ts.id },
+                  { label: 'Solicitar Ajuste', icon: <RotateCcw size={12} />, onClick: () => { setAdjModal({ open: true, id: ts.id, type: 'timesheet' }); setAdjReason('') } },
+                  { label: 'Rejeitar', icon: <XCircle size={12} />, onClick: () => { setRejectModal({ open: true, ids: [ts.id] }); setRejectReason('') }, danger: true },
+                ]} />
+              </div>
+            </div>
+            {/* Linha 2: status */}
+            <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+              <TsStatusBadge status={ts.status} display={ts.status_display} />
+            </div>
+            {/* Linha 3: resumo */}
+            <div className="mt-1.5 text-[11px] truncate" style={{ color: 'var(--brand-subtle)' }}>
+              {fmt(ts.date)}{ts.ticket ? ` · #${ts.ticket}` : ''} · {fmtMin(ts.effort_minutes)}{ts.project?.customer?.name ? ` · ${ts.project.customer.name}` : ''}{ts.project?.name ? ` · ${ts.project.name}` : ''}
+            </div>
+          </div>
+        ))}
+
+        {/* Expenses cards */}
+        {!currentLoading && tab === 'expenses' && expItems.map(exp => {
+          const isOwn = (exp.user?.id ?? (exp as any).user_id) === user?.id
+          return (
+            <div key={exp.id} onClick={() => openExpApprove(exp)}
+              className="rounded-lg border p-2.5 cursor-pointer transition-colors bg-[var(--brand-surface)] active:bg-[var(--surface-hover)] md:hover:bg-[var(--surface-hover)]"
+              style={{ borderColor: 'var(--brand-border)' }}>
+              {/* Linha 1: colaborador + menu */}
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm truncate flex-1 min-w-0" style={{ color: 'var(--brand-text)' }}>{exp.user?.name ?? '—'}</span>
+                <div onClick={e => e.stopPropagation()} className="shrink-0">
+                  <RowMenu items={[
+                    { label: 'Visualizar', icon: <Eye size={12} />, onClick: () => openExpApprove(exp) },
+                    ...(isOwn ? [] : [{ label: 'Aprovar', icon: <Check size={12} />, onClick: () => openExpApprove(exp) }]),
+                    { label: 'Solicitar Ajuste', icon: <RotateCcw size={12} />, onClick: () => { setAdjModal({ open: true, id: exp.id, type: 'expense' }); setAdjReason('') } },
+                    { label: 'Rejeitar', icon: <XCircle size={12} />, onClick: () => { setRejectModal({ open: true, ids: [exp.id] }); setRejectReason('') }, danger: true },
+                    ...(exp.receipt_url ? [{ label: 'Ver Comprovante', icon: <Paperclip size={12} />, onClick: () => openReceiptUrl(exp.receipt_url!) }] : []),
+                  ]} />
+                </div>
+              </div>
+              {/* Linha 2: status */}
+              <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                <TsStatusBadge status={exp.status} display={exp.status_display} />
+              </div>
+              {/* Linha 3: resumo */}
+              <div className="mt-1.5 text-[11px] truncate flex items-center gap-1" style={{ color: 'var(--brand-subtle)' }}>
+                {exp.receipt_url && <Paperclip size={10} className="shrink-0" />}
+                {fmt(exp.expense_date)} · {fmtBRL(parseFloat(String(exp.amount)) || 0)}{exp.category?.name ? ` · ${exp.category.name}` : ''}{exp.project?.customer?.name ? ` · ${exp.project.customer.name}` : ''}
+              </div>
+            </div>
+          )
+        })}
       </div>
 
       {/* ── Pagination ── */}

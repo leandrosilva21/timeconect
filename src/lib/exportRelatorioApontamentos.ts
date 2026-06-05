@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx'
 
 export interface RelatorioRow {
   date_inclusion: string
+  date_inclusion_late?: boolean  // digitado fora da competência (serviço no mês, lançado depois)
   requester: string
   consultant: string
   ticket: string
@@ -43,7 +44,9 @@ export function exportRelatorioToExcel(rows: RelatorioRow[], meta: RelatorioMeta
   const aoa: (string | number)[][] = [
     cols,
     ...rows.map(r => [
-      r.date_inclusion, r.requester, r.consultant, r.ticket, r.title,
+      // Marcador "⚠" destaca digitação fora da competência (SheetJS não suporta cor de célula).
+      r.date_inclusion_late ? `⚠ ${r.date_inclusion}` : r.date_inclusion,
+      r.requester, r.consultant, r.ticket, r.title,
       r.description, r.start_time, r.end_time, r.effort_decimal, r.date_service,
     ]),
   ]
