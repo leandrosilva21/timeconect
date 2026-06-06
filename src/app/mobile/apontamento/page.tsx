@@ -20,11 +20,11 @@ const LS = {
   set: (k: string, v: string) => { try { localStorage.setItem(k, v) } catch {} },
 }
 
-const LS_CUSTOMER_ID   = 'minutor_m_customer_id'
-const LS_CUSTOMER_NAME = 'minutor_m_customer_name'
-const LS_PROJECT_ID    = 'minutor_m_project_id'
-const LS_PROJECT_NAME  = 'minutor_m_project_name'
-const LS_PROJECT_SUS   = 'minutor_m_project_sus'
+const LS_CUSTOMER_ID   = 'timeconect_m_customer_id'
+const LS_CUSTOMER_NAME = 'timeconect_m_customer_name'
+const LS_PROJECT_ID    = 'timeconect_m_project_id'
+const LS_PROJECT_NAME  = 'timeconect_m_project_name'
+const LS_PROJECT_SUS   = 'timeconect_m_project_sus'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

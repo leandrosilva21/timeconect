@@ -113,8 +113,8 @@ interface DebugClienteRow {
   tickets: number
   vinculados: number
   match: 'cnpj' | 'nome' | 'nao'
-  minutor_name: string | null
-  minutor_cgc: string | null
+  timeconect_name: string | null
+  timeconect_cgc: string | null
 }
 
 interface DebugResponsavelRow {
@@ -126,8 +126,8 @@ interface DebugResponsavelRow {
   tickets: number
   vinculados: number
   match: 'encontrado' | 'nao'
-  minutor_name: string | null
-  minutor_id: number | null
+  timeconect_name: string | null
+  timeconect_id: number | null
 }
 
 interface ExecutiveData {
@@ -256,7 +256,7 @@ function DebugClientesTab({ rows, onSync }: { rows: DebugClienteRow[]; onSync: (
     if (cnpjFilter === 'sem' && row.cnpj_movidesk) return false
     if (search) {
       const q = search.toLowerCase()
-      if (!(row.org ?? '').toLowerCase().includes(q) && !(row.minutor_name ?? '').toLowerCase().includes(q)) return false
+      if (!(row.org ?? '').toLowerCase().includes(q) && !(row.timeconect_name ?? '').toLowerCase().includes(q)) return false
     }
     return true
   })
@@ -289,7 +289,7 @@ function DebugClientesTab({ rows, onSync }: { rows: DebugClienteRow[]; onSync: (
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-zinc-300">Comparativo Clientes: Movidesk × Minutor</h2>
+        <h2 className="text-sm font-semibold text-zinc-300">Comparativo Clientes: Movidesk × Time Conect</h2>
         <div className="flex items-center gap-3">
           <span className="text-xs text-zinc-600">{filtered.length} de {rows.length} organizações</span>
           <button onClick={handleSync} disabled={syncing}
@@ -351,8 +351,8 @@ function DebugClientesTab({ rows, onSync }: { rows: DebugClienteRow[]; onSync: (
               <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">CNPJ Movidesk</th>
               <th className="text-right px-3 py-2.5 text-zinc-400 font-medium">Tickets</th>
               <th className="text-right px-3 py-2.5 text-zinc-400 font-medium">Vinculados</th>
-              <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">Cliente no Minutor</th>
-              <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">CNPJ Minutor</th>
+              <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">Cliente no Time Conect</th>
+              <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">CNPJ Time Conect</th>
               <th className="text-center px-3 py-2.5 text-zinc-400 font-medium">Vínculo</th>
             </tr>
           </thead>
@@ -377,8 +377,8 @@ function DebugClientesTab({ rows, onSync }: { rows: DebugClienteRow[]; onSync: (
                   </td>
                   <td className="px-3 py-2 text-right text-zinc-300">{row.tickets}</td>
                   <td className="px-3 py-2 text-right" style={{ color: row.vinculados === row.tickets ? '#22c55e' : row.vinculados > 0 ? '#eab308' : '#ef4444' }}>{row.vinculados}</td>
-                  <td className="px-3 py-2 text-zinc-200">{row.minutor_name ?? <span className="text-zinc-600 italic">—</span>}</td>
-                  <td className="px-3 py-2 font-mono text-zinc-400">{row.minutor_cgc ?? <span className="text-zinc-600 italic">—</span>}</td>
+                  <td className="px-3 py-2 text-zinc-200">{row.timeconect_name ?? <span className="text-zinc-600 italic">—</span>}</td>
+                  <td className="px-3 py-2 font-mono text-zinc-400">{row.timeconect_cgc ?? <span className="text-zinc-600 italic">—</span>}</td>
                   <td className="px-3 py-2 text-center font-semibold" style={{ color: matchColor }}>{matchLabel}</td>
                 </tr>
               )
@@ -415,7 +415,7 @@ function DebugResponsaveisTab({ rows, onSync }: { rows: DebugResponsavelRow[]; o
       if (
         !row.owner_email.toLowerCase().includes(q) &&
         !(row.owner_name ?? '').toLowerCase().includes(q) &&
-        !(row.minutor_name ?? '').toLowerCase().includes(q)
+        !(row.timeconect_name ?? '').toLowerCase().includes(q)
       ) return false
     }
     return true
@@ -429,7 +429,7 @@ function DebugResponsaveisTab({ rows, onSync }: { rows: DebugResponsavelRow[]; o
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-zinc-300">Responsáveis por Ticket: Movidesk × Minutor</h2>
+        <h2 className="text-sm font-semibold text-zinc-300">Responsáveis por Ticket: Movidesk × Time Conect</h2>
         <div className="flex items-center gap-3">
           {syncing && <span className="text-xs text-cyan-400">⏳ Rodando em background...</span>}
           <span className="text-xs text-zinc-600">{filtered.length} de {rows.length} responsáveis</span>
@@ -453,7 +453,7 @@ function DebugResponsaveisTab({ rows, onSync }: { rows: DebugResponsavelRow[]; o
         <div className="flex rounded-lg border border-zinc-700 overflow-hidden text-xs">
           {([
             { key: 'all',        label: `Todos (${rows.length})`,         color: '#71717a' },
-            { key: 'encontrado', label: `✓ No Minutor (${found})`,        color: '#22c55e' },
+            { key: 'encontrado', label: `✓ No Time Conect (${found})`,        color: '#22c55e' },
             { key: 'nao',        label: `✗ Não encontrado (${notFound})`, color: '#ef4444' },
           ] as const).map(opt => (
             <button key={opt.key} onClick={() => setMatchFilter(opt.key)}
@@ -489,7 +489,7 @@ function DebugResponsaveisTab({ rows, onSync }: { rows: DebugResponsavelRow[]; o
               <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">Equipe</th>
               <th className="text-right px-3 py-2.5 text-zinc-400 font-medium">Tickets</th>
               <th className="text-right px-3 py-2.5 text-zinc-400 font-medium">Vinculados</th>
-              <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">Nome no Minutor</th>
+              <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">Nome no Time Conect</th>
               <th className="text-center px-3 py-2.5 text-zinc-400 font-medium">Vínculo</th>
             </tr>
           </thead>
@@ -509,7 +509,7 @@ function DebugResponsaveisTab({ rows, onSync }: { rows: DebugResponsavelRow[]; o
                   <td className="px-3 py-2 text-zinc-500">{row.team ?? '—'}</td>
                   <td className="px-3 py-2 text-right text-zinc-300">{row.tickets}</td>
                   <td className="px-3 py-2 text-right" style={{ color: row.vinculados === row.tickets ? '#22c55e' : row.vinculados > 0 ? '#eab308' : '#ef4444' }}>{row.vinculados}</td>
-                  <td className="px-3 py-2 text-zinc-300">{row.minutor_name ?? <span className="text-zinc-600 italic">—</span>}</td>
+                  <td className="px-3 py-2 text-zinc-300">{row.timeconect_name ?? <span className="text-zinc-600 italic">—</span>}</td>
                   <td className="px-3 py-2 text-center">
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: `${matchColor}18`, color: matchColor }}>{matchLabel}</span>
                   </td>
@@ -949,7 +949,7 @@ export default function SustentacaoPage() {
       <div className="flex items-center justify-between gap-3 flex-wrap px-4 md:px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
         <div>
           <h1 className="text-lg font-bold text-white">Portal de Sustentação</h1>
-          <p className="text-xs text-zinc-500">Central operacional de suporte — Movidesk + Minutor</p>
+          <p className="text-xs text-zinc-500">Central operacional de suporte — Movidesk + Time Conect</p>
         </div>
         <div className="flex items-center gap-3">
           {/* Toggle Mês/Ano ↔ Período */}

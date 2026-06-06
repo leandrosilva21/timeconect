@@ -52,7 +52,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import type { LucideIcon } from 'lucide-react'
 import type { User } from '@/types'
 
-import { MinutorIcon } from '@/components/branding/MinutorIcon'
+import { Time ConectIcon } from '@/components/branding/Time ConectIcon'
 
 // ─── Nav config ──────────────────────────────────────────────────────────────
 
@@ -280,7 +280,7 @@ function SidebarInner({ user, mobileOpen = false, onClose }: { user: User; mobil
   // PRINCIPAIS (sem parent_project_id). Filhos herdam o item do menu via parent
   // — não deveriam expor entrada extra no menu.
   // Cacheado em sessionStorage pra evitar flicker do grupo "Contratos" ao trocar de rota.
-  const cacheKey = isCliente && user?.customer_id ? `minutor:contract_codes:${user.customer_id}` : null
+  const cacheKey = isCliente && user?.customer_id ? `timeconect:contract_codes:${user.customer_id}` : null
   const [clienteContractCodes, setClienteContractCodes] = useState<Set<string>>(() => {
     if (typeof window === 'undefined' || !cacheKey) return new Set()
     try {
@@ -580,10 +580,10 @@ function SidebarInner({ user, mobileOpen = false, onClose }: { user: User; mobil
         className="flex items-center gap-8 h-18 px-5 border-b shrink-0"
         style={{ borderColor: 'var(--brand-border)' }}
       >
-        <MinutorIcon size={34} />
+        <Time ConectIcon size={34} />
         {!collapsed && (
           <span className="font-bold text-[20px] tracking-tight" style={{ color: 'var(--text)' }}>
-            Minutor
+            Time Conect
           </span>
         )}
       </div>

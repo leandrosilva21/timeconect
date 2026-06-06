@@ -1,5 +1,5 @@
 /**
- * Logo símbolo do Minutor — 4 barras verticais.
+ * Logo símbolo do Time Conect — 4 barras verticais.
  *
  * Cor controlada pelo token `--brand-logo` (definido em globals.css):
  *   - light: #06B6D4 (cyan reforçado)
@@ -31,7 +31,7 @@ const BARS = [
 
 const SPLASH_COLOR = '#00F5FF'
 
-export function MinutorIcon({ size = 28, variant = 'default', className }: Props) {
+export function Time ConectIcon({ size = 28, variant = 'default', className }: Props) {
   const fill = variant === 'splash' ? SPLASH_COLOR : 'var(--brand-logo)'
   return (
     <svg
@@ -41,7 +41,7 @@ export function MinutorIcon({ size = 28, variant = 'default', className }: Props
       fill="none"
       className={className}
       role="img"
-      aria-label="Minutor"
+      aria-label="Time Conect"
     >
       {BARS.map((b, i) => (
         <rect

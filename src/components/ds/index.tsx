@@ -1,5 +1,5 @@
 /**
- * Minutor Design System
+ * Time Conect Design System
  * Tokens: --brand-bg / --brand-surface / --brand-border / --brand-primary (#00F5FF)
  *         --brand-text / --brand-muted / --brand-subtle
  *         --brand-success / --brand-warning / --brand-danger / --brand-purple

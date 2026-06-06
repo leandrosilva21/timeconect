@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * DataTable — tabela canônica do Minutor (Linear/Notion-like)
+ * DataTable — tabela canônica do Time Conect (Linear/Notion-like)
  *
  * Usa exclusivamente tokens do Design System:
  *  - Container: var(--surface) + var(--border) + var(--shadow-sm) + rounded-xl

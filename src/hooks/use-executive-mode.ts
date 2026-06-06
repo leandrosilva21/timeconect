@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
-const STORAGE_KEY = 'minutor.executive_mode'
-const EVENT = 'minutor:executive-mode-change'
+const STORAGE_KEY = 'timeconect.executive_mode'
+const EVENT = 'timeconect:executive-mode-change'
 
 function read(): boolean {
   if (typeof window === 'undefined') return false

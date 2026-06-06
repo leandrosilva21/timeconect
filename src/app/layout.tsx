@@ -16,13 +16,13 @@ const ICON_HREF =
                           '/favicon-prod.svg'
 
 export const metadata: Metadata = {
-  title: 'Minutor',
+  title: 'Time Conect',
   icons: { icon: [{ url: ICON_HREF, type: 'image/svg+xml' }] },
   description: 'Gestão de horas e despesas',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Minutor',
+    title: 'Time Conect',
   },
   other: {
     'apple-touch-icon': '/apple-touch-icon.png',

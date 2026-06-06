@@ -1,4 +1,4 @@
-# Design System — Minutor
+# Design System — Time Conect
 
 Guia rápido para padronizar a UI. Tokens e classes vivem em `src/app/globals.css`.
 

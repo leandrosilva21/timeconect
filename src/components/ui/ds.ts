@@ -1,5 +1,5 @@
 /**
- * Minutor Design System — re-exports canônicos.
+ * Time Conect Design System — re-exports canônicos.
  *
  * Importe tudo daqui pra forçar o uso dos componentes oficiais:
  *

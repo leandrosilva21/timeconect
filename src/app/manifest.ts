@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Minutor',
-    short_name: 'Minutor',
+    name: 'Time Conect',
+    short_name: 'Time Conect',
     description: 'Lançamento rápido de horas e despesas',
     start_url: '/mobile',
     display: 'standalone',

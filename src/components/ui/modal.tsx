@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Modal — modal canônico do Minutor.
+ * Modal — modal canônico do Time Conect.
  *
  * Estrutura:
  *   <Modal open={open} onClose={() => setOpen(false)} size="md">

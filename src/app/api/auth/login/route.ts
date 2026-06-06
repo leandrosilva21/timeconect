@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-const TOKEN_COOKIE = 'minutor_token'
+const TOKEN_COOKIE = 'timeconect_token'
 const COOKIE_MAX_AGE = 60 * 60 * 24 // 24h, alinhado com SANCTUM_TOKEN_EXPIRATION
 const isProd = process.env.NODE_ENV === 'production'
 

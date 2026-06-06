@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
 function storageKey(page: string, userId: number | string): string {
-  return `minutor_filters__${page}__${userId}`
+  return `timeconect_filters__${page}__${userId}`
 }
 
 function readStorage<T>(key: string, defaults: T): T {

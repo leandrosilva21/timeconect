@@ -66,7 +66,7 @@ interface SelectOption { id: number | string; name: string }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const WEBHOOK_URL = 'https://api.minutor.com.br/api/v1/webhooks/movidesk/ticket'
+const WEBHOOK_URL = 'https://api.timeconect.com.br/api/v1/webhooks/movidesk/ticket'
 
 function KpiCard({ label, value, icon: Icon, color }: {
   label: string; value: string | number; icon: any; color: string

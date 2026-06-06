@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 
-const TOKEN_COOKIE = 'minutor_token'
+const TOKEN_COOKIE = 'timeconect_token'
 
-// Credenciais para upload DIRETO no backend (ex.: api.minutor.com.br), evitando o
+// Credenciais para upload DIRETO no backend (ex.: api.timeconect.com.br), evitando o
 // limite de body (~4.5MB) da borda da Vercel no caminho /api/v1 (middleware + rewrite).
 // O backend aceita até 20MB (PHP) e o CORS já libera o domínio do app.
-// Só responde para a sessão autenticada (cookie httpOnly minutor_token) — devolve
+// Só responde para a sessão autenticada (cookie httpOnly timeconect_token) — devolve
 // o token DESSA sessão para o JS usar como Bearer no upload direto.
 export async function GET() {
   const token = (await cookies()).get(TOKEN_COOKIE)?.value

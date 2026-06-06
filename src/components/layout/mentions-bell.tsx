@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { AtSign, X } from 'lucide-react'
 import { useMentions } from '@/hooks/use-mentions'
 
-const STORAGE_KEY = 'minutor.mentions_seen_ids'
+const STORAGE_KEY = 'timeconect.mentions_seen_ids'
 
 /** Set de mention IDs já clicados (read). Abrir o popup NÃO marca — só o click. */
 function readSeenIds(): Set<string> {

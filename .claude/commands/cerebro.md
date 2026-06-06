@@ -1,1 +1,1 @@
-Leia o arquivo "/Users/ricardodeoliveirasilva/Documents/Obsidian Vault/MINUTOR.md" e carregue todo o contexto do projeto Minutor na sessão. Confirme que leu com um resumo de 3 linhas do que está no cofre.
+Leia o arquivo "/Users/ricardodeoliveirasilva/Documents/Obsidian Vault/TIME CONECT.md" e carregue todo o contexto do projeto Time Conect na sessão. Confirme que leu com um resumo de 3 linhas do que está no cofre.

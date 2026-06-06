@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 
-const TOKEN_COOKIE = 'minutor_token'
+const TOKEN_COOKIE = 'timeconect_token'
 
 export async function POST() {
   const cookieStore = await cookies()

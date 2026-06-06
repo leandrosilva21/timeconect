@@ -331,7 +331,7 @@ function NovaRequisicaoContent() {
                 <SectionTitle number="2" title="Em cópia (acompanhamento)" />
                 <p className="text-xs mb-3" style={{ color: 'var(--brand-subtle)' }}>
                   Adicione e-mails de pessoas que devem acompanhar esta requisição.
-                  Quem já tem usuário no Minutor entra automaticamente no chat e segue o projeto.
+                  Quem já tem usuário no Time Conect entra automaticamente no chat e segue o projeto.
                   Quem não tem cadastro fica registrado, mas não recebe acesso.
                 </p>
 

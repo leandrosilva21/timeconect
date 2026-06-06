@@ -520,7 +520,7 @@ export default function FechamentoParceiroPage() {
   ${isServ && isFixed ? '<p style="margin-top:8px;font-size:10px;color:#9ca3af">* Taxa fixa aplicada a todos os consultores.</p>' : ''}
 
   <div class="page-footer">
-    <span>ERPSERV Consultoria — Documento gerado pelo sistema Minutor</span>
+    <span>ERPSERV Consultoria — Documento gerado pelo sistema Time Conect</span>
     <span>Emitido em ${new Date().toLocaleDateString('pt-BR')}</span>
   </div>
 </body>
@@ -605,7 +605,7 @@ export default function FechamentoParceiroPage() {
   </div>
 
   <div class="page-footer">
-    <span>ERPSERV Consultoria — Documento gerado pelo sistema Minutor</span>
+    <span>ERPSERV Consultoria — Documento gerado pelo sistema Time Conect</span>
     <span>Emitido em ${new Date().toLocaleDateString('pt-BR')}</span>
   </div>
 </body>

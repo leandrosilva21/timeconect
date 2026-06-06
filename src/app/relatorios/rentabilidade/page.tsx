@@ -29,7 +29,7 @@ interface DisplayRow extends Row { key: string; n_consultores: number }
 interface ClienteRow {
   customer_id: number | null; cliente: string; cnpj: string
   horas: number; receita: number; custo: number; margem: number; margem_pct: number | null
-  recebido: number; margem_real: number; margem_real_pct: number | null; no_minutor: boolean
+  recebido: number; margem_real: number; margem_real_pct: number | null; no_timeconect: boolean
 }
 
 const fmtH = (h: number) => `${h.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}h`
@@ -56,7 +56,7 @@ export default function RentabilidadePage() {
   const [clientesRows, setClientesRows] = useState<ClienteRow[]>([])
   const [clientesLoading, setClientesLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [soMinutor, setSoMinutor] = useState(false)
+  const [soTime Conect, setSoTime Conect] = useState(false)
 
   const monthsToFetch = useMemo(() => {
     if (mode === 'mes') return [`${year}-${String(month).padStart(2, '0')}`]
@@ -111,7 +111,7 @@ export default function RentabilidadePage() {
         if (!e) map.set(k, { ...r })
         else {
           e.horas += r.horas; e.receita += r.receita; e.custo += r.custo; e.recebido += r.recebido
-          e.no_minutor = e.no_minutor || r.no_minutor
+          e.no_timeconect = e.no_timeconect || r.no_timeconect
         }
       }
       setClientesRows([...map.values()].map(r => {
@@ -241,13 +241,13 @@ export default function RentabilidadePage() {
   // ── Aba Clientes: filtro/ordenação/total ──
   const clientesFiltered = useMemo(() => clientesRows.filter(r => {
     if (soReceita && r.receita === 0 && r.recebido === 0) return false
-    if (soMinutor && !r.no_minutor) return false
+    if (soTime Conect && !r.no_timeconect) return false
     if (busca.trim()) {
       const q = busca.trim().toLowerCase()
       if (!r.cliente.toLowerCase().includes(q) && !r.cnpj.includes(busca.replace(/\D/g, ''))) return false
     }
     return true
-  }), [clientesRows, soReceita, soMinutor, busca])
+  }), [clientesRows, soReceita, soTime Conect, busca])
   const { sorted: clientesSorted, thProps: cliThProps } = useTableSort(clientesFiltered)
   const clientesTot = useMemo(() => {
     const receita = clientesFiltered.reduce((s, r) => s + r.receita, 0)
@@ -256,8 +256,8 @@ export default function RentabilidadePage() {
     return { receita, custo, recebido, margemReal: recebido - custo, pct: recebido > 0 ? (recebido - custo) / recebido * 100 : null }
   }, [clientesFiltered])
 
-  const limpar = () => { setFCliente(''); setFProjeto(''); setFConsultor(''); setBusca(''); setSoReceita(true); setSoMinutor(false) }
-  const hasFiltros = !!(fCliente || fProjeto || fConsultor || busca.trim() || !soReceita || soMinutor)
+  const limpar = () => { setFCliente(''); setFProjeto(''); setFConsultor(''); setBusca(''); setSoReceita(true); setSoTime Conect(false) }
+  const hasFiltros = !!(fCliente || fProjeto || fConsultor || busca.trim() || !soReceita || soTime Conect)
 
   const fmtYm = (ym: string) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }) }
   const fmtMes = () => monthsToFetch.length === 1
@@ -273,7 +273,7 @@ export default function RentabilidadePage() {
   const exportExcel = () => {
     if (visao === 'clientes') {
       const data = clientesSorted.map(r => ({
-        Cliente: r.cliente, CNPJ: r.cnpj, 'No Minutor': r.no_minutor ? 'Sim' : 'Não',
+        Cliente: r.cliente, CNPJ: r.cnpj, 'No Time Conect': r.no_timeconect ? 'Sim' : 'Não',
         Horas: r.horas, Custo: r.custo,
         'Recebido (M+1)': r.recebido, 'Margem Real': r.margem_real, 'Margem Real %': r.margem_real_pct,
       }))
@@ -296,7 +296,7 @@ export default function RentabilidadePage() {
   const exportPdf = () => {
     if (visao === 'clientes') {
       const linhas = clientesSorted.map(r => `
-        <tr><td>${r.cliente}${r.no_minutor ? '' : ' <span style="color:#9ca3af">(fora do Minutor)</span>'}</td><td>${fmtCnpj(r.cnpj)}</td>
+        <tr><td>${r.cliente}${r.no_timeconect ? '' : ' <span style="color:#9ca3af">(fora do Time Conect)</span>'}</td><td>${fmtCnpj(r.cnpj)}</td>
         <td class="r">${fmtH(r.horas)}</td><td class="r">${formatBRL(r.custo)}</td>
         <td class="r">${formatBRL(r.recebido)}</td><td class="r">${formatBRL(r.margem_real)}</td>
         <td class="r">${r.margem_real_pct == null ? '—' : r.margem_real_pct + '%'}</td></tr>`).join('')
@@ -352,7 +352,7 @@ export default function RentabilidadePage() {
         <PageHeader
           icon={TrendingUp}
           title="Rentabilidade"
-          subtitle={visao === 'clientes' ? 'Custo Minutor × recebimento Keruak por cliente (CNPJ) — recebido do mês seguinte (M+1)' : visao === 'projeto' ? 'Receita, custo e margem por projeto' : 'Receita, custo e margem por consultor × projeto'}
+          subtitle={visao === 'clientes' ? 'Custo Time Conect × recebimento Keruak por cliente (CNPJ) — recebido do mês seguinte (M+1)' : visao === 'projeto' ? 'Receita, custo e margem por projeto' : 'Receita, custo e margem por consultor × projeto'}
           actions={
             <div className="flex items-center gap-2 flex-wrap">
               <div className="inline-flex rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
@@ -416,8 +416,8 @@ export default function RentabilidadePage() {
           </label>
           {visao === 'clientes' && (
             <label className="flex items-center gap-2 text-xs cursor-pointer pb-2" style={{ color: 'var(--text-muted)' }}>
-              <input type="checkbox" checked={soMinutor} onChange={e => setSoMinutor(e.target.checked)} />
-              Só clientes do Minutor
+              <input type="checkbox" checked={soTime Conect} onChange={e => setSoTime Conect(e.target.checked)} />
+              Só clientes do Time Conect
             </label>
           )}
           <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar..."
@@ -429,7 +429,7 @@ export default function RentabilidadePage() {
         {/* Cards de total */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           {(visao === 'clientes' ? [
-            // Receita (Minutor) removida: p/ cliente a apuração é o recebido do Keruak (M+1).
+            // Receita (Time Conect) removida: p/ cliente a apuração é o recebido do Keruak (M+1).
             { label: 'Custo', value: formatBRL(clientesTot.custo), color: 'var(--text)' },
             { label: 'Recebido (M+1)', value: formatBRL(clientesTot.recebido), color: 'var(--brand-primary)' },
             { label: 'Margem Real %', value: clientesTot.pct == null ? '—' : clientesTot.pct.toFixed(1) + '%', color: pctColor(clientesTot.pct) },
@@ -469,7 +469,7 @@ export default function RentabilidadePage() {
                   <Tr key={r.cnpj || `c${r.customer_id}` || r.cliente}>
                     <Td className="font-medium" style={{ color: 'var(--text)' }}>
                       <span className="truncate max-w-[240px] inline-block align-bottom">{r.cliente}</span>
-                      {!r.no_minutor && <span className="ml-2 text-[10px]" style={{ color: 'var(--text-light)' }}>(fora do Minutor)</span>}
+                      {!r.no_timeconect && <span className="ml-2 text-[10px]" style={{ color: 'var(--text-light)' }}>(fora do Time Conect)</span>}
                     </Td>
                     <Td muted className="tabular-nums">{fmtCnpj(r.cnpj)}</Td>
                     <Td right muted className="tabular-nums">{fmtH(r.horas)}</Td>

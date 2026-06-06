@@ -29,7 +29,7 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  // Auth: o cookie httpOnly minutor_token é enviado pelo browser; o middleware
+  // Auth: o cookie httpOnly timeconect_token é enviado pelo browser; o middleware
   // Next.js (src/middleware.ts) injeta o header Authorization server-side.
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
   const headers: HeadersInit = {

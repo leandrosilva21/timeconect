@@ -1,7 +1,7 @@
 // Upload de arquivos DIRETO no backend, contornando o limite de body (~4.5MB) da
 // borda da Vercel — o caminho /api/v1 passa por middleware (edge) + rewrite e barra
 // arquivos grandes ANTES de chegar no Laravel (que aceita 20MB). O backend é
-// acessível pelo browser (api.minutor.com.br) e o CORS já libera o app + credenciais.
+// acessível pelo browser (api.timeconect.com.br) e o CORS já libera o app + credenciais.
 //
 // Diferença crítica vs. o fetch antigo: ESTE checa a resposta e LANÇA em falha —
 // nunca falha em silêncio (era a causa do "anexo some sem erro").

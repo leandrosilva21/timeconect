@@ -1,4 +1,4 @@
-// FASE 11.2.FE — Camada FE única de anexos do Minutor.
+// FASE 11.2.FE — Camada FE única de anexos do Time Conect.
 //
 // Espelha o domínio do BE (app/Attachments/). NUNCA chamar /api/v1/attachments
 // com ad-hoc — usa-se o hook useAttachments + os componentes shared. Esse

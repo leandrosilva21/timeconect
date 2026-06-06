@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-const TOKEN_COOKIE = 'minutor_token'
+const TOKEN_COOKIE = 'timeconect_token'
 
 export function middleware(req: NextRequest) {
   const token = req.cookies.get(TOKEN_COOKIE)?.value

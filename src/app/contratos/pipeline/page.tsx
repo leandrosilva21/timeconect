@@ -3960,8 +3960,8 @@ function KanbanContent() {
   const [unreadContractIds, setUnreadContractIds] = useState<number[]>([])
   const [seenProjectIds, setSeenProjectIds] = useState<Set<number>>(() => {
     try {
-      const userId = JSON.parse(localStorage.getItem('minutor_user') ?? '{}').id
-      return new Set(JSON.parse(localStorage.getItem(`minutor_seen_projects_${userId}`) ?? '[]'))
+      const userId = JSON.parse(localStorage.getItem('timeconect_user') ?? '{}').id
+      return new Set(JSON.parse(localStorage.getItem(`timeconect_seen_projects_${userId}`) ?? '[]'))
     } catch { return new Set() }
   })
 
@@ -3975,8 +3975,8 @@ function KanbanContent() {
       const next = new Set(prev)
       next.add(projectId)
       try {
-        const userId = JSON.parse(localStorage.getItem('minutor_user') ?? '{}').id
-        localStorage.setItem(`minutor_seen_projects_${userId}`, JSON.stringify([...next]))
+        const userId = JSON.parse(localStorage.getItem('timeconect_user') ?? '{}').id
+        localStorage.setItem(`timeconect_seen_projects_${userId}`, JSON.stringify([...next]))
       } catch {}
       return next
     })
@@ -3984,8 +3984,8 @@ function KanbanContent() {
 
   const [seenContractIds, setSeenContractIds] = useState<Set<number>>(() => {
     try {
-      const userId = JSON.parse(localStorage.getItem('minutor_user') ?? '{}').id
-      const raw = localStorage.getItem(`minutor_seen_contracts_${userId}`) ?? '[]'
+      const userId = JSON.parse(localStorage.getItem('timeconect_user') ?? '{}').id
+      const raw = localStorage.getItem(`timeconect_seen_contracts_${userId}`) ?? '[]'
       return new Set(JSON.parse(raw))
     } catch { return new Set() }
   })
@@ -3996,8 +3996,8 @@ function KanbanContent() {
       const next = new Set(prev)
       next.add(contractId)
       try {
-        const userId = JSON.parse(localStorage.getItem('minutor_user') ?? '{}').id
-        localStorage.setItem(`minutor_seen_contracts_${userId}`, JSON.stringify([...next]))
+        const userId = JSON.parse(localStorage.getItem('timeconect_user') ?? '{}').id
+        localStorage.setItem(`timeconect_seen_contracts_${userId}`, JSON.stringify([...next]))
       } catch {}
       return next
     })
