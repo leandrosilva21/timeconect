@@ -194,14 +194,13 @@ export default function LoginPage() {
           {/* ── Cabeçalho de marca ── */}
           <div style={{ padding: '36px 40px 32px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
 
-            {/* ERPServ — logo centralizado */}
+            {/* HD Think — logo centralizado */}
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 32 }}>
               <Image
                 src="/logo.png"
-                alt="ERPServ"
-                width={96}
-                height={32}
-                className="login-erpserv-logo"
+                alt="HD Think"
+                width={140}
+                height={52}
                 style={{ objectFit: 'contain' }}
               />
             </div>
@@ -236,7 +235,7 @@ export default function LoginPage() {
 
         {/* Rodapé discreto */}
         <p style={{ textAlign: 'center', marginTop: 20, fontSize: 11, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.02em' }}>
-          © {new Date().getFullYear()} ERPServ Consultoria · Todos os direitos reservados
+          © {new Date().getFullYear()} HD Think · Todos os direitos reservados
         </p>
       </div>
 

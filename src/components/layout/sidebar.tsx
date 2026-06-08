@@ -772,10 +772,10 @@ function SidebarInner({ user, mobileOpen = false, onClose }: { user: User; mobil
         <div className="flex items-center justify-center px-5 py-3 border-t" style={{ borderColor: 'var(--brand-border)' }}>
           <Image
             src="/logo.png"
-            alt="ERPServ"
-            width={90}
-            height={36}
-            className="object-contain sidebar-erpserv-logo"
+            alt="HD Think"
+            width={120}
+            height={45}
+            className="object-contain"
           />
         </div>
       )}
