@@ -950,12 +950,12 @@ export function UserFormModal({ open, userId, onClose, onSaved }: UserFormModalP
               />
             )}
 
-            {/* ── Funcionário Bizify (separa do resultado ERPSERV no fechamento) ── */}
+            {/* ── Funcionário Bizify (separa do resultado HD Think no fechamento) ── */}
             {isConsultor && (
               <Toggle
                 value={form.is_bizify}
                 onChange={() => setForm(f => ({ ...f, is_bizify: !f.is_bizify }))}
-                label="Funcionário Bizify (sai dos cards ERPSERV e vai pra aba Bizify no fechamento)"
+                label="Funcionário Bizify (sai dos cards HD Think e vai pra aba Bizify no fechamento)"
               />
             )}
 

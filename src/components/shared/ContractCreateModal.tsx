@@ -1185,7 +1185,7 @@ export function ContractCreateModal({
                   )}
                   {isFechado && (
                     <div>
-                      <label className={labelCls}>Save ERPSERV</label>
+                      <label className={labelCls}>Save HD Think</label>
                       <input readOnly
                         value={saveErpserv != null ? saveErpserv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
                         className={inputCls} style={{ ...inputStyle, opacity: 0.5, cursor: 'not-allowed' }} />

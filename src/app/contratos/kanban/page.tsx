@@ -78,7 +78,7 @@ interface ProjectFull {
   hour_contribution?: number; exceeded_hour_contribution?: number | null
   consultant_hours?: number | null; coordinator_hours?: number | null
   coordinator_percentage?: number | null
-  save_erpserv?: number | null; total_available_hours?: number | null
+  save_hdthink?: number | null; total_available_hours?: number | null
   total_project_value?: number | null; weighted_hourly_rate?: number | null
   general_hours_balance?: number | null; consumed_hours?: number | null
   balance_percentage?: number | null; total_contributions_hours?: number | null

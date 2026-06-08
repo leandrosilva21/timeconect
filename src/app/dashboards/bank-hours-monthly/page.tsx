@@ -514,7 +514,7 @@ export default function BankHoursMonthlyPage() {
                     <div className="flex items-center gap-2">
                       <AlertTriangle size={14} style={{ color: '#EF4444' }} />
                       <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>
-                        Saldo Devedor — ERPSERV <span style={{ opacity: 0.7 }}>(informativo)</span>
+                        Saldo Devedor — HD Think <span style={{ opacity: 0.7 }}>(informativo)</span>
                       </span>
                     </div>
                     <span className="text-3xl font-extrabold tracking-tight" style={{ color: '#EF4444', lineHeight: 1 }}>

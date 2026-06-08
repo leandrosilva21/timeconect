@@ -200,8 +200,8 @@ export default function FechamentoFolhaPage() {
   const [categoria, setCategoria] = useState<'todos' | 'cooperados' | 'raho' | 'manuais'>('todos')
   // Cancelar/Reativar em andamento (por row_key) — desabilita a ação da linha.
   const [togglingKey, setTogglingKey] = useState<string | null>(null)
-  // Empresa (aba de topo): ERPSERV (cooperativa, esta tela) | Bizify (lançamentos manuais).
-  const [empresa, setEmpresa] = useState<'erpserv' | 'bizify'>('erpserv')
+  // Empresa (aba de topo): HD Think (cooperativa, esta tela) | Bizify (lançamentos manuais).
+  const [empresa, setEmpresa] = useState<'hdthink' | 'bizify'>('hdthink')
 
   // ─── Modal "Novo usuário" (cadastro inline de cooperado) ────────────────────
   // Cria um consultor cooperado direto no cadastro (POST /users), sem sair da
@@ -661,10 +661,10 @@ export default function FechamentoFolhaPage() {
     <AppLayout title="Fechamento — Folha Cooperativa">
       <div className="space-y-6">
 
-        {/* Abas por empresa: ERPSERV (cooperativa) | Bizify (lançamentos manuais) */}
+        {/* Abas por empresa: HD Think (cooperativa) | Bizify (lançamentos manuais) */}
         <div className="flex gap-1 border-b" role="tablist" style={{ borderColor: 'var(--brand-border)' }}>
           {([
-            { key: 'erpserv' as const, label: 'ERPSERV' },
+            { key: 'hdthink' as const, label: 'HD Think' },
             { key: 'bizify' as const, label: 'Bizify' },
           ]).map(c => {
             const active = empresa === c.key

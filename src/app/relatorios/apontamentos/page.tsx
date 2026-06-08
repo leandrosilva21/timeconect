@@ -201,7 +201,7 @@ export default function RelatorioApontamentosPage() {
     return out
   }, [projects])
 
-  // Regra especial VEDAMOTORS: coluna "Título" do relatório vira "TICKET ERPSERV".
+  // Regra especial VEDAMOTORS: coluna "Título" do relatório vira "TICKET HD Think".
   // Quando o ticket bate o padrão (5 dígitos), mantém o título original.
   // Quando NÃO bate, prefixa com "sem ticket".
   const isVedamotors = useMemo(
@@ -344,7 +344,7 @@ export default function RelatorioApontamentosPage() {
       emittedAt,
       totalHours:   totalHoras,
       totalRecords: items.length,
-      ticketHeader: isVedamotors ? 'Ticket ERPSERV' : 'Ticket',
+      ticketHeader: isVedamotors ? 'Ticket HD Think' : 'Ticket',
       titleHeader:  isVedamotors ? 'Ticket Vedamotors' : 'Título',
     }
   }
@@ -610,7 +610,7 @@ export default function RelatorioApontamentosPage() {
                 className="flex items-start justify-between px-10 pt-8 pb-6"
                 style={{ borderBottom: '2px solid #5b21b6' }}
               >
-                <Image src="/logo.png" alt="ERPSERV" width={180} height={72} style={{ objectFit: 'contain' }} />
+                <Image src="/logo.png" alt="HD Think" width={180} height={72} style={{ objectFit: 'contain' }} />
                 <div className="text-right">
                   <div className="text-xl font-bold text-gray-800 mb-1">Relatório de Apontamentos</div>
                   <div className="text-sm text-gray-500 mb-2">Documento de cobrança e transparência</div>
@@ -651,7 +651,7 @@ export default function RelatorioApontamentosPage() {
                       <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Data de Inclusão</th>
                       <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Solicitante</th>
                       <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Consultor</th>
-                      <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">{isVedamotors ? 'Ticket ERPSERV' : 'Ticket'}</th>
+                      <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">{isVedamotors ? 'Ticket HD Think' : 'Ticket'}</th>
                       <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">{isVedamotors ? 'Ticket Vedamotors' : 'Título'}</th>
                       <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Início</th>
                       <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600">Fim</th>
@@ -696,7 +696,7 @@ export default function RelatorioApontamentosPage() {
                                   <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center">{t.user?.name ?? '—'}</td>
                                   <td className="px-3 pt-2 pb-1 text-xs text-gray-500 text-center">
                                     {t.ticket
-                                      ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${t.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-500">#{t.ticket}</a>
+                                      ? <a href={`https://hdthink.movidesk.com/Ticket/Edit/${t.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-500">#{t.ticket}</a>
                                       : '—'}
                                   </td>
                                   <td className="px-3 pt-2 pb-1 text-xs text-gray-700 text-center whitespace-nowrap">
@@ -766,7 +766,7 @@ export default function RelatorioApontamentosPage() {
                           style={{ background: i % 2 === 0 ? '#fff' : '#faf9ff', borderBottom: '1px solid #e5e7eb', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}
                         >
                           <td className="px-3 py-2 text-xs whitespace-nowrap">
-                            <a href={`https://erpserv.movidesk.com/Ticket/Edit/${tk.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-500">
+                            <a href={`https://hdthink.movidesk.com/Ticket/Edit/${tk.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-500">
                               #{tk.ticket}
                             </a>
                           </td>
@@ -786,7 +786,7 @@ export default function RelatorioApontamentosPage() {
               )}
 
               <div className="px-10 pb-6 text-center text-xs text-gray-400">
-                ERPSERV Consultoria — Documento gerado pelo sistema TimeConect
+                HD Think Consultoria — Documento gerado pelo sistema TimeConect
               </div>
             </div>
           </div>

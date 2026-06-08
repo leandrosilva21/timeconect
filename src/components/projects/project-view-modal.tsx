@@ -22,7 +22,7 @@ interface ProjectFull {
   hour_contribution?: number; exceeded_hour_contribution?: number | null
   consultant_hours?: number | null; coordinator_hours?: number | null
   coordinator_percentage?: number | null
-  save_erpserv?: number | null; total_available_hours?: number | null
+  save_hdthink?: number | null; total_available_hours?: number | null
   total_project_value?: number | null; weighted_hourly_rate?: number | null
   general_hours_balance?: number | null; consumed_hours?: number | null
   balance_percentage?: number | null; total_contributions_hours?: number | null
@@ -386,7 +386,7 @@ export function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                         <Row label="Percentual Gestão"    value={(p as any).coordinator_hours != null ? `${(p as any).coordinator_hours}%` : '—'} />
                         <Row label="Horas de Gestão"      value={(p as any).coordinator_hours != null && (p as any).sold_hours != null ? `${Math.round((Number((p as any).coordinator_hours) / 100) * Number((p as any).sold_hours) * 100) / 100}h` : '—'} />
                         <Row label="Horas Consultor"      value={(p as any).consultant_hours != null ? `${Number((p as any).consultant_hours).toFixed(1)}h` : '—'} />
-                        <Row label="Saving ERPSERV"       value={(p as any).sold_hours != null && (p as any).consultant_hours != null && (p as any).coordinator_hours != null ? `${Math.round((Number((p as any).sold_hours) - Number((p as any).consultant_hours) - (Number((p as any).coordinator_hours) / 100) * Number((p as any).sold_hours)) * 100) / 100}h` : '—'} />
+                        <Row label="Saving HD Think"       value={(p as any).sold_hours != null && (p as any).consultant_hours != null && (p as any).coordinator_hours != null ? `${Math.round((Number((p as any).sold_hours) - Number((p as any).consultant_hours) - (Number((p as any).coordinator_hours) / 100) * Number((p as any).sold_hours)) * 100) / 100}h` : '—'} />
                         <Row label="Horas Apontáveis"     value={(p as any).coordination_hours != null && Number((p as any).coordination_hours) > 0 ? `${Number((p as any).coordination_hours).toFixed(1)}h` : '—'} />
                         <Row label="Cobra Despesa"        value={(p as any).cobra_despesa_cliente ? 'Sim' : 'Não'} />
                         <Row label="Limite de Despesa"    value={(p as any).limite_despesa != null ? fmtBRL(Number((p as any).limite_despesa)) : '—'} />
@@ -1216,14 +1216,14 @@ export function ProjectInlineEditModal({ project, onClose, onSaved }: { project:
                 <div><label style={lStyle}>Horas Consultor</label><input type="number" value={form.consultant_hours} onChange={setF('consultant_hours')} style={iStyle} placeholder="0" step="1" /></div>
                 {showApontaveis && (<>
                 {(() => {
-                  // Saving ERPSERV = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
+                  // Saving HD Think = Horas Vendidas − Consultor − Horas de Gestão (% × Vendidas).
                   const sold = Number(form.sold_hours || 0)
                   const cons = Number(form.consultant_hours || 0)
                   const coordPct = Number(form.coordinator_hours || 0)
                   const gestao = sold > 0 ? (coordPct / 100) * sold : 0
                   const sobra = Math.round((sold - cons - gestao) * 100) / 100
                   return (
-                    <div><label style={lStyle}>Saving ERPSERV</label><input type="text" value={isNaN(sobra) ? '—' : `${sobra}h`} readOnly tabIndex={-1} style={{ ...iStyle, opacity: 0.7, cursor: 'default' }} /></div>
+                    <div><label style={lStyle}>Saving HD Think</label><input type="text" value={isNaN(sobra) ? '—' : `${sobra}h`} readOnly tabIndex={-1} style={{ ...iStyle, opacity: 0.7, cursor: 'default' }} /></div>
                   )
                 })()}
                 <div>

@@ -21,7 +21,7 @@ export interface RelatorioMeta {
   emittedAt: string
   totalHours: string
   totalRecords: number
-  ticketHeader?: string  // 'Ticket' (default) ou 'Ticket ERPSERV' (VEDAMOTORS)
+  ticketHeader?: string  // 'Ticket' (default) ou 'Ticket HD Think' (VEDAMOTORS)
   titleHeader?:  string  // 'Título' (default) ou 'Ticket Vedamotors' (VEDAMOTORS)
 }
 

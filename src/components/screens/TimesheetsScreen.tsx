@@ -1692,7 +1692,7 @@ function TimesheetsPageContent({ scope, embedded, triagemPadrao, leadOptions }: 
                   <Td muted className="hidden lg:table-cell font-mono">
                     {ts.ticket
                       ? <a
-                          href={`https://erpserv.movidesk.com/Ticket/Edit/${ts.ticket}`}
+                          href={`https://hdthink.movidesk.com/Ticket/Edit/${ts.ticket}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={e => e.stopPropagation()}

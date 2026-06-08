@@ -75,7 +75,7 @@ export default function CardEnvolvidos({ cardType, cardId, readOnly = false, cli
       ) : (
         <>
           <SideBlock
-            label="ERPServ · interno"
+            label="HD Think · interno"
             accent="#22D3EE"
             items={internal}
             onAdd={readOnly ? undefined : () => setAdding('internal')}
@@ -248,7 +248,7 @@ function AddDialog({
         onClick={e => e.stopPropagation()}
       >
         <h3 className="font-semibold mb-1" style={{ color: 'var(--text)' }}>
-          Adicionar envolvido — {side === 'internal' ? 'ERPServ' : 'Cliente'}
+          Adicionar envolvido — {side === 'internal' ? 'HD Think' : 'Cliente'}
         </h3>
         <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
           {side === 'internal'

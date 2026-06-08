@@ -126,7 +126,7 @@ export default function InvestimentoComercialPage() {
   const [userSearch,   setUserSearch]   = useState('')
   const [saving,       setSaving]       = useState(false)
 
-  // Modal de criação de projeto interno (ERPSERV)
+  // Modal de criação de projeto interno (HD Think)
   const [newProjectOpen,      setNewProjectOpen]      = useState(false)
   const [newProjectName,      setNewProjectName]      = useState('')
   const [newProjectCategoria, setNewProjectCategoria] = useState<'Sustentação' | 'Projeto' | 'Suporte' | 'Comercial' | 'Leads'>('Projeto')
@@ -269,11 +269,11 @@ export default function InvestimentoComercialPage() {
     return () => { cancelled = true }
   }, [])
 
-  // Auto-expandir o cliente ERPSERV ao carregar (é o destaque da página)
+  // Auto-expandir o cliente HD Think ao carregar (é o destaque da página)
   useEffect(() => {
-    const erpserv = projects.find(p => (p.customer?.name ?? '').toUpperCase().includes('ERPSERV'))?.customer
-    if (!erpserv) return
-    setExpandedCustomers(prev => prev.has(erpserv.id) ? prev : new Set(prev).add(erpserv.id))
+    const hdthink = projects.find(p => (p.customer?.name ?? '').toUpperCase().includes('HD Think'))?.customer
+    if (!hdthink) return
+    setExpandedCustomers(prev => prev.has(hdthink.id) ? prev : new Set(prev).add(hdthink.id))
   }, [projects])
 
   const handleCreateProject = async () => {
@@ -466,7 +466,7 @@ export default function InvestimentoComercialPage() {
       if (!groups.has(key)) groups.set(key, { customer: p.customer, projects: [] })
       groups.get(key)!.projects.push(p)
     }
-    const isErpserv = (name: string) => name.toUpperCase().includes('ERPSERV')
+    const isErpserv = (name: string) => name.toUpperCase().includes('HD Think')
     const groupList = [...groups.values()].sort((a, b) => {
       const aErp = isErpserv(a.customer.name)
       const bErp = isErpserv(b.customer.name)
@@ -490,7 +490,7 @@ export default function InvestimentoComercialPage() {
             const expanded = expandedCustomers.has(customer.id)
             const totalHoursCustomer = projects.reduce((s, p) => s + (hoursMap[p.id] ?? 0), 0)
             const totalConsultorIds = new Set(projects.flatMap(p => p.consultants.map(c => c.id)))
-            const erpservRow = isErpserv(customer.name)
+            const hdthinkRow = isErpserv(customer.name)
             const showDivider = customer.id === firstNonErpservId
             return (
               <Fragment key={customer.id}>
@@ -506,7 +506,7 @@ export default function InvestimentoComercialPage() {
                   </Tr>
                 )}
                 {/* Linha do cliente (pai) */}
-                <Tr baseBackground={erpservRow ? 'var(--primary-soft)' : undefined}>
+                <Tr baseBackground={hdthinkRow ? 'var(--primary-soft)' : undefined}>
                   <Td>
                     <button onClick={() => toggleCustomerExpand(customer.id)}
                       className="flex items-center gap-2 text-left w-full hover:opacity-80 transition-opacity">
@@ -514,7 +514,7 @@ export default function InvestimentoComercialPage() {
                         ? <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
                         : <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />}
                       <span className="font-semibold text-sm" style={{ color: 'var(--text)' }}>{customer.name}</span>
-                      {erpservRow && (
+                      {hdthinkRow && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded uppercase tracking-widest font-bold"
                           style={{ background: 'var(--primary)', color: 'var(--primary-fg)' }}>
                           Casa
@@ -776,7 +776,7 @@ export default function InvestimentoComercialPage() {
                 setLeadMode(false); setNewProjectParent(''); setNewProjectCategoria('Projeto')
                 setNewProjectName(''); setNewProjectApprover(''); setNewProjectOpen(true)
               }}>
-                <Plus size={13} className="mr-1" /> Novo Projeto Interno (ERPSERV)
+                <Plus size={13} className="mr-1" /> Novo Projeto Interno (HD Think)
               </Button>
             )}
           </>
@@ -836,7 +836,7 @@ export default function InvestimentoComercialPage() {
       {activeTab === 'mensal'      && renderMensal()}
       {activeTab === 'detalhe'     && renderDetalhe()}
 
-      {/* Modal: Novo Projeto Interno (ERPSERV) */}
+      {/* Modal: Novo Projeto Interno (HD Think) */}
       {newProjectOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}
           onClick={() => !creatingProject && setNewProjectOpen(false)}>
@@ -850,7 +850,7 @@ export default function InvestimentoComercialPage() {
             </div>
             <div className="px-6 py-5 space-y-4">
               <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>
-                Cliente: <span className="font-semibold" style={{ color: 'var(--brand-text)' }}>ERPSERV</span> · sem horas e sem valor de contrato
+                Cliente: <span className="font-semibold" style={{ color: 'var(--brand-text)' }}>HD Think</span> · sem horas e sem valor de contrato
               </p>
               {leadMode ? (
                 <p className="text-xs" style={{ color: 'var(--brand-subtle)' }}>
@@ -868,7 +868,7 @@ export default function InvestimentoComercialPage() {
                     value={newProjectParent}
                     onChange={setNewProjectParent}
                     options={projects
-                      .filter(p => (p.customer?.name ?? '').toUpperCase().includes('ERPSERV') && !p.parent_project_id)
+                      .filter(p => (p.customer?.name ?? '').toUpperCase().includes('HD Think') && !p.parent_project_id)
                       .map(p => ({ id: p.id, name: p.name || p.code }))}
                     placeholder="Aninhar abaixo de um investimento (ex.: Investimento Leads)..."
                   />

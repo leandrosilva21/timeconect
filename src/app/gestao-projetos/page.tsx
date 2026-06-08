@@ -44,7 +44,7 @@ interface ProjectFull extends ProjectWithTeam {
   exceeded_hour_contribution?: number | null
   consultant_hours?: number | null
   coordinator_hours?: number | null
-  save_erpserv?: number | null
+  save_hdthink?: number | null
   total_available_hours?: number | null
   total_project_value?: number | null
   weighted_hourly_rate?: number | null
@@ -3688,7 +3688,7 @@ export default function GestaoProjetosPage() {
                           {p.weighted_hourly_rate != null && <Row label="Taxa Média Ponderada" value={fmtBRL(p.weighted_hourly_rate)} />}
                           <Row label="Hora Adicional" value={fmtBRL(p.additional_hourly_rate)} />
                           <Row label="Custo Inicial" value={fmtBRL(p.initial_cost)} />
-                          {p.save_erpserv != null && p.save_erpserv > 0 && <Row label="Saving" value={fmtBRL(p.save_erpserv)} />}
+                          {p.save_hdthink != null && p.save_hdthink > 0 && <Row label="Saving" value={fmtBRL(p.save_hdthink)} />}
                           {p.max_expense_per_consultant != null && <Row label="Limite Despesa/Consultor" value={fmtBRL(p.max_expense_per_consultant)} />}
                           {p.expense_responsible_party && <Row label="Resp. Despesas" value={p.expense_responsible_party === 'client' ? 'Cliente' : 'Consultoria'} />}
                         </div>

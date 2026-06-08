@@ -83,7 +83,7 @@ export default function AlterarSenhaPage() {
           {/* Header */}
           <div style={{ padding: '36px 40px 32px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 32 }}>
-              <Image src="/logo.png" alt="ERPServ" width={96} height={32} style={{ objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.75 }} />
+              <Image src="/logo.png" alt="HD Think" width={96} height={32} style={{ objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.75 }} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 9, background: 'rgba(0,212,232,0.07)', border: '1px solid rgba(0,212,232,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -183,7 +183,7 @@ export default function AlterarSenhaPage() {
         </div>
 
         <p style={{ textAlign: 'center', marginTop: 20, fontSize: 11, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.02em' }}>
-          © {new Date().getFullYear()} ERPServ Consultoria · Todos os direitos reservados
+          © {new Date().getFullYear()} HD Think Consultoria · Todos os direitos reservados
         </p>
       </div>
 

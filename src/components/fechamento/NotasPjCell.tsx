@@ -56,7 +56,7 @@ export function NotasPjCell({
   canUpload: boolean
   expectedValue?: number | null
   // Tela do próprio funcionário (consultor/parceiro): mostra a parte de emissão (valor da nota,
-  // legenda do valor exato, dados da ERPSERV, Enviar/Substituir). No fechamento admin = false
+  // legenda do valor exato, dados da HD Think, Enviar/Substituir). No fechamento admin = false
   // (admin só revisa: visualizar/baixar/aceitar/rejeitar/liberar).
   selfService?: boolean
   onChanged: (n: NotasPayload) => void
@@ -323,12 +323,12 @@ export function NotasPjCell({
         )
       })}
 
-      {/* Dados da ERPSERV para o consultor/parceiro emitir a NF (tomador) — só na tela do funcionário */}
+      {/* Dados da HD Think para o consultor/parceiro emitir a NF (tomador) — só na tela do funcionário */}
       {selfService && (
         <div className="mt-1.5 rounded-lg px-3 py-2 text-[11px] leading-relaxed"
           style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-          <p className="font-semibold mb-0.5" style={{ color: 'var(--text)' }}>Informações da ERPSERV para emissão da NF</p>
-          <p>ERPSERV CONSULTORIA DE SISTEMAS LTDA</p>
+          <p className="font-semibold mb-0.5" style={{ color: 'var(--text)' }}>Informações da HD Think para emissão da NF</p>
+          <p>HD Think CONSULTORIA DE SISTEMAS LTDA</p>
           <p>CNPJ: 23.870.826/0001-07</p>
         </div>
       )}

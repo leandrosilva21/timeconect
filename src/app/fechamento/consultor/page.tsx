@@ -390,7 +390,7 @@ function buildReport(
   return `
     <div class="page">
       <div class="header">
-        <div class="logo"><img src="${window.location.origin}/${consultor.is_bizify ? 'logo-bizify.png' : 'logo.png'}" alt="${consultor.is_bizify ? 'Bizify' : 'ERPServ Consultoria'}" /></div>
+        <div class="logo"><img src="${window.location.origin}/${consultor.is_bizify ? 'logo-bizify.png' : 'logo.png'}" alt="${consultor.is_bizify ? 'Bizify' : 'HD Think Consultoria'}" /></div>
         <div class="meta">
           <strong>${consultor.nome}</strong>
           Fechamento de Consultores &nbsp;·&nbsp; ${fmtYearMonth(yearMonth)} &nbsp;·&nbsp; ${modeLabel}
@@ -722,7 +722,7 @@ export default function FechamentoConsultorPage() {
     const html = `
       <div class="page">
         <div class="header">
-          <div class="logo"><img src="${window.location.origin}/logo.png" alt="ERPServ Consultoria" /></div>
+          <div class="logo"><img src="${window.location.origin}/logo.png" alt="HD Think Consultoria" /></div>
           <div class="meta"><strong>Fechamento de Consultores — Consolidado</strong>${fmtYearMonth(yearMonth)}</div>
         </div>
         <table>
@@ -756,7 +756,7 @@ export default function FechamentoConsultorPage() {
     const html = `
       <div class="page">
         <div class="header">
-          <div class="logo"><img src="${window.location.origin}/logo.png" alt="ERPServ Consultoria" /></div>
+          <div class="logo"><img src="${window.location.origin}/logo.png" alt="HD Think Consultoria" /></div>
           <div class="meta"><strong>Fechamento de Consultores</strong>${fmtYearMonth(yearMonth)}</div>
         </div>
         <table>
@@ -1198,7 +1198,7 @@ export default function FechamentoConsultorPage() {
             <img src="/logo-bizify.png" alt="Bizify" className="h-9 w-auto" />
             <div>
               <h3 className="text-sm font-semibold text-zinc-100">Fechamento Bizify</h3>
-              <p className="text-xs text-zinc-400">Não entra no resultado da ERPSERV</p>
+              <p className="text-xs text-zinc-400">Não entra no resultado da HD Think</p>
             </div>
           </div>
           {t && (

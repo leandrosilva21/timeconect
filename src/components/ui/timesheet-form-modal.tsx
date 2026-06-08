@@ -254,14 +254,14 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.start_time, form.end_time, form.total_hours, useTotal, timeDriver])
 
-  // ERPSERV (empresa própria): investimentos internos não pedem Projeto Real.
+  // HD Think (empresa própria): investimentos internos não pedem Projeto Real.
   const selectedCustomer = customers.find(c => String(c.id) === form.customer_id) as any
-  const isErpservCustomer = String(selectedCustomer?.name ?? '').trim().toUpperCase() === 'ERPSERV'
+  const isErpservCustomer = String(selectedCustomer?.name ?? '').trim().toUpperCase() === 'HD Think'
 
   const save = async () => {
     if (!form.project_id) { toast.error('Selecione um projeto'); return }
     const selProj = projects.find(p => String(p.id) === form.project_id) as any
-    // Investimento da própria ERPSERV não pede Projeto Real (interno, sem projeto de cliente real).
+    // Investimento da própria HD Think não pede Projeto Real (interno, sem projeto de cliente real).
     const isInvestimento = !!selProj?.is_investimento_comercial && !isErpservCustomer
     if (isInvestimento && !form.real_project_id) { toast.error('Selecione o Projeto Real'); return }
     if (useTotal) {
@@ -381,7 +381,7 @@ export function TimesheetFormModal({ open, onClose, onSaved, currentUser }: Prop
                 investimento; o real é referência e define o coordenador que aprova). */}
             {(() => {
               const sel = projects.find(p => String(p.id) === form.project_id) as any
-              // ERPSERV: investimento interno não pede Projeto Real.
+              // HD Think: investimento interno não pede Projeto Real.
               if (!sel?.is_investimento_comercial || isErpservCustomer) return null
               const soSustentacao = sel?.categoria_interna === 'Suporte'
               const realOpts = projects.filter(p => {

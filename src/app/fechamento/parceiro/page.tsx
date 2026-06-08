@@ -520,7 +520,7 @@ export default function FechamentoParceiroPage() {
   ${isServ && isFixed ? '<p style="margin-top:8px;font-size:10px;color:#9ca3af">* Taxa fixa aplicada a todos os consultores.</p>' : ''}
 
   <div class="page-footer">
-    <span>ERPSERV Consultoria — Documento gerado pelo sistema TimeConect</span>
+    <span>HD Think Consultoria — Documento gerado pelo sistema TimeConect</span>
     <span>Emitido em ${new Date().toLocaleDateString('pt-BR')}</span>
   </div>
 </body>
@@ -605,7 +605,7 @@ export default function FechamentoParceiroPage() {
   </div>
 
   <div class="page-footer">
-    <span>ERPSERV Consultoria — Documento gerado pelo sistema TimeConect</span>
+    <span>HD Think Consultoria — Documento gerado pelo sistema TimeConect</span>
     <span>Emitido em ${new Date().toLocaleDateString('pt-BR')}</span>
   </div>
 </body>
@@ -1351,7 +1351,7 @@ export default function FechamentoParceiroPage() {
                                 {STATUS_LABELS[row.status] ?? row.status}
                               </Badge>
                             </Td>
-                            <Td className="text-xs">{row.ticket ? <a href={`https://erpserv.movidesk.com/Ticket/Edit/${row.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300">#{row.ticket}</a> : '—'}</Td>
+                            <Td className="text-xs">{row.ticket ? <a href={`https://hdthink.movidesk.com/Ticket/Edit/${row.ticket}`} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300">#{row.ticket}</a> : '—'}</Td>
                             <Td className="text-xs max-w-xs truncate">
                               <span title={previewText(row.observacao)}>{row.observacao ? previewText(row.observacao) : '—'}</span>
                             </Td>

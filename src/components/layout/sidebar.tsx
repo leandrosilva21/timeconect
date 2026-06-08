@@ -323,7 +323,7 @@ function SidebarInner({ user, mobileOpen = false, onClose }: { user: User; mobil
       nav.unshift({ type: 'item', label: 'Meu Painel', href: '/meu-painel', icon: LayoutDashboard })
 
       // Investimento Interno — disponível para TODOS os coordenadores (apontamentos,
-      // aprovação e gestão dos investimentos internos / leads da ERPSERV).
+      // aprovação e gestão dos investimentos internos / leads da HD Think).
       nav.push({ type: 'item', label: 'Investimento Interno', href: '/investimento-comercial', icon: TrendingUp })
 
       // Demandas e Projetos — posição 2 para coordenador de projetos

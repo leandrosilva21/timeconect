@@ -1979,7 +1979,7 @@ interface ProjectFull {
   initial_hours_balance?: number | null; sold_hours?: number | null
   hour_contribution?: number; exceeded_hour_contribution?: number | null
   consultant_hours?: number | null; coordinator_hours?: number | null
-  save_erpserv?: number | null; total_available_hours?: number | null
+  save_hdthink?: number | null; total_available_hours?: number | null
   total_project_value?: number | null; weighted_hourly_rate?: number | null
   general_hours_balance?: number | null; consumed_hours?: number | null
   balance_percentage?: number | null; total_contributions_hours?: number | null
@@ -2657,7 +2657,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: { projec
                     {p.weighted_hourly_rate != null && <Row label="Taxa Média Ponderada" value={fmtBRL(p.weighted_hourly_rate)} />}
                     <Row label="Hora Adicional" value={fmtBRL(p.additional_hourly_rate)} />
                     <Row label="Custo Inicial" value={fmtBRL(p.initial_cost)} />
-                    {p.save_erpserv != null && p.save_erpserv > 0 && <Row label="Saving" value={<span style={{ color: '#22c55e' }}>{fmtBRL(p.save_erpserv)}</span>} />}
+                    {p.save_hdthink != null && p.save_hdthink > 0 && <Row label="Saving" value={<span style={{ color: '#22c55e' }}>{fmtBRL(p.save_hdthink)}</span>} />}
                   </div>
                 </div>
                 <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--brand-border)' }}>

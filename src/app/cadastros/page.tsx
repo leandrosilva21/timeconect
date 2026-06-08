@@ -1036,13 +1036,13 @@ function HolidaysTab() {
 interface EmailTpl { id: number; categoria: string; contract_type: string | null; empresa: string | null; nome: string | null; subject: string; body: string; pay_day: number | null; active: boolean }
 const TPL_CATEGORIAS = [{ value: 'consultor', label: 'Consultor' }, { value: 'parceiro', label: 'Parceiro' }, { value: 'cliente', label: 'Cliente' }]
 const TPL_CONTRATOS  = [{ value: 'cooperado', label: 'Cooperado' }, { value: 'clt', label: 'CLT' }, { value: 'pj', label: 'PJ' }]
-const TPL_EMPRESAS   = [{ value: 'erpserv', label: 'ERPSERV' }, { value: 'bizify', label: 'Bizify' }]
+const TPL_EMPRESAS   = [{ value: 'hdthink', label: 'HD Think' }, { value: 'bizify', label: 'Bizify' }]
 
 function EmailTemplatesTab() {
   const [items, setItems] = useState<EmailTpl[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<{ open: boolean; item?: EmailTpl }>({ open: false })
-  const [form, setForm] = useState({ categoria: 'consultor', contract_type: 'cooperado', empresa: 'erpserv', nome: '', subject: '', body: '', pay_day: '', active: true })
+  const [form, setForm] = useState({ categoria: 'consultor', contract_type: 'cooperado', empresa: 'hdthink', nome: '', subject: '', body: '', pay_day: '', active: true })
   const [saving, setSaving] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id?: number }>({ open: false })
 
@@ -1082,16 +1082,16 @@ function EmailTemplatesTab() {
   }, [])
   useEffect(() => { load() }, [load])
 
-  const openCreate = () => { setVarMenu(null); setForm({ categoria: 'consultor', contract_type: 'cooperado', empresa: 'erpserv', nome: '', subject: '', body: '', pay_day: '', active: true }); setModal({ open: true }) }
-  const openEdit = (it: EmailTpl) => { setVarMenu(null); setForm({ categoria: it.categoria, contract_type: it.contract_type ?? 'cooperado', empresa: it.empresa ?? 'erpserv', nome: it.nome ?? '', subject: it.subject, body: it.body, pay_day: it.pay_day != null ? String(it.pay_day) : '', active: it.active }); setModal({ open: true, item: it }) }
+  const openCreate = () => { setVarMenu(null); setForm({ categoria: 'consultor', contract_type: 'cooperado', empresa: 'hdthink', nome: '', subject: '', body: '', pay_day: '', active: true }); setModal({ open: true }) }
+  const openEdit = (it: EmailTpl) => { setVarMenu(null); setForm({ categoria: it.categoria, contract_type: it.contract_type ?? 'cooperado', empresa: it.empresa ?? 'hdthink', nome: it.nome ?? '', subject: it.subject, body: it.body, pay_day: it.pay_day != null ? String(it.pay_day) : '', active: it.active }); setModal({ open: true, item: it }) }
   // Duplica: abre como NOVO modelo (sem item) com o conteúdo copiado, inativo p/ não derrubar o ativo atual.
-  const openDuplicate = (it: EmailTpl) => { setVarMenu(null); setForm({ categoria: it.categoria, contract_type: it.contract_type ?? 'cooperado', empresa: it.empresa ?? 'erpserv', nome: (it.nome ? it.nome + ' (cópia)' : 'Cópia'), subject: it.subject, body: it.body, pay_day: it.pay_day != null ? String(it.pay_day) : '', active: false }); setModal({ open: true }) }
+  const openDuplicate = (it: EmailTpl) => { setVarMenu(null); setForm({ categoria: it.categoria, contract_type: it.contract_type ?? 'cooperado', empresa: it.empresa ?? 'hdthink', nome: (it.nome ? it.nome + ' (cópia)' : 'Cópia'), subject: it.subject, body: it.body, pay_day: it.pay_day != null ? String(it.pay_day) : '', active: false }); setModal({ open: true }) }
 
   const save = async () => {
     if (!form.subject.trim() || !form.body.trim()) { toast.error('Preencha assunto e corpo'); return }
     setSaving(true)
     try {
-      const payload = { categoria: form.categoria, contract_type: form.categoria === 'cliente' ? null : form.contract_type, empresa: form.categoria === 'consultor' ? form.empresa : 'erpserv', nome: form.nome || null, subject: form.subject, body: form.body, pay_day: form.pay_day.trim() === '' ? null : Number(form.pay_day), active: form.active }
+      const payload = { categoria: form.categoria, contract_type: form.categoria === 'cliente' ? null : form.contract_type, empresa: form.categoria === 'consultor' ? form.empresa : 'hdthink', nome: form.nome || null, subject: form.subject, body: form.body, pay_day: form.pay_day.trim() === '' ? null : Number(form.pay_day), active: form.active }
       if (modal.item) await api.put(`/fechamento-email-templates/${modal.item.id}`, payload)
       else await api.post('/fechamento-email-templates', payload)
       toast.success('Modelo salvo'); setModal({ open: false }); load()
@@ -1112,7 +1112,7 @@ function EmailTemplatesTab() {
     <div>
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
         <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-          Variáveis: <code>{'{nome}'}</code> <code>{'{periodo}'}</code> <code>{'{valor}'}</code> <code>{'{data}'}</code> (dia do mês configurado, no mês seguinte). Consultor distingue por empresa (ERPSERV/Bizify). Só 1 ativo por tipo+empresa.
+          Variáveis: <code>{'{nome}'}</code> <code>{'{periodo}'}</code> <code>{'{valor}'}</code> <code>{'{data}'}</code> (dia do mês configurado, no mês seguinte). Consultor distingue por empresa (HD Think/Bizify). Só 1 ativo por tipo+empresa.
         </p>
         <Button onClick={openCreate} className="bg-blue-600 hover:bg-blue-500 text-white h-8 text-xs gap-1.5"><Plus size={13} /> Novo modelo</Button>
       </div>
@@ -1141,7 +1141,7 @@ function EmailTemplatesTab() {
                 ]} /></td>
                 <td className="px-3 py-2.5 text-zinc-200">{catLabel(it.categoria)}</td>
                 <td className="px-3 py-2.5 text-zinc-400">{ctLabel(it.contract_type)}</td>
-                <td className="px-3 py-2.5 text-zinc-400">{it.categoria === 'consultor' ? (it.empresa === 'bizify' ? 'Bizify' : 'ERPSERV') : '—'}</td>
+                <td className="px-3 py-2.5 text-zinc-400">{it.categoria === 'consultor' ? (it.empresa === 'bizify' ? 'Bizify' : 'HD Think') : '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-400">{it.nome || '—'}</td>
                 <td className="px-3 py-2.5 text-zinc-200 max-w-[280px] truncate">{it.subject}</td>
                 <td className="px-3 py-2.5"><ActiveBadge active={it.active} /></td>
