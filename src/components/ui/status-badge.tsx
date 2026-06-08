@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Status — camada inteligente do Time Conect.
+ * Status — camada inteligente do TimeConect.
  *
  * Vai além de "cor + label": cada status carrega metadados que influenciam UI,
  * ações permitidas e recomendações automáticas.

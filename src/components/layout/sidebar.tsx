@@ -52,7 +52,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import type { LucideIcon } from 'lucide-react'
 import type { User } from '@/types'
 
-import { Time ConectIcon } from '@/components/branding/Time ConectIcon'
+import { TimeConectIcon } from '@/components/branding/TimeConectIcon'
 
 // ─── Nav config ──────────────────────────────────────────────────────────────
 
@@ -580,10 +580,10 @@ function SidebarInner({ user, mobileOpen = false, onClose }: { user: User; mobil
         className="flex items-center gap-8 h-18 px-5 border-b shrink-0"
         style={{ borderColor: 'var(--brand-border)' }}
       >
-        <Time ConectIcon size={34} />
+        <TimeConectIcon size={34} />
         {!collapsed && (
           <span className="font-bold text-[20px] tracking-tight" style={{ color: 'var(--text)' }}>
-            Time Conect
+            TimeConect
           </span>
         )}
       </div>

@@ -786,7 +786,7 @@ export default function RelatorioApontamentosPage() {
               )}
 
               <div className="px-10 pb-6 text-center text-xs text-gray-400">
-                ERPSERV Consultoria — Documento gerado pelo sistema Time Conect
+                ERPSERV Consultoria — Documento gerado pelo sistema TimeConect
               </div>
             </div>
           </div>

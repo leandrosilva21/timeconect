@@ -1,5 +1,5 @@
 /**
- * Time Conect Design System
+ * TimeConect Design System
  * Tokens: --brand-bg / --brand-surface / --brand-border / --brand-primary (#00F5FF)
  *         --brand-text / --brand-muted / --brand-subtle
  *         --brand-success / --brand-warning / --brand-danger / --brand-purple

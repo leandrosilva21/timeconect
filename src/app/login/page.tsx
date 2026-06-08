@@ -9,10 +9,10 @@ import { useAuth } from '@/hooks/use-auth'
 import { ApiError } from '@/lib/api'
 
 // Splash escuro fixo (tela de login não segue o tema light) — variant splash.
-import { Time ConectIcon as SharedTime ConectIcon } from '@/components/branding/Time ConectIcon'
+import { TimeConectIcon as SharedTimeConectIcon } from '@/components/branding/TimeConectIcon'
 
-function Time ConectIcon({ size = 52 }: { size?: number }) {
-  return <SharedTime ConectIcon size={size} variant="splash" />
+function TimeConectIcon({ size = 52 }: { size?: number }) {
+  return <SharedTimeConectIcon size={size} variant="splash" />
 }
 
 function LoginForm() {
@@ -206,14 +206,14 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Time Conect — produto */}
+            {/* TimeConect — produto */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
               <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 9, background: 'rgba(0,212,232,0.07)', border: '1px solid rgba(0,212,232,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Time ConectIcon size={19} />
+                <TimeConectIcon size={19} />
               </div>
               <div>
                 <h1 className="login-title" style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: '#FFFFFF', lineHeight: 1.05 }}>
-                  Time Conect
+                  TimeConect
                 </h1>
                 <p style={{ margin: '4px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.38)', fontWeight: 400, letterSpacing: 0 }}>
                   Controle de horas e contratos em um só lugar

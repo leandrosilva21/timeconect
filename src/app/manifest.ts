@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Time Conect',
-    short_name: 'Time Conect',
+    name: 'TimeConect',
+    short_name: 'TimeConect',
     description: 'Lançamento rápido de horas e despesas',
     start_url: '/mobile',
     display: 'standalone',

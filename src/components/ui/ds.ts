@@ -1,5 +1,5 @@
 /**
- * Time Conect Design System — re-exports canônicos.
+ * TimeConect Design System — re-exports canônicos.
  *
  * Importe tudo daqui pra forçar o uso dos componentes oficiais:
  *

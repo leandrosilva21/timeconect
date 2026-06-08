@@ -252,8 +252,8 @@ function AddDialog({
         </h3>
         <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
           {side === 'internal'
-            ? 'Selecione um usuário do cadastro Time Conect.'
-            : 'Use um usuário Time Conect do cliente OU convide via email.'}
+            ? 'Selecione um usuário do cadastro TimeConect.'
+            : 'Use um usuário TimeConect do cliente OU convide via email.'}
         </p>
 
         {side === 'client' && (
@@ -266,7 +266,7 @@ function AddDialog({
                 color: mode === 'user' ? 'var(--primary)' : 'var(--text-muted)',
               }}
             >
-              Usuário Time Conect
+              Usuário TimeConect
             </button>
             <button
               onClick={() => setMode('email')}

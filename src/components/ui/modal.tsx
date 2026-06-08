@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Modal — modal canônico do Time Conect.
+ * Modal — modal canônico do TimeConect.
  *
  * Estrutura:
  *   <Modal open={open} onClose={() => setOpen(false)} size="md">

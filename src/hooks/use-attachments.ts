@@ -1,6 +1,6 @@
 'use client'
 
-// FASE 11.2.FE — Hook canônico de anexos do Time Conect.
+// FASE 11.2.FE — Hook canônico de anexos do TimeConect.
 //
 // Substitui o fetch ad-hoc espalhado pelo código. Toda tela que tiver upload,
 // listagem ou delete de anexos passa por aqui. Disparou `refresh()` após qualquer

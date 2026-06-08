@@ -1,5 +1,5 @@
 /**
- * Logo símbolo do Time Conect — 4 barras verticais.
+ * Logo símbolo do TimeConect — 4 barras verticais.
  *
  * Cor controlada pelo token `--brand-logo` (definido em globals.css):
  *   - light: #06B6D4 (cyan reforçado)
@@ -31,7 +31,7 @@ const BARS = [
 
 const SPLASH_COLOR = '#00F5FF'
 
-export function Time ConectIcon({ size = 28, variant = 'default', className }: Props) {
+export function TimeConectIcon({ size = 28, variant = 'default', className }: Props) {
   const fill = variant === 'splash' ? SPLASH_COLOR : 'var(--brand-logo)'
   return (
     <svg
@@ -41,7 +41,7 @@ export function Time ConectIcon({ size = 28, variant = 'default', className }: P
       fill="none"
       className={className}
       role="img"
-      aria-label="Time Conect"
+      aria-label="TimeConect"
     >
       {BARS.map((b, i) => (
         <rect

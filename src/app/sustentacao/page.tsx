@@ -289,7 +289,7 @@ function DebugClientesTab({ rows, onSync }: { rows: DebugClienteRow[]; onSync: (
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-zinc-300">Comparativo Clientes: Movidesk × Time Conect</h2>
+        <h2 className="text-sm font-semibold text-zinc-300">Comparativo Clientes: Movidesk × TimeConect</h2>
         <div className="flex items-center gap-3">
           <span className="text-xs text-zinc-600">{filtered.length} de {rows.length} organizações</span>
           <button onClick={handleSync} disabled={syncing}
@@ -351,8 +351,8 @@ function DebugClientesTab({ rows, onSync }: { rows: DebugClienteRow[]; onSync: (
               <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">CNPJ Movidesk</th>
               <th className="text-right px-3 py-2.5 text-zinc-400 font-medium">Tickets</th>
               <th className="text-right px-3 py-2.5 text-zinc-400 font-medium">Vinculados</th>
-              <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">Cliente no Time Conect</th>
-              <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">CNPJ Time Conect</th>
+              <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">Cliente no TimeConect</th>
+              <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">CNPJ TimeConect</th>
               <th className="text-center px-3 py-2.5 text-zinc-400 font-medium">Vínculo</th>
             </tr>
           </thead>
@@ -429,7 +429,7 @@ function DebugResponsaveisTab({ rows, onSync }: { rows: DebugResponsavelRow[]; o
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-zinc-300">Responsáveis por Ticket: Movidesk × Time Conect</h2>
+        <h2 className="text-sm font-semibold text-zinc-300">Responsáveis por Ticket: Movidesk × TimeConect</h2>
         <div className="flex items-center gap-3">
           {syncing && <span className="text-xs text-cyan-400">⏳ Rodando em background...</span>}
           <span className="text-xs text-zinc-600">{filtered.length} de {rows.length} responsáveis</span>
@@ -453,7 +453,7 @@ function DebugResponsaveisTab({ rows, onSync }: { rows: DebugResponsavelRow[]; o
         <div className="flex rounded-lg border border-zinc-700 overflow-hidden text-xs">
           {([
             { key: 'all',        label: `Todos (${rows.length})`,         color: '#71717a' },
-            { key: 'encontrado', label: `✓ No Time Conect (${found})`,        color: '#22c55e' },
+            { key: 'encontrado', label: `✓ No TimeConect (${found})`,        color: '#22c55e' },
             { key: 'nao',        label: `✗ Não encontrado (${notFound})`, color: '#ef4444' },
           ] as const).map(opt => (
             <button key={opt.key} onClick={() => setMatchFilter(opt.key)}
@@ -489,7 +489,7 @@ function DebugResponsaveisTab({ rows, onSync }: { rows: DebugResponsavelRow[]; o
               <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">Equipe</th>
               <th className="text-right px-3 py-2.5 text-zinc-400 font-medium">Tickets</th>
               <th className="text-right px-3 py-2.5 text-zinc-400 font-medium">Vinculados</th>
-              <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">Nome no Time Conect</th>
+              <th className="text-left px-3 py-2.5 text-zinc-400 font-medium">Nome no TimeConect</th>
               <th className="text-center px-3 py-2.5 text-zinc-400 font-medium">Vínculo</th>
             </tr>
           </thead>
@@ -949,7 +949,7 @@ export default function SustentacaoPage() {
       <div className="flex items-center justify-between gap-3 flex-wrap px-4 md:px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
         <div>
           <h1 className="text-lg font-bold text-white">Portal de Sustentação</h1>
-          <p className="text-xs text-zinc-500">Central operacional de suporte — Movidesk + Time Conect</p>
+          <p className="text-xs text-zinc-500">Central operacional de suporte — Movidesk + TimeConect</p>
         </div>
         <div className="flex items-center gap-3">
           {/* Toggle Mês/Ano ↔ Período */}

@@ -47,7 +47,7 @@ const ACCENT_SOFT_BG: Record<KpiAccent, string> = {
 }
 
 /**
- * Cartão de KPI canônico do Time Conect.
+ * Cartão de KPI canônico do TimeConect.
  *
  * Tipografia (spec light theme — Set/2026):
  *  - Label: 12px / 500 / uppercase / tracking 0.04em / var(--text-muted)

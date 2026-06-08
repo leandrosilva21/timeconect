@@ -550,7 +550,7 @@ function PublicShell({ children }: { children: React.ReactNode }) {
       <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ textAlign: 'center', marginBottom: 4 }}>
           <Link href="/" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', textDecoration: 'none' }}>
-            Time Conect
+            TimeConect
           </Link>
         </div>
         {children}

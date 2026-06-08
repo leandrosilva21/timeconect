@@ -96,7 +96,7 @@ export default function SaldoInicialTicketsPage() {
           <div className="flex-1">
             <h1 className="text-lg font-bold" style={{ color: 'var(--brand-text)' }}>Saldo Inicial de Tickets</h1>
             <p className="text-xs mt-0.5" style={{ color: 'var(--brand-muted)' }}>
-              Horas históricas anteriores à entrada do ticket no Time Conect. Somam apenas na coluna "Hist. de Hs Tikets" e no relatório de Apuração por Ticket — não geram receita/despesa.
+              Horas históricas anteriores à entrada do ticket no TimeConect. Somam apenas na coluna "Hist. de Hs Tikets" e no relatório de Apuração por Ticket — não geram receita/despesa.
             </p>
           </div>
           <button
@@ -212,7 +212,7 @@ function BalanceModal({ row, onClose, onSaved }: {
       setLookup(r)
     } catch (e: any) {
       setLookup(null)
-      setLookupError(e?.message ?? 'Ticket não encontrado nos apontamentos do Time Conect')
+      setLookupError(e?.message ?? 'Ticket não encontrado nos apontamentos do TimeConect')
     } finally { setLookupLoading(false) }
   }, [ticket, isEdit])
 

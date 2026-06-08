@@ -882,7 +882,7 @@ export default function InvestimentoComercialPage() {
                 <input type="text" autoFocus value={newProjectName}
                   onChange={e => setNewProjectName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !creatingProject) handleCreateProject() }}
-                  placeholder={leadMode ? 'Ex: Acme Indústria' : 'Ex: Desenvolvimento Time Conect'}
+                  placeholder={leadMode ? 'Ex: Acme Indústria' : 'Ex: Desenvolvimento TimeConect'}
                   className="w-full px-3 h-9 rounded-xl text-sm outline-none" style={inputStyle} />
               </div>
               {!leadMode && (

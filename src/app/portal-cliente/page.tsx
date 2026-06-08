@@ -153,7 +153,7 @@ function MonthlyEvolution({ series }: { series: MonthlyPoint[] }) {
       </div>
       <p className="text-[10px] mb-4" style={{ color: 'var(--brand-subtle)' }}>
         Horas referem-se apenas a apontamentos de <strong style={{ color: 'var(--brand-muted)' }}>Sustentação</strong>.
-        Histórico apurado a partir de <strong style={{ color: 'var(--brand-muted)' }}>maio/2025</strong> (início do Time Conect).
+        Histórico apurado a partir de <strong style={{ color: 'var(--brand-muted)' }}>maio/2025</strong> (início do TimeConect).
       </p>
       {!hasAny ? (
         <p className="py-10 text-center text-sm" style={{ color: 'var(--brand-subtle)' }}>Sem movimentação nos últimos 12 meses.</p>
