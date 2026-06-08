@@ -201,6 +201,7 @@ export default function LoginPage() {
                 alt="HD Think"
                 width={140}
                 height={52}
+                className="login-brand-logo"
                 style={{ objectFit: 'contain' }}
               />
             </div>
@@ -251,8 +252,8 @@ export default function LoginPage() {
         html h1.login-title,
         html:not(.dark) h1.login-title,
         html.dark h1.login-title { color: #FFFFFF !important; }
-        /* Logo ERPServ: branco em ambos os temas (splash é sempre escuro) */
-        .login-erpserv-logo { filter: brightness(0) invert(1); opacity: 0.85; }
+        /* Logo HD Think: inverte texto preto pra branco no splash escuro */
+        .login-brand-logo { filter: invert(1) hue-rotate(180deg); opacity: 0.95; }
         .login-input::placeholder { color: rgba(255,255,255,0.22); }
         .login-input:focus {
           border: 1px solid rgba(0,212,232,0.55) !important;
