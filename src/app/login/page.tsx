@@ -8,7 +8,6 @@ import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { ApiError } from '@/lib/api'
 
-// Splash escuro fixo (tela de login não segue o tema light) — variant splash.
 import { TimeConectIcon as SharedTimeConectIcon } from '@/components/branding/TimeConectIcon'
 
 function TimeConectIcon({ size = 52 }: { size?: number }) {
@@ -31,8 +30,6 @@ function LoginForm() {
     setError('')
     setLoading(true)
     try {
-      // trim: senha colada do e-mail costuma vir com espaço/quebra invisível ao redor,
-      // o que fazia o login falhar como "Credenciais inválidas" mesmo com a senha certa.
       const { requiresPasswordChange } = await login(email.trim(), password.trim())
       router.replace(requiresPasswordChange ? '/alterar-senha' : '/dashboard')
     } catch (err) {
@@ -43,9 +40,9 @@ function LoginForm() {
   }
 
   const inputBase: React.CSSProperties = {
-    background: 'rgba(255,255,255,0.055)',
-    border: '1px solid rgba(255,255,255,0.10)',
-    color: 'white',
+    background: '#FFFFFF',
+    border: '1px solid #E2E8F0',
+    color: '#0F172A',
     borderRadius: 12,
     width: '100%',
     padding: '13px 16px',
@@ -58,14 +55,13 @@ function LoginForm() {
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
       {passwordChanged && (
-        <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: 12, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.18)', color: '#4ade80' }}>
+        <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: 12, background: 'rgba(34,197,94,0.10)', border: '1px solid rgba(34,197,94,0.25)', color: '#15803d' }}>
           Senha alterada com sucesso. Faça login com a nova senha.
         </div>
       )}
 
-      {/* E-mail */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>
+        <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#64748B' }}>
           E-mail
         </label>
         <input
@@ -74,14 +70,13 @@ function LoginForm() {
           onChange={e => setEmail(e.target.value.toLowerCase())}
           placeholder="seu@email.com"
           required
-          style={{ ...inputBase, caretColor: '#FB923C' }}
+          style={{ ...inputBase, caretColor: '#F97316' }}
           className="login-input"
         />
       </div>
 
-      {/* Senha */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>
+        <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#64748B' }}>
           Senha
         </label>
         <div style={{ position: 'relative' }}>
@@ -91,14 +86,14 @@ function LoginForm() {
             onChange={e => setPassword(e.target.value)}
             placeholder="••••••••"
             required
-            style={{ ...inputBase, paddingRight: 44, caretColor: '#FB923C' }}
+            style={{ ...inputBase, paddingRight: 44, caretColor: '#F97316' }}
             className="login-input"
           />
           <button
             type="button"
             onClick={() => setShowPass(v => !v)}
             tabIndex={-1}
-            style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.3)', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s' }}
+            style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s' }}
           >
             {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
@@ -106,12 +101,11 @@ function LoginForm() {
       </div>
 
       {error && (
-        <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: 12, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', color: '#f87171' }}>
+        <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: 12, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.22)', color: '#b91c1c' }}>
           {error}
         </div>
       )}
 
-      {/* Botão */}
       <button
         type="submit"
         disabled={loading}
@@ -127,7 +121,7 @@ function LoginForm() {
           cursor: loading ? 'not-allowed' : 'pointer',
           opacity: loading ? 0.7 : 1,
           background: 'linear-gradient(160deg, #C2410C 0%, #EA580C 60%, #F97316 100%)',
-          boxShadow: '0 6px 24px rgba(249,115,22,0.45), 0 2px 6px rgba(0,0,0,0.5)',
+          boxShadow: '0 8px 24px rgba(249,115,22,0.30), 0 2px 6px rgba(249,115,22,0.18)',
           transition: 'all 0.2s',
           letterSpacing: '0.02em',
         }}
@@ -143,9 +137,9 @@ function LoginForm() {
       </button>
 
       <div style={{ textAlign: 'center' }}>
-        <Link href="/esqueci-senha" style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', textDecoration: 'none', transition: 'color 0.15s' }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.55)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.3)')}
+        <Link href="/esqueci-senha" style={{ fontSize: 13, color: '#64748B', textDecoration: 'none', transition: 'color 0.15s' }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#F97316')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#64748B')}
         >
           Esqueceu a senha?
         </Link>
@@ -164,9 +158,8 @@ const ENV_BANNER =
 
 export default function LoginPage() {
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#07090F', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#F7F9FC', position: 'relative', overflow: 'hidden' }}>
 
-      {/* Faixa de ambiente — DEV (amarelo) ou HOMOLOG (vermelho) */}
       {ENV_BANNER && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: ENV_BANNER.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 0' }}>
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.25em', color: ENV_BANNER.fg, textTransform: 'uppercase', fontFamily: 'monospace' }}>
@@ -175,47 +168,41 @@ export default function LoginPage() {
         </div>
       )}
 
-      {/* Glow sutil — sem gradientes pesados */}
+      {/* Glow laranja sutil no canto superior */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-        <div style={{ position: 'absolute', top: '-5%', left: '50%', transform: 'translateX(-50%)', width: 700, height: 400, borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(251, 146, 60,0.05) 0%, transparent 65%)', filter: 'blur(60px)' }} />
+        <div style={{ position: 'absolute', top: '-10%', left: '50%', transform: 'translateX(-50%)', width: 800, height: 500, borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(249,115,22,0.10) 0%, transparent 65%)', filter: 'blur(60px)' }} />
       </div>
 
-      {/* Card */}
       <div style={{ animation: 'fadeUp 0.45s ease both', width: '100%', maxWidth: 460, padding: '0 20px', position: 'relative' }}>
         <div style={{
           borderRadius: 20,
-          background: 'rgba(13,15,22,0.92)',
-          border: '1px solid rgba(255,255,255,0.07)',
-          backdropFilter: 'blur(24px)',
-          boxShadow: '0 32px 80px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.05)',
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 20px 50px rgba(15,23,42,0.08), 0 4px 12px rgba(15,23,42,0.04)',
           overflow: 'hidden',
         }}>
 
-          {/* ── Cabeçalho de marca ── */}
-          <div style={{ padding: '36px 40px 32px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ padding: '36px 40px 32px', borderBottom: '1px solid #F1F5F9' }}>
 
-            {/* HD Think — logo centralizado */}
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 32 }}>
               <Image
                 src="/logo.png"
                 alt="HD Think"
                 width={140}
                 height={52}
-                className="login-brand-logo"
                 style={{ objectFit: 'contain' }}
               />
             </div>
 
-            {/* TimeConect — produto */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
-              <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 9, background: 'rgba(251, 146, 60,0.07)', border: '1px solid rgba(251, 146, 60,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 9, background: 'rgba(249,115,22,0.10)', border: '1px solid rgba(249,115,22,0.20)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <TimeConectIcon size={19} />
               </div>
               <div>
-                <h1 className="login-title" style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: '#FFFFFF', lineHeight: 1.05 }}>
+                <h1 className="login-title" style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: '#0F172A', lineHeight: 1.05 }}>
                   TimeConect
                 </h1>
-                <p style={{ margin: '4px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.38)', fontWeight: 400, letterSpacing: 0 }}>
+                <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748B', fontWeight: 400, letterSpacing: 0 }}>
                   Controle de horas e contratos em um só lugar
                 </p>
               </div>
@@ -223,9 +210,8 @@ export default function LoginPage() {
 
           </div>
 
-          {/* ── Formulário ── */}
           <div style={{ padding: '32px 40px 36px' }}>
-            <p style={{ margin: '0 0 24px', fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.01em' }}>
+            <p style={{ margin: '0 0 24px', fontSize: 13, fontWeight: 600, color: '#475569', letterSpacing: '0.01em' }}>
               Acesse sua conta
             </p>
             <Suspense fallback={null}>
@@ -234,8 +220,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Rodapé discreto */}
-        <p style={{ textAlign: 'center', marginTop: 20, fontSize: 11, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.02em' }}>
+        <p style={{ textAlign: 'center', marginTop: 20, fontSize: 11, color: '#94A3B8', letterSpacing: '0.02em' }}>
           © {new Date().getFullYear()} HD Think · Todos os direitos reservados
         </p>
       </div>
@@ -248,20 +233,14 @@ export default function LoginPage() {
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
-        /* Splash do login é sempre escuro — escapa do rule global que força h1 preto no light */
-        html h1.login-title,
-        html:not(.dark) h1.login-title,
-        html.dark h1.login-title { color: #FFFFFF !important; }
-        /* Logo HD Think: inverte texto preto pra branco no splash escuro */
-        .login-brand-logo { filter: invert(1) hue-rotate(180deg); opacity: 0.95; }
-        .login-input::placeholder { color: rgba(255,255,255,0.22); }
+        .login-input::placeholder { color: #94A3B8; }
         .login-input:focus {
-          border: 1px solid rgba(251, 146, 60,0.55) !important;
-          box-shadow: 0 0 0 3px rgba(251, 146, 60,0.08) !important;
-          background: rgba(255,255,255,0.075) !important;
+          border: 1px solid rgba(249,115,22,0.55) !important;
+          box-shadow: 0 0 0 3px rgba(249,115,22,0.10) !important;
+          background: #FFFFFF !important;
         }
         .login-btn:hover:not(:disabled) {
-          box-shadow: 0 8px 32px rgba(79,70,229,0.55), 0 2px 6px rgba(0,0,0,0.5);
+          box-shadow: 0 12px 32px rgba(249,115,22,0.40), 0 2px 6px rgba(249,115,22,0.20);
           transform: translateY(-1px);
         }
         .login-btn:active:not(:disabled) {
