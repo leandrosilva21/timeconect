@@ -87,13 +87,13 @@ const TABS = [
   { id: 'bh_mensal', label: 'BH Mensal' },
   { id: 'on_demand', label: 'On Demand' },
   { id: 'cloud',     label: 'Cloud' },
-  { id: 'bizify',    label: 'Bizify' },
+  { id: 'nfeconnect',    label: 'NFeconnect' },
 ]
 
 function getTab(p: SustProject): string {
   const ct = (p.contract_type_display ?? p.contract_type?.name ?? '').toLowerCase()
   if (ct.includes('cloud')) return 'cloud'
-  if (ct.includes('bizify')) return 'bizify'
+  if (ct.includes('nfeconnect')) return 'nfeconnect'
   if (ct.includes('mensal') || ct.includes('bh_mensal')) return 'bh_mensal'
   if (ct.includes('fixo') || ct.includes('bh_fixo')) return 'bh_fixo'
   if (ct.includes('demand')) return 'on_demand'
@@ -104,9 +104,9 @@ function isSustProject(p: SustProject): boolean {
   const ct = (p.contract_type_display ?? p.contract_type?.name ?? '').toLowerCase()
   const st = (p.service_type?.name ?? '').toLowerCase()
   return (
-    ct.includes('sust') || ct.includes('cloud') || ct.includes('bizify') ||
+    ct.includes('sust') || ct.includes('cloud') || ct.includes('nfeconnect') ||
     ct.includes('bh fixo') || ct.includes('bh mensal') || ct.includes('bh_fixo') || ct.includes('bh_mensal') ||
-    st.includes('sust') || st.includes('cloud') || st.includes('bizify')
+    st.includes('sust') || st.includes('cloud') || st.includes('nfeconnect')
   )
 }
 

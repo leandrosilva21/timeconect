@@ -153,7 +153,7 @@ interface ProjectEditForm {
 interface Column {
   id: string
   label: string
-  type: 'fixed' | 'coordinator' | 'project_status' | 'sustentacao' | 'bizify' | 'aporte'
+  type: 'fixed' | 'coordinator' | 'project_status' | 'sustentacao' | 'nfeconnect' | 'aporte'
   coordinatorId?: number
   emoji?: string
   projectStatus?: string
@@ -258,7 +258,7 @@ const FIXED_COLUMNS: Column[] = [
 ]
 
 const SUST_COLOR   = '#f97316'
-const BIZIFY_COLOR = '#a78bfa'
+const NFECONNECT_COLOR = '#a78bfa'
 
 const SUSTENTACAO_COLS: Column[] = [
   {
@@ -293,9 +293,9 @@ const SUSTENTACAO_COLS: Column[] = [
   },
 ]
 
-const BIZIFY_COL: Column = {
-  id: 'sust_bizify', label: 'Bizify', type: 'bizify', emoji: '⚡', color: BIZIFY_COLOR,
-  sustentacaoValidator: (c) => !!(c.service_type?.toLowerCase().includes('bizify') || c.contract_type?.toLowerCase().includes('bizify')),
+const NFECONNECT_COL: Column = {
+  id: 'sust_nfeconnect', label: 'NFeconnect', type: 'nfeconnect', emoji: '⚡', color: NFECONNECT_COLOR,
+  sustentacaoValidator: (c) => !!(c.service_type?.toLowerCase().includes('nfeconnect') || c.contract_type?.toLowerCase().includes('nfeconnect')),
 }
 
 const APORTE_COLOR = '#22c55e'
@@ -1912,7 +1912,7 @@ function ContractKanbanCard({ card, index, onClick, onAction, onMove, availableC
             {card.categoria && (() => {
               const svL = card.service_type?.toLowerCase() ?? ''
               const effectivelySust = card.categoria === 'sustentacao'
-                || svL.includes('sustent') || svL.includes('cloud') || svL.includes('bizify')
+                || svL.includes('sustent') || svL.includes('cloud') || svL.includes('nfeconnect')
               return (
                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
                   {effectivelySust ? 'Sustentação' : 'Projeto'}
@@ -2147,7 +2147,7 @@ const COL_LABEL: Record<string, string> = {
   em_planejamento: 'Em Planejamento', em_validacao: 'Em Validação', em_revisao: 'Em Revisão',
   aprovado: 'Aprovado', inicio_autorizado: 'Início Autorizado', alocado: 'Alocado',
   sust_bh_fixo: 'BH Fixo', sust_bh_mensal: 'BH Mensal', sust_on_demand: 'On Demand',
-  sust_cloud: 'Cloud', sust_bizify: 'Bizify',
+  sust_cloud: 'Cloud', sust_nfeconnect: 'NFeconnect',
 }
 function colLabel(col: string) {
   if (col?.startsWith('coordinator:')) return 'Coordenador'
@@ -2365,7 +2365,7 @@ function KanbanContent() {
   const [selectedAporte,    setSelectedAporte]     = useState<AporteCard | null>(null)
   const [coordinators,      setCoordinators]       = useState<Coordinator[]>([])
   const [sustGroups,        setSustGroups]         = useState<SustGroups>({
-    sust_bh_fixo: [], sust_bh_mensal: [], sust_on_demand: [], sust_cloud: [], sust_bizify: [],
+    sust_bh_fixo: [], sust_bh_mensal: [], sust_on_demand: [], sust_cloud: [], sust_nfeconnect: [],
   })
   const [loading,           setLoading]            = useState(true)
   const [selected,          setSelected]           = useState<ContractCard | null>(null)
@@ -2396,7 +2396,7 @@ function KanbanContent() {
         sust_bh_mensal: r.sustentacao_groups?.sust_bh_mensal ?? [],
         sust_on_demand: r.sustentacao_groups?.sust_on_demand ?? [],
         sust_cloud:     r.sustentacao_groups?.sust_cloud     ?? [],
-        sust_bizify:    r.sustentacao_groups?.sust_bizify    ?? [],
+        sust_nfeconnect:    r.sustentacao_groups?.sust_nfeconnect    ?? [],
       })
     } catch { toast.error('Erro ao carregar kanban') }
     finally   { setLoading(false) }
@@ -2411,7 +2411,7 @@ function KanbanContent() {
 
   const isSustCoordenador = user?.type === 'coordenador' && (user as any).coordinator_type === 'sustentacao'
 
-  // Column list: fixed → coordinators → sustentação group → bizify → project status
+  // Column list: fixed → coordinators → sustentação group → nfeconnect → project status
   // Coordenador de sustentação vê apenas "Pronto para Iniciar" + colunas de sustentação
   const columns: Column[] = isSustCoordenador
     ? [
@@ -2428,7 +2428,7 @@ function KanbanContent() {
           emoji:         '👤',
         })),
         ...SUSTENTACAO_COLS,
-        BIZIFY_COL,
+        NFECONNECT_COL,
         ...STATUS_PROJECT_COLUMNS,
         APORTE_COL,
       ]
@@ -2539,8 +2539,8 @@ function KanbanContent() {
       const ctL2 = card.contract_type?.toLowerCase() ?? ''
       const svL2 = card.service_type?.toLowerCase() ?? ''
       const isSustCard = card.categoria === 'sustentacao'
-        || ctL2.includes('banco de horas') || ctL2.includes('on demand') || ctL2.includes('cloud') || ctL2.includes('bizify') || ctL2.includes('saas')
-        || svL2.includes('sustent') || svL2.includes('cloud') || svL2.includes('bizify')
+        || ctL2.includes('banco de horas') || ctL2.includes('on demand') || ctL2.includes('cloud') || ctL2.includes('nfeconnect') || ctL2.includes('saas')
+        || svL2.includes('sustent') || svL2.includes('cloud') || svL2.includes('nfeconnect')
       if (!isSustCard) { toast.error('Contratos de projeto não podem ser movidos para filas de sustentação.'); return }
       setSustGroups(prev => {
         const next = { ...prev }
@@ -2567,7 +2567,7 @@ function KanbanContent() {
       const ctLower = card.contract_type?.toLowerCase() ?? ''
       const svLower = card.service_type?.toLowerCase() ?? ''
       const isSustType = card.categoria === 'sustentacao'
-        || svLower.includes('cloud') || svLower.includes('bizify') || svLower.includes('sustent')
+        || svLower.includes('cloud') || svLower.includes('nfeconnect') || svLower.includes('sustent')
       if (isSustType) {
         toast.error('Contratos de sustentação devem ser movidos para a fila de sustentação (BH Fixo, BH Mensal, On Demand ou Cloud).')
         return
@@ -2649,8 +2649,8 @@ function KanbanContent() {
       ?? (Object.values(sustGroups).flat().find((c: any) => c.id === cardId && c.card_type === 'project') as ProjectCard | undefined)
     const svL = (card?.service_type ?? '').toLowerCase()
     const ctL = (card?.contract_type ?? '').toLowerCase()
-    const isSustProject = svL.includes('sustent') || svL.includes('cloud') || svL.includes('bizify')
-      || ctL.includes('banco de horas') || ctL.includes('on demand') || ctL.includes('cloud') || ctL.includes('bizify')
+    const isSustProject = svL.includes('sustent') || svL.includes('cloud') || svL.includes('nfeconnect')
+      || ctL.includes('banco de horas') || ctL.includes('on demand') || ctL.includes('cloud') || ctL.includes('nfeconnect')
 
     // ── Coluna de coordenador
     if (toCol.startsWith('coordinator:')) {
@@ -2729,7 +2729,7 @@ function KanbanContent() {
     const ctLower = card.contract_type?.toLowerCase() ?? ''
     const svLower = card.service_type?.toLowerCase() ?? ''
     const isSustType = card.categoria === 'sustentacao'
-      || svLower.includes('cloud') || svLower.includes('bizify') || svLower.includes('sustent')
+      || svLower.includes('cloud') || svLower.includes('nfeconnect') || svLower.includes('sustent')
 
     // Deriva a coluna de sustentação correspondente ao tipo do contrato
     const matchingSustCol = (): { id: string; label: string } | null => {
@@ -2741,8 +2741,8 @@ function KanbanContent() {
         return { id: 'sust_on_demand', label: 'On Demand' }
       if (ctLower.includes('cloud') || svLower.includes('cloud'))
         return { id: 'sust_cloud', label: 'Cloud' }
-      if (ctLower.includes('bizify') || svLower.includes('bizify'))
-        return { id: 'sust_bizify', label: 'Bizify' }
+      if (ctLower.includes('nfeconnect') || svLower.includes('nfeconnect'))
+        return { id: 'sust_nfeconnect', label: 'NFeconnect' }
       return null
     }
 
@@ -2757,7 +2757,7 @@ function KanbanContent() {
     if (fromCol.startsWith('sust_')) {
       if (!isSustAdmin) return []
       SUSTENTACAO_COLS.forEach(s => { if (s.id !== fromCol) cols.push({ id: s.id, label: s.label }) })
-      if (BIZIFY_COL.id !== fromCol) cols.push({ id: BIZIFY_COL.id, label: BIZIFY_COL.label })
+      if (NFECONNECT_COL.id !== fromCol) cols.push({ id: NFECONNECT_COL.id, label: NFECONNECT_COL.label })
       return cols
     }
 
@@ -2779,7 +2779,7 @@ function KanbanContent() {
           cols.push(matched)
         } else {
           SUSTENTACAO_COLS.forEach(s => cols.push({ id: s.id, label: s.label }))
-          cols.push({ id: BIZIFY_COL.id, label: BIZIFY_COL.label })
+          cols.push({ id: NFECONNECT_COL.id, label: NFECONNECT_COL.label })
         }
       }
       cols.push(...CANCEL_PAUSE)
@@ -2815,9 +2815,9 @@ function KanbanContent() {
     const ctLower = card.contract_type?.toLowerCase() ?? ''
     const svLower = card.service_type?.toLowerCase() ?? ''
     const isCardSust = ctLower.includes('banco de horas') || ctLower.includes('on demand')
-      || ctLower.includes('cloud') || ctLower.includes('bizify')
+      || ctLower.includes('cloud') || ctLower.includes('nfeconnect')
       || svLower.includes('on demand') || svLower.includes('cloud')
-      || svLower.includes('bizify') || svLower.includes('sustent')
+      || svLower.includes('nfeconnect') || svLower.includes('sustent')
 
     // Deriva a coluna sust correspondente ao tipo do projeto
     const matchedSustColForProject = (): { id: string; label: string } | null => {
@@ -2829,8 +2829,8 @@ function KanbanContent() {
         return { id: 'sust_on_demand', label: 'On Demand' }
       if (ctLower.includes('cloud') || svLower.includes('cloud'))
         return { id: 'sust_cloud', label: 'Cloud' }
-      if (ctLower.includes('bizify') || svLower.includes('bizify'))
-        return { id: 'sust_bizify', label: 'Bizify' }
+      if (ctLower.includes('nfeconnect') || svLower.includes('nfeconnect'))
+        return { id: 'sust_nfeconnect', label: 'NFeconnect' }
       return null
     }
 
@@ -2865,7 +2865,7 @@ function KanbanContent() {
         const sustCol = matchedSustColForProject()
         const sustOptions = sustCol
           ? [sustCol]
-          : [...SUSTENTACAO_COLS.map(s => ({ id: s.id, label: s.label })), { id: BIZIFY_COL.id, label: BIZIFY_COL.label }]
+          : [...SUSTENTACAO_COLS.map(s => ({ id: s.id, label: s.label })), { id: NFECONNECT_COL.id, label: NFECONNECT_COL.label }]
         return [
           ...sustOptions,
           ...STATUS_PROJECT_COLUMNS.map(c => ({ id: c.id, label: c.label })),
@@ -2948,7 +2948,7 @@ function KanbanContent() {
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: 'var(--warning)' }} />Pronto</span>
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: 'var(--success)' }} />Projeto Ativo</span>
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: SUST_COLOR }} />Sustentação</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: BIZIFY_COLOR }} />Bizify</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: NFECONNECT_COLOR }} />NFeconnect</span>
           <span className="ml-auto flex items-center gap-1.5" style={{ color: 'var(--text-light)' }}><Users size={11} />Colunas de coordenador geram projeto automaticamente</span>
         </div>
 
@@ -3033,16 +3033,16 @@ function KanbanContent() {
 
                   const prevCol  = columns[colIdx - 1]
                   const isSust   = col.type === 'sustentacao'
-                  const isBizify = col.type === 'bizify'
+                  const isNFeconnect = col.type === 'nfeconnect'
                   const showSep  = (isStatusCol && prevCol?.type !== 'project_status') ||
                                    (isSust && prevCol?.type !== 'sustentacao') ||
-                                   (isBizify && prevCol?.type !== 'bizify') ||
+                                   (isNFeconnect && prevCol?.type !== 'nfeconnect') ||
                                    (isAporteCol) ||
                                    (isCoord && prevCol?.type === 'fixed')
 
                   const borderColor = isStatusCol ? `${col.color}30`
                     : isSust    ? `${col.color}35`
-                    : isBizify  ? `${BIZIFY_COLOR}35`
+                    : isNFeconnect  ? `${NFECONNECT_COLOR}35`
                     : isAporteCol ? `${APORTE_COLOR}45`
                     : isCoord   ? 'rgba(251, 146, 60,0.15)'
                     : isPronto  ? `${PRONTO_COLOR}40`
@@ -3050,7 +3050,7 @@ function KanbanContent() {
 
                   const headerColor = isStatusCol ? col.color!
                     : isSust    ? col.color!
-                    : isBizify  ? BIZIFY_COLOR
+                    : isNFeconnect  ? NFECONNECT_COLOR
                     : isAporteCol ? APORTE_COLOR
                     : isCoord   ? 'var(--brand-primary)'
                     : isPronto  ? PRONTO_COLOR
@@ -3062,8 +3062,8 @@ function KanbanContent() {
                       {showSep && (
                         <div className="self-stretch w-px shrink-0 mt-1"
                           style={{
-                            background: isSust ? SUST_COLOR : isBizify ? BIZIFY_COLOR : isAporteCol ? APORTE_COLOR : 'var(--brand-border)',
-                            opacity: (isSust || isBizify || isAporteCol) ? 0.5 : 0.4,
+                            background: isSust ? SUST_COLOR : isNFeconnect ? NFECONNECT_COLOR : isAporteCol ? APORTE_COLOR : 'var(--brand-border)',
+                            opacity: (isSust || isNFeconnect || isAporteCol) ? 0.5 : 0.4,
                           }} />
                       )}
 
@@ -3107,13 +3107,13 @@ function KanbanContent() {
                               </p>
                             </>
                           )}
-                          {isBizify && (
+                          {isNFeconnect && (
                             <>
                               <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-sm"
-                                style={{ background: `${BIZIFY_COLOR}15`, color: BIZIFY_COLOR, letterSpacing: '0.1em' }}>
-                                BIZIFY
+                                style={{ background: `${NFECONNECT_COLOR}15`, color: NFECONNECT_COLOR, letterSpacing: '0.1em' }}>
+                                NFECONNECT
                               </span>
-                              <p className="text-[10px] mt-0.5" style={{ color: BIZIFY_COLOR, opacity: 0.65 }}>
+                              <p className="text-[10px] mt-0.5" style={{ color: NFECONNECT_COLOR, opacity: 0.65 }}>
                                 Arraste para coordenador alocar
                               </p>
                             </>
@@ -3159,7 +3159,7 @@ function KanbanContent() {
                                 // Drop target ativo: bg primary-soft + (interno) borda destacada.
                                 // Fora do drop: transparente (mostra a coluna).
                                 background: snap.isDraggingOver
-                                  ? isStatusCol ? `${col.color}12` : (isSust || isBizify) ? `${col.color}12` : 'var(--primary-soft)'
+                                  ? isStatusCol ? `${col.color}12` : (isSust || isNFeconnect) ? `${col.color}12` : 'var(--primary-soft)'
                                   : 'transparent',
                                 boxShadow: snap.isDraggingOver
                                   ? `inset 0 0 0 2px var(--primary)`
@@ -3255,7 +3255,7 @@ function KanbanContent() {
                                 <p className="text-center text-xs py-6" style={{ color: 'var(--text-light)' }}>
                                   {isCoord
                                     ? 'Nenhum projeto alocado por aqui ainda'
-                                    : (isSust || isBizify)
+                                    : (isSust || isNFeconnect)
                                       ? 'Sem contratos nesta categoria'
                                       : isAporteCol
                                         ? 'Nenhum aporte registrado ainda'

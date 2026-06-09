@@ -572,7 +572,7 @@ export default function ApprovalsPage() {
       executiveId:  '',
       projectId:    '',
       customerId:   '',
-      categoriaServico: '' as '' | 'sustentacao' | 'projeto' | 'bizify' | 'investimento',
+      categoriaServico: '' as '' | 'sustentacao' | 'projeto' | 'nfeconnect' | 'investimento',
     },
   )
   const { tab, dateFrom, dateTo, refMonth, refYear, filterMode, userId, coordinatorId, executiveId, projectId, customerId, categoriaServico } = flt
@@ -587,7 +587,7 @@ export default function ApprovalsPage() {
   const setExecutiveId  = (v: string)                    => setFilter('executiveId', v)
   const setProjectId    = (v: string)                    => setFilter('projectId', v)
   const setCustomerId   = (v: string)                    => setFilter('customerId', v)
-  const setCategoriaServico = (v: '' | 'sustentacao' | 'projeto' | 'bizify' | 'investimento') => setFilter('categoriaServico', v)
+  const setCategoriaServico = (v: '' | 'sustentacao' | 'projeto' | 'nfeconnect' | 'investimento') => setFilter('categoriaServico', v)
 
   const tsStatus  = 'pending'
   const expStatus = 'pending'
@@ -991,7 +991,7 @@ export default function ApprovalsPage() {
               {([
                 { id: 'sustentacao',  label: 'Sustentação', color: '#f59e0b',            bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)' },
                 { id: 'projeto',      label: 'Projeto',     color: '#FB923C',            bg: 'rgba(251, 146, 60,0.12)',   border: 'rgba(251, 146, 60,0.35)' },
-                { id: 'bizify',       label: 'Bizify',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
+                { id: 'nfeconnect',       label: 'NFeconnect',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
                 { id: 'investimento', label: 'Investimento', color: '#ef4444',           bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.35)' },
               ] as const).map(opt => {
                 const active = (categoriaServico || '') === opt.id

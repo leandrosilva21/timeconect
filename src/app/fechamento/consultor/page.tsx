@@ -42,7 +42,7 @@ interface ConsultorBase {
   envio_em: string | null   // ISO do último envio do fechamento; null = não enviado
   envio_por: string | null  // nome de quem enviou
   notas?: NotasPayload      // NFS-e + Nota de débito (só consultor PJ avulso)
-  is_bizify?: boolean       // funcionário Bizify (relatório sai com logo Bizify)
+  is_bizify?: boolean       // funcionário NFeconnect (relatório sai com logo NFeconnect)
 }
 
 interface ConsultorHorista extends ConsultorBase {
@@ -83,7 +83,7 @@ interface Totais {
   total_geral: number
 }
 
-interface BizifyData {
+interface NFeconnectData {
   horistas: ConsultorHorista[]
   banco_horas: ConsultorBancoHoras[]
   fixos: ConsultorFixo[]
@@ -95,7 +95,7 @@ interface IndexData {
   banco_horas: ConsultorBancoHoras[]
   fixos: ConsultorFixo[]
   totais: Totais
-  bizify?: BizifyData
+  nfeconnect?: NFeconnectData
 }
 
 interface ApontamentoRow {
@@ -118,7 +118,7 @@ interface ApontamentoRow {
   valor_extra?: number | null // apenas horista/fixo
 }
 
-type Tab = 'horistas' | 'banco_horas' | 'fixo' | 'resumo' | 'bizify'
+type Tab = 'horistas' | 'banco_horas' | 'fixo' | 'resumo' | 'nfeconnect'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -390,7 +390,7 @@ function buildReport(
   return `
     <div class="page">
       <div class="header">
-        <div class="logo"><img src="${window.location.origin}/${consultor.is_bizify ? 'logo-bizify.png' : 'logo.png'}" alt="${consultor.is_bizify ? 'Bizify' : 'HD Think Consultoria'}" /></div>
+        <div class="logo"><img src="${window.location.origin}/${consultor.is_bizify ? 'logo-nfeconnect.png' : 'logo.png'}" alt="${consultor.is_bizify ? 'NFeconnect' : 'HD Think Consultoria'}" /></div>
         <div class="meta">
           <strong>${consultor.nome}</strong>
           Fechamento de Consultores &nbsp;·&nbsp; ${fmtYearMonth(yearMonth)} &nbsp;·&nbsp; ${modeLabel}
@@ -773,15 +773,15 @@ export default function FechamentoConsultorPage() {
     setReportTarget(null) // consolidado — sem alvo individual, esconde "Enviar e-mail"
   }
 
-  const hasBizify = ((data?.bizify?.horistas?.length ?? 0)
-    + (data?.bizify?.banco_horas?.length ?? 0)
-    + (data?.bizify?.fixos?.length ?? 0)) > 0
+  const hasNFeconnect = ((data?.nfeconnect?.horistas?.length ?? 0)
+    + (data?.nfeconnect?.banco_horas?.length ?? 0)
+    + (data?.nfeconnect?.fixos?.length ?? 0)) > 0
   const TABS: { key: Tab; label: string }[] = [
     { key: 'horistas',    label: 'Horistas' },
     { key: 'banco_horas', label: 'Banco de Horas' },
     { key: 'fixo',        label: 'Fixo' },
     { key: 'resumo',      label: 'Resumo' },
-    ...(hasBizify ? [{ key: 'bizify' as Tab, label: 'Bizify' }] : []),
+    ...(hasNFeconnect ? [{ key: 'nfeconnect' as Tab, label: 'NFeconnect' }] : []),
   ]
 
   // ─── Filtros ──────────────────────────────────────────────────────────────
@@ -1182,8 +1182,8 @@ export default function FechamentoConsultorPage() {
 
   // ─── Tab: Resumo ──────────────────────────────────────────────────────────
 
-  function TabBizify() {
-    const bz = data?.bizify
+  function TabNFeconnect() {
+    const bz = data?.nfeconnect
     const h = bz?.horistas ?? []
     const b = bz?.banco_horas ?? []
     const f = bz?.fixos ?? []
@@ -1191,19 +1191,19 @@ export default function FechamentoConsultorPage() {
     const vazio = h.length === 0 && b.length === 0 && f.length === 0
     return (
       <div>
-        {/* Cabeçalho Bizify (mesmos campos do consultor, com o logo Bizify) */}
+        {/* Cabeçalho NFeconnect (mesmos campos do consultor, com o logo NFeconnect) */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-bizify.png" alt="Bizify" className="h-9 w-auto" />
+            <img src="/logo-nfeconnect.png" alt="NFeconnect" className="h-9 w-auto" />
             <div>
-              <h3 className="text-sm font-semibold text-zinc-100">Fechamento Bizify</h3>
+              <h3 className="text-sm font-semibold text-zinc-100">Fechamento NFeconnect</h3>
               <p className="text-xs text-zinc-400">Não entra no resultado da HD Think</p>
             </div>
           </div>
           {t && (
             <div className="text-right">
-              <p className="text-xs text-zinc-400">Total Geral Bizify</p>
+              <p className="text-xs text-zinc-400">Total Geral NFeconnect</p>
               <p className="text-lg font-bold text-zinc-100">{formatBRL(t.total_geral)}</p>
             </div>
           )}
@@ -1228,7 +1228,7 @@ export default function FechamentoConsultorPage() {
           </section>
         )}
         {vazio && (
-          <p className="py-8 text-center text-zinc-500 text-sm">Nenhum consultor Bizify no período</p>
+          <p className="py-8 text-center text-zinc-500 text-sm">Nenhum consultor NFeconnect no período</p>
         )}
       </div>
     )
@@ -1609,7 +1609,7 @@ export default function FechamentoConsultorPage() {
               {tab === 'banco_horas' && <TabBancoHoras />}
               {tab === 'fixo'        && <TabFixo />}
               {tab === 'resumo'      && <TabResumo />}
-              {tab === 'bizify'      && <TabBizify />}
+              {tab === 'nfeconnect'      && <TabNFeconnect />}
             </>
           )}
         </div>

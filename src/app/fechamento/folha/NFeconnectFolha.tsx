@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { PageHeader, Th, Tr, Td, Button, SkeletonTable, EmptyState } from '@/components/ds'
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
-// Folha da BIZIFY: lançamentos manuais (avulsos). Identidade (matrícula/nome/
+// Folha da NFECONNECT: lançamentos manuais (avulsos). Identidade (matrícula/nome/
 // operação) é da própria linha. Colunas próprias: Produção, Variável, Aj Custo,
 // Reemb, Adto (créditos) / Descontos, Adiantamento (débitos). Totais calculados.
 interface BizRow {
@@ -70,7 +70,7 @@ function fmtYearMonth(ym: string): string {
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
-export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; setYearMonth: (v: string) => void }) {
+export function NFeconnectFolha({ yearMonth, setYearMonth }: { yearMonth: string; setYearMonth: (v: string) => void }) {
   const [rows, setRows] = useState<BizRow[]>([])
   const [edits, setEdits] = useState<Record<string, BizEdit>>({})
   const [loading, setLoading] = useState(false)
@@ -88,7 +88,7 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
     setRows([])
     setEdits({})
     try {
-      const res = await api.get<{ data: BizRow[] }>(`/fechamento-folha/${yearMonth}?empresa=bizify`)
+      const res = await api.get<{ data: BizRow[] }>(`/fechamento-folha/${yearMonth}?empresa=nfeconnect`)
       const data = res.data ?? []
       setRows(data)
       const seed: Record<string, BizEdit> = {}
@@ -101,7 +101,7 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
       }
       setEdits(seed)
     } catch (err: unknown) {
-      toast.error(`Erro ao carregar a folha Bizify: ${err instanceof Error ? err.message : 'falha na API'}`)
+      toast.error(`Erro ao carregar a folha NFeconnect: ${err instanceof Error ? err.message : 'falha na API'}`)
     } finally {
       setLoading(false)
     }
@@ -154,7 +154,7 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
     }
     setRemovingKey(r.row_key)
     try {
-      await api.delete(`/fechamento-folha/${yearMonth}/manual/${encodeURIComponent(r.socio_key)}?empresa=bizify`)
+      await api.delete(`/fechamento-folha/${yearMonth}/manual/${encodeURIComponent(r.socio_key)}?empresa=nfeconnect`)
       setRows(prev => prev.filter(x => x.row_key !== r.row_key))
       toast.success('Linha removida.')
     } catch (err: unknown) {
@@ -168,7 +168,7 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
     if (!r.socio_key) { toast.error('Salve a linha antes de ocultar.'); return }
     setTogglingKey(r.row_key)
     try {
-      await api.post(`/fechamento-folha/${yearMonth}/cancel`, { empresa: 'bizify', socio_key: r.socio_key, cancelado })
+      await api.post(`/fechamento-folha/${yearMonth}/cancel`, { empresa: 'nfeconnect', socio_key: r.socio_key, cancelado })
       setRows(prev => prev.map(x => x.row_key === r.row_key ? { ...x, cancelado } : x))
     } catch (err: unknown) {
       toast.error(`Erro ao ${cancelado ? 'ocultar' : 'reativar'}: ${err instanceof Error ? err.message : 'falha na API'}`)
@@ -201,9 +201,9 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
           adiantamento: e.adiantamento ?? 0,
         })
       }
-      await api.post(`/fechamento-folha/${yearMonth}`, { empresa: 'bizify', entries })
+      await api.post(`/fechamento-folha/${yearMonth}`, { empresa: 'nfeconnect', entries })
       if (skipped > 0) toast.warning(`${skipped} linha(s) sem matrícula não foram salvas.`)
-      toast.success('Folha Bizify salva.')
+      toast.success('Folha NFeconnect salva.')
       await load()
     } catch (err: unknown) {
       toast.error(`Erro ao salvar: ${err instanceof Error ? err.message : 'falha na API'}`)
@@ -217,13 +217,13 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
     setExporting(true)
     try {
       const res = await fetch(
-        `/api/v1/fechamento-folha/${yearMonth}/export?empresa=bizify`,
+        `/api/v1/fechamento-folha/${yearMonth}/export?empresa=nfeconnect`,
         { credentials: 'same-origin', headers: { Accept: 'application/vnd.ms-excel' } },
       )
       if (!res.ok) throw new Error(`Erro ${res.status}`)
       const cd = res.headers.get('Content-Disposition') ?? ''
       const match = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
-      const filename = match ? decodeURIComponent(match[1]) : `Folha_Bizify_${yearMonth}.xls`
+      const filename = match ? decodeURIComponent(match[1]) : `Folha_NFeconnect_${yearMonth}.xls`
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -248,7 +248,7 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
     try {
       const fd = new FormData()
       fd.append('file', file)
-      const res = await api.post<{ imported: number }>(`/fechamento-folha/${yearMonth}/import-bizify`, fd)
+      const res = await api.post<{ imported: number }>(`/fechamento-folha/${yearMonth}/import-nfeconnect`, fd)
       toast.success(`${res.imported} lançamento(s) importado(s) (mesclado por matrícula).`)
       await load()
     } catch (err: unknown) {
@@ -262,7 +262,7 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
     <div className="space-y-6">
       <PageHeader
         icon={FileSpreadsheet}
-        title="Folha — Bizify"
+        title="Folha — NFeconnect"
         subtitle={`Lançamentos manuais — ${fmtYearMonth(yearMonth)}`}
         actions={
           <div className="flex items-center gap-3">
@@ -318,7 +318,7 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
         </div>
       )}
 
-      {/* Cards de totais da folha Bizify */}
+      {/* Cards de totais da folha NFeconnect */}
       {!loading && rows.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="rounded-xl p-4" style={{ background: 'var(--primary-soft)', border: '1px solid var(--ring)' }}>
@@ -359,10 +359,10 @@ export function BizifyFolha({ yearMonth, setYearMonth }: { yearMonth: string; se
         ) : visibleRows.length === 0 ? (
           <EmptyState
             icon={Users}
-            title={tab === 'canceladas' ? 'Nenhuma linha cancelada' : 'Nenhum lançamento Bizify'}
+            title={tab === 'canceladas' ? 'Nenhuma linha cancelada' : 'Nenhum lançamento NFeconnect'}
             description={tab === 'canceladas'
               ? 'Linhas ocultadas neste mês aparecem aqui.'
-              : 'Importe a planilha da Bizify ou clique em "Nova linha" para lançar manualmente.'}
+              : 'Importe a planilha da NFeconnect ou clique em "Nova linha" para lançar manualmente.'}
           />
         ) : (
           <div className="max-h-[70vh] overflow-auto rounded-2xl" style={{ border: '1px solid var(--brand-border)' }}>

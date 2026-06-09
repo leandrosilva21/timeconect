@@ -163,8 +163,8 @@ export const STATUS_META: Record<string, StatusMeta> = {
     variant: 'warning',
     priority: 4,
   },
-  bizify: {
-    label: 'Bizify',
+  nfeconnect: {
+    label: 'NFeconnect',
     variant: 'info',
     priority: 3,
   },

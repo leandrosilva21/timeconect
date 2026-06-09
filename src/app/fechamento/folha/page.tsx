@@ -15,7 +15,7 @@ import {
 import { MultiSelect } from '@/components/ui/multi-select'
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { UserFormModal } from '@/components/users/user-form-modal'
-import { BizifyFolha } from './BizifyFolha'
+import { NFeconnectFolha } from './NFeconnectFolha'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -200,8 +200,8 @@ export default function FechamentoFolhaPage() {
   const [categoria, setCategoria] = useState<'todos' | 'cooperados' | 'raho' | 'manuais'>('todos')
   // Cancelar/Reativar em andamento (por row_key) — desabilita a ação da linha.
   const [togglingKey, setTogglingKey] = useState<string | null>(null)
-  // Empresa (aba de topo): HD Think (cooperativa, esta tela) | Bizify (lançamentos manuais).
-  const [empresa, setEmpresa] = useState<'hdthink' | 'bizify'>('hdthink')
+  // Empresa (aba de topo): HD Think (cooperativa, esta tela) | NFeconnect (lançamentos manuais).
+  const [empresa, setEmpresa] = useState<'hdthink' | 'nfeconnect'>('hdthink')
 
   // ─── Modal "Novo usuário" (cadastro inline de cooperado) ────────────────────
   // Cria um consultor cooperado direto no cadastro (POST /users), sem sair da
@@ -661,11 +661,11 @@ export default function FechamentoFolhaPage() {
     <AppLayout title="Fechamento — Folha Cooperativa">
       <div className="space-y-6">
 
-        {/* Abas por empresa: HD Think (cooperativa) | Bizify (lançamentos manuais) */}
+        {/* Abas por empresa: HD Think (cooperativa) | NFeconnect (lançamentos manuais) */}
         <div className="flex gap-1 border-b" role="tablist" style={{ borderColor: 'var(--brand-border)' }}>
           {([
             { key: 'hdthink' as const, label: 'HD Think' },
-            { key: 'bizify' as const, label: 'Bizify' },
+            { key: 'nfeconnect' as const, label: 'NFeconnect' },
           ]).map(c => {
             const active = empresa === c.key
             return (
@@ -682,8 +682,8 @@ export default function FechamentoFolhaPage() {
           })}
         </div>
 
-        {empresa === 'bizify' ? (
-          <BizifyFolha yearMonth={yearMonth} setYearMonth={setYearMonth} />
+        {empresa === 'nfeconnect' ? (
+          <NFeconnectFolha yearMonth={yearMonth} setYearMonth={setYearMonth} />
         ) : (<>
 
         <PageHeader

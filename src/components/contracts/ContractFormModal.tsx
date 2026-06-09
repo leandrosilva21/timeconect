@@ -76,7 +76,7 @@ interface SelectOption { id: number; name: string; code_prefix?: string | null }
 // Regra de combinação Tipo de Serviço × Tipo de Contrato:
 // - Projeto     → permite: BH Fixo, BH Mensal, Fechado          (proíbe: On Demand, SaaS, Cloud)
 // - Sustentação → permite: BH Fixo, BH Mensal, On Demand, Cloud (proíbe: Fechado, SaaS)
-// - Bizify      → permite: BH Fixo, Fechado, On Demand, SaaS    (proíbe: BH Mensal, Cloud)
+// - NFeconnect      → permite: BH Fixo, Fechado, On Demand, SaaS    (proíbe: BH Mensal, Cloud)
 // Subprojeto (filho) → adicionalmente proíbe BH Mensal, SaaS e Cloud (mensalidade
 // fica no projeto pai; filho herda regra de cobrança).
 // O contract_type atualmente selecionado é sempre mantido visível (caso de edição
@@ -90,15 +90,15 @@ const allowedForService = (
   const sn = (serviceTypeName ?? '').toLowerCase()
   const isProjeto = sn.includes('projeto')
   const isSustenta = sn.includes('sustenta')
-  const isBizify = sn.includes('bizify')
-  if (!isProjeto && !isSustenta && !isBizify && !isSubproject) return contractTypes
+  const isNFeconnect = sn.includes('nfeconnect')
+  if (!isProjeto && !isSustenta && !isNFeconnect && !isSubproject) return contractTypes
   return contractTypes.filter(ct => {
     if (String(ct.id) === String(selectedContractTypeId ?? '')) return true
     const n = String(ct.name ?? '').toLowerCase()
     if (isSubproject && (n.includes('banco de horas mensal') || n.includes('saas') || n === 'cloud')) return false
     if (isProjeto && (n.includes('saas') || n === 'cloud')) return false
     if (isSustenta && (n.includes('fechado') || n.includes('saas'))) return false
-    if (isBizify && (n.includes('banco de horas mensal') || n === 'cloud')) return false
+    if (isNFeconnect && (n.includes('banco de horas mensal') || n === 'cloud')) return false
     return true
   })
 }
@@ -1040,7 +1040,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                 value={form.service_type_id}
                 onChange={v => {
                   const stName = (serviceTypes.find(s => String(s.id) === String(v))?.name ?? '').toLowerCase()
-                  const isSust = stName.includes('cloud') || stName.includes('bizify')
+                  const isSust = stName.includes('cloud') || stName.includes('nfeconnect')
                     || stName.includes('sustentacao') || stName.includes('sustentação')
                   setForm(f => ({ ...f, service_type_id: v, categoria: isSust ? 'sustentacao' : 'projeto' }))
                 }}

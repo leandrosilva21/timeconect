@@ -4233,7 +4233,7 @@ function KanbanContent() {
       .sort((a, b) => a.kanban_order - b.kanban_order)
   }
 
-  const isSustType = (st?: string | null) => /sustentac|cloud|bizify/i.test(st ?? '')
+  const isSustType = (st?: string | null) => /sustentac|cloud|nfeconnect/i.test(st ?? '')
 
   const projectsInCol = (colId: string): ProjectCard[] =>
     projectCards

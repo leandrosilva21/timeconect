@@ -320,7 +320,7 @@ export default function BankHoursMonthlyPage() {
     if (!st) return false
     const c = (st.code ?? '').toLowerCase()
     const n = (st.name ?? '').toLowerCase()
-    return c === 'sustentacao' || /sustenta|cloud|bizify/.test(n)
+    return c === 'sustentacao' || /sustenta|cloud|nfeconnect/.test(n)
   })()
 
   // Abas "Sustentação" e "Indicadores" só em contrato de sustentação; "Projetos"

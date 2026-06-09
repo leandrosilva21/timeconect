@@ -292,7 +292,7 @@ export default function OnDemandPage() {
     if (!st) return false
     const c = (st.code ?? '').toLowerCase()
     const n = (st.name ?? '').toLowerCase()
-    return c === 'sustentacao' || /sustenta|cloud|bizify/.test(n)
+    return c === 'sustentacao' || /sustenta|cloud|nfeconnect/.test(n)
   })()
   // Se a aba Sustentação sumir enquanto ativa, volta pra Visão Geral.
   useEffect(() => {
