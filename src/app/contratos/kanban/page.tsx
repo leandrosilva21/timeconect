@@ -497,7 +497,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
               {userRole === 'admin' && p && (
                 <button onClick={() => setShowEdit(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-                  style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid rgba(0,245,255,0.2)' }}>
+                  style={{ background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid rgba(251, 146, 60,0.2)' }}>
                   <ExternalLink size={11} /> Editar
                 </button>
               )}
@@ -915,7 +915,7 @@ function ProjectViewModal({ projectId, onClose, userRole, initialTab }: {
                   return (
                     <>
                       {/* Bloco 1 — RECEITA */}
-                      <div className="rounded-xl p-4" style={{ background: 'var(--primary-soft)', border: '1px solid rgba(0,245,255,0.18)' }}>
+                      <div className="rounded-xl p-4" style={{ background: 'var(--primary-soft)', border: '1px solid rgba(251, 146, 60,0.18)' }}>
                         <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'var(--primary)' }}>
                           <DollarSign size={11} />Receita {isOnDemand && <span className="text-[9px] font-normal ml-1 opacity-70">(On Demand — horas × R$/h)</span>}
                         </p>
@@ -1295,7 +1295,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
-      <div className="flex flex-col rounded-2xl w-full max-w-5xl max-h-[94vh]" style={{ background: 'var(--brand-surface)', border: '1px solid rgba(0,245,255,0.25)' }}>
+      <div className="flex flex-col rounded-2xl w-full max-w-5xl max-h-[94vh]" style={{ background: 'var(--brand-surface)', border: '1px solid rgba(251, 146, 60,0.25)' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--brand-subtle)' }}>{d.code}</p>
@@ -1346,7 +1346,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                       </div>
                     ))}
                     {pendingAttach.map((pf, i) => (
-                      <div key={`pend-${i}`} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(0,245,255,0.04)', border: '1px solid rgba(0,245,255,0.15)' }}>
+                      <div key={`pend-${i}`} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(251, 146, 60,0.04)', border: '1px solid rgba(251, 146, 60,0.15)' }}>
                         <div className="min-w-0">
                           <p className="text-xs truncate" style={{ color: 'var(--brand-text)' }}>{pf.file.name}</p>
                           <p className="text-[10px]" style={{ color: 'var(--brand-subtle)' }}>{pf.type} · aguardando salvar</p>
@@ -1417,7 +1417,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 const isSustentacao = stName.includes('sustenta')
                 if (!isAdmin || !isSustentacao) return null
                 return (
-                  <div className="rounded-xl p-3 mt-2" style={{ background: 'var(--primary-soft)', border: '1px solid rgba(0,245,255,0.2)' }}>
+                  <div className="rounded-xl p-3 mt-2" style={{ background: 'var(--primary-soft)', border: '1px solid rgba(251, 146, 60,0.2)' }}>
                     <label style={lStyle} className="block mb-1">Gerenciado por outro coordenador</label>
                     <p className="text-[10px] mb-2" style={{ color: 'var(--brand-subtle)' }}>
                       Ao selecionar um coordenador, o card sai da fila de sustentação e migra pra fila dele.
@@ -1481,7 +1481,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
         </div>
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t shrink-0" style={{ borderColor: 'var(--brand-border)' }}>
           <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
-          <button onClick={handleSave} disabled={saving} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: saving ? 'var(--primary-soft)' : 'rgba(0,245,255,0.1)', color: 'var(--primary)', border: '1px solid rgba(0,245,255,0.3)', opacity: saving ? 0.6 : 1 }}>
+          <button onClick={handleSave} disabled={saving} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: saving ? 'var(--primary-soft)' : 'rgba(251, 146, 60,0.1)', color: 'var(--primary)', border: '1px solid rgba(251, 146, 60,0.3)', opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Salvando...' : 'Salvar Alterações'}
           </button>
         </div>
@@ -1500,7 +1500,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 </p>
                 <div className="flex items-center justify-end gap-3">
                   <button onClick={() => setMovideskConflict(null)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
-                  <button onClick={() => setMovideskStep('migrate')} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: 'rgba(0,245,255,0.1)', color: 'var(--primary)', border: '1px solid rgba(0,245,255,0.3)' }}>Sim, mudar</button>
+                  <button onClick={() => setMovideskStep('migrate')} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: 'rgba(251, 146, 60,0.1)', color: 'var(--primary)', border: '1px solid rgba(251, 146, 60,0.3)' }}>Sim, mudar</button>
                 </div>
               </>
             )}
@@ -1512,7 +1512,7 @@ function ProjectInlineEditModal({ project, onClose, onSaved }: { project: Projec
                 </p>
                 <div className="flex items-center justify-end gap-3">
                   <button onClick={() => submitMovideskSwap(false)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Não migrar</button>
-                  <button onClick={() => submitMovideskSwap(true)} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: 'rgba(0,245,255,0.1)', color: 'var(--primary)', border: '1px solid rgba(0,245,255,0.3)' }}>Sim, migrar</button>
+                  <button onClick={() => submitMovideskSwap(true)} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: 'rgba(251, 146, 60,0.1)', color: 'var(--primary)', border: '1px solid rgba(251, 146, 60,0.3)' }}>Sim, migrar</button>
                 </div>
               </>
             )}
@@ -1583,7 +1583,7 @@ function ProjectStatusModal({ projectId, projectName, currentStatus, onClose, on
         </div>
         <div className="flex justify-end gap-2 px-5 py-4 border-t" style={{ borderColor: 'var(--brand-border)' }}>
           <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-medium hover:bg-[var(--surface-hover)]" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
-          <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded-xl text-xs font-semibold" style={{ background: 'rgba(0,245,255,0.1)', color: 'var(--primary)', border: '1px solid rgba(0,245,255,0.3)', opacity: saving ? 0.6 : 1 }}>
+          <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded-xl text-xs font-semibold" style={{ background: 'rgba(251, 146, 60,0.1)', color: 'var(--primary)', border: '1px solid rgba(251, 146, 60,0.3)', opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Salvando...' : 'Confirmar'}
           </button>
         </div>
@@ -3044,7 +3044,7 @@ function KanbanContent() {
                     : isSust    ? `${col.color}35`
                     : isBizify  ? `${BIZIFY_COLOR}35`
                     : isAporteCol ? `${APORTE_COLOR}45`
-                    : isCoord   ? 'rgba(0,245,255,0.15)'
+                    : isCoord   ? 'rgba(251, 146, 60,0.15)'
                     : isPronto  ? `${PRONTO_COLOR}40`
                     : 'var(--brand-border)'
 

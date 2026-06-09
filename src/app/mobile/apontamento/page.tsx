@@ -66,7 +66,7 @@ function ProgressBar({ step, total }: { step: number; total: number }) {
       {Array.from({ length: total }).map((_, i) => (
         <div key={i} style={{
           flex: 1, height: 3, borderRadius: 99, transition: 'background 0.25s',
-          background: i <= step ? '#00F5FF' : 'var(--brand-border)',
+          background: i <= step ? '#FB923C' : 'var(--brand-border)',
         }} />
       ))}
     </div>
@@ -280,7 +280,7 @@ export default function MobileApontamento() {
   // ── Loading state ────────────────────────────────────────────────────────────
   if (loading || !user) return (
     <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid rgba(0,245,255,0.2)', borderTopColor: '#00F5FF', animation: 'spin 0.8s linear infinite' }} />
+      <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid rgba(251, 146, 60,0.2)', borderTopColor: '#FB923C', animation: 'spin 0.8s linear infinite' }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
@@ -324,12 +324,12 @@ export default function MobileApontamento() {
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               width: '100%', padding: '14px 16px', borderRadius: 14, marginBottom: 8,
-              background: form.customer_id === String(c.id) ? 'rgba(0,245,255,0.08)' : 'var(--brand-surface)',
-              border: form.customer_id === String(c.id) ? '1px solid rgba(0,245,255,0.3)' : '1px solid var(--brand-border)',
+              background: form.customer_id === String(c.id) ? 'rgba(251, 146, 60,0.08)' : 'var(--brand-surface)',
+              border: form.customer_id === String(c.id) ? '1px solid rgba(251, 146, 60,0.3)' : '1px solid var(--brand-border)',
               cursor: 'pointer', textAlign: 'left', ...tap,
             }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--brand-text)' }}>{c.name}</span>
-            {form.customer_id === String(c.id) && <Check size={16} color="#00F5FF" />}
+            {form.customer_id === String(c.id) && <Check size={16} color="#FB923C" />}
           </button>
         ))}
       </div>
@@ -374,8 +374,8 @@ export default function MobileApontamento() {
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '14px 16px', borderRadius: 14, width: '100%', cursor: 'pointer',
-                  background: form.customer_id ? 'rgba(0,245,255,0.06)' : 'var(--brand-surface)',
-                  border: form.customer_id ? '1px solid rgba(0,245,255,0.3)' : '1px solid var(--brand-border)',
+                  background: form.customer_id ? 'rgba(251, 146, 60,0.06)' : 'var(--brand-surface)',
+                  border: form.customer_id ? '1px solid rgba(251, 146, 60,0.3)' : '1px solid var(--brand-border)',
                   textAlign: 'left', ...tap,
                 }}>
                 <span style={{
@@ -384,7 +384,7 @@ export default function MobileApontamento() {
                 }}>
                   {form.customer_name || 'Selecionar cliente…'}
                 </span>
-                <ChevronRight size={18} color={form.customer_id ? '#00F5FF' : 'var(--brand-subtle)'} />
+                <ChevronRight size={18} color={form.customer_id ? '#FB923C' : 'var(--brand-subtle)'} />
               </button>
             </div>
 
@@ -422,8 +422,8 @@ export default function MobileApontamento() {
                       style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '14px 16px', borderRadius: 14, width: '100%', cursor: 'pointer',
-                        background: form.project_id === String(p.id) ? 'rgba(0,245,255,0.08)' : 'var(--brand-surface)',
-                        border: form.project_id === String(p.id) ? '1px solid rgba(0,245,255,0.3)' : '1px solid var(--brand-border)',
+                        background: form.project_id === String(p.id) ? 'rgba(251, 146, 60,0.08)' : 'var(--brand-surface)',
+                        border: form.project_id === String(p.id) ? '1px solid rgba(251, 146, 60,0.3)' : '1px solid var(--brand-border)',
                         textAlign: 'left', ...tap,
                       }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
@@ -433,7 +433,7 @@ export default function MobileApontamento() {
                         )}
                       </div>
                       {form.project_id === String(p.id)
-                        ? <Check size={16} color="#00F5FF" />
+                        ? <Check size={16} color="#FB923C" />
                         : <ChevronRight size={16} color="var(--brand-subtle)" />
                       }
                     </button>
@@ -470,7 +470,7 @@ export default function MobileApontamento() {
                   style={{
                     flex: 1, padding: '8px 0', borderRadius: 9, fontSize: 13, fontWeight: 600,
                     cursor: 'pointer', border: 'none', transition: 'all 0.15s',
-                    background: form.tipo === t ? '#00F5FF' : 'transparent',
+                    background: form.tipo === t ? '#FB923C' : 'transparent',
                     color: form.tipo === t ? '#0a0a0a' : 'var(--brand-subtle)',
                     ...tap,
                   }}>
@@ -510,14 +510,14 @@ export default function MobileApontamento() {
                 <input type="text" inputMode="decimal" placeholder="0:00"
                   value={form.total_hours}
                   onChange={e => { const v = e.target.value.replace(/[^\d:.,]/g, ''); set('total_hours', v) }}
-                  style={{ ...timeField, fontSize: 36, fontWeight: 800, color: '#00F5FF', letterSpacing: 2 }} />
+                  style={{ ...timeField, fontSize: 36, fontWeight: 800, color: '#FB923C', letterSpacing: 2 }} />
               </div>
             )}
 
             {/* Pill total calculado */}
             {form.tipo === 'horario' && form.total_hours && (
-              <div style={{ padding: '10px 16px', borderRadius: 10, textAlign: 'center', background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.15)' }}>
-                <span style={{ fontSize: 14, color: '#00F5FF', fontWeight: 600 }}>
+              <div style={{ padding: '10px 16px', borderRadius: 10, textAlign: 'center', background: 'rgba(251, 146, 60,0.06)', border: '1px solid rgba(251, 146, 60,0.15)' }}>
+                <span style={{ fontSize: 14, color: '#FB923C', fontWeight: 600 }}>
                   Total: {form.total_hours}
                 </span>
               </div>
@@ -600,9 +600,9 @@ export default function MobileApontamento() {
             style={{
               width: '100%', padding: '16px', borderRadius: 14, fontSize: 16, fontWeight: 700,
               cursor: canAdvanceStep1() ? 'pointer' : 'not-allowed', transition: 'all 0.15s',
-              background: canAdvanceStep1() ? 'rgba(0,245,255,0.1)' : 'rgba(255,255,255,0.04)',
-              border: canAdvanceStep1() ? '1px solid rgba(0,245,255,0.3)' : '1px solid var(--brand-border)',
-              color: canAdvanceStep1() ? '#00F5FF' : 'var(--brand-subtle)', ...tap,
+              background: canAdvanceStep1() ? 'rgba(251, 146, 60,0.1)' : 'rgba(255,255,255,0.04)',
+              border: canAdvanceStep1() ? '1px solid rgba(251, 146, 60,0.3)' : '1px solid var(--brand-border)',
+              color: canAdvanceStep1() ? '#FB923C' : 'var(--brand-subtle)', ...tap,
             }}>
             Revisar →
           </button>
@@ -613,7 +613,7 @@ export default function MobileApontamento() {
             style={{
               width: '100%', padding: '16px', borderRadius: 14, fontSize: 16, fontWeight: 700,
               cursor: saving ? 'not-allowed' : 'pointer', border: 'none',
-              background: saving ? 'rgba(255,255,255,0.04)' : '#00F5FF',
+              background: saving ? 'rgba(255,255,255,0.04)' : '#FB923C',
               color: saving ? 'var(--brand-subtle)' : '#0a0a0a',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               transition: 'all 0.15s', ...tap,

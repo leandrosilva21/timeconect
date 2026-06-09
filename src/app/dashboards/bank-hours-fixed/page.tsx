@@ -143,13 +143,13 @@ function ConsumedBreakdownCard({ total, projetos, sustentacao, arquitetura }: { 
   return (
     <div className="rounded-2xl p-5 flex flex-col gap-3 min-w-0 overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
       <div className="flex items-center gap-2 min-w-0">
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(0,245,255,0.08)' }}>
-          <Clock size={13} color="#00F5FF" />
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(251, 146, 60,0.08)' }}>
+          <Clock size={13} color="#FB923C" />
         </div>
         <span className="text-xs font-semibold uppercase tracking-wider truncate" style={{ color: 'var(--brand-subtle)' }}>Consumo Acumulado</span>
       </div>
       <div className="flex items-end gap-1.5">
-        <span className="text-4xl font-extrabold tracking-tight" style={{ color: '#00F5FF', lineHeight: 1 }}>{fmtH(total)}</span>
+        <span className="text-4xl font-extrabold tracking-tight" style={{ color: '#FB923C', lineHeight: 1 }}>{fmtH(total)}</span>
         <span className="text-base font-medium mb-0.5" style={{ color: 'var(--brand-muted)' }}>h</span>
       </div>
       {(projetos !== undefined || sustentacao !== undefined || showArq) && (
@@ -601,7 +601,7 @@ export default function BankHoursFixedPage() {
                     key={p.id}
                     className="transition-colors"
                     style={{ borderBottom: '1px solid var(--brand-border)' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,245,255,0.03)')}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(251, 146, 60,0.03)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
                     <td className="px-5 py-3.5">
@@ -620,7 +620,7 @@ export default function BankHoursFixedPage() {
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
-                      <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{p.status_display}</span>
+                      <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(251, 146, 60,0.08)', color: '#FB923C' }}>{p.status_display}</span>
                     </td>
                     <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--brand-muted)' }}>{p.contract_type_display}</td>
                     <td className="px-5 py-3.5 text-right font-medium" style={{ color: 'var(--brand-text)' }}>
@@ -660,8 +660,8 @@ export default function BankHoursFixedPage() {
 
         {/* Page header */}
         <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(0,245,255,0.08)' }}>
-            <BarChart2 size={16} color="#00F5FF" />
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(251, 146, 60,0.08)' }}>
+            <BarChart2 size={16} color="#FB923C" />
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--brand-text)' }}>Banco de Horas Fixo</h1>
@@ -764,7 +764,7 @@ export default function BankHoursFixedPage() {
                     key={p.id}
                     className="transition-colors"
                     style={{ borderBottom: '1px solid var(--brand-border)' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,245,255,0.03)')}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(251, 146, 60,0.03)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
                     <td className="px-5 py-3.5">
@@ -772,7 +772,7 @@ export default function BankHoursFixedPage() {
                     </td>
                     <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--brand-text)' }}>{p.name}</td>
                     <td className="px-5 py-3.5">
-                      <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{p.status_display ?? p.status ?? '—'}</span>
+                      <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(251, 146, 60,0.08)', color: '#FB923C' }}>{p.status_display ?? p.status ?? '—'}</span>
                     </td>
                     <td className="px-5 py-3.5 text-right">
                       <button
@@ -913,11 +913,11 @@ export default function BankHoursFixedPage() {
                                 </tr>
                               ) : summary.contributed_hours_history!.map(item => (
                                 <tr key={item.id} style={{ borderBottom: '1px solid var(--brand-border)' }}
-                                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,245,255,0.03)')}
+                                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(251, 146, 60,0.03)')}
                                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                 >
                                   <td className="px-5 py-3" style={{ color: 'var(--brand-text)' }}>{item.project?.code} — {item.project?.name}</td>
-                                  <td className="px-5 py-3 font-bold" style={{ color: '#00F5FF' }}>{Number(item.contributed_hours ?? item.difference ?? 0).toFixed(0)}h</td>
+                                  <td className="px-5 py-3 font-bold" style={{ color: '#FB923C' }}>{Number(item.contributed_hours ?? item.difference ?? 0).toFixed(0)}h</td>
                                   <td className="px-5 py-3" style={{ color: 'var(--brand-muted)' }}>{MOTIVO_LABEL[item.motivo ?? 'aporte'] ?? 'Aporte'}</td>
                                   <td className="px-5 py-3" style={{ color: 'var(--brand-muted)' }}>{fmtBRL(item.hourly_rate ?? null)}</td>
                                   <td className="px-5 py-3" style={{ color: 'var(--brand-muted)' }}>{fmtBRL(item.total_value ?? null)}</td>
@@ -1168,7 +1168,7 @@ function TimesheetDetailModal({ ts, onClose }: { ts: any; onClose: () => void })
       <div onClick={e => e.stopPropagation()} className="w-full max-w-2xl mt-8 rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
         <div className="px-6 py-5 flex items-start justify-between gap-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(0,245,255,0.10)' }}>
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(251, 146, 60,0.10)' }}>
               <Clock size={20} style={{ color: 'var(--primary)' }} />
             </div>
             <div>
@@ -1181,7 +1181,7 @@ function TimesheetDetailModal({ ts, onClose }: { ts: any; onClose: () => void })
 
         <div className="p-6 space-y-4">
           {period && (
-            <div className="rounded-xl p-4" style={{ background: 'rgba(0,245,255,0.05)', border: '1px solid rgba(0,245,255,0.2)' }}>
+            <div className="rounded-xl p-4" style={{ background: 'rgba(251, 146, 60,0.05)', border: '1px solid rgba(251, 146, 60,0.2)' }}>
               <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Período</p>
               <p className="text-2xl font-bold" style={{ color: 'var(--primary)' }}>
                 {period} <span className="text-base font-normal" style={{ color: 'var(--text-muted)' }}>({hoursDisplay})</span>

@@ -13,7 +13,7 @@ import {
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
 const PALETTE = [
-  '#00F5FF', '#8B5CF6', '#10B981', '#F59E0B',
+  '#FB923C', '#8B5CF6', '#10B981', '#F59E0B',
   '#EF4444', '#3B82F6', '#EC4899', '#14B8A6',
   '#F97316', '#A78BFA',
 ]
@@ -258,7 +258,7 @@ function TimesheetsModal({
 function DetailInfoRow({ icon: Icon, label, children }: { icon: React.ElementType; label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-3 py-3" style={{ borderBottom: '1px solid var(--brand-border)' }}>
-      <span className="mt-0.5 shrink-0 p-1.5 rounded-lg" style={{ background: 'rgba(0,245,255,0.06)', color: 'var(--brand-primary)' }}>
+      <span className="mt-0.5 shrink-0 p-1.5 rounded-lg" style={{ background: 'rgba(251, 146, 60,0.06)', color: 'var(--brand-primary)' }}>
         <Icon size={12} />
       </span>
       <div className="flex-1 min-w-0">
@@ -334,7 +334,7 @@ function TimesheetDetailModal({ id, onClose }: { id: number; onClose: () => void
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold"
-                    style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>
+                    style={{ background: 'rgba(251, 146, 60,0.08)', color: 'var(--brand-primary)' }}>
                     <Globe size={10} /> Web (manual)
                   </span>
                 )}
@@ -348,7 +348,7 @@ function TimesheetDetailModal({ id, onClose }: { id: number; onClose: () => void
                 {ts.start_time} – {ts.end_time}
                 {ts.effort_hours && (
                   <span className="ml-2 px-2 py-0.5 rounded text-xs font-bold"
-                    style={{ background: 'rgba(0,245,255,0.1)', color: 'var(--brand-primary)' }}>
+                    style={{ background: 'rgba(251, 146, 60,0.1)', color: 'var(--brand-primary)' }}>
                     {ts.effort_hours}
                   </span>
                 )}
@@ -390,7 +390,7 @@ function TimesheetDetailModal({ id, onClose }: { id: number; onClose: () => void
               )}
               {ts.reviewedBy && (
                 <div className="flex items-center gap-2 px-4 py-2.5 mt-3 rounded-xl text-xs"
-                  style={{ background: 'rgba(0,245,255,0.04)', border: '1px solid var(--brand-border)', color: 'var(--brand-subtle)' }}>
+                  style={{ background: 'rgba(251, 146, 60,0.04)', border: '1px solid var(--brand-border)', color: 'var(--brand-subtle)' }}>
                   <CheckCircle size={12} style={{ color: 'var(--brand-primary)' }} />
                   Revisado por <strong style={{ color: 'var(--brand-muted)' }}>{ts.reviewedBy.name}</strong>
                   {ts.reviewed_at && ` em ${fmtDate(ts.reviewed_at.slice(0, 10))}`}
@@ -706,7 +706,7 @@ export default function DashboardIndicators({ basePath, params, disabled = false
                     <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
                     <XAxis dataKey="month" tick={AXIS_TICK} />
                     <YAxis yAxisId="left" tick={AXIS_TICK} allowDecimals={false}
-                      label={{ value: 'Tickets', angle: -90, position: 'insideLeft', fill: '#00F5FF', fontSize: 10, dx: 12 }} />
+                      label={{ value: 'Tickets', angle: -90, position: 'insideLeft', fill: '#FB923C', fontSize: 10, dx: 12 }} />
                     <YAxis yAxisId="right" orientation="right" tick={AXIS_TICK}
                       tickFormatter={v => `${v}h`}
                       label={{ value: 'Horas', angle: 90, position: 'insideRight', fill: '#8B5CF6', fontSize: 10, dx: -4 }} />
@@ -717,7 +717,7 @@ export default function DashboardIndicators({ basePath, params, disabled = false
                     />
                     <Legend wrapperStyle={{ fontSize: 11, color: '#9CA3AF', paddingTop: 8 }} />
                     <Line yAxisId="left" type="monotone" dataKey="ticket_count" name="Tickets"
-                      stroke="#00F5FF" strokeWidth={2} dot={{ fill: '#00F5FF', r: 3 }}
+                      stroke="#FB923C" strokeWidth={2} dot={{ fill: '#FB923C', r: 3 }}
                       activeDot={{ r: 6, style: { cursor: 'pointer' },
                         onClick: (_: any, payload: any) => {
                           if (payload?.payload?.month) openModal(buildMonthParams(payload.payload.month, params))

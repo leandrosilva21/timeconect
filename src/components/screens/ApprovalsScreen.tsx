@@ -356,7 +356,7 @@ function ExpInfoRow({ icon: Icon, label, value, children, last }: {
     <div className={`flex items-center gap-2.5 px-3.5 py-1.5 ${!last ? 'border-b' : ''}`}
       style={!last ? { borderColor: 'var(--brand-border)' } : undefined}>
       <span className="shrink-0 p-1 rounded-md"
-        style={{ background: 'rgba(0,245,255,0.06)', color: 'var(--brand-primary)' }}>
+        style={{ background: 'rgba(251, 146, 60,0.06)', color: 'var(--brand-primary)' }}>
         <Icon size={12} />
       </span>
       <div className="flex-1 min-w-0">
@@ -411,7 +411,7 @@ function ExpApproveModal({
 
         {/* Header */}
         <div className="px-4 pt-3.5 pb-2.5 flex items-center gap-2.5">
-          <div className="p-1.5 rounded-lg shrink-0" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>
+          <div className="p-1.5 rounded-lg shrink-0" style={{ background: 'rgba(251, 146, 60,0.08)', color: 'var(--brand-primary)' }}>
             <Receipt size={16} />
           </div>
           <div className="flex-1 min-w-0">
@@ -435,7 +435,7 @@ function ExpApproveModal({
 
           {/* Valor hero */}
           <div className="rounded-xl px-3.5 py-2.5 flex items-baseline justify-between gap-2"
-            style={{ background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.15)' }}>
+            style={{ background: 'rgba(251, 146, 60,0.06)', border: '1px solid rgba(251, 146, 60,0.15)' }}>
             <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--brand-subtle)' }}>Valor Total</p>
             <p className="text-xl font-bold" style={{ color: 'var(--brand-primary)' }}>{fmtBRL(Number(item.amount))}</p>
           </div>
@@ -1008,7 +1008,7 @@ export function ApprovalsScreen({ scope, embedded, leadOptions }: ApprovalsScree
               )}
               {scope !== 'investimento' && ([
                 { id: 'sustentacao',  label: 'Sustentação', color: '#f59e0b',            bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)' },
-                { id: 'projeto',      label: 'Projeto',     color: '#00F5FF',            bg: 'rgba(0,245,255,0.12)',   border: 'rgba(0,245,255,0.35)' },
+                { id: 'projeto',      label: 'Projeto',     color: '#FB923C',            bg: 'rgba(251, 146, 60,0.12)',   border: 'rgba(251, 146, 60,0.35)' },
                 { id: 'bizify',       label: 'Bizify',      color: '#a78bfa',            bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)' },
                 { id: 'investimento', label: 'Investimento', color: '#ef4444',           bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.35)' },
               ] as const).map(opt => {
@@ -1124,7 +1124,7 @@ export function ApprovalsScreen({ scope, embedded, leadOptions }: ApprovalsScree
               {tab === 'timesheets' && (
                 <th
                   className="text-center px-3 py-2.5 font-medium hidden lg:table-cell whitespace-nowrap"
-                  style={{ color: 'var(--brand-primary)', background: 'rgba(0,245,255,0.06)', borderLeft: '2px solid var(--brand-primary)', borderRight: '2px solid var(--brand-primary)' }}
+                  style={{ color: 'var(--brand-primary)', background: 'rgba(251, 146, 60,0.06)', borderLeft: '2px solid var(--brand-primary)', borderRight: '2px solid var(--brand-primary)' }}
                 >Hist. de Hs Tikets</th>
               )}
               <th className="text-left px-3 py-2.5 text-zinc-500 font-medium">Data</th>
@@ -1198,7 +1198,7 @@ export function ApprovalsScreen({ scope, embedded, leadOptions }: ApprovalsScree
                 </td>
                 <td
                   className="px-3 py-2.5 font-mono text-center hidden lg:table-cell"
-                  style={{ background: 'rgba(0,245,255,0.06)', borderLeft: '2px solid var(--brand-primary)', borderRight: '2px solid var(--brand-primary)' }}
+                  style={{ background: 'rgba(251, 146, 60,0.06)', borderLeft: '2px solid var(--brand-primary)', borderRight: '2px solid var(--brand-primary)' }}
                 >
                   {ts.ticket_total_minutes != null
                     ? <span style={{ color: ticketTotalColor(ts.ticket_total_minutes), fontWeight: 700, fontSize: '0.875rem' }}>{fmtMin(ts.ticket_total_minutes)}</span>

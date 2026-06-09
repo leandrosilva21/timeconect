@@ -185,7 +185,7 @@ const printStyles = `
   .section-header { display: flex; justify-content: space-between; align-items: center; background: #ede9fe; border-left: 3px solid #7c3aed; padding: 6px 10px; margin-bottom: 6px; border-radius: 0 4px 4px 0; }
   .section-title { font-size: 11px; font-weight: 700; color: #5b21b6; text-transform: uppercase; letter-spacing: 0.4px; }
   .section-total { font-size: 12px; font-weight: 700; color: #5b21b6; }
-  .section-header.despesa { background: #cffafe; border-left-color: #0891b2; }
+  .section-header.despesa { background: #cffafe; border-left-color: #ea580c; }
   .section-header.despesa .section-title, .section-header.despesa .section-total { color: #0e7490; }
   .client-header { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; margin: 8px 0 4px; border-bottom: 1px solid #ddd6fe; }
   .client-name { font-size: 11px; font-weight: 700; color: #1a1a1a; }

@@ -149,7 +149,7 @@ interface ExecutiveData {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CYAN   = '#00F5FF'
+const CYAN   = '#FB923C'
 const GREEN  = '#22c55e'
 const YELLOW = '#eab308'
 const RED    = '#ef4444'
@@ -294,7 +294,7 @@ function DebugClientesTab({ rows, onSync }: { rows: DebugClienteRow[]; onSync: (
           <span className="text-xs text-zinc-600">{filtered.length} de {rows.length} organizações</span>
           <button onClick={handleSync} disabled={syncing}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-            style={{ background: 'rgba(0,245,255,0.10)', border: '1px solid rgba(0,245,255,0.25)', color: '#00F5FF' }}>
+            style={{ background: 'rgba(251, 146, 60,0.10)', border: '1px solid rgba(251, 146, 60,0.25)', color: '#FB923C' }}>
             {syncing ? '⏳ Integrando...' : '⚡ Integrar agora'}
           </button>
         </div>
@@ -335,7 +335,7 @@ function DebugClientesTab({ rows, onSync }: { rows: DebugClienteRow[]; onSync: (
           {([['all', 'Todos CNPJ'], ['com', 'Com CNPJ'], ['sem', 'Sem CNPJ']] as const).map(([v, l]) => (
             <button key={v} onClick={() => setCnpjFilter(v)}
               className="px-3 py-1.5 font-medium transition-colors"
-              style={{ background: cnpjFilter === v ? 'rgba(0,245,255,0.10)' : 'transparent', color: cnpjFilter === v ? CYAN : '#71717a' }}>
+              style={{ background: cnpjFilter === v ? 'rgba(251, 146, 60,0.10)' : 'transparent', color: cnpjFilter === v ? CYAN : '#71717a' }}>
               {l}
             </button>
           ))}
@@ -435,7 +435,7 @@ function DebugResponsaveisTab({ rows, onSync }: { rows: DebugResponsavelRow[]; o
           <span className="text-xs text-zinc-600">{filtered.length} de {rows.length} responsáveis</span>
           <button onClick={handleSync} disabled={syncing}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-            style={{ background: 'rgba(0,245,255,0.10)', border: '1px solid rgba(0,245,255,0.25)', color: '#00F5FF' }}>
+            style={{ background: 'rgba(251, 146, 60,0.10)', border: '1px solid rgba(251, 146, 60,0.25)', color: '#FB923C' }}>
             {syncing ? '⏳ Aguardando...' : '⚡ Integrar agora'}
           </button>
         </div>
@@ -635,8 +635,8 @@ function MultiSelect({ label, options, selected, onChange, placeholder = 'Buscar
       <label className="text-[10px] text-zinc-500 font-medium uppercase tracking-wide">{label}</label>
       <button type="button" onClick={() => setOpen(o => !o)}
         className="text-xs rounded-lg px-2.5 py-1.5 border outline-none flex items-center justify-between gap-2"
-        style={{ background: 'var(--brand-surface)', borderColor: selected.length > 0 ? '#00F5FF' : 'var(--brand-border)', color: '#e4e4e7', minWidth: 160 }}>
-        <span style={{ color: selected.length > 0 ? '#00F5FF' : '#e4e4e7' }}>{triggerLabel}</span>
+        style={{ background: 'var(--brand-surface)', borderColor: selected.length > 0 ? '#FB923C' : 'var(--brand-border)', color: '#e4e4e7', minWidth: 160 }}>
+        <span style={{ color: selected.length > 0 ? '#FB923C' : '#e4e4e7' }}>{triggerLabel}</span>
         <ChevronDown size={12} className="text-zinc-500 shrink-0" />
       </button>
       {open && (
@@ -1009,7 +1009,7 @@ export default function SustentacaoPage() {
                   title={r.desc}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors"
                   style={{
-                    background: active ? 'rgba(0,245,255,0.10)' : 'var(--brand-bg)',
+                    background: active ? 'rgba(251, 146, 60,0.10)' : 'var(--brand-bg)',
                     border: active ? '1px solid var(--primary)' : '1px solid var(--brand-border)',
                     color: active ? 'var(--primary)' : 'var(--text)',
                   }}
@@ -1248,7 +1248,7 @@ export default function SustentacaoPage() {
           <div className="space-y-3">
           {/* Painel Contextual */}
           {contextStats && (
-            <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: 'rgba(0,245,255,0.2)', background: 'rgba(0,245,255,0.03)' }}>
+            <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: 'rgba(251, 146, 60,0.2)', background: 'rgba(251, 146, 60,0.03)' }}>
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-cyan-400 uppercase tracking-wide">
                   {contextStats.filter.responsavel.length > 0 && contextStats.filter.cliente.length > 0
@@ -1391,7 +1391,7 @@ export default function SustentacaoPage() {
               <input type="text" placeholder="# ou título..." value={queueSearch}
                 onChange={e => setQueueSearch(e.target.value)}
                 className="text-xs rounded-lg px-2.5 py-1.5 border outline-none"
-                style={{ background: 'var(--brand-surface)', borderColor: queueSearch ? '#00F5FF' : 'var(--brand-border)', color: '#e4e4e7', width: 155 }} />
+                style={{ background: 'var(--brand-surface)', borderColor: queueSearch ? '#FB923C' : 'var(--brand-border)', color: '#e4e4e7', width: 155 }} />
             </div>
             <MultiSelect label="Urgência"
               options={['Urgente', 'Alta', 'Normal', 'Baixa'].map(u => ({ value: u, label: u }))}
@@ -1889,7 +1889,7 @@ function RoutineDetailModal({ item, kind, onClose }: { item: any; kind: 'timeshe
       <div onClick={e => e.stopPropagation()} className="w-full max-w-2xl mt-8 rounded-2xl overflow-hidden" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
         <div className="px-6 py-5 flex items-start justify-between gap-4" style={{ borderBottom: '1px solid var(--brand-border)' }}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(0,245,255,0.10)' }}>
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(251, 146, 60,0.10)' }}>
               {isExp ? <DollarSign size={20} className="text-cyan-400" /> : <Clock size={20} className="text-cyan-400" />}
             </div>
             <div>
@@ -1901,7 +1901,7 @@ function RoutineDetailModal({ item, kind, onClose }: { item: any; kind: 'timeshe
         </div>
         <div className="p-6 space-y-3 text-white text-sm">
           {period && (
-            <div className="rounded-xl p-4 mb-2" style={{ background: 'rgba(0,245,255,0.05)', border: '1px solid rgba(0,245,255,0.2)' }}>
+            <div className="rounded-xl p-4 mb-2" style={{ background: 'rgba(251, 146, 60,0.05)', border: '1px solid rgba(251, 146, 60,0.2)' }}>
               <p className="text-xs uppercase tracking-wider mb-1 text-zinc-400">Período</p>
               <p className="text-2xl font-bold text-cyan-400">{period} <span className="text-base font-normal text-zinc-400">({hoursDisplay})</span></p>
             </div>

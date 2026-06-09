@@ -719,7 +719,7 @@ export default function FechamentoFolhaPage() {
                     onClick={() => setCategoria(val)}
                     className="px-2.5 py-1.5 font-medium transition-colors whitespace-nowrap"
                     style={{
-                      background: categoria === val ? 'rgba(0,245,255,0.12)' : 'transparent',
+                      background: categoria === val ? 'rgba(251, 146, 60,0.12)' : 'transparent',
                       color: categoria === val ? 'var(--text)' : 'var(--text-muted)',
                     }}
                   >

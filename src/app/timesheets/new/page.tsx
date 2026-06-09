@@ -265,7 +265,7 @@ function NewTimesheetForm() {
                   className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
                   style={active
                     ? { background: 'var(--brand-primary)', color: 'var(--primary-fg)' }
-                    : { background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.2)' }
+                    : { background: 'rgba(251, 146, 60,0.08)', color: 'var(--brand-primary)', border: '1px solid rgba(251, 146, 60,0.2)' }
                   }>{label}</button>
               )
             })}

@@ -640,7 +640,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
           {(['proposta', 'contrato', 'logo'] as const).map(t => (
             <button key={t} onClick={() => setSelectedAttachType(t)}
               className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-              style={{ background: selectedAttachType === t ? 'rgba(0,245,255,0.15)' : 'transparent', border: '1px solid var(--brand-border)', color: selectedAttachType === t ? 'var(--text)' : 'var(--text-muted)' }}>
+              style={{ background: selectedAttachType === t ? 'rgba(251, 146, 60,0.15)' : 'transparent', border: '1px solid var(--brand-border)', color: selectedAttachType === t ? 'var(--text)' : 'var(--text-muted)' }}>
               {ATTACHMENT_TYPE_LABEL[t]}
             </button>
           ))}
@@ -661,7 +661,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
         <div className="space-y-1">
           <p className="text-xs text-zinc-400">Aguardando upload ({pendingFiles.length})</p>
           {pendingFiles.map((pf, i) => (
-            <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(0,245,255,0.04)', border: '1px solid rgba(0,245,255,0.15)' }}>
+            <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(251, 146, 60,0.04)', border: '1px solid rgba(251, 146, 60,0.15)' }}>
               <div>
                 <p className="text-xs text-zinc-300">{pf.file.name}</p>
                 <p className="text-[10px] text-zinc-600">{ATTACHMENT_TYPE_LABEL[pf.type]} · {fmt(pf.file.size)}</p>
@@ -683,7 +683,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
             <h2 className="text-base font-semibold text-white">{internalEdit ? 'Editar Contrato' : 'Novo Contrato'}</h2>
             {(selectedContractType || form.service_type_id) && (
               <p className="text-[11px] text-zinc-500 mt-0.5 flex items-center gap-1.5">
-                {selectedContractType && <span style={{ color: '#00F5FF' }}>{selectedContractType.name}</span>}
+                {selectedContractType && <span style={{ color: '#FB923C' }}>{selectedContractType.name}</span>}
                 {selectedContractType && form.service_type_id && <span className="text-zinc-600">·</span>}
                 {form.service_type_id && <span>{serviceTypes.find(s => String(s.id) === String(form.service_type_id))?.name}</span>}
               </p>
@@ -1283,8 +1283,8 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                         <div key={cc.id}
                           className="flex items-center justify-between rounded-lg border px-3 py-2.5 cursor-pointer transition-colors"
                           style={{
-                            borderColor: alreadyAdded ? 'rgba(0,245,255,0.4)' : 'var(--brand-border)',
-                            background: alreadyAdded ? 'rgba(0,245,255,0.06)' : 'transparent',
+                            borderColor: alreadyAdded ? 'rgba(251, 146, 60,0.4)' : 'var(--brand-border)',
+                            background: alreadyAdded ? 'rgba(251, 146, 60,0.06)' : 'transparent',
                           }}
                           onClick={() => {
                             if (alreadyAdded) {
@@ -1299,7 +1299,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                             <p className="text-[10px] text-zinc-500">{[cc.cargo, cc.email].filter(Boolean).join(' · ')}</p>
                           </div>
                           <div className="w-4 h-4 rounded flex items-center justify-center shrink-0"
-                            style={{ background: alreadyAdded ? '#00F5FF' : 'transparent', border: alreadyAdded ? 'none' : '1px solid #52525b' }}>
+                            style={{ background: alreadyAdded ? '#FB923C' : 'transparent', border: alreadyAdded ? 'none' : '1px solid #52525b' }}>
                             {alreadyAdded && <CheckCircle size={12} style={{ color: '#000' }} />}
                           </div>
                         </div>
@@ -1323,7 +1323,7 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
                   </p>
                   <button onClick={addContact}
                     className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-medium"
-                    style={{ background: 'rgba(0,245,255,0.08)', border: '1px solid rgba(0,245,255,0.2)', color: '#00F5FF' }}>
+                    style={{ background: 'rgba(251, 146, 60,0.08)', border: '1px solid rgba(251, 146, 60,0.2)', color: '#FB923C' }}>
                     <Plus size={10} /> Adicionar manual
                   </button>
                 </div>
@@ -1431,9 +1431,9 @@ export function ContractFormModal({ open, editContract, onClose, onSaved }: Cont
               <button onClick={save} disabled={saving || uploading || codeExists}
                 className="px-5 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
                 style={{
-                  background: form.is_aporte ? 'rgba(34,197,94,0.15)' : 'rgba(0,245,255,0.15)',
-                  border: `1px solid ${form.is_aporte ? 'rgba(34,197,94,0.45)' : 'rgba(0,245,255,0.3)'}`,
-                  color: form.is_aporte ? '#22c55e' : '#00F5FF',
+                  background: form.is_aporte ? 'rgba(34,197,94,0.15)' : 'rgba(251, 146, 60,0.15)',
+                  border: `1px solid ${form.is_aporte ? 'rgba(34,197,94,0.45)' : 'rgba(251, 146, 60,0.3)'}`,
+                  color: form.is_aporte ? '#22c55e' : '#FB923C',
                 }}>
                 {saving ? 'Salvando...' : uploading ? 'Enviando arquivos...' : form.is_aporte ? 'Criar aporte' : internalEdit ? 'Salvar alterações' : 'Criar contrato'}
               </button>

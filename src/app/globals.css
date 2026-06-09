@@ -146,10 +146,10 @@
   --brand-muted:    #475569;   /* spec text-secondary */
   --brand-subtle:   #94A3B8;   /* spec text-muted */
 
-  /* ── PRIMARY (ação — cyan brand premium) ─────────── */
-  --brand-primary:        #06B6D4;   /* cyan brand brilhante */
-  --brand-primary-strong: #0891B2;   /* hover ~5% mais escuro */
-  --brand-primary-dim:    #E6F6FA;   /* sidebar active / badge soft (spec) */
+  /* ── PRIMARY (ação — laranja HD Think) ─────────── */
+  --brand-primary:        #F97316;   /* laranja HD Think */
+  --brand-primary-strong: #EA580C;   /* hover ~5% mais escuro */
+  --brand-primary-dim:    #FFF7ED;   /* sidebar active / badge soft */
 
   /* ── Semantic — light (tons de border/accent) ────── */
   --brand-success:  #22C55E;
@@ -158,7 +158,7 @@
   --brand-purple:   #7C3AED;
 
   /* ── Marca (identidade independente de UI) ───────── */
-  --brand-logo: #06B6D4;
+  --brand-logo: #F97316;
 
   /* ── Elevation & dividers — só ativos no light ──── */
   --brand-card-shadow:    0 1px 2px 0 rgba(0, 0, 0, 0.04);
@@ -232,10 +232,10 @@
   --brand-muted:    #A1A1AA;
   --brand-subtle:   #71717A;
 
-  /* ── PRIMARY — Electric Cyan (legível em fundo escuro) ── */
-  --brand-primary:        #00F5FF;
-  --brand-primary-strong: #00F5FF;
-  --brand-primary-dim:    rgba(0, 245, 255, 0.10);
+  /* ── PRIMARY — Laranja HD Think (legível em fundo escuro) ── */
+  --brand-primary:        #FB923C;
+  --brand-primary-strong: #F97316;
+  --brand-primary-dim:    rgba(251, 146, 60, 0.12);
 
   /* ── Semantic — dark (tons vibrantes pra fundo escuro) ── */
   --brand-success:  #10B981;
@@ -243,8 +243,8 @@
   --brand-danger:   #EF4444;
   --brand-purple:   #8B5CF6;
 
-  /* Marca preserva Electric Cyan no dark */
-  --brand-logo: #00F5FF;
+  /* Marca preserva laranja HD Think no dark */
+  --brand-logo: #FB923C;
 
   /* Sem sombra — visual flat preservado */
   --brand-card-shadow:    none;

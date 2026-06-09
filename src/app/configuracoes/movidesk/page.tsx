@@ -263,7 +263,7 @@ export default function MovideskIntegracaoPage() {
 
         {/* Header */}
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(0,245,255,0.10)', border: '1px solid rgba(0,245,255,0.2)' }}>
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(251, 146, 60,0.10)', border: '1px solid rgba(251, 146, 60,0.2)' }}>
             <Webhook size={22} style={{ color: 'var(--primary)' }} />
           </div>
           <div>
@@ -336,7 +336,7 @@ export default function MovideskIntegracaoPage() {
             </div>
           </div>
 
-          <div className="rounded-xl p-3 text-xs space-y-1.5" style={{ background: 'rgba(0,245,255,0.04)', border: '1px solid rgba(0,245,255,0.12)' }}>
+          <div className="rounded-xl p-3 text-xs space-y-1.5" style={{ background: 'rgba(251, 146, 60,0.04)', border: '1px solid rgba(251, 146, 60,0.12)' }}>
             <p className="font-semibold" style={{ color: 'var(--primary)' }}>Configuração no Movidesk</p>
             <ol className="space-y-1 list-decimal list-inside" style={{ color: 'var(--brand-muted)' }}>
               <li>Acesse <strong>Configurações → API</strong> e gere um token de integração</li>

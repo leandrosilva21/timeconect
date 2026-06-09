@@ -238,7 +238,7 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
               <div className="p-5 space-y-4">
                 <div className="grid grid-cols-4 gap-3">
                   {[
-                    { label: 'Total Horas', value: `${totalHours.toFixed(1)}h`, color: '#00F5FF' },
+                    { label: 'Total Horas', value: `${totalHours.toFixed(1)}h`, color: '#FB923C' },
                     { label: 'Registros', value: String(timesheets.length), color: 'var(--brand-text)' },
                     { label: 'Aprovados', value: String(timesheets.filter(t => t.status === 'approved').length), color: '#22c55e' },
                     { label: 'Pendentes', value: String(timesheets.filter(t => t.status === 'pending').length), color: '#f59e0b' },
@@ -265,7 +265,7 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
                           <tr key={ts.id} style={{ borderBottom: '1px solid var(--brand-border)' }}>
                             <td className="px-3 py-2.5 tabular-nums whitespace-nowrap" style={{ color: 'var(--brand-muted)' }}>{fmtDate(ts.date)}</td>
                             <td className="px-3 py-2.5" style={{ color: 'var(--brand-text)' }}>{ts.user?.name ?? '—'}</td>
-                            <td className="px-3 py-2.5 tabular-nums font-semibold" style={{ color: '#00F5FF' }}>{fmtHours(ts.effort_hours, ts.effort_minutes)}</td>
+                            <td className="px-3 py-2.5 tabular-nums font-semibold" style={{ color: '#FB923C' }}>{fmtHours(ts.effort_hours, ts.effort_minutes)}</td>
                             <td className="px-3 py-2.5 max-w-[200px] truncate" style={{ color: 'var(--brand-muted)' }} title={previewText(ts.observation)}>{ts.observation ? previewText(ts.observation) : '—'}</td>
                             <td className="px-3 py-2.5">
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap" style={{ background: `${c}18`, color: c }}>
@@ -275,10 +275,10 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
                           </tr>
                         )
                       })}
-                      <tr style={{ background: 'rgba(0,245,255,0.04)', borderTop: '1px solid rgba(0,245,255,0.2)' }}>
+                      <tr style={{ background: 'rgba(251, 146, 60,0.04)', borderTop: '1px solid rgba(251, 146, 60,0.2)' }}>
                         <td className="px-3 py-2.5" />
                         <td className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Total</td>
-                        <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: '#00F5FF' }}>{totalHours.toFixed(1)}h</td>
+                        <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: '#FB923C' }}>{totalHours.toFixed(1)}h</td>
                         <td colSpan={2} />
                       </tr>
                     </tbody>
@@ -293,7 +293,7 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
               <div className="p-5 space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: 'Total', value: fmtBRL(totalExpenses), color: '#00F5FF' },
+                    { label: 'Total', value: fmtBRL(totalExpenses), color: '#FB923C' },
                     { label: 'Registros', value: String(expenses.length), color: 'var(--brand-text)' },
                   ].map(s => (
                     <div key={s.label} className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--brand-border)' }}>
@@ -320,7 +320,7 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
                             <td className="px-3 py-2.5 max-w-[150px] truncate" style={{ color: 'var(--brand-text)' }}>{e.description}</td>
                             <td className="px-3 py-2.5" style={{ color: 'var(--brand-muted)' }}>{e.category?.name ?? '—'}</td>
                             <td className="px-3 py-2.5" style={{ color: 'var(--brand-muted)' }}>{e.user?.name ?? '—'}</td>
-                            <td className="px-3 py-2.5 tabular-nums font-semibold" style={{ color: '#00F5FF' }}>{fmtBRL(e.amount)}</td>
+                            <td className="px-3 py-2.5 tabular-nums font-semibold" style={{ color: '#FB923C' }}>{fmtBRL(e.amount)}</td>
                             <td className="px-3 py-2.5">
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap" style={{ background: `${c}18`, color: c }}>
                                 {e.status_display ?? e.status}
@@ -329,11 +329,11 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
                           </tr>
                         )
                       })}
-                      <tr style={{ background: 'rgba(0,245,255,0.04)', borderTop: '1px solid rgba(0,245,255,0.2)' }}>
+                      <tr style={{ background: 'rgba(251, 146, 60,0.04)', borderTop: '1px solid rgba(251, 146, 60,0.2)' }}>
                         <td className="px-3 py-2.5" />
                         <td className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Total</td>
                         <td colSpan={2} />
-                        <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: '#00F5FF' }}>{fmtBRL(totalExpenses)}</td>
+                        <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: '#FB923C' }}>{fmtBRL(totalExpenses)}</td>
                         <td />
                       </tr>
                     </tbody>
@@ -350,7 +350,7 @@ export function ProjectDataModal({ projectId, projectName, initialTab = 'timeshe
             onClick={exportExcel}
             disabled={loading || activeCount === 0}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-colors disabled:opacity-40"
-            style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF', border: '1px solid rgba(0,245,255,0.2)' }}
+            style={{ background: 'rgba(251, 146, 60,0.08)', color: '#FB923C', border: '1px solid rgba(251, 146, 60,0.2)' }}
           >
             <Download size={12} /> Exportar Excel
           </button>

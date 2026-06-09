@@ -630,7 +630,7 @@ export function ContractCreateModal({
             <h2 className="text-base font-semibold text-white">{title}</h2>
             {(selectedContractType || form.service_type_id) && (
               <p className="text-[11px] text-zinc-500 mt-0.5 flex items-center gap-1.5">
-                {selectedContractType && <span style={{ color: '#00F5FF' }}>{selectedContractType.name}</span>}
+                {selectedContractType && <span style={{ color: '#FB923C' }}>{selectedContractType.name}</span>}
                 {selectedContractType && form.service_type_id && <span className="text-zinc-600">·</span>}
                 {form.service_type_id && <span>{serviceTypes.find(s => String(s.id) === String(form.service_type_id))?.name}</span>}
               </p>
@@ -1208,7 +1208,7 @@ export function ContractCreateModal({
                       return (
                         <div key={cc.id}
                           className="flex items-center justify-between rounded-lg border px-3 py-2.5 cursor-pointer transition-colors"
-                          style={{ borderColor: already ? 'rgba(0,245,255,0.4)' : 'var(--brand-border)', background: already ? 'rgba(0,245,255,0.06)' : 'transparent' }}
+                          style={{ borderColor: already ? 'rgba(251, 146, 60,0.4)' : 'var(--brand-border)', background: already ? 'rgba(251, 146, 60,0.06)' : 'transparent' }}
                           onClick={() => already
                             ? setContacts(cs => cs.filter(c => !(c.name === cc.name && c.email === cc.email)))
                             : setContacts(cs => [...cs, { name: cc.name, cargo: cc.cargo ?? '', email: cc.email ?? '', phone: cc.phone ?? '' }])}>
@@ -1217,7 +1217,7 @@ export function ContractCreateModal({
                             <p className="text-[10px] text-zinc-500">{[cc.cargo, cc.email].filter(Boolean).join(' · ')}</p>
                           </div>
                           <div className="w-4 h-4 rounded flex items-center justify-center shrink-0"
-                            style={{ background: already ? '#00F5FF' : 'transparent', border: already ? 'none' : '1px solid #52525b' }}>
+                            style={{ background: already ? '#FB923C' : 'transparent', border: already ? 'none' : '1px solid #52525b' }}>
                             {already && <CheckCircle size={12} style={{ color: '#000' }} />}
                           </div>
                         </div>
@@ -1231,7 +1231,7 @@ export function ContractCreateModal({
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Contatos selecionados ({contacts.length})</p>
                   <button onClick={addContact}
                     className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-medium"
-                    style={{ background: 'rgba(0,245,255,0.08)', border: '1px solid rgba(0,245,255,0.2)', color: '#00F5FF' }}>
+                    style={{ background: 'rgba(251, 146, 60,0.08)', border: '1px solid rgba(251, 146, 60,0.2)', color: '#FB923C' }}>
                     <Plus size={10} /> Adicionar manual
                   </button>
                 </div>
@@ -1330,9 +1330,9 @@ export function ContractCreateModal({
               <button onClick={save} disabled={saving || codeExists}
                 className="px-5 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
                 style={{
-                  background: form.is_aporte ? 'rgba(34,197,94,0.15)' : 'rgba(0,245,255,0.15)',
-                  border: `1px solid ${form.is_aporte ? 'rgba(34,197,94,0.45)' : 'rgba(0,245,255,0.3)'}`,
-                  color: form.is_aporte ? '#22c55e' : '#00F5FF',
+                  background: form.is_aporte ? 'rgba(34,197,94,0.15)' : 'rgba(251, 146, 60,0.15)',
+                  border: `1px solid ${form.is_aporte ? 'rgba(34,197,94,0.45)' : 'rgba(251, 146, 60,0.3)'}`,
+                  color: form.is_aporte ? '#22c55e' : '#FB923C',
                 }}>
                 {saving ? (form.is_aporte ? 'Criando aporte...' : 'Criando...') : form.is_aporte ? 'Criar aporte' : 'Criar Contrato'}
               </button>

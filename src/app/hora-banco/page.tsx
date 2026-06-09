@@ -336,11 +336,11 @@ export default function HoraBancoPage() {
                   className="w-full flex items-start gap-2.5 px-3 py-3 text-left transition-colors border-b last:border-0"
                   style={{
                     borderColor: 'var(--brand-border)',
-                    background: selected?.id === c.id ? 'rgba(0,245,255,0.06)' : 'transparent',
+                    background: selected?.id === c.id ? 'rgba(251, 146, 60,0.06)' : 'transparent',
                   }}
                 >
                   <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
-                    style={{ background: selected?.id === c.id ? 'rgba(0,245,255,0.15)' : 'rgba(255,255,255,0.05)', color: selected?.id === c.id ? 'var(--brand-primary)' : 'var(--brand-muted)' }}>
+                    style={{ background: selected?.id === c.id ? 'rgba(251, 146, 60,0.15)' : 'rgba(255,255,255,0.05)', color: selected?.id === c.id ? 'var(--brand-primary)' : 'var(--brand-muted)' }}>
                     {c.name.charAt(0)}
                   </div>
                   <div className="min-w-0">

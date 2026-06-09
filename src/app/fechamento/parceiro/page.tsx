@@ -435,7 +435,7 @@ export default function FechamentoParceiroPage() {
     const saldoDesp = despesas.filter(d => !d.is_paid).reduce((s, d) => s + d.valor, 0)
     const despHtml = despesas.length === 0 ? '' : `
       <div class="section" style="margin-bottom:24px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #0891b2;padding-bottom:6px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #ea580c;padding-bottom:6px;margin-bottom:14px">
           <span style="font-size:16px;font-weight:700;color:#0e7490">Despesas reembolsadas no fechamento</span>
           <span style="font-size:11px;color:#6b7280">Saldo: <b style="color:#0e7490">${formatBRL(saldoDesp)}</b></span>
         </div>
@@ -486,7 +486,7 @@ export default function FechamentoParceiroPage() {
     const isDesp = mode !== 'servicos'
     const h1Label = mode === 'despesa' ? 'Relatório de Despesas' : mode === 'servicos' ? 'Relatório de Serviços' : 'Relatório de Fechamento'
     const totalBoxHtml = mode === 'despesa'
-      ? `<div class="total-box" style="background:#0e7490;border-color:#0891b2;"><div class="total-box-block"><div class="total-box-label">Saldo a pagar no fechamento</div><div class="total-box-value">${formatBRL(saldoDesp)}</div></div></div>`
+      ? `<div class="total-box" style="background:#0e7490;border-color:#ea580c;"><div class="total-box-block"><div class="total-box-label">Saldo a pagar no fechamento</div><div class="total-box-value">${formatBRL(saldoDesp)}</div></div></div>`
       : mode === 'servicos'
         ? `<div class="total-box"><div class="total-box-block"><div class="total-box-label">Total de Horas</div><div class="total-box-value">${totalHoras.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</div></div><div class="total-box-block" style="text-align:right"><div class="total-box-label">Total Serviços</div><div class="total-box-value">${formatBRL(totalServicos)}</div></div></div>`
         : `<div class="total-box"><div class="total-box-block"><div class="total-box-label">Total de Horas</div><div class="total-box-value">${totalHoras.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</div></div><div class="total-box-block" style="text-align:center"><div class="total-box-label">Total Serviços</div><div class="total-box-value">${formatBRL(totalServicos)}</div></div>${saldoDesp > 0 ? `<div class="total-box-block" style="text-align:center"><div class="total-box-label">Despesas</div><div class="total-box-value">${formatBRL(saldoDesp)}</div></div>` : ''}<div class="total-box-block" style="text-align:right"><div class="total-box-label">Total a Pagar</div><div class="total-box-value">${formatBRL(totalServicos + saldoDesp)}</div></div></div>`
@@ -566,7 +566,7 @@ export default function FechamentoParceiroPage() {
 
       return `
         <div class="section">
-          <div class="section-header" style="background:#cffafe;border-left:3px solid #0891b2;padding:6px 10px;border-radius:0 4px 4px 0;">
+          <div class="section-header" style="background:#cffafe;border-left:3px solid #ea580c;padding:6px 10px;border-radius:0 4px 4px 0;">
             <div><span class="section-title" style="color:#0e7490">${consultor}</span></div>
             <div class="section-rate" style="color:#0e7490">Subtotal: <b>${formatBRL(sub)}</b></div>
           </div>
@@ -597,7 +597,7 @@ export default function FechamentoParceiroPage() {
 
   ${sectionsHtml}
 
-  <div class="total-box" style="background:#0e7490;border-color:#0891b2;">
+  <div class="total-box" style="background:#0e7490;border-color:#ea580c;">
     <div class="total-box-block">
       <div class="total-box-label">Saldo a pagar no fechamento</div>
       <div class="total-box-value">${formatBRL(totalDespesas)}</div>
@@ -918,7 +918,7 @@ export default function FechamentoParceiroPage() {
               <span
                 className="text-xs px-3 py-1 rounded-full font-medium"
                 style={{
-                  background: isFixed ? 'rgba(251,191,36,0.15)' : 'rgba(0,245,255,0.1)',
+                  background: isFixed ? 'rgba(251,191,36,0.15)' : 'rgba(251, 146, 60,0.1)',
                   color: isFixed ? '#fbbf24' : 'var(--brand-primary)',
                 }}
               >
@@ -1123,7 +1123,7 @@ export default function FechamentoParceiroPage() {
                       {filteredConsultores.length > 0 && (
                         <div className="mt-4 flex justify-between items-center">
                           <span className="text-xs" style={{ color: 'var(--brand-muted)' }}>Total: <b>{filteredConsultores.reduce((s, c) => s + c.horas, 0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</b></span>
-                          <div className="text-sm font-semibold px-4 py-2 rounded" style={{ background: 'rgba(0,245,255,0.07)', color: 'var(--brand-primary)' }}>
+                          <div className="text-sm font-semibold px-4 py-2 rounded" style={{ background: 'rgba(251, 146, 60,0.07)', color: 'var(--brand-primary)' }}>
                             Total Serviços: {formatBRL(filteredConsultores.reduce((s, c) => s + c.total, 0))}
                           </div>
                         </div>
@@ -1162,7 +1162,7 @@ export default function FechamentoParceiroPage() {
                                 <div className="flex items-center justify-between mb-3 pb-2 border-b" style={{ borderColor: 'var(--brand-border)' }}>
                                   <div className="flex items-center gap-2">
                                     <span className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{nome}</span>
-                                    <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)' }}>{code}</span>
+                                    <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(251, 146, 60,0.08)', color: 'var(--brand-primary)' }}>{code}</span>
                                   </div>
                                   <span className="text-xs" style={{ color: 'var(--brand-muted)' }}>
                                     {tipoHoras.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h · <b style={{ color: 'var(--brand-primary)' }}>{formatBRL(tipoTotal)}</b>
@@ -1190,7 +1190,7 @@ export default function FechamentoParceiroPage() {
                             <span className="text-xs" style={{ color: 'var(--brand-muted)' }}>
                               Total: <b>{apontamentos.reduce((s, a) => s + a.horas, 0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}h</b>
                             </span>
-                            <div className="text-sm font-semibold px-4 py-2 rounded" style={{ background: 'rgba(0,245,255,0.07)', color: 'var(--brand-primary)' }}>
+                            <div className="text-sm font-semibold px-4 py-2 rounded" style={{ background: 'rgba(251, 146, 60,0.07)', color: 'var(--brand-primary)' }}>
                               Total Serviços: {formatBRL(totalServicos)}
                             </div>
                           </div>
@@ -1270,7 +1270,7 @@ export default function FechamentoParceiroPage() {
                   )}
                   {despesas.length > 0 && (
                     <div className="mt-4 flex flex-col items-end gap-1">
-                      <div className="text-sm font-semibold px-4 py-2 rounded" style={{ background: 'rgba(0,245,255,0.07)', color: 'var(--brand-primary)' }}>
+                      <div className="text-sm font-semibold px-4 py-2 rounded" style={{ background: 'rgba(251, 146, 60,0.07)', color: 'var(--brand-primary)' }}>
                         Despesas no fechamento: {formatBRL(totalDespesas)}
                       </div>
                       {totalDespesasAnt > 0 && (

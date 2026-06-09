@@ -180,7 +180,7 @@ export default function FechadoPage() {
                     </td>
                     <td className="px-4 py-3 tabular-nums" style={{ color: 'var(--brand-muted)' }}>{fmtH(row.base_hours)} h</td>
                     <td className="px-4 py-3 tabular-nums" style={{ color: '#8B5CF6' }}>{fmtH(row.contribution_hours)} h</td>
-                    <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: '#00F5FF' }}>{fmtH(row.sold_hours)} h</td>
+                    <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: '#FB923C' }}>{fmtH(row.sold_hours)} h</td>
                     <td className="px-4 py-3 tabular-nums" style={{ color: 'var(--brand-muted)' }}>
                       {row.start_date ? new Date(row.start_date + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
                     </td>

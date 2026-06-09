@@ -122,7 +122,7 @@ export function Header({ title, actions, onMenuClick }: HeaderProps) {
             <button
               onClick={() => { setBellOpen(v => !v); fetchNotifications() }}
               className="relative p-1.5 rounded-md transition-colors hover:bg-zinc-800"
-              style={{ color: bellOpen ? '#00F5FF' : '#71717A' }}
+              style={{ color: bellOpen ? '#FB923C' : '#71717A' }}
             >
               <Bell size={16} />
               {unread > 0 && (
@@ -143,10 +143,10 @@ export function Header({ title, actions, onMenuClick }: HeaderProps) {
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--brand-border)' }}>
                   <div className="flex items-center gap-2">
-                    <MessageCircle size={14} style={{ color: '#00F5FF' }} />
+                    <MessageCircle size={14} style={{ color: '#FB923C' }} />
                     <span className="text-xs font-bold" style={{ color: '#FAFAFA' }}>Mensagens não lidas</span>
                     {unread > 0 && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(0,245,255,0.12)', color: '#00F5FF' }}>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(251, 146, 60,0.12)', color: '#FB923C' }}>
                         {unread}
                       </span>
                     )}
@@ -179,7 +179,7 @@ export function Header({ title, actions, onMenuClick }: HeaderProps) {
                             style={{ borderColor: 'var(--brand-border)' }}
                           >
                             <div className="flex items-center justify-between w-full">
-                              <span className="text-[10px] font-mono" style={{ color: '#00F5FF' }}>
+                              <span className="text-[10px] font-mono" style={{ color: '#FB923C' }}>
                                 {n.project_code ?? n.customer_name ?? ''}
                               </span>
                               <span className="text-[9px]" style={{ color: 'var(--brand-muted)' }}>
@@ -195,7 +195,7 @@ export function Header({ title, actions, onMenuClick }: HeaderProps) {
                         href="/gestao-projetos"
                         onClick={() => setBellOpen(false)}
                         className="block w-full py-2 text-center text-[10px] font-semibold hover:bg-white/5 transition-colors"
-                        style={{ color: '#00F5FF', textDecoration: 'none' }}
+                        style={{ color: '#FB923C', textDecoration: 'none' }}
                       >
                         Ver todas as mensagens →
                       </a>

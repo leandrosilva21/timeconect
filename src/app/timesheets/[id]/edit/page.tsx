@@ -72,7 +72,7 @@ function SearchSelect({ value, onChange, options, placeholder, disabled }: {
                   <button key={o.id} type="button"
                     onClick={() => { onChange(String(o.id)); setOpen(false) }}
                     className="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-white/5"
-                    style={{ color: String(o.id) === value ? '#00F5FF' : '#d4d4d8' }}>
+                    style={{ color: String(o.id) === value ? '#FB923C' : '#d4d4d8' }}>
                     {o.name}
                   </button>
                 ))
@@ -385,7 +385,7 @@ export default function EditTimesheetPage() {
                     className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
                     style={active
                       ? { background: 'var(--brand-primary)', color: 'var(--primary-fg)' }
-                      : { background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.2)' }
+                      : { background: 'rgba(251, 146, 60,0.08)', color: 'var(--brand-primary)', border: '1px solid rgba(251, 146, 60,0.2)' }
                     }>{label}</button>
                 )
               })}

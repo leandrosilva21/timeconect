@@ -221,7 +221,7 @@ function TabCusto({ data, loading }: { data: CustoData | null; loading: boolean 
 
   return (
     <div className="space-y-4">
-      <Section title="Internos" rows={data.internos} total={data.total_custo_interno} color="#00F5FF" />
+      <Section title="Internos" rows={data.internos} total={data.total_custo_interno} color="#FB923C" />
       <Section title="Parceiros" rows={data.parceiros} total={data.total_custo_parceiros} color="#a78bfa" />
       <div className="flex justify-end px-2">
         <div className="text-xs font-semibold" style={{ color: 'var(--brand-subtle)' }}>
@@ -316,7 +316,7 @@ function TabConsolidado({ data, loading }: { data: Consolidado | null; loading: 
     <div className="space-y-5 max-w-2xl mx-auto">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {[
-          { label: 'Custo Interno',   value: formatBRL(data.total_custo_interno),   icon: UserCheck,  color: '#00F5FF' },
+          { label: 'Custo Interno',   value: formatBRL(data.total_custo_interno),   icon: UserCheck,  color: '#FB923C' },
           { label: 'Custo Parceiros', value: formatBRL(data.total_custo_parceiros), icon: UserCheck,  color: '#a78bfa' },
           { label: 'Receita Total',   value: formatBRL(data.total_receita),         icon: TrendingUp, color: '#22c55e' },
           { label: 'Margem',          value: formatBRL(data.margem),                icon: BarChart2,  color: mColor   },
@@ -356,7 +356,7 @@ function TabRelatorio({ data, loading }: { data: Consolidado | null; loading: bo
   const totalCusto = data.total_custo_interno + data.total_custo_parceiros
 
   const rows = [
-    { label: 'Custo Interno',   value: data.total_custo_interno,   color: '#00F5FF', bold: false },
+    { label: 'Custo Interno',   value: data.total_custo_interno,   color: '#FB923C', bold: false },
     { label: 'Custo Parceiros', value: data.total_custo_parceiros, color: '#a78bfa', bold: false },
     { label: 'Total Custo',     value: totalCusto,                 color: '#f59e0b', bold: true  },
     { label: 'Receita Clientes',value: data.total_receita,         color: '#22c55e', bold: false },

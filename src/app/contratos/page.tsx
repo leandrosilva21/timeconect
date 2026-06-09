@@ -358,7 +358,7 @@ export default function ContratosPage() {
           </button>
           <button onClick={openNew}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-            style={{ background: 'rgba(0,245,255,0.12)', border: '1px solid rgba(0,245,255,0.3)', color: '#00F5FF' }}>
+            style={{ background: 'rgba(251, 146, 60,0.12)', border: '1px solid rgba(251, 146, 60,0.3)', color: '#FB923C' }}>
             <Plus size={15} /> Novo Contrato
           </button>
         </div>
@@ -392,13 +392,13 @@ export default function ContratosPage() {
           <button key={tab.id} onClick={() => setListTab(tab.id)}
             className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all"
             style={listTab === tab.id
-              ? { background: 'rgba(0,245,255,0.1)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.2)' }
+              ? { background: 'rgba(251, 146, 60,0.1)', color: 'var(--brand-primary)', border: '1px solid rgba(251, 146, 60,0.2)' }
               : { color: 'var(--brand-muted)', border: '1px solid transparent' }
             }>
             {tab.label}
             <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
               style={listTab === tab.id
-                ? { background: 'rgba(0,245,255,0.15)', color: 'var(--brand-primary)' }
+                ? { background: 'rgba(251, 146, 60,0.15)', color: 'var(--brand-primary)' }
                 : { background: 'rgba(255,255,255,0.06)', color: 'var(--brand-muted)' }
               }>{tab.count}</span>
           </button>
@@ -684,7 +684,7 @@ export default function ContratosPage() {
                         onClick={() => setGenCoordinatorIds(ids => sel ? ids.filter(i => i !== u.id) : [...ids, u.id])}
                         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-left"
                         style={{
-                          background: sel ? 'rgba(0,245,255,0.08)' : 'rgba(255,255,255,0.03)',
+                          background: sel ? 'rgba(251, 146, 60,0.08)' : 'rgba(255,255,255,0.03)',
                           border: `1px solid ${sel ? 'var(--brand-primary)' : 'var(--brand-border)'}`,
                           color: sel ? 'var(--brand-primary)' : 'var(--brand-text)',
                         }}>
@@ -853,7 +853,7 @@ function ProjectStatusModal({ projectId, projectName, onClose, onSaved }: {
           </button>
           <button onClick={save} disabled={saving || !selected}
             className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-            style={{ background: 'rgba(0,245,255,0.12)', border: '1px solid rgba(0,245,255,0.3)', color: '#00F5FF' }}>
+            style={{ background: 'rgba(251, 146, 60,0.12)', border: '1px solid rgba(251, 146, 60,0.3)', color: '#FB923C' }}>
             {saving ? 'Salvando...' : 'Confirmar'}
           </button>
         </div>

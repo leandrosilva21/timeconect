@@ -1,6 +1,6 @@
 /**
  * TimeConect Design System
- * Tokens: --brand-bg / --brand-surface / --brand-border / --brand-primary (#00F5FF)
+ * Tokens: --brand-bg / --brand-surface / --brand-border / --brand-primary (#FB923C)
  *         --brand-text / --brand-muted / --brand-subtle
  *         --brand-success / --brand-warning / --brand-danger / --brand-purple
  */
@@ -200,7 +200,7 @@ export function Tr({ children, onClick, className, baseBackground, onMouseEnter,
       className={cn('transition-colors duration-100', onClick && 'cursor-pointer', className)}
       style={{ borderBottom: '1px solid var(--brand-border)', background: base }}
       onMouseEnter={e => {
-        e.currentTarget.style.background = 'rgba(0,245,255,0.03)'
+        e.currentTarget.style.background = 'rgba(251, 146, 60,0.03)'
         onMouseEnter?.()
       }}
       onMouseLeave={e => {
@@ -244,7 +244,7 @@ export function Td({
 const BADGE_STYLES: Record<string, { bg: string; color: string }> = {
   // generic
   default:   { bg: 'rgba(161,161,170,0.12)',  color: '#A1A1AA' },
-  primary:   { bg: 'rgba(0,245,255,0.10)',    color: '#00F5FF' },
+  primary:   { bg: 'rgba(251, 146, 60,0.10)',    color: '#FB923C' },
   success:   { bg: 'rgba(16,185,129,0.12)',   color: '#10B981' },
   warning:   { bg: 'rgba(245,158,11,0.12)',   color: '#F59E0B' },
   danger:    { bg: 'rgba(239,68,68,0.12)',    color: '#EF4444' },
@@ -259,7 +259,7 @@ const BADGE_STYLES: Record<string, { bg: string; color: string }> = {
   adjustment_requested: { bg: 'rgba(139,92,246,0.12)',  color: '#8B5CF6' },
   // project statuses
   active:    { bg: 'rgba(16,185,129,0.12)',  color: '#10B981' },
-  started:   { bg: 'rgba(0,245,255,0.10)',   color: '#00F5FF' },
+  started:   { bg: 'rgba(251, 146, 60,0.10)',   color: '#FB923C' },
   paused:    { bg: 'rgba(245,158,11,0.12)',  color: '#F59E0B' },
   cancelled: { bg: 'rgba(239,68,68,0.12)',   color: '#EF4444' },
   finished:  { bg: 'rgba(161,161,170,0.12)', color: '#71717A' },
@@ -505,7 +505,7 @@ export function EmptyState({
       style={{ border: '1px dashed var(--brand-border)', background: 'transparent' }}
     >
       {Icon && (
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(0,245,255,0.06)' }}>
+        <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(251, 146, 60,0.06)' }}>
           <Icon size={20} color="var(--brand-primary)" />
         </div>
       )}

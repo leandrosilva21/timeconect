@@ -74,7 +74,7 @@ function LoginForm() {
           onChange={e => setEmail(e.target.value.toLowerCase())}
           placeholder="seu@email.com"
           required
-          style={{ ...inputBase, caretColor: '#00F5FF' }}
+          style={{ ...inputBase, caretColor: '#FB923C' }}
           className="login-input"
         />
       </div>
@@ -91,7 +91,7 @@ function LoginForm() {
             onChange={e => setPassword(e.target.value)}
             placeholder="••••••••"
             required
-            style={{ ...inputBase, paddingRight: 44, caretColor: '#00F5FF' }}
+            style={{ ...inputBase, paddingRight: 44, caretColor: '#FB923C' }}
             className="login-input"
           />
           <button
@@ -126,8 +126,8 @@ function LoginForm() {
           border: 'none',
           cursor: loading ? 'not-allowed' : 'pointer',
           opacity: loading ? 0.7 : 1,
-          background: 'linear-gradient(160deg, #3730A3 0%, #4F46E5 60%, #6366F1 100%)',
-          boxShadow: '0 6px 24px rgba(79,70,229,0.45), 0 2px 6px rgba(0,0,0,0.5)',
+          background: 'linear-gradient(160deg, #C2410C 0%, #EA580C 60%, #F97316 100%)',
+          boxShadow: '0 6px 24px rgba(249,115,22,0.45), 0 2px 6px rgba(0,0,0,0.5)',
           transition: 'all 0.2s',
           letterSpacing: '0.02em',
         }}
@@ -177,7 +177,7 @@ export default function LoginPage() {
 
       {/* Glow sutil — sem gradientes pesados */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-        <div style={{ position: 'absolute', top: '-5%', left: '50%', transform: 'translateX(-50%)', width: 700, height: 400, borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(0,212,232,0.05) 0%, transparent 65%)', filter: 'blur(60px)' }} />
+        <div style={{ position: 'absolute', top: '-5%', left: '50%', transform: 'translateX(-50%)', width: 700, height: 400, borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(251, 146, 60,0.05) 0%, transparent 65%)', filter: 'blur(60px)' }} />
       </div>
 
       {/* Card */}
@@ -208,7 +208,7 @@ export default function LoginPage() {
 
             {/* TimeConect — produto */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
-              <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 9, background: 'rgba(0,212,232,0.07)', border: '1px solid rgba(0,212,232,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 9, background: 'rgba(251, 146, 60,0.07)', border: '1px solid rgba(251, 146, 60,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <TimeConectIcon size={19} />
               </div>
               <div>
@@ -256,8 +256,8 @@ export default function LoginPage() {
         .login-brand-logo { filter: invert(1) hue-rotate(180deg); opacity: 0.95; }
         .login-input::placeholder { color: rgba(255,255,255,0.22); }
         .login-input:focus {
-          border: 1px solid rgba(0,212,232,0.55) !important;
-          box-shadow: 0 0 0 3px rgba(0,212,232,0.08) !important;
+          border: 1px solid rgba(251, 146, 60,0.55) !important;
+          box-shadow: 0 0 0 3px rgba(251, 146, 60,0.08) !important;
           background: rgba(255,255,255,0.075) !important;
         }
         .login-btn:hover:not(:disabled) {

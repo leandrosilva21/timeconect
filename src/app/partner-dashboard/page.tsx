@@ -268,7 +268,7 @@ function RowMenu({ isOwn, onView, onEdit, onDelete }: {
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
 function KpiCard({
-  icon: Icon, label, value, sub, color = '#00F5FF',
+  icon: Icon, label, value, sub, color = '#FB923C',
 }: {
   icon: React.ElementType
   label: string
@@ -918,7 +918,7 @@ export default function PartnerDashboardPage() {
                           <div className="flex items-center gap-2">
                             <div
                               className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
-                              style={{ background: 'rgba(0,245,255,0.12)', color: '#00F5FF' }}
+                              style={{ background: 'rgba(251, 146, 60,0.12)', color: '#FB923C' }}
                             >
                               {c.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
                             </div>
@@ -939,7 +939,7 @@ export default function PartnerDashboardPage() {
                         <td className="px-4 py-3 tabular-nums" style={{ color: 'var(--brand-subtle)' }}>
                           {formatBRL(c.hourly_rate)}
                         </td>
-                        <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: '#00F5FF' }}>
+                        <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: '#FB923C' }}>
                           {formatBRL(c.total_amount)}
                         </td>
                       </tr>
@@ -948,11 +948,11 @@ export default function PartnerDashboardPage() {
                 </tbody>
                 {!loading && data && data.consultants.length > 0 && (
                   <tfoot>
-                    <tr style={{ borderTop: '2px solid var(--brand-border)', background: 'rgba(0,245,255,0.04)' }}>
+                    <tr style={{ borderTop: '2px solid var(--brand-border)', background: 'rgba(251, 146, 60,0.04)' }}>
                       <td className="px-4 py-3 text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--brand-subtle)' }}>Total</td>
                       <td className="px-4 py-3 font-bold text-white tabular-nums">{formatNumber(data.kpis.total_hours)}h</td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--brand-subtle)' }}>Ticket médio: {formatBRL(data.kpis.avg_ticket)}/h</td>
-                      <td className="px-4 py-3 font-bold tabular-nums" style={{ color: '#00F5FF' }}>{formatBRL(data.kpis.total_amount)}</td>
+                      <td className="px-4 py-3 font-bold tabular-nums" style={{ color: '#FB923C' }}>{formatBRL(data.kpis.total_amount)}</td>
                     </tr>
                   </tfoot>
                 )}
@@ -996,7 +996,7 @@ export default function PartnerDashboardPage() {
                   <button
                     onClick={() => setNewTsOpen(true)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                    style={{ background: 'rgba(0,245,255,0.10)', color: '#00F5FF', border: '1px solid rgba(0,245,255,0.25)' }}
+                    style={{ background: 'rgba(251, 146, 60,0.10)', color: '#FB923C', border: '1px solid rgba(251, 146, 60,0.25)' }}
                   >
                     <Plus size={12} />
                     Incluir
@@ -1042,7 +1042,7 @@ export default function PartnerDashboardPage() {
                               {t.user && (
                                 <div
                                   className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
-                                  style={{ background: 'rgba(0,245,255,0.12)', color: '#00F5FF' }}
+                                  style={{ background: 'rgba(251, 146, 60,0.12)', color: '#FB923C' }}
                                 >
                                   {(t.user.name ?? '').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()}
                                 </div>
@@ -1095,7 +1095,7 @@ export default function PartnerDashboardPage() {
                   <button
                     onClick={openExpCreate}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
-                    style={{ background: 'rgba(0,245,255,0.12)', color: '#00F5FF', border: '1px solid rgba(0,245,255,0.2)' }}
+                    style={{ background: 'rgba(251, 146, 60,0.12)', color: '#FB923C', border: '1px solid rgba(251, 146, 60,0.2)' }}
                   >
                     <Plus size={12} /> Nova
                   </button>
@@ -1141,7 +1141,7 @@ export default function PartnerDashboardPage() {
                             {e.user && (
                               <div
                                 className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
-                                style={{ background: 'rgba(0,245,255,0.12)', color: '#00F5FF' }}
+                                style={{ background: 'rgba(251, 146, 60,0.12)', color: '#FB923C' }}
                               >
                                 {(e.user.name ?? '').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()}
                               </div>
@@ -1230,7 +1230,7 @@ export default function PartnerDashboardPage() {
                                   {idx === 2 && <span className="text-xs">🥉</span>}
                                   {idx > 2 && (
                                     <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0"
-                                      style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>
+                                      style={{ background: 'rgba(251, 146, 60,0.08)', color: '#FB923C' }}>
                                       {idx + 1}
                                     </div>
                                   )}
@@ -1272,7 +1272,7 @@ export default function PartnerDashboardPage() {
                             formatter={(v: any) => [formatBRL(v ?? 0), "Receita"]}
                             labelStyle={{ color: '#fff' }}
                           />
-                          <Bar dataKey="total_amount" fill="#00F5FF" radius={[0, 4, 4, 0]} opacity={0.85} background={{ fill: 'transparent' }} />
+                          <Bar dataKey="total_amount" fill="#FB923C" radius={[0, 4, 4, 0]} opacity={0.85} background={{ fill: 'transparent' }} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -1327,7 +1327,7 @@ export default function PartnerDashboardPage() {
                             labelStyle={{ color: '#fff' }}
                           />
                           <Legend formatter={v => v === 'horas' ? 'Horas' : 'Receita'} wrapperStyle={{ fontSize: 11, color: '#a1a1aa' }} />
-                          <Line yAxisId="h" type="monotone" dataKey="horas" stroke="#00F5FF" strokeWidth={2} dot={{ r: 3, fill: '#00F5FF' }} activeDot={{ r: 5 }} />
+                          <Line yAxisId="h" type="monotone" dataKey="horas" stroke="#FB923C" strokeWidth={2} dot={{ r: 3, fill: '#FB923C' }} activeDot={{ r: 5 }} />
                           <Line yAxisId="r" type="monotone" dataKey="receita" stroke="#22c55e" strokeWidth={2} dot={{ r: 3, fill: '#22c55e' }} activeDot={{ r: 5 }} />
                         </LineChart>
                       </ResponsiveContainer>
@@ -1346,7 +1346,7 @@ export default function PartnerDashboardPage() {
                           sub: `${indEfficiency.entries} apontamentos`,
                         },
                         {
-                          icon: Activity, color: '#00F5FF',
+                          icon: Activity, color: '#FB923C',
                           label: 'Horas por Dia Útil',
                           value: `${formatNumber(indEfficiency.hoursPerDay)}h`,
                           sub: `${indEfficiency.businessDays} dias úteis no mês`,
@@ -1385,11 +1385,11 @@ export default function PartnerDashboardPage() {
                       {indAlerts.map((a, i) => (
                         <div key={i} className="flex items-start gap-3 px-4 py-3 rounded-xl"
                           style={{
-                            background: a.type === 'danger' ? 'rgba(239,68,68,0.07)' : a.type === 'warning' ? 'rgba(245,158,11,0.07)' : 'rgba(0,245,255,0.05)',
-                            border: `1px solid ${a.type === 'danger' ? 'rgba(239,68,68,0.2)' : a.type === 'warning' ? 'rgba(245,158,11,0.2)' : 'rgba(0,245,255,0.15)'}`,
+                            background: a.type === 'danger' ? 'rgba(239,68,68,0.07)' : a.type === 'warning' ? 'rgba(245,158,11,0.07)' : 'rgba(251, 146, 60,0.05)',
+                            border: `1px solid ${a.type === 'danger' ? 'rgba(239,68,68,0.2)' : a.type === 'warning' ? 'rgba(245,158,11,0.2)' : 'rgba(251, 146, 60,0.15)'}`,
                           }}>
                           <AlertTriangle size={14} className="shrink-0 mt-0.5"
-                            style={{ color: a.type === 'danger' ? '#ef4444' : a.type === 'warning' ? '#f59e0b' : '#00F5FF' }} />
+                            style={{ color: a.type === 'danger' ? '#ef4444' : a.type === 'warning' ? '#f59e0b' : '#FB923C' }} />
                           <p className="text-sm" style={{ color: a.type === 'danger' ? '#fca5a5' : a.type === 'warning' ? '#fcd34d' : 'var(--brand-muted)' }}>
                             {a.text}
                           </p>
@@ -1557,7 +1557,7 @@ export default function PartnerDashboardPage() {
                 onClick={saveExpense}
                 disabled={expSaving}
                 className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-                style={{ background: 'rgba(0,245,255,0.15)', color: '#00F5FF', border: '1px solid rgba(0,245,255,0.3)' }}
+                style={{ background: 'rgba(251, 146, 60,0.15)', color: '#FB923C', border: '1px solid rgba(251, 146, 60,0.3)' }}
               >
                 {expSaving ? 'Salvando...' : 'Salvar'}
               </button>

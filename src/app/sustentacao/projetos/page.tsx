@@ -71,7 +71,7 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
-  started:        { bg: 'rgba(0,245,255,0.10)',    color: '#00F5FF' },
+  started:        { bg: 'rgba(251, 146, 60,0.10)',    color: '#FB923C' },
   active:         { bg: 'rgba(34,197,94,0.10)',    color: '#22C55E' },
   paused:         { bg: 'rgba(245,158,11,0.12)',   color: '#F59E0B' },
   cancelled:      { bg: 'rgba(239,68,68,0.12)',    color: '#EF4444' },
@@ -216,7 +216,7 @@ function ViewProjectModal({ project, onClose }: { project: SustProject; onClose:
                 <div>
                   <p className="text-[10px] mb-1.5" style={{ color: 'var(--brand-subtle)' }}>Coordenadores</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {project.coordinators!.map(u => <span key={u.id} className="text-xs px-2.5 py-1 rounded-lg font-medium" style={{ background: 'rgba(0,245,255,0.08)', color: '#00F5FF' }}>{u.name}</span>)}
+                    {project.coordinators!.map(u => <span key={u.id} className="text-xs px-2.5 py-1 rounded-lg font-medium" style={{ background: 'rgba(251, 146, 60,0.08)', color: '#FB923C' }}>{u.name}</span>)}
                   </div>
                 </div>
               )}
@@ -279,7 +279,7 @@ function CostModal({ project, onClose }: { project: SustProject; onClose: () => 
             <>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: 'Valor do Projeto', value: formatBRL(summary.project_info.project_value ?? 0), color: '#00F5FF' },
+                  { label: 'Valor do Projeto', value: formatBRL(summary.project_info.project_value ?? 0), color: '#FB923C' },
                   { label: 'Custo Total',       value: formatBRL(cc!.total_cost),                          color: '#f59e0b' },
                   { label: 'Margem',            value: formatBRL(cc!.margin),                               color: marginColor },
                   { label: 'Margem %',          value: `${cc!.margin_percentage.toFixed(1)}%`,             color: marginColor },
@@ -321,9 +321,9 @@ function CostModal({ project, onClose }: { project: SustProject; onClose: () => 
                           <td className="px-3 py-2 tabular-nums font-bold" style={{ color: 'var(--brand-text)' }}>{formatBRL(c.cost)}</td>
                         </tr>
                       ))}
-                      <tr style={{ background: 'rgba(0,245,255,0.04)', borderTop: '1px solid var(--brand-border)' }}>
+                      <tr style={{ background: 'rgba(251, 146, 60,0.04)', borderTop: '1px solid var(--brand-border)' }}>
                         <td className="px-3 py-2 font-bold text-[11px] uppercase" style={{ color: 'var(--brand-subtle)' }} colSpan={4}>Total</td>
-                        <td className="px-3 py-2 font-bold tabular-nums" style={{ color: '#00F5FF' }}>{formatBRL(cc!.total_cost)}</td>
+                        <td className="px-3 py-2 font-bold tabular-nums" style={{ color: '#FB923C' }}>{formatBRL(cc!.total_cost)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -536,7 +536,7 @@ export default function SustentacaoProjetosPage() {
               >
                 {tab.label}
                 <span className="text-xs px-1.5 py-0.5 rounded-full" style={{
-                  background: active ? 'rgba(0,245,255,0.12)' : 'rgba(255,255,255,0.06)',
+                  background: active ? 'rgba(251, 146, 60,0.12)' : 'rgba(255,255,255,0.06)',
                   color: active ? 'var(--text)' : 'var(--text-muted)',
                 }}>
                   {count}
@@ -655,12 +655,12 @@ export default function SustentacaoProjetosPage() {
                           <button
                             onClick={e => { e.stopPropagation(); setMessagesProject(p) }}
                             className="relative flex items-center justify-center w-7 h-7 rounded transition-colors"
-                            style={hasUnread ? { color: '#00F5FF', background: 'rgba(0,245,255,0.12)' } : { color: '#52525B' }}
+                            style={hasUnread ? { color: '#FB923C', background: 'rgba(251, 146, 60,0.12)' } : { color: '#52525B' }}
                             title="Mensagens"
                           >
                             <MessageCircle size={13} />
                             {hasUnread && (
-                              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style={{ background: 'var(--primary)', boxShadow: '0 0 6px rgba(0,245,255,0.8)' }} />
+                              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style={{ background: 'var(--primary)', boxShadow: '0 0 6px rgba(251, 146, 60,0.8)' }} />
                             )}
                           </button>
                         </div>
@@ -799,7 +799,7 @@ export default function SustentacaoProjetosPage() {
               <span className="text-xs" style={{ color: 'var(--brand-subtle)' }}>{selectedIds.size} consultor(es)</span>
               <div className="flex gap-2">
                 <button onClick={() => setTeamProject(null)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors" style={{ color: 'var(--brand-muted)', border: '1px solid var(--brand-border)' }}>Cancelar</button>
-                <button onClick={saveTeam} disabled={teamSaving} className="px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50" style={{ background: 'rgba(0,245,255,0.08)', color: 'var(--brand-primary)', border: '1px solid rgba(0,245,255,0.2)' }}>{teamSaving ? 'Salvando...' : 'Salvar'}</button>
+                <button onClick={saveTeam} disabled={teamSaving} className="px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50" style={{ background: 'rgba(251, 146, 60,0.08)', color: 'var(--brand-primary)', border: '1px solid rgba(251, 146, 60,0.2)' }}>{teamSaving ? 'Salvando...' : 'Salvar'}</button>
               </div>
             </div>
           </div>
